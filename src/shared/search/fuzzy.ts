@@ -1,5 +1,5 @@
 export function norm(s: string): string {
-  return (s || '').toLowerCase().replace(/[''`]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (s || '').toLowerCase().replace(/['’`]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 export function lev(a: string, b: string): number {
   const m = a.length, n = b.length;

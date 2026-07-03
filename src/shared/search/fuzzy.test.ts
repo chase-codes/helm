@@ -3,8 +3,9 @@ import { norm, lev, fuzzyTok } from './fuzzy';
 
 describe('norm', () => {
   test('lowercases, strips apostrophes and punctuation, collapses spaces', () => {
-    expect(norm("'Twas Grace  that taught!")).toBe('twas grace that taught');
+    expect(norm("’Twas Grace  that taught!")).toBe('twas grace that taught');
     expect(norm("I'd Rather")).toBe('id rather');
+    expect(norm('It wasn’t me, I’d say')).toBe('it wasnt me id say');
   });
 });
 describe('lev', () => {
