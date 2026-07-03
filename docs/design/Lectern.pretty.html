@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js">
+</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,16..72,400;0,16..72,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;text-align:left}
+input,textarea{font-family:inherit;outline:none;border:none;background:none;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes lecPulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</helmet>
+<div style="{{ rootStyle }}">
+
+  <div style="{{ headerStyle }}">
+    <div style="display:flex;align-items:center;gap:11px">
+      <div style="{{ logoStyle }}">L</div>
+      <div style="font-weight:700;font-size:16px;letter-spacing:-0.01em">Sunday Service</div>
+    </div>
+    <div style="{{ modeWrapStyle }}">
+      <sc-for list="{{ modeTabs }}" as="m" hint-placeholder-count="3">
+<button style="{{ m.style }}" onClick="{{ m.onClick }}">{{ m.label }}</button>
+</sc-for>
+    </div>
+    <div style="flex:1">
+</div>
+    <button style="{{ liveStatusStyle }}" onClick="{{ liveStatusClick }}" title="{{ liveStatusTitle }}">
+<span style="{{ liveDotStyle }}">
+</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em">{{ liveStatusText }}</span>
+<sc-if value="{{ isLiveOut }}">
+<span style="{{ takeDownChipStyle }}">✕ TAKE DOWN</span>
+</sc-if>
+</button>
+    <button style="{{ themeBtnStyle }}" onClick="{{ toggleTheme }}">{{ themeIcon }}</button>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:{{ clockColor }};font-variant-numeric:tabular-nums">{{ clock }}</div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+
+  <!-- ============ SONGS ============ -->
+  <sc-if value="{{ isSongs }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;min-height:0;display:flex;gap:1px;background:{{ hairline }}">
+
+    <div style="{{ opRailStyle }}">
+      <div style="padding:13px 13px 9px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
+<span style="width:5px;height:5px;border-radius:50%;background:{{ scriptureColor }};display:inline-block">
+</span>
+<span style="font-size:10px;letter-spacing:0.12em;color:{{ faintColor }};font-weight:600">OPERATOR · FIND A SONG</span>
+</div>
+        <div style="{{ opSearchBoxStyle }}" data-comment-anchor="8af767a850-div">
+          <span style="font-size:15px;opacity:.5">⌕</span>
+          <input style="flex:1;font-size:13.5px" value="{{ songQ }}" onChange="{{ onSongQ }}" onKeyDown="{{ onSongKey }}" placeholder="{{ songQPlaceholder }}" />
+          <sc-if value="{{ hasSongQ }}">
+<button style="font-size:12px;color:{{ dimColor }};padding:4px" onClick="{{ clearSongQ }}">✕</button>
+</sc-if>
+        </div>
+        <div style="{{ songFieldWrapStyle }}">
+          <sc-for list="{{ songFieldTabs }}" as="ft" hint-placeholder-count="3">
+<button style="{{ ft.style }}" onClick="{{ ft.onClick }}">{{ ft.label }}</button>
+</sc-for>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:0 8px 10px">
+        <sc-for list="{{ songResults }}" as="r" hint-placeholder-count="7">
+          <button style="{{ r.rowStyle }}" onClick="{{ r.onClick }}">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ r.titleColor }}">{{ r.title }}</div>
+              <div style="font-size:11px;color:{{ faintColor }};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.author }}</div>
+              <sc-if value="{{ r.hasSnippet }}">
+<div style="{{ r.snippetStyle }}">“{{ r.snippet }}”</div>
+</sc-if>
+            </div>
+            <sc-if value="{{ r.isActive }}">
+<div style="{{ r.activeBadge }}">●</div>
+</sc-if>
+          </button>
+        </sc-for>
+        <sc-if value="{{ songNoResults }}">
+<div style="padding:14px 8px;color:{{ faintColor }};font-size:12.5px;line-height:1.5">{{ songEmptyText }}</div>
+</sc-if>
+        <button style="{{ pasteSongStyle }}" onClick="{{ openQuickAdd }}">+ Add a song — search or paste</button>
+      </div>
+    </div>
+
+    <div style="width:10px;flex-shrink:0;cursor:col-resize;display:flex;align-items:center;justify-content:center;background:{{ bgApp }}" style-hover="background:rgba(128,128,128,.10)" onMouseDown="{{ dragListStart }}" title="Drag to resize">
+<div style="width:3px;height:44px;border-radius:2px;background:{{ gripListColor }}">
+</div>
+</div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:16px 10px 16px 12px;background:{{ bgApp }}">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-shrink:0">
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:800;font-size:25px;letter-spacing:-0.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ activeSongTitle }}</div>
+          <div style="font-size:13px;color:{{ dimColor }};margin-top:2px">{{ activeSongAuthor }}</div>
+        </div>
+        <div style="{{ projBarStyle }}">
+<span style="{{ projDotStyle }}">
+</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.06em">{{ projText }}</span>
+</div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex;gap:2px">
+        <div style="{{ bigVerseWrapStyle }}">
+          <div style="margin:auto;width:100%;max-width:760px;text-align:center;padding:22px 32px">
+            <div style="{{ bigVerseLabelStyle }}">{{ bigVerseLabel }}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:20px">
+              <sc-for list="{{ bigVerseLines }}" as="ln" hint-placeholder-count="4">
+<div style="{{ bigLineStyle }}">{{ ln }}</div>
+</sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="width:12px;flex-shrink:0;cursor:col-resize;display:flex;align-items:center;justify-content:center;border-radius:6px" style-hover="background:rgba(128,128,128,.10)" onMouseDown="{{ dragSecStart }}" title="Drag to resize — lyric text scales with the panel">
+<div style="width:3px;height:44px;border-radius:2px;background:{{ gripSecColor }}">
+</div>
+</div>
+        <div style="{{ sectionPanelStyle }}">
+          <div style="font-size:11px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600;margin-bottom:10px;flex-shrink:0">SECTIONS — TAP TO SING</div>
+          <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:2px">
+            <sc-for list="{{ sectionRail }}" as="s" hint-placeholder-count="4">
+              <button style="{{ s.rowStyle }}" onClick="{{ s.onClick }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                  <div style="{{ s.labelStyle }}">{{ s.label }}</div>
+                  <sc-if value="{{ s.showBadge }}">
+<div style="{{ s.badgeStyle }}">
+<span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block">
+</span>{{ s.badgeText }}</div>
+</sc-if>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px" data-comment-anchor="34aa79b127-div">
+                  <sc-for list="{{ s.lines }}" as="ln" hint-placeholder-count="2">
+<div style="{{ s.lineStyle }}">{{ ln }}</div>
+</sc-for>
+                </div>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:14px;flex-shrink:0">
+        <button style="{{ prevBtnStyle }}" onClick="{{ songPrev }}">‹ Prev</button>
+        <button style="{{ nextBtnStyle }}" onClick="{{ songNext }}">Cue next ›</button>
+        <div style="flex:1">
+</div>
+        <button style="{{ goLiveStyle }}" onClick="{{ goLive }}">{{ goLiveLabel }}</button>
+        <button style="{{ logoBtnStyle }}" onClick="{{ toggleLogo }}">{{ logoLabel }}</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ SERMON ============ -->
+  <sc-if value="{{ isSermon }}">
+  <div style="flex:1;min-height:0;display:flex;gap:1px;background:{{ hairline }}">
+    <div style="{{ schedulePanelStyle }}">
+      <div style="padding:12px 12px 10px;flex-shrink:0">
+        <div style="{{ trackWrapStyle }}">
+          <sc-for list="{{ trackTabs }}" as="t" hint-placeholder-count="2">
+<button style="{{ t.style }}" onClick="{{ t.onClick }}">{{ t.label }}</button>
+</sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ trackIsScripture }}">
+        <div style="padding:0 12px 10px;flex-shrink:0">
+          <div style="{{ schedInputStyle }}">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:{{ scriptureColor }}">›</span>
+            <input style="flex:1;font-size:13.5px;font-family:'JetBrains Mono',monospace" value="{{ sermonEntryQ }}" onChange="{{ onSermonEntry }}" onKeyDown="{{ onSermonEntryKey }}" placeholder="Add reading — John 3:16" />
+          </div>
+          <sc-if value="{{ hasSermonParse }}">
+<button style="{{ schedAddStyle }}" onClick="{{ addSermonEntry }}">{{ sermonAddText }}</button>
+</sc-if>
+        </div>
+        <div style="font-size:10px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600;padding:0 14px 8px;flex-shrink:0">SCRIPTURE SCHEDULE</div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ scriptureRows }}" as="it" hint-placeholder-count="4">
+            <button style="{{ it.rowStyle }}" onClick="{{ it.onClick }}">
+              <div style="{{ it.iconStyle }}">✝</div>
+              <div style="flex:1;min-width:0">
+<div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.title }}</div>
+<div style="font-size:11px;color:{{ faintColor }};margin-top:1px">{{ it.meta }}</div>
+</div>
+              <sc-if value="{{ it.isCurrent }}">
+<span style="width:8px;height:8px;border-radius:50%;background:{{ liveColor }};flex-shrink:0">
+</span>
+</sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ trackIsMessage }}">
+        <div style="padding:0 12px 10px;flex-shrink:0">
+          <div style="{{ schedInputStyle }}">
+            <sc-if value="{{ msgScoped }}">
+<button style="{{ msgChipStyle }}" onClick="{{ clearMsgScope }}" title="Searching within this tape — click to search everything">
+<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ msgScopeLabel }}</span>
+<span>✕</span>
+</button>
+</sc-if>
+            <sc-if value="{{ msgNotScoped }}">
+<span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:{{ messageColor }}">›</span>
+</sc-if>
+            <input style="flex:1;font-size:13.5px;min-width:0" value="{{ msgQ }}" onChange="{{ onMsgQ }}" onKeyDown="{{ onMsgQKey }}" placeholder="{{ msgQPlaceholder }}" />
+          </div>
+        </div>
+        <sc-if value="{{ hasMsgSearch }}">
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:6px">
+            <sc-if value="{{ hasTapeMatches }}">
+              <div style="font-size:10px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600;padding:2px 4px 2px;flex-shrink:0">TAPES — SELECT TO SEARCH WITHIN</div>
+              <sc-for list="{{ msgTapeRows }}" as="tp" hint-placeholder-count="2">
+                <button style="{{ tp.rowStyle }}" onClick="{{ tp.onClick }}">
+                  <div style="{{ tp.iconStyle }}">▸</div>
+                  <div style="flex:1;min-width:0">
+<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tp.title }}</div>
+<div style="font-size:11px;color:{{ faintColor }};margin-top:1px">{{ tp.meta }}</div>
+</div>
+                </button>
+              </sc-for>
+            </sc-if>
+            <sc-if value="{{ hasQuoteMatches }}">
+              <div style="font-size:10px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600;padding:6px 4px 2px;flex-shrink:0">{{ msgQuotesHeader }}</div>
+              <sc-for list="{{ msgSearchRows }}" as="qr" hint-placeholder-count="3">
+                <button style="{{ qr.rowStyle }}" onClick="{{ qr.onClick }}">
+                  <div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ qr.title }}</div>
+                  <div style="{{ qr.textStyle }}">{{ qr.preview }}</div>
+                </button>
+              </sc-for>
+            </sc-if>
+            <sc-if value="{{ msgSearchEmpty }}">
+<div style="padding:12px 8px;color:{{ faintColor }};font-size:12.5px;line-height:1.5">No matches — try fewer words, or clear the tape scope.</div>
+</sc-if>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noMsgSearch }}">
+          <div style="font-size:10px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600;padding:0 14px 8px;flex-shrink:0">QUOTE SCHEDULE</div>
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ msgScheduleRows }}" as="it" hint-placeholder-count="3">
+              <button style="{{ it.rowStyle }}" onClick="{{ it.onClick }}">
+                <div style="{{ it.iconStyle }}">❝</div>
+                <div style="flex:1;min-width:0">
+<div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.title }}</div>
+<div style="font-size:11px;color:{{ faintColor }};margin-top:1px">{{ it.meta }}</div>
+</div>
+                <sc-if value="{{ it.isCurrent }}">
+<span style="width:8px;height:8px;border-radius:50%;background:{{ liveColor }};flex-shrink:0">
+</span>
+</sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <div style="{{ tapeCardStyle }}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button style="{{ tapeBtnStyle }}" onClick="{{ toggleTape }}">{{ tapeBtnLabel }}</button>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tapeTitle }}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:{{ faintColor }};margin-top:2px">{{ tapeTime }}</div>
+            </div>
+          </div>
+          <div style="{{ tapeBarStyle }}">
+<div style="{{ tapeFillStyle }}">
+</div>
+</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ trackIsPresentation }}">
+        <div style="font-size:10px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600;padding:0 14px 9px;flex-shrink:0">PRESENTATIONS &amp; MEDIA</div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ mediaRows }}" as="md" hint-placeholder-count="3">
+            <button style="{{ md.rowStyle }}" onClick="{{ md.onClick }}">
+              <div style="width:74px;aspect-ratio:16/9;border-radius:6px;overflow:hidden;position:relative;flex-shrink:0;box-shadow:inset 0 0 0 1px {{ border }}">
+<dc-import name="SlideCanvas" slide="{{ md.thumb }}" variant="audience" hint-size="74px,42px" style="position:absolute;inset:0">
+</dc-import>
+</div>
+              <div style="flex:1;min-width:0">
+<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ md.title }}</div>
+<div style="font-size:11px;color:{{ faintColor }};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ md.meta }}</div>
+</div>
+              <sc-if value="{{ md.isCurrent }}">
+<span style="width:8px;height:8px;border-radius:50%;background:{{ liveColor }};flex-shrink:0">
+</span>
+</sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="{{ sermonCenterStyle }}">
+      <div style="{{ nowBarStyle }}">
+<span style="{{ projDotStyle }}">
+</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.06em">{{ projText }}</span>
+</div>
+
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div style="{{ heroCardStyle }}">
+          <sc-if value="{{ liveIsVerse }}">
+            <div style="margin:auto;width:100%;max-width:680px;text-align:center;padding:22px 30px">
+              <div style="{{ heroLabelStyle }}">{{ heroLabel }}</div>
+              <div style="display:flex;gap:30px;justify-content:center;text-align:left;margin-top:18px">
+                <sc-for list="{{ liveVerseCols }}" as="c" hint-placeholder-count="1">
+                  <div style="flex:1;max-width:{{ verseColMax }}">
+<div style="{{ verseVerStyle }}">{{ c.version }}</div>
+<div style="{{ verseTextStyle }}">{{ c.text }}</div>
+</div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ liveIsQuote }}">
+            <div style="margin:auto;width:100%;max-width:720px;padding:26px 36px">
+              <div style="{{ heroLabelStyle }}">{{ quoteRef }}</div>
+              <div style="{{ quoteTextStyle }}">{{ quoteText }}</div>
+              <div style="{{ quoteSourceStyle }}">{{ quoteSource }}</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ liveIsSlide }}">
+            <div style="margin:auto;width:min(100%,680px);aspect-ratio:16/9;border-radius:10px;overflow:hidden;position:relative;box-shadow:0 10px 30px rgba(0,0,0,.28)">
+<dc-import name="SlideCanvas" slide="{{ liveSlideObj }}" variant="audience" hint-size="100%,383px" style="position:absolute;inset:0">
+</dc-import>
+</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="{{ ondeckStyle }}">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.12em;color:{{ faintColor }}">{{ ondeckLabel }}</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:7px">
+          <div style="{{ ondeckTagStyle }}">{{ ondeckTag }}</div>
+          <div style="flex:1;min-width:0">
+<div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ondeckTitle }}</div>
+<div style="font-size:12px;color:{{ dimColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ondeckPreview }}</div>
+</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:13px;flex-shrink:0">
+        <button style="{{ prevBtnStyle }}" onClick="{{ sermonPrev }}">‹ Back</button>
+        <button style="{{ sermonNextStyle }}" onClick="{{ sermonNext }}">{{ sermonNextLabel }}</button>
+        <div style="flex:1">
+</div>
+        <button style="{{ goLiveStyle }}" onClick="{{ goLive }}">{{ goLiveLabel }}</button>
+        <sc-if value="{{ trackIsScripture }}">
+          <div style="position:relative">
+            <button style="{{ versionBtnStyle }}" onClick="{{ toggleVerPick }}" title="Choose translations">
+<span>{{ versionLabel }}</span>
+<span style="font-size:8px;margin-left:6px;opacity:.7">▲</span>
+</button>
+            <sc-if value="{{ verPickOpen }}">
+              <div style="position:fixed;inset:0;z-index:39" onClick="{{ closeVerPick }}">
+</div>
+              <div style="{{ verPopStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 9px 8px">
+                  <span style="font-size:10px;letter-spacing:0.1em;font-weight:600;color:{{ faintColor }}">TRANSLATIONS</span>
+                  <span style="font-size:10.5px;color:{{ faintColor }}">pick two to compare</span>
+                </div>
+                <sc-for list="{{ verRows }}" as="v" hint-placeholder-count="4">
+                  <button style="{{ v.rowStyle }}" onClick="{{ v.onClick }}" title="{{ v.title }}">
+                    <span style="{{ v.abbrStyle }}">{{ v.abbr }}</span>
+                    <span style="{{ v.nameStyle }}">{{ v.name }}</span>
+                    <span style="{{ v.markStyle }}">{{ v.mark }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+        <button style="{{ logoBtnStyle }}" onClick="{{ toggleLogo }}">{{ logoLabel }}</button>
+      </div>
+    </div>
+
+    <sc-if value="{{ rightPanelShow }}">
+    <div style="{{ comingPanelStyle }}">
+      <sc-if value="{{ trackIsScripture }}">
+      <div style="padding:14px 15px 10px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+<div style="font-size:11px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600">{{ chapterLabel }}</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:{{ scriptureColor }}">{{ plannedLabel }}</div>
+</div>
+        <div style="font-size:11.5px;color:{{ faintColor }};margin-top:6px;line-height:1.45">{{ comingHint }}</div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:0 12px 14px;display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ chapterRows }}" as="c" hint-placeholder-count="8">
+          <button style="{{ c.rowStyle }}" onClick="{{ c.onClick }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="{{ c.labelStyle }}">{{ c.label }}</div>
+              <sc-if value="{{ c.showBadge }}">
+<div style="{{ c.badgeStyle }}">
+<span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block">
+</span>{{ c.badgeText }}</div>
+</sc-if>
+            </div>
+            <div style="{{ c.textStyle }}">{{ c.preview }}</div>
+          </button>
+        </sc-for>
+      </div>
+      </sc-if>
+      <sc-if value="{{ trackIsMessage }}">
+      <div style="padding:14px 15px 10px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+<div style="font-size:11px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600">{{ msgPanelTitle }}</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:{{ messageColor }}">{{ msgPanelSub }}</div>
+</div>
+        <div style="font-size:11.5px;color:{{ faintColor }};margin-top:6px;line-height:1.45">{{ msgHint }}</div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:0 12px 14px;display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ paraRows }}" as="c" hint-placeholder-count="6">
+          <button style="{{ c.rowStyle }}" onClick="{{ c.onClick }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="{{ c.labelStyle }}">{{ c.label }}</div>
+              <sc-if value="{{ c.showBadge }}">
+<div style="{{ c.badgeStyle }}">
+<span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block">
+</span>{{ c.badgeText }}</div>
+</sc-if>
+            </div>
+            <div style="{{ c.textStyle }}">{{ c.preview }}</div>
+          </button>
+        </sc-for>
+      </div>
+      </sc-if>
+      <sc-if value="{{ trackIsPresentation }}">
+      <div style="padding:14px 15px 10px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+<div style="font-size:11px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600">{{ deckTitle }}</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:{{ sermonColor }}">{{ deckSub }}</div>
+</div>
+        <div style="font-size:11.5px;color:{{ faintColor }};margin-top:6px;line-height:1.45">{{ deckHint }}</div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:0 12px 14px;display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{ deckSlideRows }}" as="d" hint-placeholder-count="3">
+          <button style="{{ d.rowStyle }}" onClick="{{ d.onClick }}">
+            <div style="{{ d.numStyle }}">{{ d.num }}</div>
+            <div style="{{ d.thumbStyle }}">
+<dc-import name="SlideCanvas" slide="{{ d.slide }}" variant="audience" hint-size="100%,100%" style="position:absolute;inset:0">
+</dc-import>
+</div>
+          </button>
+        </sc-for>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ PRE-SERVICE ============ -->
+  <sc-if value="{{ isPre }}">
+  <div style="flex:1;min-height:0;display:flex;gap:1px;background:{{ hairline }}" data-comment-anchor="f40dfb1ec4-div">
+    <div style="{{ preRailStyle }}">
+      <div style="padding:13px 13px 9px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:10px;letter-spacing:0.12em;color:{{ faintColor }};font-weight:600">PRE-SERVICE LOOP</span>
+          <span style="{{ loopCountTag }}">{{ loopCountText }}</span>
+        </div>
+        <div style="font-size:11.5px;color:{{ faintColor }};margin-top:5px;line-height:1.4">Tap a card to show it now. Toggle cards in or out of the rotation.</div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ preRows }}" as="it" hint-placeholder-count="5">
+          <button style="{{ it.rowStyle }}" onClick="{{ it.onClick }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">
+              <div style="{{ it.labelStyle }}">{{ it.label }}</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <sc-if value="{{ it.isShowing }}">
+<span style="{{ it.showingBadge }}">● ON SCREEN</span>
+</sc-if>
+                <sc-if value="{{ it.canEdit }}">
+<span style="{{ it.editChipStyle }}" onClick="{{ it.onEdit }}" title="Edit card">✎</span>
+</sc-if>
+                <span style="{{ it.chipStyle }}" onClick="{{ it.onToggle }}" title="Include or skip in the loop">{{ it.chipText }}</span>
+              </div>
+            </div>
+            <div style="{{ it.snippetStyle }}">{{ it.snippet }}</div>
+            <sc-if value="{{ it.showProgress }}">
+<div style="{{ it.progressTrack }}">
+<div style="{{ it.progressFill }}">
+</div>
+</div>
+</sc-if>
+          </button>
+        </sc-for>
+        <button style="{{ pasteSongStyle }}" onClick="{{ openPreAdd }}">+ Add a card — verse, announcements, prayer…</button>
+      </div>
+    </div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px;background:{{ bgApp }}">
+      <div style="width:100%;max-width:680px;text-align:center">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-size:11px;letter-spacing:0.1em;color:{{ faintColor }};font-weight:600">PREVIEW — CURRENT CARD</span>
+          <div style="{{ projBarStyle }}">
+<span style="{{ projDotStyle }}">
+</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.06em">{{ projText }}</span>
+</div>
+        </div>
+        <div style="width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;position:relative;box-shadow:0 18px 50px rgba(0,0,0,.3)">
+<dc-import name="SlideCanvas" slide="{{ preSlideObj }}" variant="audience" hint-size="100%,383px" style="position:absolute;inset:0">
+</dc-import>
+</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap">
+          <button style="{{ preBtnA }}" onClick="{{ preStepBack }}" title="Previous card">‹</button>
+          <button style="{{ preBtnPrimary }}" onClick="{{ toggleLoopOn }}">{{ loopToggleLabel }}</button>
+          <button style="{{ preBtnA }}" onClick="{{ preStepFwd }}" title="Next card">›</button>
+          <div style="width:1px;height:28px;background:{{ hairline }};margin:0 4px">
+</div>
+          <button style="{{ preBtnB }}" onClick="{{ dwellMinus }}">−</button>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ dimColor }};min-width:74px">{{ dwellText }}</span>
+          <button style="{{ preBtnB }}" onClick="{{ dwellPlus }}">+</button>
+          <sc-if value="{{ preItemIsCountdown }}">
+            <div style="width:1px;height:28px;background:{{ hairline }};margin:0 4px">
+</div>
+            <button style="{{ preBtnB }}" onClick="{{ addMinute }}">+1 min</button>
+            <button style="{{ preBtnB }}" onClick="{{ togglePre }}">{{ preToggleLabel }}</button>
+            <button style="{{ preBtnB }}" onClick="{{ resetPre }}">Reset</button>
+          </sc-if>
+        </div>
+        <div style="font-size:13px;color:{{ dimColor }};margin-top:18px;line-height:1.5">{{ preHint }}</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+
+  <!-- pre-service card editor -->
+  <sc-if value="{{ preEditOpen }}">
+    <div style="position:fixed;inset:0;z-index:50;background:rgba(8,9,12,.6);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:5vh 4vw" onClick="{{ closePreEdit }}">
+      <div style="{{ preModalStyle }}" onClick="{{ stop }}">
+        <div style="font-weight:700;font-size:18px">{{ preEditTitle }}</div>
+        <sc-if value="{{ preEditIsNew }}">
+          <div style="display:flex;gap:6px;margin-top:14px">
+            <sc-for list="{{ preTypeTabs }}" as="t" hint-placeholder-count="3">
+<button style="{{ t.style }}" onClick="{{ t.onClick }}">{{ t.label }}</button>
+</sc-for>
+          </div>
+        </sc-if>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <div>
+            <div style="{{ preFieldLabel }}">CARD NAME</div>
+            <input style="{{ preInputStyle }}" value="{{ peTitle }}" onChange="{{ onPeTitle }}" placeholder="e.g. Prayer requests" />
+          </div>
+          <sc-if value="{{ peIsVerse }}">
+            <div>
+              <div style="{{ preFieldLabel }}">REFERENCE</div>
+              <input style="{{ preInputStyle }}" value="{{ peRef }}" onChange="{{ onPeRef }}" placeholder="Psalm 122:1" />
+            </div>
+            <div>
+              <div style="{{ preFieldLabel }}">VERSE TEXT</div>
+              <textarea style="{{ preAreaStyle }}" value="{{ peText }}" onChange="{{ onPeText }}" placeholder="I was glad when they said unto me…">
+</textarea>
+            </div>
+          </sc-if>
+          <sc-if value="{{ peIsList }}">
+            <div>
+              <div style="{{ preFieldLabel }}">ITEMS — ONE PER LINE</div>
+              <textarea style="{{ preAreaStyle }}" value="{{ peLines }}" onChange="{{ onPeLines }}" placeholder="Fellowship dinner — next Sunday after service">
+</textarea>
+            </div>
+          </sc-if>
+          <sc-if value="{{ peIsMessage }}">
+            <div>
+              <div style="{{ preFieldLabel }}">BIG LINE</div>
+              <input style="{{ preInputStyle }}" value="{{ peHeadline }}" onChange="{{ onPeHeadline }}" placeholder="Welcome" />
+            </div>
+            <div>
+              <div style="{{ preFieldLabel }}">SMALL LINE</div>
+              <input style="{{ preInputStyle }}" value="{{ peSubtitle }}" onChange="{{ onPeSubtitle }}" placeholder="We’re glad you’re here this morning" />
+            </div>
+          </sc-if>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;align-items:center">
+          <sc-if value="{{ preEditCanRemove }}">
+<button style="{{ preRemoveStyle }}" onClick="{{ removePreCard }}">Remove card</button>
+</sc-if>
+          <div style="flex:1">
+</div>
+          <button style="{{ preBtnB }}" onClick="{{ closePreEdit }}">Cancel</button>
+          <button style="{{ preBtnPrimary }}" onClick="{{ savePreEdit }}">{{ preSaveLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- quick add modal -->
+  <sc-if value="{{ quickAddOpen }}">
+    <div style="position:fixed;inset:0;z-index:50;background:rgba(8,9,12,.6);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:5vh 4vw" onClick="{{ closeQuickAdd }}">
+      <div style="{{ modalStyle }}" onClick="{{ stop }}">
+        <div style="padding:16px 22px 0;border-bottom:1px solid {{ hairline }}">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="font-weight:700;font-size:18px;flex:1">Add a song</div>
+            <div style="{{ qaTabsWrapStyle }}">
+              <button style="{{ qaTabSearchStyle }}" onClick="{{ qaGoSearch }}">Search online</button>
+              <button style="{{ qaTabPasteStyle }}" onClick="{{ qaGoPaste }}">Paste lyrics</button>
+            </div>
+          </div>
+          <div style="font-size:13px;color:{{ dimColor }};margin:6px 0 14px;line-height:1.4">{{ qaSubtitle }}</div>
+        </div>
+
+        <sc-if value="{{ qaShowFind }}">
+        <div style="flex:1;min-height:0;display:flex">
+          <div style="width:340px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid {{ hairline }};min-height:0">
+            <div style="padding:14px 14px 10px;flex-shrink:0">
+              <div style="{{ schedInputStyle }}">
+                <span style="font-size:13px;color:{{ faintColor }}">⌕</span>
+                <input style="flex:1;font-size:13.5px" value="{{ qaQ }}" onChange="{{ onQaQ }}" placeholder="Title, author, or a line of lyrics" />
+              </div>
+            </div>
+            <div style="flex:1;min-height:0;overflow-y:auto;padding:0 10px 12px;display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ qaResults }}" as="r" hint-placeholder-count="4">
+                <button style="{{ r.rowStyle }}" onClick="{{ r.onClick }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+<div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</div>
+<div style="{{ r.srcStyle }}">{{ r.source }}</div>
+</div>
+                  <div style="font-size:11.5px;color:{{ dimColor }};margin-top:2px">{{ r.author }}</div>
+                  <div style="{{ r.snipStyle }}">{{ r.snippet }}</div>
+                </button>
+              </sc-for>
+              <sc-if value="{{ qaNoResults }}">
+<div style="padding:12px 8px;color:{{ faintColor }};font-size:12.5px;line-height:1.5">No matches — check the spelling, or switch to Paste lyrics.</div>
+</sc-if>
+            </div>
+          </div>
+          <div style="{{ qaPickPanelStyle }}">
+            <sc-if value="{{ qaHasPick }}">
+              <div style="padding:16px 20px 12px;border-bottom:1px solid {{ hairline }};display:flex;align-items:center;gap:12px;flex-shrink:0">
+                <div style="flex:1;min-width:0">
+<div style="font-weight:700;font-size:16px">{{ qaPickTitle }}</div>
+<div style="font-size:12px;color:{{ dimColor }};margin-top:2px">{{ qaPickMeta }}</div>
+</div>
+                <button style="{{ qaUseStyle }}" onClick="{{ qaUsePick }}">Use this song ›</button>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px;font-size:13.5px;line-height:1.6;color:{{ dimColor }};white-space:pre-line">{{ qaPickText }}</div>
+            </sc-if>
+            <sc-if value="{{ qaNoPick }}">
+              <div style="margin:auto;max-width:300px;text-align:center;color:{{ faintColor }};font-size:13px;line-height:1.55;padding:20px">Search, then pick a result to read the full lyrics and make sure it’s the right song before importing.</div>
+            </sc-if>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ qaShowReview }}">
+        <div style="flex:1;min-height:0;display:flex">
+          <div style="flex:1;display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-right:1px solid {{ hairline }}">
+            <input style="{{ qaTitleStyle }}" value="{{ qaTitle }}" onChange="{{ onQaTitle }}" placeholder="Song title" />
+            <textarea style="{{ qaTextStyle }}" value="{{ qaText }}" onChange="{{ onQaText }}" placeholder="Paste lyrics here…
+
+Verse 1
+Line one
+Line two
+
+Chorus
+The chorus">
+</textarea>
+          </div>
+          <div style="{{ qaPreviewPanelStyle }}">
+            <div style="padding:14px 18px 10px;font-size:12px;letter-spacing:0.06em;color:{{ faintColor }};font-weight:600">PREVIEW · {{ qaSlideCount }} slides</div>
+            <div style="flex:1;overflow-y:auto;padding:0 14px 14px;display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ qaPreviewSlides }}" as="s" hint-placeholder-count="3">
+<div style="{{ qaCardStyle }}">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.06em;color:{{ accentColor }};margin-bottom:6px">{{ s.label }}</div>
+<div style="font-size:13px;color:{{ dimColor }};line-height:1.5;white-space:pre-line">{{ s.text }}</div>
+</div>
+</sc-for>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+        <div style="display:flex;justify-content:flex-end;gap:10px;padding:15px 22px;border-top:1px solid {{ hairline }}">
+          <button style="{{ qaCancelStyle }}" onClick="{{ closeQuickAdd }}">Cancel</button>
+          <sc-if value="{{ qaFromSearch }}">
+<button style="{{ qaCancelStyle }}" onClick="{{ qaBackToSearch }}">‹ Back to search</button>
+</sc-if>
+          <sc-if value="{{ qaShowReview }}">
+<button style="{{ qaSaveStyle }}" onClick="{{ saveQuickAdd }}">{{ qaSaveLabel }}</button>
+</sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;tone&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Warm&quot;,&quot;Cool&quot;,&quot;Earthen&quot;],&quot;default&quot;:&quot;Warm&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Feel&quot;},&quot;typeScale&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Standard&quot;,&quot;Large&quot;],&quot;default&quot;:&quot;Standard&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Feel&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Comfortable&quot;,&quot;Compact&quot;],&quot;default&quot;:&quot;Comfortable&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Feel&quot;},&quot;sectionPanelWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:380,&quot;min&quot;:280,&quot;max&quot;:560,&quot;step&quot;:10,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Songs layout&quot;},&quot;songListWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:250,&quot;min&quot;:200,&quot;max&quot;:340,&quot;step&quot;:10,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Songs layout&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.DARK = { appBg: '#0f1115', panel: '#15171c', panel2: '#1c1f25', panel3: '#23262e', text: '#e8e6e1', dim: '#9a9488', faint: '#736f66', hairline: 'rgba(255,255,255,.06)', border: 'rgba(255,255,255,.08)', inputBg: '#1c1f25', accent: '#e0a341', accentInk: '#1a1206', live: '#cf6a5e', scripture: '#6f9cf0', sermon: '#6f9c7a', quote: '#b98cf0' };
+    this.LIGHT = { appBg: '#ece5d6', panel: '#f7f3ea', panel2: '#fdfbf6', panel3: '#ffffff', text: '#2c2823', dim: '#7a7263', faint: '#a59c8a', hairline: 'rgba(0,0,0,.08)', border: 'rgba(0,0,0,.12)', inputBg: '#ffffff', accent: '#b87a2c', accentInk: '#ffffff', live: '#bf4f44', scripture: '#3f6bb5', sermon: '#4f7d5f', quote: '#8a5cc0' };
+    this._VERSIONS = [
+      { id: 'kjv', abbr: 'KJV', name: 'King James Version', installed: true },
+      { id: 'web', abbr: 'WEB', name: 'World English Bible', installed: true },
+      { id: 'asv', abbr: 'ASV', name: 'American Standard Version', installed: false },
+      { id: 'dby', abbr: 'DBY', name: 'Darby Translation', installed: false }
+    ];
+    this._d = this.buildData();
+    this._d.messages = [
+      { id: 'rapture', tape: '65-1204', title: 'The Rapture', date: 'December 4, 1965', duration: 9430, paragraphs: [
+        { n: 76, text: 'Now notice, the coming of the Lord will be a secret coming. He said He would come as a thief in the night.' },
+        { n: 77, text: 'The world will go right on; they will never know it has happened. Just as it was in the days of Noah, so shall it be.' },
+        { n: 78, text: 'There will be three things happen: a shout, a voice, and a trumpet. The shout is the Message going forth first.' },
+        { n: 79, text: 'The shout wakes the sleeping virgins. It gathers the Bride together, gets the people ready.' },
+        { n: 80, text: 'Notice, the voice of the Archangel is to raise the sleeping saints, and the trumpet calls them to the Marriage Supper.' },
+        { n: 81, text: 'We are not divided; we are one Body. The same Spirit that raised Him from the grave dwells in us.' },
+        { n: 82, text: 'Watch the promises of God. Every one of them is Yea and Amen to those that will believe it.' },
+        { n: 83, text: 'Do not be weary. Keep your lamps trimmed and burning. It is later than you think.' }
+      ] },
+      { id: 'faith', tape: '47-0412', title: 'Faith Is The Substance', date: 'April 12, 1947', duration: 4360, paragraphs: [
+        { n: 20, text: 'Faith is the substance of things hoped for, the evidence of things not seen. You do not see it, yet you know it is there.' },
+        { n: 21, text: 'Faith is not what you feel. Faith is what you believe against everything the senses declare.' },
+        { n: 22, text: 'When you take God at His Word, that settles it. Faith takes its stand upon the Word and nothing else.' },
+        { n: 23, text: 'A man with genuine faith does not waver. He calls those things which are not as though they were.' },
+        { n: 24, text: 'Your faith gives action to the Word. Believe it, act on it, and watch God confirm it.' }
+      ] }
+    ];
+    this._d.msgMap = {}; this._d.messages.forEach(mm => { this._d.msgMap[mm.id] = mm; });
+    this._d.msgSchedule = [ { msgId: 'rapture', idx: 2 }, { msgId: 'rapture', idx: 4 }, { msgId: 'faith', idx: 0 } ];
+    this._d.onlineSongs = [
+      { id: 'ol-onlybelieve', title: 'Only Believe', author: 'Paul Rader, 1921', source: 'Hymnary.org', text: 'Verse 1\nFear not, little flock, from the cross to the throne,\nFrom death into life He went for His own;\nAll power in earth, all power above,\nIs given to Him for the flock of His love.\n\nChorus\nOnly believe, only believe;\nAll things are possible, only believe;\nOnly believe, only believe;\nAll things are possible, only believe.\n\nVerse 2\nFear not, little flock, He goeth ahead,\nYour Shepherd selecteth the path you must tread;\nThe waters of Marah He\u2019ll sweeten for thee,\nHe drank all the bitter in Gethsemane.' },
+      { id: 'ol-crimson', title: 'I See A Crimson Stream', author: 'G. T. Haywood, 1920', source: 'Hymnary.org', text: 'Verse 1\nOn Calv\u2019ry\u2019s hill of sorrow\nWhere sin\u2019s demands were paid,\nAnd rays of hope for tomorrow\nAcross our path were laid.\n\nChorus\nI see a crimson stream of blood,\nIt flows from Calvary,\nIts waves which reach the throne of God,\nAre sweeping over me.' },
+      { id: 'ol-blessed', title: 'Blessed Assurance', author: 'Fanny Crosby, 1873', source: 'Hymnary.org', text: 'Verse 1\nBlessed assurance, Jesus is mine!\nOh, what a foretaste of glory divine!\nHeir of salvation, purchase of God,\nBorn of His Spirit, washed in His blood.\n\nChorus\nThis is my story, this is my song,\nPraising my Savior all the day long;\nThis is my story, this is my song,\nPraising my Savior all the day long.\n\nVerse 2\nPerfect submission, perfect delight,\nVisions of rapture now burst on my sight;\nAngels descending bring from above\nEchoes of mercy, whispers of love.' },
+      { id: 'ol-friend', title: 'What A Friend We Have In Jesus', author: 'Joseph Scriven, 1855', source: 'Hymnary.org', text: 'Verse 1\nWhat a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!\n\nVerse 2\nHave we trials and temptations?\nIs there trouble anywhere?\nWe should never be discouraged \u2014\nTake it to the Lord in prayer.' }
+    ];
+    this.state = {
+      theme: 'dark', mode: 'songs', output: 'black', liveKey: null, liveSnap: null,
+      songQ: '', activeSongId: 'amazing', songSection: 0,
+      sermonTrack: 'scripture', scrBook: 'Genesis', scrCh: 1, scrV: 1, presItemId: 'pptx', presSlideIdx: 0, versions: ['kjv'], verPickOpen: false, sermonEntryQ: '',
+      msgId: 'rapture', msgIdx: 2, msgQ: '', msgScope: null, tapePlaying: false, tapePos: 4283, songField: 'all',
+      quickAddOpen: false, qaTitle: '', qaText: '', qaSource: 'search', qaStep: 'find', qaQ: '', qaPickedId: null,
+      now: Date.now(), countdown: 600, preRunning: true, preMode: 'count',
+      preIdx: 0, loopOn: true, loopT: 0, dwell: 12,
+      preLoop: [
+        { id: 'count', type: 'countdown', title: 'Countdown', enabled: true },
+        { id: 'welcome', type: 'message', title: 'Welcome', headline: 'Welcome', subtitle: 'We’re glad you’re here this morning', enabled: true },
+        { id: 'verse', type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'I was glad when they said unto me, Let us go into the house of the LORD.', enabled: true },
+        { id: 'announce', type: 'list', title: 'Announcements', heading: 'Announcements', points: ['Fellowship dinner — next Sunday after service', 'Youth night — Wednesday 7:00 PM', 'Fall campout sign-up sheet in the foyer'], enabled: true },
+        { id: 'prayer', type: 'list', title: 'Prayer requests', heading: 'Prayer Requests', points: ['The Hollis family', 'Sis. Ruth — recovering from surgery', 'Traveling ministers this week'], enabled: true },
+        { id: 'logo', type: 'logo', title: 'Logo', enabled: false }
+      ],
+      peOpen: false, peId: null, peType: 'verse', peTitle: '', peRef: '', peText: '', peLines: '', peHeadline: '', peSubtitle: '',
+      lastNonBlank: 'live',
+      songListW: this._loadW('lecternSongListW'), sectionPanelW: this._loadW('lecternSectionPanelW'), dragging: null
+    };
+  }
+  _loadW(k) { try { const v = parseFloat(localStorage.getItem(k)); return isNaN(v) ? null : v; } catch (e) { return null; } }
+  startColDrag(which, e) {
+    e.preventDefault();
+    const S = this.state;
+    const startX = e.clientX;
+    const startW = which === 'list'
+      ? (S.songListW ?? Number(this.props.songListWidth ?? 250))
+      : (S.sectionPanelW ?? Number(this.props.sectionPanelWidth ?? 380));
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      if (which === 'list') this.setState({ songListW: Math.max(200, Math.min(360, startW + dx)) });
+      else this.setState({ sectionPanelW: Math.max(260, Math.min(620, startW - dx)) });
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      this.setState(s => {
+        try {
+          if (s.songListW != null) localStorage.setItem('lecternSongListW', s.songListW);
+          if (s.sectionPanelW != null) localStorage.setItem('lecternSectionPanelW', s.sectionPanelW);
+        } catch (er) {}
+        return { dragging: null };
+      });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    this.setState({ dragging: which });
+  }
+  componentDidMount() {
+    this._tick = setInterval(() => this.setState(s => {
+      const next = { now: Date.now(), countdown: (s.preRunning && s.countdown > 0) ? s.countdown - 1 : s.countdown, tapePos: s.tapePlaying ? s.tapePos + 1 : s.tapePos };
+      if (s.mode === 'pre' && s.loopOn) {
+        const t = s.loopT + 1;
+        if (t >= s.dwell) { next.preIdx = this.nextLoopIdx(s, 1); next.loopT = 0; }
+        else next.loopT = t;
+      }
+      return next;
+    }), 1000);
+    this._onKey = (e) => {
+      const tag = (e.target.tagName || '').toLowerCase(); const typing = tag === 'input' || tag === 'textarea';
+      if (e.key === 'Escape') { this.setState({ quickAddOpen: false, peOpen: false }); return; }
+      if (typing) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); this.advance(1); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); this.advance(-1); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.goLive(); }
+    };
+    document.addEventListener('keydown', this._onKey);
+  }
+  componentWillUnmount() { clearInterval(this._tick); document.removeEventListener('keydown', this._onKey); }
+  T() {
+    const base = this.state.theme === 'light' ? this.LIGHT : this.DARK;
+    const tones = {
+      Warm: { accent: base.accent, scripture: '#6f9cf0', sermon: '#6f9c7a', message: '#a88bc4', live: base.live },
+      Cool: { accent: '#5aa9d6', scripture: '#7c8cf0', sermon: '#56b39a', message: '#8f7ce0', live: '#d06a8a' },
+      Earthen: { accent: '#cf9646', scripture: '#8f9bc2', sermon: '#88a06a', message: '#a08a9e', live: '#c46a52' }
+    };
+    return { ...base, ...(tones[this.props.tone] || tones.Warm) };
+  }
+
+  // ---------------- data ----------------
+  buildData() {
+    const sec = (label, ...lines) => ({ label, lines });
+    const song = (id, title, author, secs) => { const it = { id, type: 'song', title, author, sections: secs }; it.blob = title + ' ' + author + ' ' + secs.map(s => s.lines.join(' ')).join(' '); return it; };
+    const songs = [
+      song('amazing', 'Amazing Grace', 'John Newton', [
+        sec('Verse 1', 'Amazing grace! how sweet the sound,', 'That saved a wretch like me;', 'I once was lost, but now am found,', 'Was blind, but now I see.'),
+        sec('Verse 2', "'Twas grace that taught my heart to fear,", 'And grace my fears relieved;', 'How precious did that grace appear', 'The hour I first believed.'),
+        sec('Verse 3', 'Through many dangers, toils, and snares,', 'I have already come;', "'Tis grace hath brought me safe thus far,", 'And grace will lead me home.'),
+        sec('Verse 4', "When we've been there ten thousand years,", 'Bright shining as the sun,', "We've no less days to sing God's praise", "Than when we'd first begun.")
+      ]),
+      song('onlybelieve', 'Only Believe', 'Paul Rader', [
+        sec('Verse 1', 'Fear not, little flock, from the cross to the throne,', 'From death into life He went for His own;', 'All power in earth, all power above,', 'Is given to Him for the flock of His love.'),
+        sec('Chorus', 'Only believe, only believe,', 'All things are possible, only believe;', 'Only believe, only believe,', 'All things are possible, only believe.')
+      ]),
+      song('itiswell', 'It Is Well With My Soul', 'Horatio Spafford', [
+        sec('Verse 1', 'When peace, like a river, attendeth my way,', 'When sorrows like sea billows roll;', 'Whatever my lot, Thou hast taught me to say,', 'It is well, it is well with my soul.'),
+        sec('Chorus', 'It is well (it is well),', 'With my soul (with my soul),', 'It is well, it is well with my soul.')
+      ]),
+      song('blessed', 'Blessed Assurance', 'Fanny Crosby', [
+        sec('Verse 1', 'Blessed assurance, Jesus is mine!', 'Oh, what a foretaste of glory divine!', 'Heir of salvation, purchase of God,', 'Born of His Spirit, washed in His blood.'),
+        sec('Chorus', 'This is my story, this is my song,', 'Praising my Saviour all the day long;', 'This is my story, this is my song,', 'Praising my Saviour all the day long.')
+      ]),
+      song('faithfulness', 'Great Is Thy Faithfulness', 'Thomas Chisholm', [
+        sec('Verse 1', 'Great is Thy faithfulness, O God my Father,', 'There is no shadow of turning with Thee;', 'Thou changest not, Thy compassions, they fail not;', 'As Thou hast been Thou forever wilt be.'),
+        sec('Chorus', 'Great is Thy faithfulness! Great is Thy faithfulness!', 'Morning by morning new mercies I see;', 'All I have needed Thy hand hath provided—', 'Great is Thy faithfulness, Lord, unto me!')
+      ]),
+      song('holy', 'Holy, Holy, Holy', 'Reginald Heber', [
+        sec('Verse 1', 'Holy, holy, holy! Lord God Almighty!', 'Early in the morning our song shall rise to Thee;', 'Holy, holy, holy! merciful and mighty!', 'God in three Persons, blessed Trinity!')
+      ]),
+      song('howgreat', 'How Great Thou Art', 'Stuart K. Hine', [
+        sec('Verse 1', 'O Lord my God, when I in awesome wonder', 'Consider all the worlds Thy hands have made,', 'I see the stars, I hear the rolling thunder,', 'Thy power throughout the universe displayed.'),
+        sec('Chorus', 'Then sings my soul, my Saviour God, to Thee,', 'How great Thou art, how great Thou art!')
+      ]),
+      song('rugged', 'The Old Rugged Cross', 'George Bennard', [
+        sec('Verse 1', 'On a hill far away stood an old rugged cross,', 'The emblem of suffering and shame;', 'And I love that old cross where the dearest and best', 'For a world of lost sinners was slain.'),
+        sec('Chorus', 'So I’ll cherish the old rugged cross,', 'Till my trophies at last I lay down;', 'I will cling to the old rugged cross,', 'And exchange it some day for a crown.')
+      ]),
+      song('rather', "I'd Rather Have Jesus", 'Rhea F. Miller', [
+        sec('Verse 1', 'I’d rather have Jesus than silver or gold,', 'I’d rather be His than have riches untold;', 'I’d rather have Jesus than houses or lands,', 'I’d rather be led by His nail-pierced hand.')
+      ]),
+      song('downglory', 'Down From His Glory', 'William Booth-Clibborn', [
+        sec('Verse 1', 'Down from His glory, ever living story,', 'My God and Saviour came,', 'And Jesus was His name.'),
+        sec('Chorus', 'O how I love Him! How I adore Him!', 'My breath, my sunshine, my all in all!', 'The great Creator became my Saviour,', 'And all God’s fullness dwelleth in Him.')
+      ])
+    ];
+    songs.forEach(s => { this._mk(s); });
+    const songMap = {}; songs.forEach(s => songMap[s.id] = s);
+
+    // bible: key 'book ch' -> {count, v:{n:{kjv, web}}}
+    const bible = {
+      'Genesis 1': { count: 15, v: {
+        1: { kjv: 'In the beginning God created the heaven and the earth.', web: 'In the beginning, God created the heavens and the earth.' },
+        2: { kjv: 'And the earth was without form, and void; and darkness was upon the face of the deep. And the Spirit of God moved upon the face of the waters.', web: "The earth was formless and empty. Darkness was on the surface of the deep and God's Spirit was hovering over the surface of the waters." },
+        3: { kjv: 'And God said, Let there be light: and there was light.', web: 'God said, “Let there be light,” and there was light.' },
+        4: { kjv: 'And God saw the light, that it was good: and God divided the light from the darkness.', web: 'God saw the light, and saw that it was good. God divided the light from the darkness.' },
+        5: { kjv: 'And God called the light Day, and the darkness he called Night. And the evening and the morning were the first day.', web: 'God called the light “day”, and the darkness he called “night”. There was evening and there was morning, the first day.' },
+        6: { kjv: 'And God said, Let there be a firmament in the midst of the waters, and let it divide the waters from the waters.', web: 'God said, “Let there be an expanse in the middle of the waters, and let it divide the waters from the waters.”' },
+        7: { kjv: 'And God made the firmament, and divided the waters which were under the firmament from the waters which were above the firmament: and it was so.', web: 'God made the expanse, and divided the waters which were under the expanse from the waters which were above the expanse; and it was so.' },
+        8: { kjv: 'And God called the firmament Heaven. And the evening and the morning were the second day.', web: 'God called the expanse “sky”. There was evening and there was morning, a second day.' },
+        9: { kjv: 'And God said, Let the waters under the heaven be gathered together unto one place, and let the dry land appear: and it was so.', web: 'God said, “Let the waters under the sky be gathered together to one place, and let the dry land appear;” and it was so.' },
+        10: { kjv: 'And God called the dry land Earth; and the gathering together of the waters called he Seas: and God saw that it was good.', web: 'God called the dry land “earth”, and the gathering together of the waters he called “seas”. God saw that it was good.' },
+        11: { kjv: 'And God said, Let the earth bring forth grass, the herb yielding seed, and the fruit tree yielding fruit after his kind, whose seed is in itself, upon the earth: and it was so.', web: '' },
+        12: { kjv: 'And the earth brought forth grass, and herb yielding seed after his kind, and the tree yielding fruit, whose seed was in itself, after his kind: and God saw that it was good.', web: '' },
+        13: { kjv: 'And the evening and the morning were the third day.', web: '' },
+        14: { kjv: 'And God said, Let there be lights in the firmament of the heaven to divide the day from the night; and let them be for signs, and for seasons, and for days, and years:', web: '' },
+        15: { kjv: 'And let them be for lights in the firmament of the heaven to give light upon the earth: and it was so.', web: '' }
+      } },
+      'John 3': { count: 16, v: { 16: { kjv: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.', web: 'For God so loved the world, that he gave his one and only Son, that whoever believes in him should not perish, but have eternal life.' } } },
+      'Exodus 12': { count: 13, v: { 13: { kjv: 'And the blood shall be to you for a token upon the houses where ye are: and when I see the blood, I will pass over you.', web: 'The blood shall be to you for a token on the houses where you are. When I see the blood, I will pass over you.' } } },
+      'Psalm 23': { count: 6, v: {
+        1: { kjv: 'The LORD is my shepherd; I shall not want.', web: 'The LORD is my shepherd; I shall lack nothing.' },
+        2: { kjv: 'He maketh me to lie down in green pastures: he leadeth me beside the still waters.', web: 'He makes me lie down in green pastures. He leads me beside still waters.' },
+        3: { kjv: 'He restoreth my soul: he leadeth me in the paths of righteousness for his name’s sake.', web: 'He restores my soul. He guides me in the paths of righteousness for his name’s sake.' },
+        4: { kjv: 'Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me; thy rod and thy staff they comfort me.', web: 'Even though I walk through the valley of the shadow of death, I will fear no evil, for you are with me. Your rod and your staff, they comfort me.' },
+        5: { kjv: 'Thou preparest a table before me in the presence of mine enemies: thou anointest my head with oil; my cup runneth over.', web: 'You prepare a table before me in the presence of my enemies. You anoint my head with oil. My cup runs over.' },
+        6: { kjv: 'Surely goodness and mercy shall follow me all the days of my life: and I will dwell in the house of the LORD for ever.', web: 'Surely goodness and loving kindness shall follow me all the days of my life, and I will dwell in the LORD’s house forever.' }
+      } }
+    };
+
+    const scriptureSchedule = [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 10 },
+      { id: 'r2', book: 'John', ch: 3, from: 16, to: 16 }
+    ];
+    const mediaItems = [
+      { id: 'pptx', type: 'deck', title: 'Sermon.pptx', label: 'PowerPoint', slides: [
+        { kind: 'sermon', accent: '#6f9c7a', label: 'Title', title: 'In the Beginning', subtitle: 'A study of Genesis 1' },
+        { kind: 'title', accent: '#6f9c7a', label: 'Point', title: 'Order Out of the Deep', points: ['Light divides the darkness', 'Waters divide from waters', 'Dry land appears'] },
+        { kind: 'title', accent: '#6f9c7a', label: 'Slide 7 of 9', title: '[ Imported slide ]', subtitle: 'PowerPoint formatting kept' }
+      ] },
+      { id: 'welcome', type: 'media', title: 'Welcome.mp4', label: 'Video clip', slide: { kind: 'title', accent: '#6f9c7a', label: 'Media', title: '▶  Welcome.mp4', subtitle: 'Video — click to play on screen' } },
+      { id: 'announce', type: 'media', title: 'Announcements', label: 'Image', slide: { kind: 'title', accent: '#6f9c7a', label: 'Media', title: 'This Week', points: ['Wednesday Service — 7:30 PM', 'Fellowship Dinner — next Sunday', 'Prayer Meeting — Friday 6 PM'] } }
+    ];
+    return { songs, songMap, bible, scriptureSchedule, mediaItems };
+  }
+  _mk(s) { return s; }
+
+  // ---------------- fuzzy search ----------------
+  norm(s) { return (s || '').toLowerCase().replace(/['’`]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  lev(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; const d = Array.from({ length: m + 1 }, (_, i) => [i]); for (let j = 0; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) { const c = a[i - 1] === b[j - 1] ? 0 : 1; d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c); } return d[m][n]; }
+  scoreSong(query, song, field) {
+    const q = this.norm(query); if (!q) return { score: 1, snippet: '' };
+    const title = this.norm(song.title); const blob = field === 'title' ? this.norm(song.title) : field === 'lyric' ? this.norm(song.sections.map(sc => sc.lines.join(' ')).join(' ')) : this.norm(song.blob); let score = 0; let snippet = '';
+    if (field !== 'lyric') { if (title === q) score = 1200; else if (title.includes(q)) score = 1000 - title.indexOf(q); }
+    const words = blob.split(' '); const qts = q.split(' '); let matched = 0;
+    for (const t of qts) { let best = 99; for (const w of words) { if (w === t) { best = 0; break; } if (Math.abs(w.length - t.length) <= 2) { const dd = this.lev(t, w); if (dd < best) best = dd; } } const tol = t.length <= 4 ? 1 : 2; if (best <= tol) matched++; }
+    if (matched === qts.length && matched > 0) score = Math.max(score, 380 + matched * 12);
+    for (const sc of song.sections) { for (const ln of sc.lines) { if (qts.some(t => t.length > 2 && this.norm(ln).includes(t))) { snippet = ln; break; } } if (snippet) break; }
+    if (field === 'title' && snippet) snippet = '';
+    if (snippet && score < 360 && field !== 'title') score = 360;
+    return { score, snippet };
+  }
+  searchSongs(q, field) {
+    if (!this.norm(q)) return this._d.songs.map(s => ({ song: s, snippet: '' }));
+    return this._d.songs.map(s => ({ song: s, ...this.scoreSong(q, s, field) })).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
+  }
+
+  // ---------------- scripture parse ----------------
+  books() { return [['Genesis', ['genesis', 'gen', 'ge']], ['Exodus', ['exodus', 'exod', 'exo', 'ex']], ['Leviticus', ['leviticus', 'lev']], ['Numbers', ['numbers', 'num']], ['Psalm', ['psalms', 'psalm', 'psa', 'ps']], ['Proverbs', ['proverbs', 'prov', 'pr']], ['Isaiah', ['isaiah', 'isa']], ['Matthew', ['matthew', 'matt', 'mt']], ['Mark', ['mark', 'mk']], ['Luke', ['luke', 'lk']], ['John', ['john', 'jhn', 'jn']], ['Acts', ['acts', 'ac']], ['Romans', ['romans', 'rom', 'ro']], ['Hebrews', ['hebrews', 'heb']], ['Revelation', ['revelation', 'rev', 're']]]; }
+  matchBook(tok) { tok = this.norm(tok); if (!tok) return null; for (const [n, al] of this.books()) if (al.includes(tok)) return n; for (const [n, al] of this.books()) if (al.some(a => a.startsWith(tok))) return n; return null; }
+  parseRef(raw) { const m = (raw || '').trim().match(/^([1-3]?\s?[a-zA-Z]+)\.?\s*(\d+)(?::\s*(\d+)\s*(?:[-–]\s*(\d+))?)?$/); if (!m) return null; const book = this.matchBook(m[1]); if (!book) return null; const ch = parseInt(m[2]); const from = m[3] ? parseInt(m[3]) : 1; const to = m[4] ? parseInt(m[4]) : from; return { book, ch, from, to }; }
+  verseText(book, ch, v) { const e = this._d.bible[book + ' ' + ch]; if (e && e.v[v]) return e.v[v]; return { kjv: '[ Verse text loads from your Bible source ]', web: '' }; }
+  chapterCount(book, ch) { const e = this._d.bible[book + ' ' + ch]; return e ? e.count : 0; }
+
+  // ---------------- sermon helpers ----------------
+  plannedSet(book, ch) { const s = new Set(); this._d.scriptureSchedule.forEach(r => { if (r.book === book && r.ch === ch) for (let v = r.from; v <= r.to; v++) s.add(v); }); return s; }
+  chapVerseCount(book, ch) { return this.chapterCount(book, ch) || 1; }
+
+  // ---------------- shared actions ----------------
+  setMode(m) { this.setState({ mode: m }); }
+  toggleTheme() { this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })); }
+  setOutput(o) { this.setState({ output: o }); }
+  toggleBlank() { this.setState(s => s.output === 'black' ? { output: s.lastNonBlank || 'live' } : { output: 'black', lastNonBlank: s.output }); }
+  advance(dir) { const m = this.state.mode; if (m === 'songs') this.songStep(dir); else if (m === 'sermon') this.sermonStep(dir); }
+  keyFor(S) { if (S.mode === 'songs') return 'song:' + S.activeSongId + ':' + S.songSection; if (S.mode === 'sermon') { if (S.sermonTrack === 'presentation') return 'pres:' + S.presItemId + ':' + S.presSlideIdx; if (S.sermonTrack === 'message') return 'msg:' + S.msgId + ':' + S.msgIdx; return 'scr:' + S.scrBook + ':' + S.scrCh + ':' + S.scrV; } return 'pre'; }
+  cueKey() { return this.keyFor(this.state); }
+  sameFlow(a, b) { if (!a || !b) return false; const pa = a.split(':'), pb = b.split(':'); if (pa[0] !== pb[0]) return false; if (pa[0] === 'scr') return pa[1] === pb[1] && pa[2] === pb[2]; return pa[1] === pb[1]; }
+  applyCue(patch) { this.setState(s => { const upd = { ...patch }; if (s.output === 'live') { const merged = { ...s, ...patch }; const nk = this.keyFor(merged); if (this.sameFlow(s.liveKey, nk)) { upd.liveKey = nk; upd.liveSnap = this.liveContent(merged); } } return upd; }); }
+  goLive() { const k = this.cueKey(); if (this.state.output === 'live' && this.state.liveKey === k) this.setState({ output: 'black' }); else this.setState({ liveKey: k, output: 'live', liveSnap: this.liveContent() }); }
+
+  // songs
+  onSongQ(e) { this.setState({ songQ: e.target.value }); }
+  clearSongQ() { this.setState({ songQ: '' }); }
+  selectSong(id) { this.applyCue({ activeSongId: id, songSection: 0 }); }
+  pickSong(id) { this.applyCue({ activeSongId: id, songSection: 0, songQ: '' }); }
+  onSongKey(e) { if (e.key === 'Enter') { e.preventDefault(); const r = this.searchSongs(this.state.songQ)[0]; if (r) this.selectSong(r.song.id); } else if (e.key === 'Escape') { this.clearSongQ(); } }
+  toggleLogo() { this.setState(s => s.output === 'logo' ? { output: 'live' } : { output: 'logo' }); }
+  showSection(i) { this.applyCue({ songSection: i }); }
+  songStep(dir) { const s = this._d.songMap[this.state.activeSongId]; if (!s) return; const n = s.sections.length; this.applyCue({ songSection: Math.max(0, Math.min(n - 1, this.state.songSection + dir)) }); }
+  songPrev() { this.songStep(-1); } songNext() { this.songStep(1); }
+
+  // sermon
+  setTrack(t) { this.applyCue({ sermonTrack: t }); }
+  selectReading(it) { this.applyCue({ sermonTrack: 'scripture', scrBook: it.book, scrCh: it.ch, scrV: it.from }); }
+  showVerse(v) { this.applyCue({ scrV: v }); }
+  curMedia() { return this._d.mediaItems.find(m => m.id === this.state.presItemId) || this._d.mediaItems[0]; }
+  selectMedia(it) { this.applyCue({ sermonTrack: 'presentation', presItemId: it.id, presSlideIdx: 0 }); }
+  showDeckSlide(i) { this.applyCue({ presSlideIdx: i }); }
+  curMsg() { return this._d.msgMap[this.state.msgId] || this._d.messages[0]; }
+  selectQuote(msgId, idx) { this.applyCue({ sermonTrack: 'message', msgId, msgIdx: idx, msgQ: '' }); }
+  showPara(i) { this.applyCue({ msgIdx: i }); }
+  toggleTape() { this.setState(s => ({ tapePlaying: !s.tapePlaying })); }
+  onMsgQ(e) { this.setState({ msgQ: e.target.value }); }
+  onMsgQKey(e) { if (e.key === 'Backspace' && !this.state.msgQ && this.state.msgScope) this.msgScopeClear(); }
+  msgScopeSet(id) { this.setState({ msgScope: id, msgId: id, msgIdx: 0, msgQ: '' }); }
+  msgScopeClear() { this.setState({ msgScope: null }); }
+  searchTapes(q) { const nq = this.norm(q); if (!nq) return []; const qts = nq.split(' '); return this._d.messages.filter(mm => { const t = this.norm(mm.title + ' ' + mm.tape); const words = t.split(' '); return qts.every(tok => t.includes(tok) || (tok.length > 3 && this.fuzzyTok(tok, words))); }); }
+  searchQuotes(q, scope) { const nq = this.norm(q); if (!nq) return []; const qts = nq.split(' '); const out = []; for (const msg of (scope ? this._d.messages.filter(x => x.id === scope) : this._d.messages)) { msg.paragraphs.forEach((p, i) => { const t = this.norm(msg.title + ' ' + msg.tape + ' ' + p.text); const words = t.split(' '); let ok = 0; for (const tok of qts) { if (t.includes(tok)) { ok++; continue; } if (tok.length > 3 && this.fuzzyTok(tok, words)) ok++; } if (ok === qts.length) out.push({ msg, idx: i, p }); }); } return out.slice(0, 12); }
+  fmtDur(s) { const h = Math.floor(s / 3600), m2 = Math.floor((s % 3600) / 60), sec = s % 60; return (h ? h + ':' + this.fmt2(m2) : m2) + ':' + this.fmt2(sec); }
+  sermonStep(dir) {
+    const S = this.state;
+    if (S.sermonTrack === 'presentation') { const it = this.curMedia(); const n = it.type === 'deck' ? it.slides.length : 1; this.applyCue({ presSlideIdx: Math.max(0, Math.min(n - 1, S.presSlideIdx + dir)) }); }
+    else if (S.sermonTrack === 'message') { const mm = this.curMsg(); this.applyCue({ msgIdx: Math.max(0, Math.min(mm.paragraphs.length - 1, S.msgIdx + dir)) }); }
+    else { const cnt = this.chapVerseCount(S.scrBook, S.scrCh); this.applyCue({ scrV: Math.max(1, Math.min(cnt, S.scrV + dir)) }); }
+  }
+  sermonPrev() { this.sermonStep(-1); } sermonNext() { this.sermonStep(1); }
+  toggleVerPick() { this.setState(s => ({ verPickOpen: !s.verPickOpen })); }
+  pickVersion(id) { this.setState(s => { let v = (s.versions || ['kjv']).slice(); const i = v.indexOf(id); if (i >= 0) { if (v.length > 1) v.splice(i, 1); } else if (v.length >= 2) v = [v[0], id]; else v.push(id); return { versions: v }; }); }
+  verseCols(t, versions) { const cols = (versions || ['kjv']).map(id => ({ version: id.toUpperCase(), text: t[id] || '' })).filter(c => c.text); return cols.length ? cols : [{ version: 'KJV', text: t.kjv || '' }]; }
+  onSermonEntry(e) { this.setState({ sermonEntryQ: e.target.value }); }
+  onSermonEntryKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.addSermonEntry(); } if (e.key === ' ') { const v = this.state.sermonEntryQ; if (!/\d/.test(v)) { const b = this.matchBook(v.trim()); if (b && this.norm(b) !== this.norm(v.trim())) { e.preventDefault(); this.setState({ sermonEntryQ: b + ' ' }); } } } }
+  addSermonEntry() { const p = this.parseRef(this.state.sermonEntryQ); if (!p) return; if (!this._d.scriptureSchedule.some(r => r.book === p.book && r.ch === p.ch && r.from === p.from && r.to === p.to)) this._d.scriptureSchedule.push({ id: 'r' + Date.now(), book: p.book, ch: p.ch, from: p.from, to: p.to }); this.setState({ sermonEntryQ: '', sermonTrack: 'scripture', scrBook: p.book, scrCh: p.ch, scrV: p.from, output: 'live' }); }
+
+  // pre-service
+  togglePre() { this.setState(s => ({ preRunning: !s.preRunning })); }
+  addMinute() { this.setState(s => ({ countdown: s.countdown + 60 })); }
+  resetPre() { this.setState({ countdown: 600, preRunning: false }); }
+  nextLoopIdx(s, d) { const L = s.preLoop; const n = L.length; let i = s.preIdx; for (let k = 0; k < n; k++) { i = (i + d + n) % n; if (L[i].enabled) return i; } return s.preIdx; }
+  preShow(i) { this.setState({ preIdx: i, loopT: 0 }); }
+  preStep(d) { this.setState(s => ({ preIdx: this.nextLoopIdx(s, d), loopT: 0 })); }
+  toggleLoopOn() { this.setState(s => ({ loopOn: !s.loopOn, loopT: 0 })); }
+  toggleLoopItem(id) { this.setState(s => ({ preLoop: s.preLoop.map(it => it.id === id ? { ...it, enabled: !it.enabled } : it) })); }
+  adjDwell(d) { this.setState(s => ({ dwell: Math.max(5, Math.min(60, s.dwell + d)), loopT: 0 })); }
+  openPreAdd() { this.setState({ peOpen: true, peId: null, peType: 'verse', peTitle: '', peRef: '', peText: '', peLines: '', peHeadline: '', peSubtitle: '' }); }
+  openPreEdit(it) { this.setState({ peOpen: true, peId: it.id, peType: (it.type === 'welcome' ? 'message' : it.type), peTitle: it.title || '', peRef: it.ref || '', peText: it.text || '', peLines: (it.points || []).join('\n'), peHeadline: it.headline || '', peSubtitle: it.subtitle || '' }); }
+  closePreEdit() { this.setState({ peOpen: false }); }
+  savePreEdit() {
+    this.setState(s => {
+      const t = s.peType;
+      let patch;
+      if (t === 'verse') patch = { type: 'verse', title: s.peTitle.trim() || s.peRef.trim() || 'Verse', ref: s.peRef.trim(), text: s.peText.trim() };
+      else if (t === 'list') patch = { type: 'list', title: s.peTitle.trim() || 'List', heading: s.peTitle.trim() || 'Announcements', points: s.peLines.split('\n').map(x => x.trim()).filter(Boolean) };
+      else patch = { type: 'message', title: s.peTitle.trim() || s.peHeadline.trim() || 'Message', headline: s.peHeadline.trim() || 'Welcome', subtitle: s.peSubtitle.trim() };
+      if (s.peId) return { peOpen: false, preLoop: s.preLoop.map(it => it.id === s.peId ? { ...it, ...patch } : it) };
+      return { peOpen: false, preLoop: [...s.preLoop, { id: 'c' + Date.now(), enabled: true, ...patch }] };
+    });
+  }
+  removePreCard() {
+    this.setState(s => {
+      const L = s.preLoop.filter(it => it.id !== s.peId);
+      return { peOpen: false, preLoop: L, preIdx: Math.max(0, Math.min(s.preIdx, L.length - 1)), loopT: 0 };
+    });
+  }
+  preSlideFor(it, S) {
+    const A = '#e0a341';
+    if (it.type === 'welcome' || it.type === 'message') return { kind: 'title', accent: A, title: it.headline || 'Welcome', subtitle: it.subtitle != null ? it.subtitle : 'We’re glad you’re here this morning' };
+    if (it.type === 'verse') return { kind: 'scripture', accent: '#6f9cf0', ref: it.ref, label: it.ref, columns: [{ version: 'KJV', text: it.text }] };
+    if (it.type === 'list') return { kind: 'title', accent: A, title: it.heading, points: it.points };
+    if (it.type === 'logo') return { kind: 'logo', title: 'LECTERN' };
+    return { kind: 'countdown', accent: A, message: 'Service begins in', countdownText: this.fmtCount(S.countdown) };
+  }
+
+  // quick add
+  splitToSlides(text) { const blocks = (text || '').split(/\n\s*\n/).map(b => b.trim()).filter(Boolean); return blocks.map((b, i) => { let lines = b.split(/\n/).map(l => l.trim()).filter(Boolean); let label = 'Verse ' + (i + 1); if (/^(chorus|verse|bridge|refrain|intro|outro|tag|pre-?chorus)\b/i.test(lines[0] || '')) label = lines.shift().replace(/[:.]$/, ''); return { label, lines }; }); }
+  openQuickAdd() { this.setState({ quickAddOpen: true, qaTitle: '', qaText: '', qaSource: 'search', qaStep: 'find', qaQ: '', qaPickedId: null }); }
+  closeQuickAdd() { this.setState({ quickAddOpen: false }); }
+  qaGoSearch() { this.setState({ qaSource: 'search', qaStep: 'find' }); }
+  qaGoPaste() { this.setState({ qaSource: 'paste', qaStep: 'review', qaPickedId: null, qaTitle: '', qaText: '' }); }
+  qaPick(id) { this.setState({ qaPickedId: id }); }
+  qaUsePick() { const r = this._d.onlineSongs.find(x => x.id === this.state.qaPickedId); if (!r) return; this.setState({ qaTitle: r.title, qaText: r.text, qaStep: 'review' }); }
+  qaBackToSearch() { this.setState({ qaStep: 'find', qaSource: 'search' }); }
+  fuzzyTok(tok, words) { const tol = tok.length >= 6 ? 2 : 1; return words.some(w => Math.abs(w.length - tok.length) <= 2 && this.lev(tok, w) <= tol); }
+  searchOnline(q) { const nq = this.norm(q); if (!nq) return this._d.onlineSongs; const qts = nq.split(' '); return this._d.onlineSongs.filter(r => { const t = this.norm(r.title + ' ' + r.author + ' ' + r.text); const words = t.split(' '); return qts.every(tok => t.includes(tok) || (tok.length > 3 && this.fuzzyTok(tok, words))); }); }
+  saveQuickAdd() { const secs = this.splitToSlides(this.state.qaText); if (!secs.length) { this.setState({ quickAddOpen: false }); return; } const id = 'song-' + Date.now(); const title = this.state.qaTitle.trim() || 'Untitled Song'; const src = this.state.qaStep === 'review' && this.state.qaPickedId ? this._d.onlineSongs.find(x => x.id === this.state.qaPickedId) : null; const it = { id, type: 'song', title, author: src ? src.author : 'Added in service', sections: secs }; it.blob = title + ' ' + secs.map(s => s.lines.join(' ')).join(' '); this._d.songs.unshift(it); this._d.songMap[id] = it; this.setState({ quickAddOpen: false, activeSongId: id, songSection: 0, songQ: '' }); }
+
+  // ---------------- live slide derivation ----------------
+  liveContent(st) {
+    const S0 = st || this.state;
+    const m = S0.mode;
+    if (m === 'songs') { const s = this._d.songMap[S0.activeSongId]; const sec = s && s.sections[S0.songSection]; return sec ? { kind: 'lyrics', accent: '#e0a341', label: s.title + ' · ' + sec.label, lines: sec.lines } : { kind: 'logo', title: 'LECTERN' }; }
+    if (m === 'sermon') { const S = S0; if (S.sermonTrack === 'message') { const msg = this._d.msgMap[S.msgId] || this._d.messages[0]; const p = msg.paragraphs[Math.max(0, Math.min(S.msgIdx, msg.paragraphs.length - 1))]; return { kind: 'quote', accent: '#a88bc4', label: msg.title, text: p.text, source: msg.title + ' · Tape ' + msg.tape + ' · ¶' + p.n }; } if (S.sermonTrack === 'presentation') { const it = this._d.mediaItems.find(x => x.id === S.presItemId) || this._d.mediaItems[0]; const sl = it.type === 'deck' ? (it.slides[S.presSlideIdx] || it.slides[0]) : it.slide; return sl ? { ...sl, liveLabel: it.title + (it.type === 'deck' ? ' · Slide ' + (Math.min(S.presSlideIdx, it.slides.length - 1) + 1) : '') } : { kind: 'logo', title: 'LECTERN' }; } const ref = S.scrBook + ' ' + S.scrCh + ':' + S.scrV; const t = this.verseText(S.scrBook, S.scrCh, S.scrV); const cols = this.verseCols(t, S.versions); return { kind: 'scripture', accent: '#6f9cf0', ref, label: ref, columns: cols }; }
+    if (m === 'pre') { const it = (S0.preLoop || [])[S0.preIdx]; return this.preSlideFor(it || { type: 'countdown' }, S0); }
+    return { kind: 'logo', title: 'LECTERN' };
+  }
+  fmt2(n) { return (n < 10 ? '0' : '') + n; }
+  fmtCount(s) { return Math.floor(s / 60) + ':' + this.fmt2(s % 60); }
+
+  // ---------------- styles ----------------
+  tag(c, T) { return { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '2px 7px', borderRadius: '5px', fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.06em', fontWeight: 500, color: c, background: c + '22', flexShrink: 0, whiteSpace: 'nowrap' }; }
+
+  renderVals() {
+    const S = this.state; const T = this.T(); const m = S.mode;
+    const ts = this.props.typeScale === 'Large' ? 1.2 : 1;
+    const compact = this.props.density === 'Compact';
+    const railW = (w) => (compact ? Math.round(w * 0.82) : w) + 'px';
+    const sized = (a, b, c) => 'clamp(' + (a * ts).toFixed(1) + 'px, ' + (b * ts).toFixed(2) + 'vw, ' + (c * ts).toFixed(1) + 'px)';
+    const curKey = this.cueKey();
+    const cuedIsLive = S.output === 'live' && S.liveKey === curKey;
+    const clockD = new Date(S.now);
+    const clock = this.fmt2(clockD.getHours()) + ':' + this.fmt2(clockD.getMinutes()) + ':' + this.fmt2(clockD.getSeconds());
+    const live = this.liveContent();
+    const liveSlideRaw = live;
+    const outputOverride = S.output === 'black' ? { kind: 'black' } : S.output === 'logo' ? { kind: 'logo', title: 'LECTERN' } : (S.liveSnap || live);
+
+    const modeTabs = [['pre', 'Pre-service'], ['songs', 'Songs'], ['sermon', 'Sermon']].map(([id, label]) => ({ id, label, onClick: () => this.setMode(id), style: { padding: '7px 16px', borderRadius: '8px', fontSize: '13.5px', fontWeight: m === id ? 700 : 600, color: m === id ? T.accentInk : T.dim, background: m === id ? T.accent : 'transparent' } }));
+
+    const snapLbl = (S.liveSnap && (S.liveSnap.liveLabel || S.liveSnap.label || S.liveSnap.ref || S.liveSnap.title || '')) || '';
+    const outLabel = S.output === 'black' ? 'SCREEN BLACK' : S.output === 'logo' ? 'LOGO' : ('LIVE' + (snapLbl ? ' — ' + snapLbl.toUpperCase().slice(0, 30) : ''));
+    const outColor = S.output === 'black' ? T.dim : S.output === 'logo' ? T.accent : T.live;
+
+    // ---- songs ----
+    const sres = this.searchSongs(S.songQ, S.songField).slice(0, 9);
+    const songFieldTabs = [['all', 'All'], ['title', 'Title'], ['lyric', 'Lyric']].map(([id, label]) => ({ label, onClick: () => this.setState({ songField: id }), style: { flex: 1, height: '24px', borderRadius: '7px', fontSize: '11px', fontWeight: S.songField === id ? 700 : 600, color: S.songField === id ? T.accentInk : T.faint, background: S.songField === id ? T.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' } }));
+    const songResults = sres.map(r => { const active = r.song.id === S.activeSongId; return { id: r.song.id, title: r.song.title, author: r.song.author + ' · ' + r.song.sections.length + (r.song.sections.length === 1 ? ' section' : ' sections'), snippet: r.snippet, hasSnippet: !!r.snippet, isActive: active, titleColor: active ? T.accent : T.text, onClick: () => this.selectSong(r.song.id),
+      rowStyle: { display: 'flex', alignItems: 'flex-start', gap: '8px', width: '100%', padding: '9px 10px', borderRadius: '10px', cursor: 'pointer', marginBottom: '2px', background: active ? (S.theme === 'dark' ? '#221d10' : '#f3e6cd') : 'transparent', boxShadow: active ? 'inset 0 0 0 1px ' + T.accent + '66' : 'none' },
+      snippetStyle: { fontSize: '11px', color: T.dim, marginTop: '4px', fontStyle: 'italic', lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
+      activeBadge: { fontSize: '10px', color: T.accent, flexShrink: 0, marginTop: '3px' } }; });
+    const activeSong = this._d.songMap[S.activeSongId] || this._d.songs[0];
+    const songSec = Math.max(0, Math.min(S.songSection, activeSong.sections.length - 1));
+    const liveSec = activeSong.sections[songSec] || { label: '', lines: [] };
+    const secPanelW = Math.max(260, Math.min(620, Number(S.sectionPanelW ?? this.props.sectionPanelWidth ?? 380)));
+    const secFont = Math.round(Math.max(13, Math.min(18, secPanelW / 24)) * ts * 10) / 10;
+    const sectionRail = activeSong.sections.map((sc, i) => { const isCued = i === songSec; const isLive = S.output === 'live' && S.liveKey === ('song:' + activeSong.id + ':' + i); return { label: sc.label, lines: sc.lines, showBadge: isCued || isLive, badgeText: isLive ? 'LIVE' : 'CUED', onClick: () => this.showSection(i),
+      rowStyle: { display: 'block', width: '100%', textAlign: 'left', padding: '11px 13px', borderRadius: '11px', cursor: 'pointer', background: isLive ? (S.theme === 'dark' ? '#221d10' : '#fbf1da') : T.panel2, boxShadow: isLive ? 'inset 0 0 0 2px ' + T.accent : (isCued ? 'inset 0 0 0 1.5px ' + T.accent + '66' : 'inset 0 0 0 1px ' + T.hairline) },
+      labelStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '10.5px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500, color: isCued ? T.accent : T.faint },
+      badgeStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.08em', fontWeight: 600, color: isLive ? T.live : T.dim },
+      lineStyle: { fontSize: secFont + 'px', lineHeight: 1.45, fontWeight: 500, color: isCued ? T.text : (S.theme === 'dark' ? '#b4b1aa' : '#5f5848'), textWrap: 'pretty' } }; });
+
+    // ---- sermon ----
+    // ---- sermon ----
+    const isScr = S.sermonTrack === 'scripture';
+    const isPres = S.sermonTrack === 'presentation';
+    const isMsg = S.sermonTrack === 'message';
+    const trackTabs = [['scripture', 'Scripture'], ['message', 'Message'], ['presentation', 'Slides']].map(([id, label]) => ({ id, label, onClick: () => this.setTrack(id), style: { flex: 1, height: '34px', borderRadius: '8px', fontSize: '12.5px', fontWeight: S.sermonTrack === id ? 700 : 600, color: S.sermonTrack === id ? '#fff' : T.dim, background: S.sermonTrack === id ? (id === 'scripture' ? T.scripture : id === 'message' ? T.message : T.sermon) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' } }));
+
+    const scriptureRows = this._d.scriptureSchedule.map(it => { const isCur = isScr && it.book === S.scrBook && it.ch === S.scrCh && S.scrV >= it.from && S.scrV <= it.to; const ref = it.book + ' ' + it.ch + ':' + it.from + (it.to > it.from ? '–' + it.to : ''); const n = it.to - it.from + 1; return { title: ref, meta: n + (n === 1 ? ' verse' : ' verses') + ' · KJV', isCurrent: isCur, onClick: () => this.selectReading(it),
+      iconStyle: { width: '28px', height: '28px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '13px', color: T.scripture, background: T.scripture + '22' },
+      rowStyle: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: isCur ? T.panel3 : 'transparent', boxShadow: isCur ? 'inset 0 0 0 1px ' + T.scripture + '55' : 'none' } }; });
+
+    const curItem = this._d.mediaItems.find(x => x.id === S.presItemId) || this._d.mediaItems[0];
+    const curSlides = curItem.type === 'deck' ? curItem.slides : [curItem.slide];
+    const presIdx = Math.max(0, Math.min(S.presSlideIdx, curSlides.length - 1));
+    const mediaRows = this._d.mediaItems.map(it => { const isCur = isPres && it.id === S.presItemId; const thumb = it.type === 'deck' ? it.slides[0] : it.slide; const icon = it.type === 'deck' ? '▤' : (it.label === 'Video clip' ? '▶' : '▣'); return { thumb, icon, title: it.title, meta: it.type === 'deck' ? (it.label + ' · ' + it.slides.length + ' slides') : it.label, isCurrent: isCur, onClick: () => this.selectMedia(it),
+      rowStyle: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '8px 9px', borderRadius: '11px', cursor: 'pointer', background: isCur ? T.panel3 : 'transparent', boxShadow: isCur ? 'inset 0 0 0 1px ' + T.sermon + '55' : 'none' } }; });
+    const deckSlideRows = (curItem.type === 'deck' ? curItem.slides : []).map((sl, i) => { const isCued = isPres && i === presIdx; const isLive = S.output === 'live' && S.liveKey === ('pres:' + S.presItemId + ':' + i); return { slide: sl, num: i + 1, isCurrent: isCued || isLive, onClick: () => this.showDeckSlide(i),
+      numStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', width: '16px', flexShrink: 0, textAlign: 'right', color: isCued ? T.sermon : T.faint, fontWeight: isCued ? 700 : 400 },
+      thumbStyle: { flex: 1, aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', position: 'relative', boxShadow: isLive ? '0 0 0 2px ' + T.sermon + ', 0 6px 18px rgba(0,0,0,.25)' : (isCued ? '0 0 0 2px ' + T.sermon + '66' : 'inset 0 0 0 1px ' + T.border) },
+      rowStyle: { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent' } }; });
+
+    const liveIsVerse = isScr; const liveIsSlide = isPres; const liveIsQuote = isMsg;
+    const curMsgObj = this.curMsg();
+    const msgIdx = Math.max(0, Math.min(S.msgIdx, curMsgObj.paragraphs.length - 1));
+    const curPara = curMsgObj.paragraphs[msgIdx];
+    const msgPlanned = new Set(this._d.msgSchedule.filter(x => x.msgId === curMsgObj.id).map(x => x.idx));
+    const scrCnt = this.chapVerseCount(S.scrBook, S.scrCh);
+    const plannedSet = this.plannedSet(S.scrBook, S.scrCh);
+    let liveRef = '', liveVerseCols = [];
+    if (isScr) { liveRef = S.scrBook + ' ' + S.scrCh + ':' + S.scrV; const t = this.verseText(S.scrBook, S.scrCh, S.scrV); liveVerseCols = this.verseCols(t, S.versions); }
+    const curSlide = curSlides[presIdx] || { kind: 'logo', title: 'LECTERN' };
+
+    let ondeckLabel = 'UP NEXT — TAP OR PRESS →', ondeckTag = '—', ondeckTitle = '', ondeckPreview = '', ondeckTagColor = T.faint;
+    if (isScr) { if (S.scrV < scrCnt) { const nv = S.scrV + 1; ondeckTag = plannedSet.has(nv) ? 'VERSE' : 'KEEP READING'; ondeckTagColor = T.scripture; ondeckTitle = S.scrBook + ' ' + S.scrCh + ':' + nv; ondeckPreview = this.verseText(S.scrBook, S.scrCh, nv).kjv; } else { ondeckTitle = 'End of ' + S.scrBook + ' ' + S.scrCh; ondeckPreview = 'Pick the next reading on the left'; } }
+    else if (isMsg) { const np = curMsgObj.paragraphs[msgIdx + 1]; if (np) { ondeckTag = msgPlanned.has(msgIdx + 1) ? 'QUOTE' : 'KEEP READING'; ondeckTagColor = T.message; ondeckTitle = curMsgObj.title + ' — ¶' + np.n; ondeckPreview = np.text; } else { ondeckTitle = 'End of ' + curMsgObj.title + ' quotes'; ondeckPreview = 'Pick another quote on the left'; } }
+    else { const ns = curSlides[presIdx + 1]; if (ns) { ondeckTag = 'SLIDE'; ondeckTagColor = T.sermon; ondeckTitle = ns.title; ondeckPreview = ns.subtitle || (ns.points ? ns.points.join(' · ') : ns.label); } else { ondeckTitle = curItem.type === 'deck' ? 'End of ' + curItem.title : 'Single item'; ondeckPreview = 'Pick another from the left'; } }
+
+    const chapterRows = [];
+    if (isScr) { for (let v = 1; v <= scrCnt; v++) { const planned = plannedSet.has(v); const isCued = v === S.scrV; const isLive = S.output === 'live' && S.liveKey === ('scr:' + S.scrBook + ':' + S.scrCh + ':' + v); const t = this.verseText(S.scrBook, S.scrCh, v); chapterRows.push({ label: 'Verse ' + v, preview: t.kjv, showBadge: isCued || isLive, badgeText: isLive ? 'LIVE' : 'CUED', onClick: () => this.showVerse(v),
+      labelStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '10.5px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500, color: (isCued || planned) ? T.scripture : T.faint },
+      badgeStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.08em', fontWeight: 600, color: isLive ? T.live : T.dim },
+      textStyle: { fontSize: '12.5px', lineHeight: 1.42, fontWeight: 500, color: isCued ? T.text : (planned ? (S.theme === 'dark' ? '#b4b1aa' : '#5f5848') : T.dim), display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+      rowStyle: { display: 'block', width: '100%', textAlign: 'left', padding: '11px 13px', borderRadius: '11px', cursor: 'pointer', background: isLive ? (S.theme === 'dark' ? 'rgba(111,156,240,.14)' : 'rgba(63,107,181,.11)') : (isCued ? (S.theme === 'dark' ? 'rgba(111,156,240,.09)' : 'rgba(63,107,181,.07)') : (planned ? (S.theme === 'dark' ? 'rgba(111,156,240,.05)' : 'rgba(63,107,181,.045)') : T.panel2)), boxShadow: isLive ? 'inset 0 0 0 2px ' + T.scripture : (isCued ? 'inset 0 0 0 1.5px ' + T.scripture + '66' : (planned ? 'inset 0 0 0 1px ' + T.scripture + '44' : 'inset 0 0 0 1px ' + T.hairline)) } }); } }
+    const plannedCount = plannedSet.size;
+
+    // ---- message track ----
+    const msgRowBg = (lv, cu, pl) => lv ? (S.theme === 'dark' ? 'rgba(168,139,196,.14)' : 'rgba(122,92,150,.11)') : (cu ? (S.theme === 'dark' ? 'rgba(168,139,196,.09)' : 'rgba(122,92,150,.07)') : (pl ? (S.theme === 'dark' ? 'rgba(168,139,196,.05)' : 'rgba(122,92,150,.045)') : T.panel2));
+    const msgScheduleRows = this._d.msgSchedule.map(it => { const mm = this._d.msgMap[it.msgId]; const p = mm.paragraphs[it.idx]; const isCur = isMsg && S.msgId === it.msgId && msgIdx === it.idx; return { title: mm.title, meta: '¶' + p.n + ' · Tape ' + mm.tape, isCurrent: isCur, onClick: () => this.selectQuote(it.msgId, it.idx),
+      iconStyle: { width: '28px', height: '28px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '14px', color: T.message, background: T.message + '22' },
+      rowStyle: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: isCur ? T.panel3 : 'transparent', boxShadow: isCur ? 'inset 0 0 0 1px ' + T.message + '55' : 'none' } }; });
+    const msgScopeObj = S.msgScope ? this._d.msgMap[S.msgScope] : null;
+    const msgTapeRows = (!S.msgScope ? this.searchTapes(S.msgQ) : []).map(t => ({ title: t.title, meta: 'Tape ' + t.tape + ' · ' + t.date, onClick: () => this.msgScopeSet(t.id),
+      iconStyle: { width: '28px', height: '28px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '13px', color: T.message, background: T.message + '22' },
+      rowStyle: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.hairline } }));
+    const msgSearchRows = this.searchQuotes(S.msgQ, S.msgScope).map(r => ({ title: (S.msgScope ? '¶' + r.p.n : r.msg.title + ' — ¶' + r.p.n), preview: r.p.text, onClick: () => this.selectQuote(r.msg.id, r.idx),
+      textStyle: { fontSize: '12px', lineHeight: 1.42, color: T.dim, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginTop: '3px' },
+      rowStyle: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.hairline } }));
+    const hasMsgSearch = isMsg && !!this.norm(S.msgQ);
+    const paraRows = curMsgObj.paragraphs.map((p, i) => { const planned = msgPlanned.has(i); const isCued = i === msgIdx; const isLive = S.output === 'live' && S.liveKey === ('msg:' + S.msgId + ':' + i); return { label: '¶ ' + p.n, preview: p.text, showBadge: isCued || isLive, badgeText: isLive ? 'LIVE' : 'CUED', onClick: () => this.showPara(i),
+      labelStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '10.5px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500, color: (isCued || planned) ? T.message : T.faint },
+      badgeStyle: { display: 'inline-flex', alignItems: 'center', gap: '5px', fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.08em', fontWeight: 600, color: isLive ? T.live : T.dim },
+      textStyle: { fontSize: '12.5px', lineHeight: 1.42, fontWeight: 500, color: isCued ? T.text : (planned ? (S.theme === 'dark' ? '#b4b1aa' : '#5f5848') : T.dim), display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+      rowStyle: { display: 'block', width: '100%', textAlign: 'left', padding: '11px 13px', borderRadius: '11px', cursor: 'pointer', background: msgRowBg(isLive, isCued, planned), boxShadow: isLive ? 'inset 0 0 0 2px ' + T.message : (isCued ? 'inset 0 0 0 1.5px ' + T.message + '66' : (planned ? 'inset 0 0 0 1px ' + T.message + '44' : 'inset 0 0 0 1px ' + T.hairline)) } }; });
+
+    const sp = this.parseRef(S.sermonEntryQ);
+    const hasSermonParse = !!sp;
+    const sermonParseLabel = sp ? (sp.book + ' ' + sp.ch + ':' + sp.from + (sp.to > sp.from ? '–' + sp.to : '')) : '';
+
+    // pre
+    const preToggleLabel = S.preRunning ? '❚❚ Pause' : '▶ Resume';
+    const preIdxC = Math.max(0, Math.min(S.preIdx, S.preLoop.length - 1));
+    const preItem = S.preLoop[preIdxC];
+    const enabledCount = S.preLoop.filter(x => x.enabled).length;
+    const preRows = S.preLoop.map((it, i) => {
+      const isShowing = i === preIdxC;
+      const snippet = it.type === 'countdown' ? 'Service begins in ' + this.fmtCount(S.countdown)
+        : (it.type === 'welcome' || it.type === 'message') ? ((it.headline || 'Welcome') + (it.subtitle ? ' — ' + it.subtitle : ''))
+        : it.type === 'verse' ? it.text
+        : it.type === 'list' ? (it.points || []).join('  ·  ')
+        : 'Church logo on a dark screen';
+      const canEdit = it.type !== 'countdown' && it.type !== 'logo';
+      return {
+        label: it.title, snippet, isShowing, canEdit,
+        showProgress: isShowing && S.loopOn && it.enabled,
+        onClick: () => this.preShow(i),
+        onToggle: (e) => { e.stopPropagation(); this.toggleLoopItem(it.id); },
+        onEdit: (e) => { e.stopPropagation(); this.openPreEdit(it); },
+        editChipStyle: { fontSize: '11px', padding: '3px 7px', borderRadius: '6px', cursor: 'pointer', flexShrink: 0, color: T.dim, boxShadow: 'inset 0 0 0 1px ' + T.border },
+        chipText: it.enabled ? 'IN LOOP' : 'SKIPPED',
+        chipStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.06em', fontWeight: 600, padding: '3px 7px', borderRadius: '6px', cursor: 'pointer', flexShrink: 0, color: it.enabled ? T.accent : T.faint, background: it.enabled ? T.accent + '1c' : 'transparent', boxShadow: it.enabled ? 'none' : 'inset 0 0 0 1px ' + T.border },
+        showingBadge: { fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.06em', fontWeight: 600, color: T.live, whiteSpace: 'nowrap', flexShrink: 0 },
+        rowStyle: { display: 'block', width: '100%', textAlign: 'left', padding: '11px 13px', borderRadius: '11px', cursor: 'pointer', opacity: it.enabled || isShowing ? 1 : 0.55, background: isShowing ? (S.theme === 'dark' ? '#221d10' : '#fbf1da') : T.panel2, boxShadow: isShowing ? 'inset 0 0 0 1.5px ' + T.accent + '88' : 'inset 0 0 0 1px ' + T.hairline },
+        labelStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '10.5px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500, color: isShowing ? T.accent : T.faint },
+        snippetStyle: { fontSize: '12.5px', lineHeight: 1.45, fontWeight: 500, color: isShowing ? T.text : T.dim, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
+        progressTrack: { marginTop: '9px', height: '3px', borderRadius: '2px', background: T.hairline, overflow: 'hidden' },
+        progressFill: { height: '100%', borderRadius: '2px', background: T.accent, width: Math.min(100, (S.loopT / S.dwell) * 100) + '%', transition: 'width 1s linear' }
+      };
+    });
+
+    // qa
+    const qaSlides = this.splitToSlides(S.qaText);
+    const qaShowFind = S.quickAddOpen && S.qaSource === 'search' && S.qaStep === 'find';
+    const qaShowReview = S.quickAddOpen && !qaShowFind;
+    const qaPicked = this._d.onlineSongs.find(x => x.id === S.qaPickedId) || null;
+    const qaTab = (active) => ({ height: '32px', padding: '0 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: active ? 700 : 600, color: active ? T.accentInk : T.dim, background: active ? T.accent : 'transparent' });
+    const qaResults = this.searchOnline(S.qaQ).map(r => { const picked = r.id === S.qaPickedId; const firstLine = r.text.split('\n').find(l => l.trim() && !/^(verse|chorus|bridge)/i.test(l)) || ''; return { title: r.title, author: r.author, source: r.source, snippet: firstLine, onClick: () => this.qaPick(r.id),
+      srcStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.05em', color: T.accent, background: T.accent + '1c', padding: '2px 6px', borderRadius: '5px', flexShrink: 0, whiteSpace: 'nowrap' },
+      snipStyle: { fontSize: '11.5px', color: T.faint, marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: 'italic' },
+      rowStyle: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: picked ? T.panel3 : T.panel2, boxShadow: picked ? 'inset 0 0 0 1.5px ' + T.accent + '88' : 'inset 0 0 0 1px ' + T.hairline } }; });
+
+    // shared button styles
+    const ghostBtn = { height: '46px', padding: '0 16px', borderRadius: '11px', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.hairline, fontSize: '14px', fontWeight: 600, color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' };
+    const primaryBtn = { height: '46px', padding: '0 22px', borderRadius: '11px', background: T.accent, color: T.accentInk, fontSize: '14.5px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' };
+    const sermonPrimary = { ...primaryBtn, background: T.sermon, color: S.theme === 'dark' ? '#0c150f' : '#fff' };
+    const smallGhost = { height: '46px', padding: '0 14px', borderRadius: '11px', background: 'transparent', boxShadow: 'inset 0 0 0 1px ' + T.border, fontSize: '13px', fontWeight: 600, color: T.dim, display: 'flex', alignItems: 'center' };
+    const outBtn = (active, c) => ({ height: '30px', padding: '0 12px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 600, color: active ? c : T.dim, background: active ? c + '22' : 'transparent', boxShadow: 'inset 0 0 0 1px ' + (active ? c + '55' : T.border) });
+    const miniWrap = { width: '78px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', boxShadow: 'inset 0 0 0 1px ' + T.border, flexShrink: 0 };
+
+    return {
+      rootStyle: { height: '100vh', display: 'flex', flexDirection: 'column', background: T.appBg, color: T.text, fontFamily: "'Hanken Grotesk', system-ui, sans-serif", fontSize: '14px', overflow: 'hidden' },
+      headerStyle: { height: '56px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '18px', padding: '0 16px', background: T.panel, borderBottom: '1px solid ' + T.hairline },
+      logoStyle: { width: '30px', height: '30px', borderRadius: '9px', background: 'linear-gradient(150deg,#e7b95c,#cf8f33)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#1a1206', fontSize: '17px' },
+      modeWrapStyle: { display: 'flex', gap: '4px', background: T.panel2, padding: '4px', borderRadius: '11px' },
+      modeTabs,
+      liveStatusStyle: { display: 'inline-flex', alignItems: 'center', gap: '7px', height: S.output === 'live' ? '32px' : '28px', padding: '0 11px', borderRadius: '8px', background: outColor + '1c', boxShadow: 'inset 0 0 0 1px ' + outColor + '55', color: outColor, cursor: S.output === 'live' ? 'pointer' : 'default', whiteSpace: 'nowrap' },
+      liveDotStyle: { width: '7px', height: '7px', borderRadius: '50%', background: outColor, animation: S.output === 'live' ? 'lecPulse 1.6s ease-in-out infinite' : 'none' },
+      liveStatusText: outLabel, themeIcon: S.theme === 'dark' ? '☀' : '☾',
+      isLiveOut: S.output === 'live',
+      liveStatusClick: () => { if (this.state.output === 'live') this.setState({ output: 'black' }); },
+      liveStatusTitle: S.output === 'live' ? 'Take down — clears the screen from anywhere' : 'Nothing on screen',
+      takeDownChipStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '9.5px', letterSpacing: '0.08em', fontWeight: 700, color: T.live, background: T.live + '22', padding: '3px 7px', borderRadius: '6px', marginLeft: '2px' },
+      themeBtnStyle: { width: '34px', height: '34px', borderRadius: '9px', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.hairline, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: T.dim },
+      clock, clockColor: T.dim, toggleTheme: () => this.toggleTheme(),
+      hairline: T.hairline, dimColor: T.dim, faintColor: T.faint, accentColor: T.accent, scriptureColor: T.scripture, sermonColor: T.sermon, liveColor: T.live,
+      isSongs: m === 'songs', isSermon: m === 'sermon', isPre: m === 'pre',
+      showOutputs: m === 'songs' || m === 'sermon',
+
+      // songs
+      searchPanelStyle: { width: '376px', flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 },
+      searchBoxStyle: { display: 'flex', alignItems: 'center', gap: '11px', height: '46px', padding: '0 14px', background: T.inputBg, borderRadius: '12px', boxShadow: 'inset 0 0 0 1px ' + T.border },
+      songQ: S.songQ, onSongQ: (e) => this.onSongQ(e), hasSongQ: !!S.songQ, clearSongQ: () => this.clearSongQ(),
+      songFieldTabs, songFieldWrapStyle: { display: 'flex', gap: '3px', background: T.panel2, padding: '3px', borderRadius: '9px', marginTop: '7px' },
+      songQPlaceholder: S.songField === 'title' ? 'Search titles…' : S.songField === 'lyric' ? 'Search a lyric line…' : 'Title or a lyric line…',
+      songSearchHint: S.songQ.trim() ? (sres.length + ' result' + (sres.length === 1 ? '' : 's') + ' · typos & missing apostrophes are fine') : 'Find by title or a remembered line — “amazin grace”, “sweet the sound”, “only beleive”.',
+      songResults, songNoResults: S.songQ.trim() && sres.length === 0, songEmptyText: 'No match for “' + S.songQ + '”. Try another word, or paste it as a new song below.',
+      bgApp: T.appBg, onSongKey: (e) => this.onSongKey(e),
+      opRailStyle: { width: railW(Math.max(200, Math.min(360, Number(S.songListW ?? this.props.songListWidth ?? 250)))), flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 },
+      sectionPanelStyle: { width: secPanelW + 'px', flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 },
+      dragListStart: (e) => this.startColDrag('list', e),
+      dragSecStart: (e) => this.startColDrag('sections', e),
+      gripListColor: S.dragging === 'list' ? T.accent : T.border,
+      gripSecColor: S.dragging === 'sections' ? T.accent : T.border,
+      opSearchBoxStyle: { display: 'flex', alignItems: 'center', gap: '8px', height: '38px', padding: '0 11px', background: T.inputBg, borderRadius: '9px', boxShadow: 'inset 0 0 0 1px ' + T.border },
+      toggleLogo: () => this.toggleLogo(), logoLabel: S.output === 'logo' ? 'Logo on screen' : 'Logo',
+      logoBtnStyle: { height: '46px', padding: '0 14px', borderRadius: '11px', background: 'transparent', boxShadow: 'inset 0 0 0 1px ' + (S.output === 'logo' ? T.accent + '66' : T.border), fontSize: '13px', fontWeight: 600, color: S.output === 'logo' ? T.accent : T.dim, display: 'flex', alignItems: 'center' },
+      pasteSongStyle: { width: '100%', height: '42px', marginTop: '8px', borderRadius: '11px', boxShadow: 'inset 0 0 0 1px ' + T.border, border: 'none', color: T.dim, fontSize: '13.5px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent' },
+      versePanelStyle: { flex: 1, minWidth: 0, background: T.appBg, display: 'flex', flexDirection: 'column', padding: '18px 20px', minHeight: 0 },
+      activeSongTitle: activeSong.title, activeSongAuthor: activeSong.author,
+      projBarStyle: { display: 'inline-flex', alignItems: 'center', gap: '8px', height: '30px', padding: '0 13px', borderRadius: '9px', background: outColor + '1c', boxShadow: 'inset 0 0 0 1px ' + outColor + '55', color: outColor },
+      projDotStyle: { width: '8px', height: '8px', borderRadius: '50%', background: outColor, animation: S.output === 'live' ? 'lecPulse 1.6s ease-in-out infinite' : 'none' },
+      projText: S.output === 'black' ? 'NOTHING ON SCREEN' : S.output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN',
+      sectionRail, bigVerseLines: liveSec.lines,
+      bigVerseLabel: liveSec.label ? ('NOW SINGING · ' + liveSec.label) : '',
+      bigVerseWrapStyle: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto', borderRadius: '14px', background: T.panel, boxShadow: cuedIsLive ? 'inset 0 0 0 2px ' + T.accent + '66' : 'inset 0 0 0 1px ' + T.hairline },
+      bigVerseLabelStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', letterSpacing: '0.14em', textTransform: 'uppercase', color: cuedIsLive ? T.accent : T.faint, fontWeight: 500 },
+      bigLineStyle: { fontWeight: 700, fontSize: sized(20, 2.9, 34), lineHeight: 1.3, letterSpacing: '-0.012em', color: T.text },
+      prevBtnStyle: ghostBtn, nextBtnStyle: ghostBtn, songPrev: () => this.songPrev(), songNext: () => this.songNext(),
+      goLive: () => this.goLive(), goLiveLabel: cuedIsLive ? '■ Take down' : '● Go live',
+      goLiveStyle: { height: '46px', padding: '0 20px', borderRadius: '11px', background: cuedIsLive ? T.live : '#2f9e5b', color: '#fff', fontSize: '14.5px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', whiteSpace: 'nowrap' },
+      blankBtnStyle: { ...smallGhost, color: S.output === 'black' ? T.live : T.dim, boxShadow: 'inset 0 0 0 1px ' + (S.output === 'black' ? T.live + '66' : T.border) }, blankLabel: S.output === 'black' ? 'Screen is black' : 'Blank screen', toggleBlank: () => this.toggleBlank(),
+
+      // sermon
+      schedulePanelStyle: { width: railW(270), flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 },
+      trackWrapStyle: { display: 'flex', gap: '4px', background: T.panel2, padding: '4px', borderRadius: '10px' },
+      trackTabs, trackIsScripture: isScr, trackIsPresentation: isPres, border: T.border,
+      schedInputStyle: { display: 'flex', alignItems: 'center', gap: '9px', height: '42px', padding: '0 12px', background: T.inputBg, borderRadius: '10px', boxShadow: 'inset 0 0 0 1px ' + T.border },
+      sermonEntryQ: S.sermonEntryQ, onSermonEntry: (e) => this.onSermonEntry(e), onSermonEntryKey: (e) => this.onSermonEntryKey(e),
+      hasSermonParse, sermonParseLabel, sermonAddText: '+ Add ' + sermonParseLabel, addSermonEntry: () => this.addSermonEntry(),
+      schedAddStyle: { width: '100%', height: '34px', marginTop: '8px', borderRadius: '9px', background: T.scripture + '22', color: T.scripture, fontSize: '12.5px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+      scriptureRows, mediaRows, deckSlideRows,
+      rightPanelShow: isScr || isMsg || (isPres && curItem.type === 'deck'),
+      trackIsMessage: isMsg, messageColor: T.message,
+      msgScheduleRows, msgSearchRows, hasMsgSearch, noMsgSearch: !hasMsgSearch, msgQ: S.msgQ, onMsgQ: (e) => this.onMsgQ(e), onMsgQKey: (e) => this.onMsgQKey(e),
+      msgTapeRows, hasTapeMatches: hasMsgSearch && msgTapeRows.length > 0, hasQuoteMatches: hasMsgSearch && msgSearchRows.length > 0, msgSearchEmpty: hasMsgSearch && msgTapeRows.length === 0 && msgSearchRows.length === 0,
+      msgScoped: !!msgScopeObj, msgNotScoped: !msgScopeObj, msgScopeLabel: msgScopeObj ? msgScopeObj.title : '', clearMsgScope: () => this.msgScopeClear(),
+      msgQPlaceholder: msgScopeObj ? 'Search within this tape…' : 'Search tapes & quotes…',
+      msgChipStyle: { display: 'inline-flex', alignItems: 'center', gap: '6px', height: '24px', padding: '0 8px', borderRadius: '7px', background: T.message + '22', color: T.message, fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0, cursor: 'pointer' },
+      msgQuotesHeader: msgScopeObj ? 'QUOTES IN THIS TAPE' : 'QUOTES',
+      msgPanelTitle: curMsgObj.title, msgPanelSub: msgPlanned.size + ' planned', msgHint: 'Planned quotes are highlighted. Tap any paragraph — and keep reading right past the plan.',
+      paraRows, liveIsQuote,
+      quoteRef: 'Tape ' + curMsgObj.tape + ' — ¶' + curPara.n,
+      quoteText: curPara.text,
+      quoteSource: curMsgObj.title + ' · ' + curMsgObj.date,
+      quoteTextStyle: { fontFamily: "'Newsreader', Georgia, serif", fontSize: sized(22, 2.1, 30), lineHeight: 1.55, color: T.text, textAlign: 'left', marginTop: '18px' },
+      quoteSourceStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '11.5px', letterSpacing: '0.08em', color: T.faint, marginTop: '18px', textAlign: 'left' },
+      tapeTitle: curMsgObj.title, tapeBtnLabel: S.tapePlaying ? '❚❚' : '▶', toggleTape: () => this.toggleTape(),
+      tapeTime: this.fmtDur(Math.min(S.tapePos, curMsgObj.duration)) + ' / ' + this.fmtDur(curMsgObj.duration),
+      tapeCardStyle: { margin: '0 12px 12px', padding: '11px 12px', borderRadius: '12px', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.hairline, flexShrink: 0 },
+      tapeBtnStyle: { width: '34px', height: '34px', borderRadius: '50%', background: T.message + '22', color: T.message, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: 'inset 0 0 0 1px ' + T.message + '55' },
+      tapeBarStyle: { height: '4px', borderRadius: '2px', background: T.panel3, marginTop: '10px', overflow: 'hidden' },
+      tapeFillStyle: { height: '100%', width: Math.min(100, (S.tapePos / curMsgObj.duration) * 100).toFixed(1) + '%', background: T.message, transition: 'width 1s linear' },
+      deckTitle: curItem.title, deckSub: curSlides.length + ' slides', deckHint: 'Tap any slide to put it on screen — jump anywhere, not just next.',
+      sermonCenterStyle: { flex: 1, minWidth: 0, background: T.appBg, display: 'flex', flexDirection: 'column', padding: compact ? '12px 16px' : '16px 22px', minHeight: 0 },
+      nowBarStyle: { alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '8px', height: '28px', padding: '0 12px', borderRadius: '9px', background: outColor + '1c', boxShadow: 'inset 0 0 0 1px ' + outColor + '55', color: outColor, marginBottom: '4px' },
+      liveIsVerse, liveIsSlide, liveRef, liveVerseCols, liveSlideObj: curSlide,
+      heroCardStyle: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto', borderRadius: '14px', background: T.panel, boxShadow: cuedIsLive ? 'inset 0 0 0 2px ' + (isScr ? T.scripture : isMsg ? T.message : T.sermon) + '66' : 'inset 0 0 0 1px ' + T.hairline },
+      heroLabel: isScr ? liveRef : ((curSlide && curSlide.label) || ''),
+      heroLabelStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', letterSpacing: '0.14em', textTransform: 'uppercase', color: cuedIsLive ? (isScr ? T.scripture : isMsg ? T.message : T.sermon) : T.faint, fontWeight: 500 },
+      verseColMax: liveVerseCols.length > 1 ? '50%' : '100%',
+      verseVerStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', letterSpacing: '0.14em', color: T.faint, marginBottom: '8px' },
+      verseTextStyle: { fontFamily: "'Newsreader', Georgia, serif", fontSize: liveVerseCols.length > 1 ? (21 * ts).toFixed(1) + 'px' : sized(26, 2.7, 38), lineHeight: 1.4, color: T.text, fontWeight: 400 },
+      ondeckStyle: { flexShrink: 0, padding: '12px 15px', borderRadius: '12px', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.hairline },
+      ondeckLabel, ondeckTag, ondeckTitle, ondeckPreview, ondeckTagStyle: this.tag(ondeckTagColor, T),
+      sermonNextStyle: ghostBtn, sermonNextLabel: isScr ? 'Next verse ›' : isMsg ? 'Next ¶ ›' : 'Next slide ›', sermonPrev: () => this.sermonPrev(), sermonNext: () => this.sermonNext(),
+      versionBtnStyle: { ...smallGhost, whiteSpace: 'nowrap', flexShrink: 0, color: S.versions.length > 1 ? T.scripture : T.dim, boxShadow: 'inset 0 0 0 1px ' + (S.versions.length > 1 || S.verPickOpen ? T.scripture + '66' : T.border) },
+      versionLabel: S.versions.map(id => id.toUpperCase()).join(' + '),
+      toggleVerPick: () => this.toggleVerPick(), closeVerPick: () => this.setState({ verPickOpen: false }), verPickOpen: S.verPickOpen,
+      verPopStyle: { position: 'absolute', bottom: '46px', right: 0, zIndex: 40, width: '290px', background: T.panel3, borderRadius: '12px', padding: '10px 8px 8px', boxShadow: '0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px ' + T.border },
+      verRows: this._VERSIONS.map(v => { const idx = S.versions.indexOf(v.id); const sel = idx >= 0; return {
+        abbr: v.abbr, name: v.name,
+        mark: sel ? (idx === 0 ? '● PRIMARY' : '◧ COMPARE') : (v.installed ? '' : 'NOT INSTALLED'),
+        title: v.installed ? (sel ? 'Tap to take off screen' : 'Tap to show — two at once appear side by side') : 'Downloadable in a full install',
+        onClick: v.installed ? () => this.pickVersion(v.id) : () => {},
+        rowStyle: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '9px 9px', borderRadius: '8px', cursor: v.installed ? 'pointer' : 'default', opacity: v.installed ? 1 : 0.45, background: sel ? T.scripture + '18' : 'transparent', marginBottom: '2px' },
+        abbrStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', width: '38px', flexShrink: 0, fontWeight: 600, color: sel ? T.scripture : T.dim, textAlign: 'left' },
+        nameStyle: { flex: 1, fontSize: '12.5px', fontWeight: 500, color: sel ? T.text : T.dim, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+        markStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: '8.5px', letterSpacing: '0.06em', fontWeight: 600, color: sel ? T.scripture : T.faint, flexShrink: 0, whiteSpace: 'nowrap' }
+      }; }),
+      comingPanelStyle: { width: railW(330), flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 },
+      chapterLabel: S.scrBook + ' ' + S.scrCh, plannedLabel: plannedCount ? (plannedCount + ' planned') : 'none planned',
+      comingHint: 'Planned verses are highlighted. Tap any verse — and keep reading right past the plan.',
+      chapterRows,
+
+      // pre
+      preSlideObj: this.preSlideFor(preItem || { type: 'countdown' }, S), preToggleLabel, togglePre: () => this.togglePre(), addMinute: () => this.addMinute(), resetPre: () => this.resetPre(),
+      preBtnPrimary: primaryBtn, preBtnA: ghostBtn, preBtnB: smallGhost,
+      preRailStyle: { width: railW(320), flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 },
+      preRows, preItemIsCountdown: preItem && preItem.type === 'countdown',
+      loopCountText: enabledCount + ' IN LOOP',
+      loopCountTag: this.tag(T.accent, T),
+      loopToggleLabel: S.loopOn ? '❚❚ Pause loop' : '▶ Play loop',
+      toggleLoopOn: () => this.toggleLoopOn(),
+      preStepBack: () => this.preStep(-1), preStepFwd: () => this.preStep(1),
+      dwellMinus: () => this.adjDwell(-3), dwellPlus: () => this.adjDwell(3),
+      dwellText: S.dwell + 's / card',
+      openPreAdd: () => this.openPreAdd(),
+      preEditOpen: S.peOpen, preEditIsNew: !S.peId, preEditCanRemove: !!S.peId,
+      preEditTitle: S.peId ? 'Edit card' : 'Add a card to the loop',
+      preSaveLabel: S.peId ? 'Save changes' : 'Add to loop',
+      peIsVerse: S.peType === 'verse', peIsList: S.peType === 'list', peIsMessage: S.peType === 'message',
+      peTitle: S.peTitle, peRef: S.peRef, peText: S.peText, peLines: S.peLines, peHeadline: S.peHeadline, peSubtitle: S.peSubtitle,
+      onPeTitle: (e) => this.setState({ peTitle: e.target.value }),
+      onPeRef: (e) => this.setState({ peRef: e.target.value }),
+      onPeText: (e) => this.setState({ peText: e.target.value }),
+      onPeLines: (e) => this.setState({ peLines: e.target.value }),
+      onPeHeadline: (e) => this.setState({ peHeadline: e.target.value }),
+      onPeSubtitle: (e) => this.setState({ peSubtitle: e.target.value }),
+      closePreEdit: () => this.closePreEdit(), savePreEdit: () => this.savePreEdit(), removePreCard: () => this.removePreCard(),
+      preTypeTabs: [['verse', 'Bible verse'], ['list', 'List of items'], ['message', 'Big message']].map(([id, label]) => ({ label, onClick: () => this.setState({ peType: id }), style: { flex: 1, height: '32px', borderRadius: '8px', fontSize: '12.5px', fontWeight: S.peType === id ? 700 : 600, color: S.peType === id ? T.accentInk : T.dim, background: S.peType === id ? T.accent : T.panel2, display: 'flex', alignItems: 'center', justifyContent: 'center' } })),
+      preModalStyle: { width: '100%', maxWidth: '520px', background: T.panel, borderRadius: '16px', padding: '22px 24px', boxShadow: '0 30px 80px rgba(0,0,0,.5)', maxHeight: '90vh', overflowY: 'auto' },
+      preFieldLabel: { fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, marginBottom: '6px' },
+      preInputStyle: { width: '100%', height: '38px', padding: '0 12px', background: T.inputBg, borderRadius: '9px', boxShadow: 'inset 0 0 0 1px ' + T.border, fontSize: '13.5px' },
+      preAreaStyle: { width: '100%', minHeight: '110px', padding: '10px 12px', background: T.inputBg, borderRadius: '9px', boxShadow: 'inset 0 0 0 1px ' + T.border, fontSize: '13.5px', lineHeight: 1.55, resize: 'vertical' },
+      preRemoveStyle: { height: '34px', padding: '0 14px', borderRadius: '9px', color: T.live, background: T.live + '1a', fontSize: '12.5px', fontWeight: 600 },
+      preHint: 'The loop rotates through the cards on the left while people arrive. Tap any card to show it immediately. Move to Songs when the music starts.',
+
+      // footer outputs
+      footerStyle: { height: '72px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '18px', padding: '0 18px', background: T.panel, borderTop: '1px solid ' + T.hairline },
+      miniWrapStyle: miniWrap, miniWrapDarkStyle: { ...miniWrap, background: '#0c0e12' },
+      audienceSlide: outputOverride, liveSlideRaw, ltTitle: m === 'songs' ? activeSong.title : (liveIsVerse ? liveRef : (curSlide && curSlide.title) || ''),
+      outLiveStyle: outBtn(S.output === 'live', T.live), outLogoStyle: outBtn(S.output === 'logo', T.accent), outBlackStyle: outBtn(S.output === 'black', T.dim),
+      setLiveOut: () => this.setOutput('live'), setLogoOut: () => this.setOutput('logo'), setBlackOut: () => this.setOutput('black'),
+
+      // quick add
+      quickAddOpen: S.quickAddOpen, closeQuickAdd: () => this.closeQuickAdd(), openQuickAdd: () => this.openQuickAdd(), stop: (e) => e.stopPropagation(),
+      qaShowFind, qaShowReview, qaResults, qaNoResults: qaShowFind && qaResults.length === 0,
+      qaQ: S.qaQ, onQaQ: (e) => this.setState({ qaQ: e.target.value }),
+      qaGoSearch: () => this.qaGoSearch(), qaGoPaste: () => this.qaGoPaste(),
+      qaTabSearchStyle: qaTab(S.qaSource === 'search'), qaTabPasteStyle: qaTab(S.qaSource === 'paste'),
+      qaTabsWrapStyle: { display: 'flex', gap: '4px', background: T.panel2, padding: '4px', borderRadius: '10px' },
+      qaSubtitle: qaShowFind ? 'Search by title, author, or any line of lyrics — open a result to make sure it\u2019s the right one before importing.' : (S.qaPickedId ? 'Imported and split into sections automatically. Review, tweak anything, then approve.' : 'Leave a blank line between each verse or chorus. Lectern splits and labels them automatically.'),
+      qaHasPick: !!qaPicked, qaNoPick: !qaPicked,
+      qaPickTitle: qaPicked ? qaPicked.title : '', qaPickMeta: qaPicked ? (qaPicked.author + ' · ' + qaPicked.source) : '', qaPickText: qaPicked ? qaPicked.text : '',
+      qaUsePick: () => this.qaUsePick(), qaBackToSearch: () => this.qaBackToSearch(), qaFromSearch: qaShowReview && !!S.qaPickedId,
+      qaUseStyle: { height: '38px', padding: '0 16px', borderRadius: '10px', background: T.accent, color: T.accentInk, fontSize: '13.5px', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 },
+      qaPickPanelStyle: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: T.appBg },
+      qaSaveLabel: S.qaPickedId ? 'Approve & add to library' : 'Add to library',
+      modalStyle: { width: '860px', maxWidth: '96vw', maxHeight: '88vh', background: T.panel, borderRadius: '16px', boxShadow: '0 30px 80px rgba(0,0,0,.5)', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid ' + T.border },
+      qaTitle: S.qaTitle, qaText: S.qaText, onQaTitle: (e) => this.setState({ qaTitle: e.target.value }), onQaText: (e) => this.setState({ qaText: e.target.value }),
+      qaTitleStyle: { height: '44px', padding: '0 14px', background: T.inputBg, borderRadius: '10px', boxShadow: 'inset 0 0 0 1px ' + T.border, fontSize: '15px', fontWeight: 600, color: T.text },
+      qaTextStyle: { flex: 1, minHeight: '300px', padding: '14px', background: T.inputBg, borderRadius: '10px', boxShadow: 'inset 0 0 0 1px ' + T.border, fontSize: '14px', lineHeight: 1.55, color: T.text, resize: 'none', fontFamily: "'Hanken Grotesk', system-ui" },
+      qaPreviewPanelStyle: { width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: T.appBg },
+      qaSlideCount: qaSlides.length, qaPreviewSlides: qaSlides.map(s => ({ label: s.label, text: s.lines.join('\n') })),
+      qaCardStyle: { background: T.panel2, borderRadius: '10px', padding: '11px 13px', boxShadow: 'inset 0 0 0 1px ' + T.hairline },
+      qaCancelStyle: { height: '40px', padding: '0 18px', borderRadius: '10px', background: T.panel2, boxShadow: 'inset 0 0 0 1px ' + T.border, fontSize: '14px', color: T.dim },
+      qaSaveStyle: { height: '40px', padding: '0 20px', borderRadius: '10px', background: T.accent, color: T.accentInk, fontWeight: 700, fontSize: '14px' },
+      saveQuickAdd: () => this.saveQuickAdd()
+    };
+  }
+}
+</script>
+</body>
+</html>

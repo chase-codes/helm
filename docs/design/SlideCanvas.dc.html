@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,16..72,400;0,16..72,500;1,16..72,400;1,16..72,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</helmet>
+<div style="{{ rootStyle }}">
+  <sc-if value="{{ showBackPlate }}" hint-placeholder-val="{{ true }}"><div style="{{ backPlateStyle }}"></div></sc-if>
+
+  <sc-if value="{{ isLyrics }}" hint-placeholder-val="{{ true }}">
+    <div style="{{ contentStyle }}">
+      <sc-for list="{{ lines }}" as="ln" hint-placeholder-count="3"><div style="{{ lineStyle }}">{{ ln }}</div></sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isScripture }}">
+    <div style="{{ scriptureWrap }}">
+      <div style="{{ refStyle }}">{{ ref }}</div>
+      <div style="{{ colsStyle }}">
+        <sc-for list="{{ columns }}" as="col" hint-placeholder-count="2">
+          <div style="{{ columnStyle }}">
+            <div style="{{ versionStyle }}">{{ col.version }}</div>
+            <div style="{{ verseTextStyle }}">{{ col.text }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isQuote }}">
+    <div style="{{ contentStyle }}">
+      <div style="{{ quoteMarkStyle }}">&ldquo;</div>
+      <div style="{{ quoteTextStyle }}">{{ quoteText }}</div>
+      <div style="{{ quoteSourceStyle }}">{{ quoteSource }}</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isTitle }}">
+    <div style="{{ contentStyle }}">
+      <div style="{{ titleStyle }}">{{ titleText }}</div>
+      <div style="{{ subtitleStyle }}">{{ subtitleText }}</div>
+      <sc-if value="{{ hasPoints }}"><div style="{{ pointsWrap }}"><sc-for list="{{ points }}" as="p" hint-placeholder-count="3"><div style="{{ pointStyle }}"><span style="{{ pointDotStyle }}"></span>{{ p }}</div></sc-for></div></sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isCountdown }}">
+    <div style="{{ contentStyle }}">
+      <div style="{{ countdownMsgStyle }}">{{ messageText }}</div>
+      <div style="{{ countdownStyle }}">{{ countdownText }}</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isBlank }}"><div style="{{ blankStyle }}">{{ blankText }}</div></sc-if>
+
+  <sc-if value="{{ showLabel }}"><div style="{{ labelStyle }}">{{ label }}</div></sc-if>
+
+  <sc-if value="{{ showChrome }}">
+    <div style="{{ clockStyle }}">{{ clock }}</div>
+    <sc-if value="{{ hasNext }}"><div style="{{ nextStyle }}"><span style="{{ nextTagStyle }}">NEXT</span><span style="{{ nextTextStyle }}">{{ nextText }}</span></div></sc-if>
+  </sc-if>
+
+  <sc-if value="{{ isLowerThird }}"><div style="{{ ltBarStyle }}"><div style="{{ ltAccentStyle }}"></div><div><div style="{{ ltPrimaryStyle }}">{{ ltPrimary }}</div><div style="{{ ltSecondaryStyle }}">{{ ltSecondary }}</div></div></div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:480,&quot;height&quot;:270},&quot;slide&quot;:{&quot;editor&quot;:null,&quot;default&quot;:{&quot;kind&quot;:&quot;lyrics&quot;,&quot;label&quot;:&quot;Verse 1&quot;,&quot;lines&quot;:[&quot;Amazing grace! how sweet the sound&quot;,&quot;That saved a wretch like me;&quot;,&quot;I once was lost, but now am found,&quot;,&quot;Was blind, but now I see.&quot;]}},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;audience&quot;,&quot;main&quot;,&quot;stage&quot;,&quot;leader&quot;,&quot;livestream&quot;],&quot;default&quot;:&quot;audience&quot;},&quot;clock&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;10:42:05&quot;},&quot;next&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Chorus — Only believe&quot;},&quot;countdown&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Amazing Grace&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props || {};
+    const s = p.slide || {};
+    const variant = p.variant || 'audience';
+    const kind = s.kind || 'blank';
+    const isLT = variant === 'livestream';
+    const isStage = variant === 'stage';
+    const isMain = variant === 'main';
+    const accent = s.accent || '#f0b24a';
+
+    let bg = s.bg;
+    if (!bg) {
+      if (kind === 'countdown') bg = 'radial-gradient(135% 135% at 50% 32%, #1d2330 0%, #07080b 74%)';
+      else if (kind === 'quote') bg = 'radial-gradient(135% 135% at 50% 0%, #1c1925 0%, #08070b 72%)';
+      else if (kind === 'title' || kind === 'sermon') bg = 'radial-gradient(140% 130% at 0% 0%, #20283a 0%, #08090d 70%)';
+      else bg = 'radial-gradient(135% 125% at 50% -10%, #181d28 0%, #08090c 74%)';
+    }
+    if (isLT) bg = 'transparent';
+
+    const rootStyle = { position: 'relative', width: '100%', aspectRatio: '16 / 9', height: 'auto', overflow: 'hidden', containerType: 'size', background: bg, color: '#fff', fontFamily: "'Hanken Grotesk', system-ui, sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center' };
+    const contentStyle = { position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5cqmin', width: '100%', padding: '7cqmin', boxSizing: 'border-box', textAlign: 'center' };
+    const lineStyle = { fontWeight: 700, fontSize: 'clamp(11px, 7.4cqmin, 72px)', lineHeight: 1.16, letterSpacing: '-0.015em', color: '#fff', textShadow: '0 2px 22px rgba(0,0,0,.55)', maxWidth: '94%' };
+
+    const single = (s.columns || []).length <= 1;
+    const scriptureWrap = { position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4cqmin', width: '100%', padding: '6cqmin', boxSizing: 'border-box' };
+    const refStyle = { fontFamily: "'JetBrains Mono', monospace", fontSize: 'clamp(8px,2.9cqmin,22px)', letterSpacing: '0.2em', textTransform: 'uppercase', color: accent, fontWeight: 500 };
+    const colsStyle = { display: 'flex', gap: '5cqmin', width: '100%', justifyContent: 'center', alignItems: 'flex-start' };
+    const columnStyle = { flex: 1, maxWidth: single ? '86%' : '47%', display: 'flex', flexDirection: 'column', gap: '1.8cqmin', textAlign: single ? 'center' : 'left' };
+    const versionStyle = { fontFamily: "'JetBrains Mono', monospace", fontSize: 'clamp(7px,2.2cqmin,15px)', letterSpacing: '0.16em', color: 'rgba(255,255,255,.4)' };
+    const verseTextStyle = { fontFamily: "'Newsreader', Georgia, serif", fontSize: 'clamp(10px,4.7cqmin,40px)', lineHeight: 1.36, color: '#f3efe6', fontWeight: 400 };
+
+    const quoteMarkStyle = { fontFamily: "'Newsreader', Georgia, serif", fontSize: 'clamp(28px,16cqmin,150px)', lineHeight: 0.6, color: accent, opacity: 0.55, marginBottom: '1cqmin' };
+    const quoteTextStyle = { fontFamily: "'Newsreader', Georgia, serif", fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(12px,5.4cqmin,52px)', lineHeight: 1.34, color: '#f2eee5', maxWidth: '88%' };
+    const quoteSourceStyle = { fontFamily: "'JetBrains Mono', monospace", fontSize: 'clamp(7px,2.4cqmin,17px)', letterSpacing: '0.16em', textTransform: 'uppercase', color: accent, marginTop: '3cqmin' };
+
+    const titleStyle = { fontWeight: 800, fontSize: 'clamp(14px,9.2cqmin,90px)', lineHeight: 1.04, letterSpacing: '-0.02em' };
+    const subtitleStyle = { fontWeight: 500, fontSize: 'clamp(9px,3.6cqmin,30px)', color: 'rgba(255,255,255,.58)', marginTop: '1.4cqmin' };
+    const pointsWrap = { display: 'flex', flexDirection: 'column', gap: '1.8cqmin', marginTop: '4cqmin', alignItems: 'flex-start' };
+    const pointStyle = { display: 'flex', alignItems: 'center', gap: '2cqmin', fontWeight: 500, fontSize: 'clamp(9px,3.4cqmin,28px)', color: 'rgba(255,255,255,.85)' };
+    const pointDotStyle = { width: '1.4cqmin', height: '1.4cqmin', minWidth: '5px', minHeight: '5px', borderRadius: '50%', background: accent, display: 'inline-block' };
+
+    const countdownStyle = { fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, fontSize: 'clamp(20px,18cqmin,170px)', letterSpacing: '0.01em', color: '#fff', fontVariantNumeric: 'tabular-nums' };
+    const countdownMsgStyle = { fontWeight: 600, fontSize: 'clamp(9px,3.2cqmin,28px)', letterSpacing: '0.06em', textTransform: 'uppercase', color: accent };
+
+    const isLogo = kind === 'logo';
+    const blankStyle = isLogo
+      ? { fontWeight: 800, fontSize: 'clamp(14px,7cqmin,60px)', letterSpacing: '0.12em', color: 'rgba(255,255,255,.92)' }
+      : { color: 'rgba(255,255,255,.22)', fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(8px,2.6cqmin,15px)', letterSpacing: '0.22em', textTransform: 'uppercase' };
+
+    const showChrome = isStage;
+    const clockStyle = { position: 'absolute', top: '4cqmin', right: '5cqmin', zIndex: 5, fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(8px,3.4cqmin,24px)', color: 'rgba(255,255,255,.5)', fontVariantNumeric: 'tabular-nums' };
+    const nextStyle = { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '2.6cqmin 5cqmin', background: 'linear-gradient(0deg, rgba(0,0,0,.62), transparent)', display: 'flex', alignItems: 'center', gap: '2.4cqmin' };
+    const nextTagStyle = { fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(6px,2cqmin,12px)', letterSpacing: '0.18em', color: accent, border: '1px solid ' + accent, borderRadius: '3px', padding: '1px 6px', flexShrink: 0 };
+    const nextTextStyle = { fontSize: 'clamp(8px,3cqmin,20px)', color: 'rgba(255,255,255,.72)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+
+    const showLabel = (isStage || isMain) && !!s.label && kind !== 'blank' && kind !== 'countdown' && kind !== 'logo' && kind !== 'black';
+    const labelStyle = { position: 'absolute', top: '4cqmin', left: '5cqmin', zIndex: 5, fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(7px,2.7cqmin,15px)', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,.38)' };
+
+    let ltPrimary = '', ltSecondary = '';
+    if (kind === 'scripture') { ltPrimary = s.ref || ''; ltSecondary = (s.columns && s.columns[0] && s.columns[0].version) || 'Scripture'; }
+    else if (kind === 'lyrics') { ltPrimary = p.title || 'Now singing'; ltSecondary = s.label || ''; }
+    else if (kind === 'quote') { ltPrimary = s.source || ''; ltSecondary = 'Message Archive'; }
+    else { ltPrimary = s.title || ''; ltSecondary = s.subtitle || ''; }
+    const ltBarStyle = { position: 'absolute', left: '5%', right: '5%', bottom: '9%', zIndex: 6, display: 'flex', alignItems: 'stretch', gap: '12px', background: 'rgba(9,11,15,.74)', backdropFilter: 'blur(10px)', borderRadius: '6px', padding: '10px 14px', boxShadow: '0 8px 30px rgba(0,0,0,.4)' };
+    const ltAccentStyle = { width: '4px', borderRadius: '2px', background: accent, flexShrink: 0 };
+    const ltPrimaryStyle = { fontWeight: 700, fontSize: 'clamp(11px,4.4cqmin,18px)', color: '#fff', lineHeight: 1.2 };
+    const ltSecondaryStyle = { fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(7px,2.6cqmin,11px)', letterSpacing: '0.1em', textTransform: 'uppercase', color: accent, marginTop: '3px' };
+
+    const backPlateStyle = isLT
+      ? { position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg,#14161b,#14161b 14px,#181b21 14px,#181b21 28px)' }
+      : { position: 'absolute', inset: 0 };
+
+    const active = !isLT;
+    return {
+      rootStyle, contentStyle, lineStyle,
+      isLyrics: active && kind === 'lyrics', lines: s.lines || [],
+      isScripture: active && kind === 'scripture',
+      ref: s.ref || '', scriptureWrap, refStyle, colsStyle, columnStyle, versionStyle, verseTextStyle, columns: s.columns || [],
+      isQuote: active && kind === 'quote', quoteText: s.text || '', quoteSource: s.source || '', quoteMarkStyle, quoteTextStyle, quoteSourceStyle,
+      isTitle: active && (kind === 'title' || kind === 'sermon'),
+      titleText: s.title || '', subtitleText: s.subtitle || '', titleStyle, subtitleStyle,
+      hasPoints: active && (kind === 'title' || kind === 'sermon') && (s.points || []).length > 0,
+      points: s.points || [], pointsWrap, pointStyle, pointDotStyle,
+      isCountdown: active && kind === 'countdown',
+      countdownText: s.countdownText || p.countdown || '10:00', messageText: s.message || 'Service begins in', countdownStyle, countdownMsgStyle,
+      isBlank: active && (kind === 'blank' || kind === 'black' || kind === 'logo'),
+      blankText: isLogo ? (s.title || 'LECTERN') : (kind === 'black' ? '' : '—'), blankStyle,
+      showChrome, clock: p.clock || '', clockStyle,
+      hasNext: isStage && !!p.next, nextText: p.next || '', nextStyle, nextTagStyle, nextTextStyle,
+      showLabel, label: s.label || '', labelStyle,
+      isLowerThird: isLT && kind !== 'blank' && kind !== 'black' && kind !== 'logo' && kind !== 'countdown',
+      ltPrimary, ltSecondary, ltBarStyle, ltAccentStyle, ltPrimaryStyle, ltSecondaryStyle,
+      showBackPlate: isLT, backPlateStyle
+    };
+  }
+}
+</script>
+</body>
+</html>
