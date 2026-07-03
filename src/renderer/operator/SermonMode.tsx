@@ -1,15 +1,18 @@
 import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
-import type { ModeKeyHandlerRef } from './App';
+import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { formatRef, matchBook, parseRef, type ParsedRef } from '../../shared/scripture/refs';
-import { buildScriptureSlide, keyForScripture, verseCols } from '../../shared/scripture/slides';
+import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
 import { norm } from '../../shared/search/fuzzy';
 import type { BibleManifestEntry, ChapterData, ScriptureReading } from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
+import { VersionPicker } from './VersionPicker';
+import { ChapterRail } from './ChapterRail';
 
 export interface SermonModeProps {
+  themeMode: ThemeMode;
   keyHandlerRef: ModeKeyHandlerRef;
   active: boolean;
 }
@@ -18,8 +21,9 @@ const INSTALL_HINT = '[ Install a Bible in Settings ]';
 const SCHEDULE_PANEL_W = 270;
 const RIGHT_PANEL_W = 330;
 
-export function SermonMode({ keyHandlerRef, active }: SermonModeProps): JSX.Element {
+export function SermonMode({ themeMode, keyHandlerRef, active }: SermonModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
+  const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
 
   const [track, setTrack] = useState<SermonTrack>('scripture');
@@ -64,6 +68,17 @@ export function SermonMode({ keyHandlerRef, active }: SermonModeProps): JSX.Elem
     return () => {
       live = false;
     };
+  }, []);
+
+  // Refresh the manifest on install completion/failure so a translation installed from
+  // Settings mid-service becomes pickable in VersionPicker without an app restart.
+  // Subscribed unconditionally (not gated on `active`) since SermonMode stays mounted
+  // for the app's whole lifetime under the keep-alive contract.
+  useEffect(() => {
+    return window.helm.bibles.onProgress((p) => {
+      if (p.phase !== 'done' && p.phase !== 'error') return;
+      void window.helm.bibles.manifest().then(setManifest).catch(console.error);
+    });
   }, []);
 
   // Persist the version selection once it changes after the initial load.
@@ -216,6 +231,14 @@ export function SermonMode({ keyHandlerRef, active }: SermonModeProps): JSX.Elem
       for (let v = r.from; v <= r.to; v++) plannedSet.add(v);
     }
   }
+  // Primary-version verse text, keyed by verse number — shared by the on-deck preview
+  // and ChapterRail's per-verse cards.
+  const previewOf = useCallback((v: number): string => liveChapter?.verses[v]?.[versions[0]] ?? '', [liveChapter, versions]);
+  const isVerseLive = useCallback(
+    (v: number): boolean => output === 'live' && liveKey === keyForScripture(scrBook, scrCh, v),
+    [output, liveKey, scrBook, scrCh]
+  );
+
   let ondeckTag = '—';
   let ondeckTagColor = T.faint;
   let ondeckTitle = '';
@@ -225,13 +248,11 @@ export function SermonMode({ keyHandlerRef, active }: SermonModeProps): JSX.Elem
     ondeckTag = plannedSet.has(nv) ? 'VERSE' : 'KEEP READING';
     ondeckTagColor = T.scripture;
     ondeckTitle = `${scrBook} ${scrCh}:${nv}`;
-    ondeckPreview = liveChapter?.verses[nv]?.[versions[0]] ?? '';
+    ondeckPreview = previewOf(nv);
   } else {
     ondeckTitle = `End of ${scrBook} ${scrCh}`;
     ondeckPreview = 'Pick the next reading on the left';
   }
-
-  const versionLabel = versions.map((id) => abbrOf(id)).join(' + ');
 
   // Registers this mode's keyboard delegate only while active — App keeps both Songs
   // and Sermon mounted (keep-alive contract) so operator state survives tab switches.
@@ -256,8 +277,19 @@ export function SermonMode({ keyHandlerRef, active }: SermonModeProps): JSX.Elem
     };
   });
 
+  const versionPicker = (
+    <VersionPicker
+      theme={T}
+      manifest={manifest}
+      versions={versions}
+      onPick={(id) => setVersions((v) => pickVersion(v, id))}
+      // TODO(Task 7): wire to the real Settings modal (Bibles tab) once it exists —
+      // this interim no-op just closes the popover on a NOT INSTALLED row.
+      onOpenSettings={() => {}}
+    />
+  );
+
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
-  const rightPlaceholderStyle: CSSProperties = { width: `${RIGHT_PANEL_W}px`, flexShrink: 0, background: T.panel };
   const comingStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
@@ -293,18 +325,29 @@ export function SermonMode({ keyHandlerRef, active }: SermonModeProps): JSX.Elem
             cuedIsLive={cuedIsLive}
             heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
             cols={liveCols}
-            versionsCount={versions.length}
             ondeckTag={ondeckTag}
             ondeckTagColor={ondeckTagColor}
             ondeckTitle={ondeckTitle}
             ondeckPreview={ondeckPreview}
-            versionLabel={versionLabel}
+            versionPicker={versionPicker}
             onPrev={() => stepVerse(-1)}
             onNext={() => stepVerse(1)}
             onGoLive={goLive}
             onToggleLogo={toggleLogo}
           />
-          <div style={rightPlaceholderStyle} />
+          <ChapterRail
+            theme={T}
+            dark={dark}
+            width={RIGHT_PANEL_W}
+            book={scrBook}
+            ch={scrCh}
+            verseCount={verseCount}
+            plannedSet={plannedSet}
+            cuedV={scrV}
+            isVerseLive={isVerseLive}
+            previewOf={previewOf}
+            onSelect={setScrV}
+          />
         </>
       ) : (
         <div style={comingStyle}>Coming in slice 4/5 — see the spec</div>

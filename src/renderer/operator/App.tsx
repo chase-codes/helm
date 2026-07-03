@@ -114,7 +114,7 @@ function App(): JSX.Element {
             <SongsMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
           </div>
           <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>
-            <SermonMode keyHandlerRef={keyHandlerRef} active={mode === 'sermon'} />
+            <SermonMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} active={mode === 'sermon'} />
           </div>
         </div>
       </div>

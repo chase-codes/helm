@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { keyForScripture, verseCols, buildScriptureSlide } from './slides'
+import { keyForScripture, verseCols, buildScriptureSlide, pickVersion } from './slides'
 
 test('keyForScripture format', () => {
   expect(keyForScripture('John', 3, 16)).toBe('scr:John:3:16')
@@ -51,4 +51,24 @@ test('verseCols returns empty when nothing installed', () => {
   const selected = ['kjv', 'niv']
   const result = verseCols(textByVersion, selected, (id) => id.toUpperCase())
   expect(result).toEqual([])
+})
+
+test('pickVersion removes a selected id', () => {
+  expect(pickVersion(['kjv', 'web'], 'kjv')).toEqual(['web'])
+})
+
+test('pickVersion never drops below one selected', () => {
+  expect(pickVersion(['kjv'], 'kjv')).toEqual(['kjv'])
+})
+
+test('pickVersion appends when fewer than two are selected', () => {
+  expect(pickVersion(['kjv'], 'web')).toEqual(['kjv', 'web'])
+})
+
+test('pickVersion replaces the compare slot when two are already selected', () => {
+  expect(pickVersion(['kjv', 'web'], 'asv')).toEqual(['kjv', 'asv'])
+})
+
+test('pickVersion removing the compare slot leaves the primary', () => {
+  expect(pickVersion(['kjv', 'web'], 'web')).toEqual(['kjv'])
 })

@@ -8,12 +8,13 @@ export interface SermonCenterProps {
   cuedIsLive: boolean;
   heroLabel: string;
   cols: SlideColumn[];
-  versionsCount: number;
   ondeckTag: string;
   ondeckTagColor: string;
   ondeckTitle: string;
   ondeckPreview: string;
-  versionLabel: string;
+  /** The version-picker button + popover (Task 6's VersionPicker), rendered in the
+   * transport row where the design's static version button used to sit. */
+  versionPicker: JSX.Element;
   onPrev: () => void;
   onNext: () => void;
   onGoLive: () => void;
@@ -29,12 +30,11 @@ export function SermonCenter({
   cuedIsLive,
   heroLabel,
   cols,
-  versionsCount,
   ondeckTag,
   ondeckTagColor,
   ondeckTitle,
   ondeckPreview,
-  versionLabel,
+  versionPicker,
   onPrev,
   onNext,
   onGoLive,
@@ -135,20 +135,6 @@ export function SermonCenter({
     gap: '7px',
     whiteSpace: 'nowrap'
   };
-  const versionBtnStyle: CSSProperties = {
-    height: '46px',
-    padding: '0 14px',
-    borderRadius: '11px',
-    background: 'transparent',
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-    boxShadow: `inset 0 0 0 1px ${versionsCount > 1 ? T.scripture + '66' : T.border}`,
-    fontSize: '13px',
-    fontWeight: 600,
-    color: versionsCount > 1 ? T.scripture : T.dim,
-    display: 'flex',
-    alignItems: 'center'
-  };
   const logoBtnStyle: CSSProperties = {
     height: '46px',
     padding: '0 14px',
@@ -213,10 +199,7 @@ export function SermonCenter({
         <button style={goLiveStyle} onClick={onGoLive}>
           {cuedIsLive ? '■ Take down' : '● Go live'}
         </button>
-        <button style={versionBtnStyle} title="Choose translations">
-          <span>{versionLabel}</span>
-          <span style={{ fontSize: '8px', marginLeft: '6px', opacity: 0.7 }}>▲</span>
-        </button>
+        {versionPicker}
         <button style={logoBtnStyle} onClick={onToggleLogo}>
           {output === 'logo' ? 'Logo on screen' : 'Logo'}
         </button>
