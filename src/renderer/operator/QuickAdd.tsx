@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import { useContext, useMemo, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './App';
 import { splitToSlides } from '../../shared/songs/splitToSlides';
 import type { Song } from '../../shared/types';
@@ -18,16 +18,11 @@ export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
-  // Escape closes while the modal is open. Task 12 will add a global handler;
-  // this listener is self-contained so it can be dropped in favor of that later.
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  // Escape is handled by App's global keydown delegate (Task 12), which asks the active
+  // mode's ModeKeyHandler.onEscape() to close any open modal — SongsMode owns
+  // `quickAddOpen`/`setQuickAddOpen(false)` for that. No local listener here: a second
+  // one would double-handle the same keypress (harmless since onClose is idempotent, but
+  // redundant), and this component doesn't otherwise need to know about keyboard input.
 
   const slides = useMemo(() => splitToSlides(text), [text]);
 

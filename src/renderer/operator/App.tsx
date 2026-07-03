@@ -1,4 +1,4 @@
-import { createContext, useState, type CSSProperties, type JSX } from 'react';
+import { createContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { themeFor, type Theme } from '../../shared/theme';
 import { Header } from './Header';
 import { SongsMode } from './SongsMode';
@@ -7,6 +7,22 @@ export type Mode = 'pre' | 'songs' | 'sermon';
 export type ThemeMode = 'dark' | 'light';
 
 export const ThemeCtx = createContext<Theme>(themeFor('dark'));
+
+/**
+ * Delegate interface a mode registers on `keyHandlerRef` so the global
+ * document keydown handler below can drive it without App knowing anything
+ * mode-specific. Future modes (pre/sermon) plug in the same way.
+ */
+export interface ModeKeyHandler {
+  /** Escape: close an open modal if one is open. Returns true if it handled it. */
+  onEscape: () => boolean;
+  /** Arrow navigation: +1 (Right/Down) or -1 (Left/Up) steps the current cue. */
+  onArrow: (dir: 1 | -1) => void;
+  /** Enter/Space: go live on the current cue. */
+  onGoLive: () => void;
+}
+
+export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
 
 function Placeholder({ theme, title }: { theme: Theme; title: string }): JSX.Element {
   const wrapStyle: CSSProperties = {
@@ -37,6 +53,38 @@ function App(): JSX.Element {
   const theme = themeFor(themeMode);
   const toggleTheme = (): void => setThemeMode((m) => (m === 'dark' ? 'light' : 'dark'));
 
+  // Delegated to whichever mode is active (see ModeKeyHandler above). Registered
+  // once on `document` here so future modes plug in without App changing.
+  const keyHandlerRef = useRef<ModeKeyHandler | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea';
+      const handler = keyHandlerRef.current;
+
+      if (e.key === 'Escape') {
+        if (handler?.onEscape()) e.preventDefault();
+        return;
+      }
+      if (typing) return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        handler?.onArrow(1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        handler?.onArrow(-1);
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handler?.onGoLive();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const rootStyle: CSSProperties = {
     height: '100vh',
     display: 'flex',
@@ -56,7 +104,7 @@ function App(): JSX.Element {
         <div style={mainStyle}>
           {mode === 'pre' && <Placeholder theme={theme} title="Pre-service" />}
           {mode === 'sermon' && <Placeholder theme={theme} title="Sermon" />}
-          {mode === 'songs' && <SongsMode themeMode={themeMode} />}
+          {mode === 'songs' && <SongsMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} />}
         </div>
       </div>
     </ThemeCtx.Provider>
