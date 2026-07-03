@@ -11,6 +11,7 @@ import { QuickAdd } from './QuickAdd';
 export interface SongsModeProps {
   themeMode: ThemeMode;
   keyHandlerRef: ModeKeyHandlerRef;
+  active: boolean;
 }
 
 const LIST_W_DEFAULT = 250;
@@ -46,7 +47,7 @@ function toRow(song: Song, snippet: string, activeSongId: string | null): SongRo
   };
 }
 
-export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Element {
+export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -159,9 +160,15 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
   };
 
   // Register this mode's keyboard delegate on every render so the closure below always
-  // sees current state; clear it on unmount so a global keypress after switching away
-  // from Songs mode doesn't reach a stale handler.
+  // sees current state. While inactive, skip touching the ref entirely rather than
+  // nulling it: App keeps both Songs and Sermon mounted (keep-alive contract), so a mode
+  // switch re-runs both modes' effects in the same commit — if the inactive mode's body
+  // wrote null unconditionally, it could run *after* the newly-active mode's effect in
+  // tree order and clobber the handler it just registered. Deactivation is instead
+  // handled by this effect's own cleanup (below), which only fires when this mode was
+  // the one that last set the ref.
   useEffect(() => {
+    if (!active) return;
     keyHandlerRef.current = {
       onEscape: () => {
         if (!quickAddOpen) return false;

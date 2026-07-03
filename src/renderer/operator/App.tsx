@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { themeFor, type Theme } from '../../shared/theme';
 import { Header } from './Header';
+import { SermonMode } from './SermonMode';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
 
@@ -104,8 +105,17 @@ function App(): JSX.Element {
         <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} />
         <div style={mainStyle}>
           {mode === 'pre' && <Placeholder theme={theme} title="Pre-service" />}
-          {mode === 'sermon' && <Placeholder theme={theme} title="Sermon" />}
-          {mode === 'songs' && <SongsMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} />}
+          {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
+              state — cued song/section, sermon reading, schedule — survives tab switches.
+              The inactive one is hidden via `display:none`; `display:contents` while active
+              keeps it transparent to mainStyle's flex layout. Each receives `active` and
+              only registers its keyboard delegate while it's the one on screen. */}
+          <div style={{ display: mode === 'songs' ? 'contents' : 'none' }}>
+            <SongsMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
+          </div>
+          <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>
+            <SermonMode keyHandlerRef={keyHandlerRef} active={mode === 'sermon'} />
+          </div>
         </div>
       </div>
     </ThemeCtx.Provider>
