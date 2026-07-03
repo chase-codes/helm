@@ -37,6 +37,17 @@ export const CH = {
   displaysOpenTest: 'displays:openTest',
 } as const;
 
+export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
+export interface ChapterData {
+  book: string; chapter: number; verseCount: number;
+  verses: Record<number, Record<string, string>>;
+}
+export interface ScriptureReading { id: string; book: string; ch: number; from: number; to: number }
+export interface NormalizedBible {
+  id: string; abbr: string; name: string; language: string;
+  books: { name: string; chapters: { n: number; verses: { n: number; text: string }[] }[] }[];
+}
+
 export interface HelmApi {
   songs: {
     search(q: string, field: SearchField): Promise<SongSearchResult[]>;
