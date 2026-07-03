@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type JSX, type Mutable
 import { themeFor, type Theme } from '../../shared/theme';
 import { Header } from './Header';
 import { SermonMode } from './SermonMode';
+import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
 
@@ -53,6 +54,11 @@ function App(): JSX.Element {
   const theme = themeFor(themeMode);
   const toggleTheme = (): void => setThemeMode((m) => (m === 'dark' ? 'light' : 'dark'));
 
+  // Settings is app-level (not owned by any mode) — it can be opened from the header
+  // gear regardless of which mode is active, so its state lives here rather than in
+  // SongsMode/SermonMode the way QuickAdd's modal state lives in SongsMode.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   // Delegated to whichever mode is active (see ModeKeyHandler above). Registered
   // once on `document` here so future modes plug in without App changing.
   const keyHandlerRef = useRef<ModeKeyHandler | null>(null);
@@ -65,8 +71,14 @@ function App(): JSX.Element {
       const handler = keyHandlerRef.current;
 
       // Escape fires even while typing (closes any open modal); no preventDefault,
-      // matching the prototype exactly.
+      // matching the prototype exactly. Settings sits above the mode layer, so an open
+      // settings modal closes first — the mode's own onEscape (e.g. QuickAdd) only
+      // gets a chance once settings is out of the way.
       if (e.key === 'Escape') {
+        if (settingsOpen) {
+          setSettingsOpen(false);
+          return;
+        }
         handler?.onEscape();
         return;
       }
@@ -85,7 +97,7 @@ function App(): JSX.Element {
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [settingsOpen]);
 
   const rootStyle: CSSProperties = {
     height: '100vh',
@@ -102,7 +114,7 @@ function App(): JSX.Element {
   return (
     <ThemeCtx.Provider value={theme}>
       <div style={rootStyle}>
-        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} />
+        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
           {mode === 'pre' && <Placeholder theme={theme} title="Pre-service" />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
@@ -114,9 +126,15 @@ function App(): JSX.Element {
             <SongsMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
           </div>
           <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>
-            <SermonMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} active={mode === 'sermon'} />
+            <SermonMode
+              themeMode={themeMode}
+              keyHandlerRef={keyHandlerRef}
+              active={mode === 'sermon'}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
           </div>
         </div>
+        {settingsOpen && <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
       </div>
     </ThemeCtx.Provider>
   );

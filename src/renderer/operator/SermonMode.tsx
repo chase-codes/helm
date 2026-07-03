@@ -15,13 +15,27 @@ export interface SermonModeProps {
   themeMode: ThemeMode;
   keyHandlerRef: ModeKeyHandlerRef;
   active: boolean;
+  onOpenSettings: () => void;
 }
 
 const INSTALL_HINT = '[ Install a Bible in Settings ]';
 const SCHEDULE_PANEL_W = 270;
 const RIGHT_PANEL_W = 330;
 
-export function SermonMode({ themeMode, keyHandlerRef, active }: SermonModeProps): JSX.Element {
+// Uninstalling a bible (from SettingsModal) has no IPC progress broadcast to
+// piggyback on the way install's downloading/installing/done phases do — SettingsModal
+// calls this directly after a successful uninstall so any mounted SermonMode instance
+// picks up the refreshed manifest immediately, without an app restart or mode switch.
+// (Not a component — disabling react-refresh's one-export-per-file rule for it rather
+// than splitting a two-line helper into its own module.)
+type ManifestListener = (m: BibleManifestEntry[]) => void;
+const manifestListeners = new Set<ManifestListener>();
+// eslint-disable-next-line react-refresh/only-export-components
+export function notifyBiblesManifestChanged(manifest: BibleManifestEntry[]): void {
+  manifestListeners.forEach((l) => l(manifest));
+}
+
+export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings }: SermonModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -39,6 +53,22 @@ export function SermonMode({ themeMode, keyHandlerRef, active }: SermonModeProps
   // Guards the persist-on-change effect below from firing with the ['kjv'] default
   // before settings.get resolves (which would clobber a real saved selection).
   const versionsLoadedRef = useRef(false);
+
+  // Applies a freshly-fetched manifest and, in the same beat, drops any compare-selected
+  // version id that's no longer installed (e.g. removed in Settings, possibly while it's
+  // part of the current selection) — falling back to the bundled KJV alone if that
+  // empties the selection. Bundling both updates into one callback (rather than a
+  // separate effect reacting to `manifest`) keeps the versions update tied to the event
+  // that caused it instead of a passive state-watching effect. The cue effect further
+  // down depends on `versions`, so this also re-cues the live slide to whatever's left.
+  const applyManifest = useCallback((m: BibleManifestEntry[]): void => {
+    setManifest(m);
+    setVersions((v) => {
+      const installedIds = new Set(m.filter((e) => e.installed).map((e) => e.id));
+      const kept = v.filter((id) => installedIds.has(id));
+      return kept.length ? kept : ['kjv'];
+    });
+  }, []);
 
   // Initial load: persisted version selection, the reading schedule, and the bible
   // manifest (for id -> abbr lookups). `live` guards each against a mode switch away
@@ -62,24 +92,31 @@ export function SermonMode({ themeMode, keyHandlerRef, active }: SermonModeProps
     void window.helm.bibles
       .manifest()
       .then((m) => {
-        if (live) setManifest(m);
+        if (live) applyManifest(m);
       })
       .catch(console.error);
     return () => {
       live = false;
     };
-  }, []);
+  }, [applyManifest]);
 
   // Refresh the manifest on install completion/failure so a translation installed from
   // Settings mid-service becomes pickable in VersionPicker without an app restart.
-  // Subscribed unconditionally (not gated on `active`) since SermonMode stays mounted
-  // for the app's whole lifetime under the keep-alive contract.
+  // Also listen for direct manifest pushes from SettingsModal (uninstall has no
+  // progress broadcast — see notifyBiblesManifestChanged above). Subscribed
+  // unconditionally (not gated on `active`) since SermonMode stays mounted for the
+  // app's whole lifetime under the keep-alive contract.
   useEffect(() => {
-    return window.helm.bibles.onProgress((p) => {
+    const offProgress = window.helm.bibles.onProgress((p) => {
       if (p.phase !== 'done' && p.phase !== 'error') return;
-      void window.helm.bibles.manifest().then(setManifest).catch(console.error);
+      void window.helm.bibles.manifest().then(applyManifest).catch(console.error);
     });
-  }, []);
+    manifestListeners.add(applyManifest);
+    return () => {
+      offProgress();
+      manifestListeners.delete(applyManifest);
+    };
+  }, [applyManifest]);
 
   // Persist the version selection once it changes after the initial load.
   useEffect(() => {
@@ -283,9 +320,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active }: SermonModeProps
       manifest={manifest}
       versions={versions}
       onPick={(id) => setVersions((v) => pickVersion(v, id))}
-      // TODO(Task 7): wire to the real Settings modal (Bibles tab) once it exists —
-      // this interim no-op just closes the popover on a NOT INSTALLED row.
-      onOpenSettings={() => {}}
+      onOpenSettings={onOpenSettings}
     />
   );
 

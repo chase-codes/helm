@@ -8,6 +8,7 @@ export interface HeaderProps {
   setMode: (m: Mode) => void;
   themeMode: ThemeMode;
   toggleTheme: () => void;
+  onOpenSettings: () => void;
 }
 
 const MODE_TABS: Array<{ id: Mode; label: string }> = [
@@ -16,7 +17,7 @@ const MODE_TABS: Array<{ id: Mode; label: string }> = [
   { id: 'sermon', label: 'Sermon' }
 ];
 
-export function Header({ mode, setMode, themeMode, toggleTheme }: HeaderProps): JSX.Element {
+export function Header({ mode, setMode, themeMode, toggleTheme, onOpenSettings }: HeaderProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { output, liveSnap } = usePresentationState();
   const { outputs } = useDisplayStatus();
@@ -146,6 +147,9 @@ export function Header({ mode, setMode, themeMode, toggleTheme }: HeaderProps): 
       </button>
       <button style={themeBtnStyle} onClick={toggleTheme}>
         {themeMode === 'dark' ? '☀' : '☾'}
+      </button>
+      <button style={themeBtnStyle} onClick={onOpenSettings} title="Settings">
+        ⚙
       </button>
       <div
         style={{
