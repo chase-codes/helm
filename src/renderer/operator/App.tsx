@@ -59,6 +59,11 @@ function App(): JSX.Element {
   // SongsMode/SermonMode the way QuickAdd's modal state lives in SongsMode.
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Bumped by SettingsModal after a successful bible uninstall (which, unlike install,
+  // has no IPC progress broadcast for SermonMode to piggyback on) so App can mediate the
+  // refresh between the two sibling components instead of them reaching into each other.
+  const [biblesRevision, setBiblesRevision] = useState(0);
+
   // Delegated to whichever mode is active (see ModeKeyHandler above). Registered
   // once on `document` here so future modes plug in without App changing.
   const keyHandlerRef = useRef<ModeKeyHandler | null>(null);
@@ -131,10 +136,17 @@ function App(): JSX.Element {
               keyHandlerRef={keyHandlerRef}
               active={mode === 'sermon'}
               onOpenSettings={() => setSettingsOpen(true)}
+              biblesRevision={biblesRevision}
             />
           </div>
         </div>
-        {settingsOpen && <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
+        {settingsOpen && (
+          <SettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            onBiblesChanged={() => setBiblesRevision((r) => r + 1)}
+          />
+        )}
       </div>
     </ThemeCtx.Provider>
   );

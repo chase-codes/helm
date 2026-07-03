@@ -1,11 +1,15 @@
 import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
-import { notifyBiblesManifestChanged } from './SermonMode';
 import type { BibleInstallProgress, BibleManifestEntry } from '../../shared/types';
 
 export interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
+  // Uninstall has no IPC progress broadcast to piggyback on the way install's
+  // downloading/installing/done phases do — App bumps a revision counter it passes to
+  // SermonMode so any mounted instance refetches the manifest, without this component
+  // reaching into SermonMode directly.
+  onBiblesChanged: () => void;
 }
 
 const SECTIONS = [
@@ -19,7 +23,7 @@ type SettingsSection = (typeof SECTIONS)[number]['id'];
 
 const REMOVE_CONFIRM_MS = 4000;
 
-export function SettingsModal({ open, onClose }: SettingsModalProps): JSX.Element | null {
+export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
   // The parent only mounts this component while `open` is true (matching QuickAdd's
   // pattern), so this is belt-and-suspenders — but keep it since the prop is part of
@@ -36,6 +40,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps): JSX.Elemen
   // lapse back to the plain Remove button.
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirrors the mount-effect's local `live` guard below, but exposed via ref so
+  // handleRemoveClick's uninstall promise (fired from a click, outside the effect) can
+  // check it the same way.
+  const liveRef = useRef(true);
 
   const clearConfirmTimer = (): void => {
     if (confirmTimerRef.current !== null) {
@@ -75,6 +83,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps): JSX.Elemen
     });
     return () => {
       live = false;
+      liveRef.current = false;
       offProgress();
       clearConfirmTimer();
     };
@@ -93,11 +102,13 @@ export function SettingsModal({ open, onClose }: SettingsModalProps): JSX.Elemen
       window.helm.bibles
         .uninstall(id)
         .then((m) => {
-          setManifest(m);
+          if (liveRef.current) setManifest(m);
           // Uninstall (unlike install) has no IPC progress broadcast to piggyback on —
-          // push the refreshed manifest straight to any mounted SermonMode so its
-          // compare selection can drop the id immediately.
-          notifyBiblesManifestChanged(m);
+          // tell App to bump biblesRevision so any mounted SermonMode refetches and
+          // drops the id from its compare selection. Fired regardless of this modal's
+          // mount state: App/SermonMode outlive it, so the notification should still land
+          // even if the modal was closed mid-uninstall.
+          onBiblesChanged();
         })
         .catch(console.error);
       return;

@@ -16,26 +16,18 @@ export interface SermonModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
   active: boolean;
   onOpenSettings: () => void;
+  // Bumped by App after a successful bible uninstall in SettingsModal — uninstall has no
+  // IPC progress broadcast to piggyback on the way install's downloading/installing/done
+  // phases do, so App mediates the refresh instead of SermonMode/SettingsModal reaching
+  // into each other directly.
+  biblesRevision: number;
 }
 
 const INSTALL_HINT = '[ Install a Bible in Settings ]';
 const SCHEDULE_PANEL_W = 270;
 const RIGHT_PANEL_W = 330;
 
-// Uninstalling a bible (from SettingsModal) has no IPC progress broadcast to
-// piggyback on the way install's downloading/installing/done phases do — SettingsModal
-// calls this directly after a successful uninstall so any mounted SermonMode instance
-// picks up the refreshed manifest immediately, without an app restart or mode switch.
-// (Not a component — disabling react-refresh's one-export-per-file rule for it rather
-// than splitting a two-line helper into its own module.)
-type ManifestListener = (m: BibleManifestEntry[]) => void;
-const manifestListeners = new Set<ManifestListener>();
-// eslint-disable-next-line react-refresh/only-export-components
-export function notifyBiblesManifestChanged(manifest: BibleManifestEntry[]): void {
-  manifestListeners.forEach((l) => l(manifest));
-}
-
-export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings }: SermonModeProps): JSX.Element {
+export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, biblesRevision }: SermonModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -102,21 +94,35 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings }:
 
   // Refresh the manifest on install completion/failure so a translation installed from
   // Settings mid-service becomes pickable in VersionPicker without an app restart.
-  // Also listen for direct manifest pushes from SettingsModal (uninstall has no
-  // progress broadcast — see notifyBiblesManifestChanged above). Subscribed
-  // unconditionally (not gated on `active`) since SermonMode stays mounted for the
-  // app's whole lifetime under the keep-alive contract.
+  // Subscribed unconditionally (not gated on `active`) since SermonMode stays mounted
+  // for the app's whole lifetime under the keep-alive contract.
   useEffect(() => {
     const offProgress = window.helm.bibles.onProgress((p) => {
       if (p.phase !== 'done' && p.phase !== 'error') return;
       void window.helm.bibles.manifest().then(applyManifest).catch(console.error);
     });
-    manifestListeners.add(applyManifest);
     return () => {
       offProgress();
-      manifestListeners.delete(applyManifest);
     };
   }, [applyManifest]);
+
+  // Uninstall (unlike install) has no IPC progress broadcast to piggyback on, so App
+  // bumps `biblesRevision` after a successful SettingsModal uninstall and this effect
+  // reacts by refetching. Revision starts at 0 and this only needs to fire on an actual
+  // change, so the initial 0 is skipped to avoid duplicating the initial-load fetch above.
+  useEffect(() => {
+    if (biblesRevision === 0) return;
+    let live = true;
+    void window.helm.bibles
+      .manifest()
+      .then((m) => {
+        if (live) applyManifest(m);
+      })
+      .catch(console.error);
+    return () => {
+      live = false;
+    };
+  }, [biblesRevision, applyManifest]);
 
   // Persist the version selection once it changes after the initial load.
   useEffect(() => {
