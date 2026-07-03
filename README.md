@@ -1,17 +1,19 @@
 # Helm
 
 A Mac + Windows desktop app for running a church service from one seat: congregational
-songs (scripture, sermon quotes, and a pre-service loop are planned but not yet built) —
-searched by half-remembered lyric, cued and taken live from an operator console, and
-projected full-screen to a second display over HDMI. Everything is stored locally in
-SQLite; the operator window and the physical output are both pure renders of one shared
-presentation state, so what you see in the preview is exactly what the room sees. See
-`docs/superpowers/specs/2026-07-03-helm-design.md` §1 for the full purpose and success
-criteria.
+songs and scripture (sermon quotes and a pre-service loop are planned but not yet built) —
+searched by half-remembered lyric or typed reference, cued and taken live from an operator
+console, and projected full-screen to a second display over HDMI. Everything is stored
+locally in SQLite; the operator window and the physical output are both pure renders of
+one shared presentation state, so what you see in the preview is exactly what the room
+sees. See `docs/superpowers/specs/2026-07-03-helm-design.md` §1 for the full purpose and
+success criteria.
 
-**Status:** slice 1–2 (songs mode) is implemented — search, cue, go-live, quick-add,
-keyboard control, resizable panels, auto-attaching output window. Scripture, sermon
-quotes, pre-service loop, settings, and multi-display roles are deferred to later slices
+**Status:** slice 1–2 (songs mode) and slice 3 (scripture) are implemented — song search,
+cue, go-live, quick-add, keyboard control, resizable panels, auto-attaching output window;
+scripture reference parsing, bundled KJV plus an in-app Bible installer, sermon-mode
+scripture track with chapter rail and translation compare, and full keyboard parity.
+Sermon quotes, the pre-service loop, and multi-display roles are deferred to later slices
 (spec §11).
 
 ## Project setup
@@ -77,3 +79,6 @@ per-display renders of that same state; they hold no local state of their own.
 2. Launch Helm (`npm run dev`, or the packaged app).
 3. Songs tab → type a few words of the lyric → **Enter** to cue → **Go live** (or press
    Enter/Space again) to put it on screen.
+4. Sermon tab → type a reference — `john 3:16` — and press **Enter** to put it on screen
+   immediately. Settings → Bibles has KJV installed out of the box; install more
+   translations there (needs a network connection) to compare versions side by side.
