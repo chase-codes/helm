@@ -1,6 +1,7 @@
 import { createContext, useState, type CSSProperties, type JSX } from 'react';
 import { themeFor, type Theme } from '../../shared/theme';
 import { Header } from './Header';
+import { SongsMode } from './SongsMode';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
 export type ThemeMode = 'dark' | 'light';
@@ -55,7 +56,7 @@ function App(): JSX.Element {
         <div style={mainStyle}>
           {mode === 'pre' && <Placeholder theme={theme} title="Pre-service" />}
           {mode === 'sermon' && <Placeholder theme={theme} title="Sermon" />}
-          {mode === 'songs' && <div style={{ flex: 1, minHeight: 0 }} />}
+          {mode === 'songs' && <SongsMode themeMode={themeMode} />}
         </div>
       </div>
     </ThemeCtx.Provider>
