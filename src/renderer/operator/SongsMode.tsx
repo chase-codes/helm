@@ -53,12 +53,10 @@ export function SongsMode({ themeMode }: SongsModeProps): JSX.Element {
     };
   }, []);
 
-  // Re-query on every keystroke / field change. Empty query shows the library instead.
+  // Re-query on every keystroke / field change. Empty query shows the library instead
+  // (displayedRows only reads `results` when the query is non-empty, so no reset needed).
   useEffect(() => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
+    if (!q.trim()) return;
     let live = true;
     void window.helm.songs.search(q, field).then((r) => {
       if (live) setResults(r);
