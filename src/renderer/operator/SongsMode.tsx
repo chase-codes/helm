@@ -5,6 +5,7 @@ import { keyForSong } from '../../shared/presentation/core';
 import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
+import { QuickAdd } from './QuickAdd';
 
 export interface SongsModeProps {
   themeMode: ThemeMode;
@@ -36,6 +37,7 @@ export function SongsMode({ themeMode }: SongsModeProps): JSX.Element {
   const [library, setLibrary] = useState<Song[]>([]);
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [section, setSection] = useState(0);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   // Initial load: fetch the library and select the first song (seed order = Amazing Grace).
   useEffect(() => {
@@ -87,6 +89,11 @@ export function SongsMode({ themeMode }: SongsModeProps): JSX.Element {
   const selectSong = (id: string): void => {
     setActiveSongId(id);
     setSection(0);
+  };
+
+  const onQuickAddSaved = (song: Song): void => {
+    setLibrary((prev) => [song, ...prev]);
+    selectSong(song.id);
   };
 
   const hasQuery = !!q.trim();
@@ -244,6 +251,7 @@ export function SongsMode({ themeMode }: SongsModeProps): JSX.Element {
         emptyText={emptyText}
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
+        onAddSong={() => setQuickAddOpen(true)}
       />
 
       <div style={{ ...dividerStyle(10), background: T.appBg }} title="Drag to resize">
@@ -309,6 +317,8 @@ export function SongsMode({ themeMode }: SongsModeProps): JSX.Element {
           </button>
         </div>
       </div>
+
+      {quickAddOpen && <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />}
     </div>
   );
 }

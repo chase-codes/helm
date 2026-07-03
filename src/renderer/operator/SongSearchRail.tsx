@@ -30,6 +30,7 @@ export interface SongSearchRailProps {
   emptyText: string;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSelect: (id: string) => void;
+  onAddSong: () => void;
 }
 
 export function SongSearchRail({
@@ -44,7 +45,8 @@ export function SongSearchRail({
   noResults,
   emptyText,
   onKeyDown,
-  onSelect
+  onSelect,
+  onAddSong
 }: SongSearchRailProps): JSX.Element {
   const opRailStyle: CSSProperties = {
     width: `${width}px`,
@@ -181,7 +183,7 @@ export function SongSearchRail({
           </button>
         ))}
         {noResults && <div style={{ padding: '14px 8px', color: T.faint, fontSize: '12.5px', lineHeight: 1.5 }}>{emptyText}</div>}
-        <button style={pasteSongStyle} onClick={() => {}}>
+        <button style={pasteSongStyle} onClick={onAddSong}>
           + Add a song — search or paste
         </button>
       </div>
