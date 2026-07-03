@@ -2,8 +2,13 @@ import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { CH, type BibleInstallProgress } from '../shared/types'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
+import { createBiblesRepo } from './biblesRepo'
+import { createScheduleRepo } from './scheduleRepo'
+import { createSettingsRepo } from './settingsRepo'
+import { createBibleInstaller } from './bibleInstaller'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
@@ -85,11 +90,23 @@ app.whenReady().then(() => {
   const db = openDb(join(app.getPath('userData'), 'helm.db'))
   const repo = createSongsRepo(db)
   seedIfEmpty(repo)
-  registerIpc(repo)
+  const biblesRepo = createBiblesRepo(db)
+  const scheduleRepo = createScheduleRepo(db)
+  const settingsRepo = createSettingsRepo(db)
+  // Same broadcast-to-all-windows pattern as displaysStatus in displays.ts.
+  const broadcastBibleProgress = (p: BibleInstallProgress): void => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.biblesProgress, p)
+  }
+  const installer = createBibleInstaller(biblesRepo, broadcastBibleProgress)
+  registerIpc(repo, biblesRepo, scheduleRepo, settingsRepo, installer)
 
   buildMenu()
   createWindow()
   initDisplays()
+
+  // Fire-and-forget: awaiting this before createWindow() would block boot by ~2s
+  // on first run. The UI catches up via bibles:progress broadcasts / manifest() polling.
+  void installer.installBundledKjvIfMissing()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

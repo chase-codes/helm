@@ -35,6 +35,12 @@ export const CH = {
   outputSlide: 'output:slide',               // main → output windows
   displaysGet: 'displays:get', displaysStatus: 'displays:status',
   displaysOpenTest: 'displays:openTest',
+  biblesManifest: 'bibles:manifest', biblesInstall: 'bibles:install',
+  biblesUninstall: 'bibles:uninstall',
+  biblesProgress: 'bibles:progress',  // main → all windows
+  biblesGetChapter: 'bibles:getChapter',
+  scheduleList: 'schedule:list', scheduleAdd: 'schedule:add',
+  settingsGet: 'settings:get', settingsSet: 'settings:set',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -46,6 +52,11 @@ export interface ScriptureReading { id: string; book: string; ch: number; from: 
 export interface NormalizedBible {
   id: string; abbr: string; name: string; language: string;
   books: { name: string; chapters: { n: number; verses: { n: number; text: string }[] }[] }[];
+}
+
+export interface BibleManifestEntry { id: string; abbr: string; name: string; bundled?: boolean; installed: boolean }
+export interface BibleInstallProgress {
+  id: string; phase: 'downloading' | 'installing' | 'done' | 'error'; error?: string;
 }
 
 export interface HelmApi {
@@ -67,5 +78,20 @@ export interface HelmApi {
     get(): Promise<DisplayStatus>;
     onStatus(cb: (d: DisplayStatus) => void): () => void;
     openTest(): void;
+  };
+  bibles: {
+    manifest(): Promise<BibleManifestEntry[]>;
+    install(id: string): void;                       // async; progress via onProgress
+    uninstall(id: string): Promise<BibleManifestEntry[]>;
+    getChapter(book: string, chapter: number): Promise<ChapterData>;
+    onProgress(cb: (p: BibleInstallProgress) => void): () => void;
+  };
+  schedule: {
+    list(): Promise<ScriptureReading[]>;
+    add(r: Omit<ScriptureReading, 'id'>): Promise<ScriptureReading[]>;
+  };
+  settings: {
+    get<T>(key: string, fallback: T): Promise<T>;
+    set(key: string, value: unknown): void;
   };
 }

@@ -26,5 +26,20 @@ const api: HelmApi = {
     onStatus: sub(CH.displaysStatus),
     openTest: () => ipcRenderer.send(CH.displaysOpenTest),
   },
+  bibles: {
+    manifest: () => ipcRenderer.invoke(CH.biblesManifest),
+    install: (id) => ipcRenderer.send(CH.biblesInstall, id),
+    uninstall: (id) => ipcRenderer.invoke(CH.biblesUninstall, id),
+    getChapter: (book, chapter) => ipcRenderer.invoke(CH.biblesGetChapter, book, chapter),
+    onProgress: sub(CH.biblesProgress),
+  },
+  schedule: {
+    list: () => ipcRenderer.invoke(CH.scheduleList),
+    add: (r) => ipcRenderer.invoke(CH.scheduleAdd, r),
+  },
+  settings: {
+    get: (key, fallback) => ipcRenderer.invoke(CH.settingsGet, key, fallback),
+    set: (key, value) => ipcRenderer.send(CH.settingsSet, key, value),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);
