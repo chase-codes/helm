@@ -3,9 +3,7 @@
   "include": [
     "src/renderer/env.d.ts",
     "src/renderer/operator/**/*",
-    "src/renderer/operator/**/*.tsx",
     "src/renderer/output/**/*",
-    "src/renderer/output/**/*.tsx",
     "src/shared/**/*",
     "src/preload/*.d.ts"
   ],
