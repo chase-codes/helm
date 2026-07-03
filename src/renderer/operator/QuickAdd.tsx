@@ -15,6 +15,8 @@ export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element
   // mount (and therefore fresh field state) happens on every open.
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   // Escape closes while the modal is open. Task 12 will add a global handler;
   // this listener is self-contained so it can be dropped in favor of that later.
@@ -31,14 +33,23 @@ export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element
 
   if (!open) return null;
 
-  const canSave = !!text.trim();
+  const canSave = !!text.trim() && !saving;
 
   const save = (): void => {
     if (!canSave) return;
-    void window.helm.songs.add({ title: title.trim() || 'Untitled Song', text }).then((song) => {
-      onClose();
-      onSaved(song);
-    });
+    setSaving(true);
+    setSaveError(false);
+    window.helm.songs.add({ title: title.trim() || 'Untitled Song', text }).then(
+      (song) => {
+        onClose();
+        onSaved(song);
+      },
+      () => {
+        // Keep the modal (and the user's text) intact; let them retry.
+        setSaving(false);
+        setSaveError(true);
+      }
+    );
   };
 
   const stop = (e: ReactMouseEvent): void => e.stopPropagation();
@@ -173,7 +184,17 @@ export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '15px 22px', borderTop: `1px solid ${T.hairline}` }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '15px 22px',
+            borderTop: `1px solid ${T.hairline}`
+          }}
+        >
+          {saveError && <div style={{ fontSize: '13px', color: T.live }}>Couldn&rsquo;t save — try again</div>}
           <button style={cancelStyle} onClick={onClose}>
             Cancel
           </button>
