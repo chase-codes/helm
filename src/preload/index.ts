@@ -1,22 +1,30 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { CH, type HelmApi } from '../shared/types';
 
-// Custom APIs for renderer
-const api = {}
-
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
-}
+const sub = <T>(channel: string) => (cb: (v: T) => void) => {
+  const h = (_e: IpcRendererEvent, v: T): void => cb(v);
+  ipcRenderer.on(channel, h);
+  return () => ipcRenderer.removeListener(channel, h);
+};
+const api: HelmApi = {
+  songs: {
+    search: (q, field) => ipcRenderer.invoke(CH.songsSearch, q, field),
+    list: () => ipcRenderer.invoke(CH.songsList),
+    get: (id) => ipcRenderer.invoke(CH.songsGet, id),
+    add: (input) => ipcRenderer.invoke(CH.songsAdd, input),
+  },
+  presentation: {
+    get: () => ipcRenderer.invoke(CH.presGet),
+    cue: (key, slide) => ipcRenderer.send(CH.presCue, key, slide),
+    goLive: (key, slide) => ipcRenderer.send(CH.presGoLive, key, slide),
+    setOutput: (mode) => ipcRenderer.send(CH.presSetOutput, mode),
+    onState: sub(CH.presState),
+  },
+  output: { onSlide: sub(CH.outputSlide) },
+  displays: {
+    get: () => ipcRenderer.invoke(CH.displaysGet),
+    onStatus: sub(CH.displaysStatus),
+    openTest: () => ipcRenderer.send(CH.displaysOpenTest),
+  },
+};
+contextBridge.exposeInMainWorld('helm', api);

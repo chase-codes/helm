@@ -1,7 +1,12 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { openDb } from './db'
+import { createSongsRepo } from './songsRepo'
+import { seedIfEmpty } from './seed'
+import { registerIpc } from './ipc'
+import { initDisplays, openTestOutput } from './displays'
 
 function createWindow(): void {
   // Create the browser window.
@@ -40,6 +45,17 @@ function createWindow(): void {
   }
 }
 
+function buildMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    {
+      label: 'View',
+      submenu: [{ label: 'Open Test Output', click: () => openTestOutput() }]
+    }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -54,10 +70,14 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  const db = openDb(join(app.getPath('userData'), 'helm.db'))
+  const repo = createSongsRepo(db)
+  seedIfEmpty(repo)
+  registerIpc(repo)
 
+  buildMenu()
   createWindow()
+  initDisplays()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
