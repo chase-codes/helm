@@ -1,4 +1,4 @@
-# Selah — Church Presentation App (EasyWorship replacement)
+# Helm — Church Presentation App (EasyWorship replacement)
 
 **Date:** 2026-07-03
 **Status:** Draft — awaiting user review
@@ -8,7 +8,7 @@
 
 A Mac + Windows desktop app for running a church service: pre-service loop, congregational songs, scripture, Message (tape) quotes, and slide decks — with all content stored locally, first-class mid-service search, and rock-solid output to multiple physical displays over HDMI.
 
-Working name: **Selah** (the pause marker in the Psalms). Pending user confirmation; the name appears only in package metadata, the logo slide, and the repo name, so renaming later is cheap. Alternatives considered: Herald, Doxa, Evenlight.
+Name: **Helm** — steering the service from one seat (with a quiet echo of James 3:4). Chosen after a naming workshop; the name appears only in package metadata, the logo slide, and the repo name, so renaming later is cheap. Alternatives considered: Selah, Asaph, Herald, Cue, Baton, Cadence.
 
 ## 2. Success criteria
 
