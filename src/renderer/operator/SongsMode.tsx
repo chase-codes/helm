@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx, type ModeKeyHandlerRef, type ThemeMode } from './App';
 import { usePresentationState } from './useHelm';
 import { keyForSong } from '../../shared/presentation/core';
@@ -175,6 +175,18 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
     };
   });
 
+  // Holds the active drag's teardown (remove window listeners, reset body cursor/
+  // userSelect). Set by startColDrag, cleared when the drag ends; the unmount effect
+  // below invokes it if SongsMode unmounts mid-drag so no dangling listeners or a stuck
+  // col-resize cursor survive the component.
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
+    };
+  }, []);
+
   // Drag-resize for the two column dividers (list <-> hero, hero <-> sections). Mirrors
   // the prototype's startColDrag: mousemove/mouseup on window, body cursor + userSelect
   // suppressed while dragging, persisted to localStorage on release. Note the section
@@ -194,12 +206,18 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
         setSectionW(latest);
       }
     };
-    const onUp = (): void => {
+    const cleanup = (): void => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      dragCleanupRef.current = null;
+    };
+    const onUp = (): void => {
+      cleanup();
       setDragging(null);
+      // Persist only on a real mouseup — an unmount-aborted drag skips this (the width
+      // state it was mutating is being torn down anyway).
       try {
         localStorage.setItem(which === 'list' ? 'helmSongListW' : 'helmSectionPanelW', String(latest));
       } catch {
@@ -210,6 +228,7 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
     window.addEventListener('mouseup', onUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+    dragCleanupRef.current = cleanup;
     setDragging(which);
   };
 

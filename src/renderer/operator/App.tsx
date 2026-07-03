@@ -64,8 +64,10 @@ function App(): JSX.Element {
       const typing = tag === 'input' || tag === 'textarea';
       const handler = keyHandlerRef.current;
 
+      // Escape fires even while typing (closes any open modal); no preventDefault,
+      // matching the prototype exactly.
       if (e.key === 'Escape') {
-        if (handler?.onEscape()) e.preventDefault();
+        handler?.onEscape();
         return;
       }
       if (typing) return;
