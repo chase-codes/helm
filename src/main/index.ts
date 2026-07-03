@@ -6,7 +6,7 @@ import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
-import { initDisplays, openTestOutput, closeAllOutputs } from './displays'
+import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
 
 let operatorWindow: BrowserWindow | null = null
 
@@ -97,7 +97,12 @@ app.whenReady().then(() => {
     // stay alive independently of the operator window, so checking for "no
     // operator window" (rather than BrowserWindow.getAllWindows().length === 0,
     // which output windows would keep non-zero) is what actually matters here.
-    if (operatorWindow === null) createWindow()
+    // Closing the operator window also tore down all output windows, so re-attach
+    // them to external displays — otherwise they'd only return on a display replug.
+    if (operatorWindow === null) {
+      createWindow()
+      resyncDisplays()
+    }
   })
 })
 

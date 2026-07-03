@@ -6,6 +6,7 @@ import { presentation } from './stateStore';
 
 const byDisplayId = new Map<number, BrowserWindow>();
 const testOutputs = new Set<BrowserWindow>();
+let resync: (() => void) | null = null;
 
 function loadOutput(win: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/output/index.html`);
@@ -37,8 +38,14 @@ export function initDisplays(): void {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.displaysStatus, displayStatus());
   };
   screen.on('display-added', sync); screen.on('display-removed', sync); screen.on('display-metrics-changed', sync);
+  resync = sync;
   sync();
 }
+
+// Re-attach output windows to external displays on demand — e.g. when the operator
+// window is recreated after an accidental Cmd+W tore all outputs down; without this,
+// outputs would only come back on a display add/remove/metrics event.
+export function resyncDisplays(): void { resync?.(); }
 // Dev helper: windowed output for single-display machines
 export function openTestOutput(): void {
   const win = createOutputWindow({ x: 80, y: 80, width: 960, height: 540 }, false);

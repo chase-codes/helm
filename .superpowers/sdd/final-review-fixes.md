@@ -53,3 +53,20 @@ Applied on branch `feat/slice-1-2-songs`, 2026-07-03.
   243 such warnings on these same files prior to this change, so this is pre-existing lint
   posture, not a new-error regression). Confirmed via a `git stash` A/B comparison.
 - Electron was not launched, per instructions (better-sqlite3 is built for Node ABI).
+
+## Re-review residual (follow-up commit)
+
+10. **Output windows not re-attached after operator-window recreate** — `src/main/displays.ts`
+    now hoists the `sync` closure via a module-level `let resync: (() => void) | null = null`
+    assigned inside `initDisplays()`, exported as `resyncDisplays()` with a null-guard
+    (`resync?.()`). `src/main/index.ts` imports it and calls it after `createWindow()` in the
+    macOS `activate` handler, so reopening the console after an accidental Cmd+W (which tears
+    all outputs down via `closeAllOutputs()`) re-attaches output windows to external displays
+    immediately instead of waiting for a display add/remove/metrics event.
+
+### Verification (follow-up)
+
+- `npm run typecheck` — clean.
+- `npm test` — 38/38 passed (7 files).
+- `npx eslint src/main/displays.ts src/main/index.ts` — 0 errors (38 pre-existing
+  prettier/prettier warnings, same posture as before).
