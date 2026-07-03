@@ -1,19 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import ReactDOM from 'react-dom/client'
-import type { OutputPayload } from '../../shared/types'
-import { SlideCanvas } from '../shared/SlideCanvas'
+import { OutputApp } from './OutputApp'
 
-function OutputApp(): React.JSX.Element {
-  const [payload, setPayload] = useState<OutputPayload>({ slide: { kind: 'black' }, variant: 'audience' })
-  useEffect(() => window.helm.output.onSlide(setPayload), [])
-  useEffect(() => {
-    document.body.style.cursor = 'none'
-    document.body.style.background = '#000'
-  }, [])
-  return (
-    <div style={{ position: 'fixed', inset: 0 }}>
-      <SlideCanvas slide={payload.slide} variant={payload.variant} fill />
-    </div>
-  )
-}
-ReactDOM.createRoot(document.getElementById('root')!).render(<OutputApp />)
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <OutputApp />
+  </React.StrictMode>
+)

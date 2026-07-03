@@ -1,8 +1,8 @@
 import type { Song, SongSearchResult, SearchField } from '../types';
 import { norm, lev } from './fuzzy';
 
-const lyricsOf = (s: Song) => s.sections.map((sc) => sc.lines.join(' ')).join(' ');
-const blobOf = (s: Song) => `${s.title} ${s.author} ${lyricsOf(s)}`;
+const lyricsOf = (s: Song): string => s.sections.map((sc) => sc.lines.join(' ')).join(' ');
+const blobOf = (s: Song): string => `${s.title} ${s.author} ${lyricsOf(s)}`;
 
 export function scoreSong(query: string, song: Song, field: SearchField): { score: number; snippet: string } {
   const q = norm(query);

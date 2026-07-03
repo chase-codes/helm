@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import { ThemeCtx, type ModeKeyHandlerRef, type ThemeMode } from './App';
+import type { ModeKeyHandlerRef, ThemeMode } from './App';
+import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { keyForSong } from '../../shared/presentation/core';
 import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/types';

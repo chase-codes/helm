@@ -1,6 +1,6 @@
 import { useContext, type CSSProperties, type JSX } from 'react';
 import type { Mode, ThemeMode } from './App';
-import { ThemeCtx } from './App';
+import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm';
 
 export interface HeaderProps {

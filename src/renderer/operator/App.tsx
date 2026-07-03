@@ -1,12 +1,11 @@
-import { createContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { themeFor, type Theme } from '../../shared/theme';
 import { Header } from './Header';
 import { SongsMode } from './SongsMode';
+import { ThemeCtx } from './ThemeCtx';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
 export type ThemeMode = 'dark' | 'light';
-
-export const ThemeCtx = createContext<Theme>(themeFor('dark'));
 
 /**
  * Delegate interface a mode registers on `keyHandlerRef` so the global

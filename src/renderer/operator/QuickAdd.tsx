@@ -1,5 +1,5 @@
 import { useContext, useMemo, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
-import { ThemeCtx } from './App';
+import { ThemeCtx } from './ThemeCtx';
 import { splitToSlides } from '../../shared/songs/splitToSlides';
 import type { Song } from '../../shared/types';
 
