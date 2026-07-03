@@ -72,7 +72,7 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
         setActiveSongId(songs[0].id);
         setSection(0);
       }
-    });
+    }).catch(console.error);
     return () => {
       live = false;
     };
@@ -85,7 +85,7 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
     let live = true;
     void window.helm.songs.search(q, field).then((r) => {
       if (live) setResults(r);
-    });
+    }).catch(console.error);
     return () => {
       live = false;
     };
@@ -115,7 +115,7 @@ export function SongsMode({ themeMode, keyHandlerRef }: SongsModeProps): JSX.Ele
   };
 
   const onQuickAddSaved = (song: Song): void => {
-    setLibrary((prev) => [song, ...prev]);
+    setLibrary((prev) => [...prev, song]);
     selectSong(song.id);
   };
 

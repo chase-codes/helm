@@ -18,7 +18,7 @@ export const presentation = {
   registerOutput(w: BrowserWindow) {
     outputWindows.add(w);
     w.on('closed', () => outputWindows.delete(w));
-    w.webContents.once('did-finish-load', () => w.webContents.send(CH.outputSlide, outputPayload(state)));
+    w.webContents.on('did-finish-load', () => w.webContents.send(CH.outputSlide, outputPayload(state)));
   },
   outputCount: () => outputWindows.size,
 };

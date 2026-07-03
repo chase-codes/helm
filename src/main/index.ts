@@ -6,7 +6,9 @@ import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
-import { initDisplays, openTestOutput } from './displays'
+import { initDisplays, openTestOutput, closeAllOutputs } from './displays'
+
+let operatorWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   // Create the browser window.
@@ -26,9 +28,18 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+  operatorWindow = mainWindow
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // Output windows (real-display and test) are always-on-top and have no window
+  // chrome of their own — if the operator window closes without taking them down,
+  // they're orphaned with no way for the user to close them. Destroy them here.
+  mainWindow.on('closed', () => {
+    operatorWindow = null
+    closeAllOutputs()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -48,6 +59,7 @@ function createWindow(): void {
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    { role: 'editMenu' as const },
     {
       label: 'View',
       submenu: [{ label: 'Open Test Output', click: () => openTestOutput() }]
@@ -61,7 +73,7 @@ function buildMenu(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.helm.app')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -81,8 +93,11 @@ app.whenReady().then(() => {
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    // dock icon is clicked and there are no other windows open. Output windows
+    // stay alive independently of the operator window, so checking for "no
+    // operator window" (rather than BrowserWindow.getAllWindows().length === 0,
+    // which output windows would keep non-zero) is what actually matters here.
+    if (operatorWindow === null) createWindow()
   })
 })
 

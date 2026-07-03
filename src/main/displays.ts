@@ -5,6 +5,7 @@ import { CH, type DisplayStatus } from '../shared/types';
 import { presentation } from './stateStore';
 
 const byDisplayId = new Map<number, BrowserWindow>();
+const testOutputs = new Set<BrowserWindow>();
 
 function loadOutput(win: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/output/index.html`);
@@ -39,4 +40,19 @@ export function initDisplays(): void {
   sync();
 }
 // Dev helper: windowed output for single-display machines
-export function openTestOutput(): void { createOutputWindow({ x: 80, y: 80, width: 960, height: 540 }, false); }
+export function openTestOutput(): void {
+  const win = createOutputWindow({ x: 80, y: 80, width: 960, height: 540 }, false);
+  testOutputs.add(win);
+  win.on('closed', () => testOutputs.delete(win));
+}
+
+// Destroys every output window (real-display and test) so none are left orphaned
+// once the operator window closes — always-on-top outputs would otherwise survive
+// with no way for the user to close them (esp. on Win/Linux, where there's no dock
+// icon / activate handler to bring the operator window back).
+export function closeAllOutputs(): void {
+  for (const w of byDisplayId.values()) if (!w.isDestroyed()) w.destroy();
+  byDisplayId.clear();
+  for (const w of testOutputs) if (!w.isDestroyed()) w.destroy();
+  testOutputs.clear();
+}

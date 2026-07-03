@@ -148,7 +148,7 @@ export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element
             </div>
           </div>
           <div style={{ fontSize: '13px', color: T.dim, margin: '6px 0 14px', lineHeight: 1.4 }}>
-            Leave a blank line between each verse or chorus. Lectern splits and labels them automatically.
+            Leave a blank line between each verse or chorus. Helm splits and labels them automatically.
           </div>
         </div>
 
