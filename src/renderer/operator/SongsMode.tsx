@@ -176,7 +176,8 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         return true;
       },
       onArrow: step,
-      onGoLive: goLive
+      onGoLive: goLive,
+      isModalOpen: () => quickAddOpen
     };
     return () => {
       keyHandlerRef.current = null;

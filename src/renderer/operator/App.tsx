@@ -21,6 +21,13 @@ export interface ModeKeyHandler {
   onArrow: (dir: 1 | -1) => void;
   /** Enter/Space: go live on the current cue. */
   onGoLive: () => void;
+  /**
+   * True while this mode has its own modal open (e.g. SongsMode's QuickAdd). Queried
+   * fresh at dispatch time (the handler is re-registered every render, so this always
+   * reflects current state) so App can suppress Enter/Space→onGoLive without needing a
+   * separate piece of App-level state per mode's modal.
+   */
+  isModalOpen: () => boolean;
 }
 
 export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
@@ -97,6 +104,12 @@ function App(): JSX.Element {
         handler?.onArrow(-1);
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
+        // Guard against Enter/Space firing goLive behind an open modal (quick-add or
+        // settings) — e.g. pressing Enter on a modal's own button/input must not also
+        // put content live on the output window behind it. Settings is app-level so its
+        // state is checked directly; the active mode's own modal (if any) is queried via
+        // the delegate so App doesn't need a piece of state per mode's modal.
+        if (settingsOpen || handler?.isModalOpen()) return;
         handler?.onGoLive();
       }
     };

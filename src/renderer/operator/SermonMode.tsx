@@ -246,6 +246,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
           setEntryQ(b + ' ');
         }
       }
+    } else if (e.key === 'Escape') {
+      // Clear the input first (mirrors SongsMode's search box); a second Escape once
+      // it's already empty is a no-op here and falls through to the document-level
+      // handler's modal-close semantics (Settings, if open) via normal bubbling.
+      if (entryQ) setEntryQ('');
     }
   };
 
@@ -313,7 +318,10 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       },
       onGoLive: () => {
         if (track === 'scripture') goLive();
-      }
+      },
+      // SermonMode has no App-level modal of its own (unlike SongsMode's QuickAdd) —
+      // Settings, its only modal, is tracked directly in App via settingsOpen.
+      isModalOpen: () => false
     };
     return () => {
       keyHandlerRef.current = null;
