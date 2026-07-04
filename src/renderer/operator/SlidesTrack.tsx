@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
+import { useContext, useEffect, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
@@ -56,6 +56,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   const [selId, setSelId] = useState('');
   const [slideIdx, setSlideIdx] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  // Deck-import calm-fallback surface (spec §9: never let an import failure throw
+  // uncaught). 'no-libreoffice' is the structural `{ error }` result D1's importDeck
+  // resolves with when soffice isn't found; 'failed' covers the promise REJECTING
+  // mid-conversion (D1 flagged this can happen) — same modal, different copy.
+  const [deckFallback, setDeckFallback] = useState<'no-libreoffice' | 'failed' | null>(null);
 
   // Initial load: the media library, picking the first item as current.
   useEffect(() => {
@@ -130,9 +135,31 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     setImportOpen(false);
     void window.helm.media.importVideo().then(refreshFrom).catch(console.error);
   };
-  // TODO(D2): a "PowerPoint" entry belongs in this menu, calling
-  // window.helm.media.importDeck() and — on `{ error: 'no-libreoffice' }` — opening the
-  // fallback modal described in the spec (§5.3). Not built here; Task D2's scope.
+  // PowerPoint import: unlike Images/Video, importDeck's success value carries an
+  // optional `error` (no-LibreOffice is a structural result, not a rejection) AND the
+  // promise can still reject mid-conversion (D1 flagged this) — so both paths route to
+  // the same calm fallback modal rather than letting either crash the UI (spec §9). On
+  // real success the repo is ordered newest-first (mediaRepo's `ORDER BY created_at
+  // DESC`), so the just-imported deck is always `items[0]` — select it directly so its
+  // slide rail shows immediately, rather than reusing refreshFrom's keep-current logic.
+  const importDeck = (): void => {
+    setImportOpen(false);
+    void window.helm.media
+      .importDeck()
+      .then((res) => {
+        if (res.error === 'no-libreoffice') {
+          setDeckFallback('no-libreoffice');
+          return;
+        }
+        setItems(res.items);
+        setSelId(res.items[0]?.id ?? '');
+        setSlideIdx(0);
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        setDeckFallback('failed');
+      });
+  };
 
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
   // messageKeyRef-registration effect) — no deps array so it always captures the latest
@@ -239,6 +266,40 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   });
   const deckRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent' };
 
+  // Calm fallback modal for deck import — overlay/card values copied character-exact
+  // from PreCardEditor's shell (the smallest single-purpose modal in the app; see that
+  // file's overlayStyle/modalStyle), not invented fresh.
+  const stopDeckFallbackClick = (e: ReactMouseEvent): void => e.stopPropagation();
+  const deckFallbackOverlayStyle: CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 50,
+    background: 'rgba(8,9,12,.6)',
+    backdropFilter: 'blur(3px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '5vh 4vw'
+  };
+  const deckFallbackModalStyle: CSSProperties = {
+    width: '100%',
+    maxWidth: '420px',
+    background: T.panel,
+    borderRadius: '16px',
+    padding: '22px 24px',
+    boxShadow: '0 30px 80px rgba(0,0,0,.5)'
+  };
+  const deckFallbackCloseBtnStyle: CSSProperties = {
+    height: '38px',
+    padding: '0 18px',
+    borderRadius: '10px',
+    background: T.panel2,
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    fontSize: '13.5px',
+    fontWeight: 600,
+    color: T.dim
+  };
+
   return (
     <div style={rootStyle}>
       <div style={railStyle}>
@@ -274,6 +335,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
                   </button>
                   <button style={importRowStyle} onClick={importVideo}>
                     Video
+                  </button>
+                  <button style={importRowStyle} onClick={importDeck}>
+                    PowerPoint
                   </button>
                 </div>
               </>
@@ -325,6 +389,26 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {deckFallback && (
+        <div style={deckFallbackOverlayStyle} onClick={() => setDeckFallback(null)}>
+          <div style={deckFallbackModalStyle} onClick={stopDeckFallbackClick}>
+            <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>
+              {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import PowerPoint"}
+            </div>
+            <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5 }}>
+              {deckFallback === 'no-libreoffice'
+                ? 'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
+                : "Couldn't convert that PowerPoint file."}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
+              <button style={deckFallbackCloseBtnStyle} onClick={() => setDeckFallback(null)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

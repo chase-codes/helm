@@ -84,4 +84,19 @@ describe('SlidesTrack', () => {
     fireEvent.click(goLiveBtn)
     expect(goLive).toHaveBeenCalledWith(expect.stringMatching(/^pres:/), expect.anything())
   })
+
+  it('shows the LibreOffice-missing fallback modal when importDeck reports no-libreoffice', async () => {
+    installHelmStub()
+    window.helm.media.importDeck = vi.fn(async () => ({ items: [], error: 'no-libreoffice' as const }))
+    renderTrack()
+    const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
+    fireEvent.click(importBtn)
+    const pptBtn = (await screen.findByText('PowerPoint')).closest('button') as HTMLButtonElement
+    fireEvent.click(pptBtn)
+    expect(
+      await screen.findByText(
+        'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
+      )
+    ).toBeTruthy()
+  })
 })
