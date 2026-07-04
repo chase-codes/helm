@@ -9,13 +9,14 @@ export interface NewSongInput { title: string; author?: string; text: string; so
 
 export type SlideKind =
   | 'lyrics' | 'scripture' | 'quote' | 'title' | 'sermon'
-  | 'countdown' | 'logo' | 'black' | 'blank';
+  | 'countdown' | 'logo' | 'black' | 'blank' | 'reading';
 export interface SlideColumn { version: string; text: string }
 export interface Slide {
   kind: SlideKind; accent?: string; label?: string; lines?: string[];
   ref?: string; columns?: SlideColumn[]; text?: string; source?: string;
   title?: string; subtitle?: string; points?: string[];
   message?: string; countdownText?: string; bg?: string;
+  paras?: { label: string; text: string }[]; activeOrd?: number;
 }
 
 export type OutputMode = 'live' | 'logo' | 'black';
@@ -58,6 +59,15 @@ export interface BibleManifestEntry { id: string; abbr: string; name: string; bu
 export interface BibleInstallProgress {
   id: string; phase: 'downloading' | 'installing' | 'done' | 'error'; error?: string;
 }
+
+export interface MessageParagraph { ord: number; label: string; text: string }
+export interface Message {
+  id: string; tapeNo: string; title: string; date: string;
+  durationS: number; audioPath: string | null; source: string;
+  paragraphs: MessageParagraph[];
+}
+export interface TimingSpan { ord: number; tStart: number; tEnd: number }
+export type TimingMap = TimingSpan[];
 
 export interface HelmApi {
   songs: {
