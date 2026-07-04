@@ -65,7 +65,7 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
   };
 
   const save = (): void => {
-    if (!result || saving) return;
+    if (!result || result.paragraphs.length === 0 || saving) return;
     setSaving(true);
     setError(null);
     window.helm.message
@@ -166,8 +166,9 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
     cursor: enabled ? 'pointer' : 'not-allowed'
   });
   const errorStyle: CSSProperties = { fontSize: '13px', color: T.live };
+  const noParasStyle: CSSProperties = { fontSize: '12px', color: T.dim, padding: '0 22px 10px' };
 
-  const canSave = !!result && !saving;
+  const canSave = !!result && result.paragraphs.length > 0 && !saving;
 
   return (
     <div style={overlayStyle} onClick={onClose}>
@@ -180,11 +181,18 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
         </div>
 
         <div style={pickRowStyle}>
-          <button style={pickBtnStyle} onClick={() => fileInputRef.current?.click()}>
+          <button style={pickBtnStyle} onClick={() => fileInputRef.current?.click()} disabled={busy}>
             Choose file…
           </button>
           <span style={fileNameStyle}>{busy ? 'Parsing…' : fileName || 'No file chosen (.txt or .pdf)'}</span>
-          <input ref={fileInputRef} type="file" accept=".txt,.pdf,text/plain,application/pdf" style={{ display: 'none' }} onChange={handlePick} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.pdf,text/plain,application/pdf"
+            style={{ display: 'none' }}
+            onChange={handlePick}
+            disabled={busy}
+          />
         </div>
 
         {error && <div style={{ padding: '10px 22px 0', ...errorStyle }}>{error}</div>}
@@ -218,14 +226,18 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
               </div>
             </div>
             <div style={previewHintStyle}>PREVIEW · {result.paragraphs.length} paragraphs</div>
-            <div style={previewListStyle}>
-              {result.paragraphs.map((p, i) => (
-                <div key={i} style={paraCardStyle}>
-                  <div style={paraLabelStyle}>¶{p.label}</div>
-                  <div style={paraTextStyle}>{p.text}</div>
-                </div>
-              ))}
-            </div>
+            {result.paragraphs.length === 0 ? (
+              <div style={noParasStyle}>No numbered paragraphs found — check the file, or edit the header if this is correct.</div>
+            ) : (
+              <div style={previewListStyle}>
+                {result.paragraphs.map((p, i) => (
+                  <div key={i} style={paraCardStyle}>
+                    <div style={paraLabelStyle}>¶{p.label}</div>
+                    <div style={paraTextStyle}>{p.text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <div style={emptyStateStyle}>{busy ? 'Parsing…' : 'Choose a .txt or .pdf transcript to preview it here.'}</div>
