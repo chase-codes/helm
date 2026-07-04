@@ -59,6 +59,7 @@ export interface ChapterData {
   book: string; chapter: number; verseCount: number;
   verses: Record<number, Record<string, string>>;
 }
+export interface BookExtent { chapters: number; verseCounts: number[] } // verseCounts[chapterIndex0] = verses in chapter (index+1)
 export interface ScriptureReading { id: string; book: string; ch: number; from: number; to: number }
 export interface NormalizedBible {
   id: string; abbr: string; name: string; language: string;
