@@ -68,6 +68,7 @@ export interface Message {
 }
 export interface TimingSpan { ord: number; tStart: number; tEnd: number }
 export type TimingMap = TimingSpan[];
+export interface MessageMeta { id: string; tapeNo: string; title: string; date: string; durationS: number; hasAudio: boolean }
 
 export interface HelmApi {
   songs: {
