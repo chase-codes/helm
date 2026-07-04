@@ -1,4 +1,4 @@
-import type { PreCard, Slide } from '../shared/types';
+import type { PreCard, PreState, Slide } from '../shared/types';
 import type { PreCardsRepo } from './preCardsRepo';
 import { preSlideFor, nextEnabledIdx, fmtCountdown, remainingMs } from '../shared/preservice/cards';
 
@@ -7,10 +7,7 @@ export interface PresentationSink {
   goLive(key: string, slide: Slide): void;
   liveKey(): string | null;
 }
-export interface PreState {
-  engaged: boolean; loopOn: boolean; idx: number; dwellS: number;
-  countdownText: string; paused: boolean; cards: PreCard[];
-}
+export type { PreState };
 export interface PreserviceEngine {
   getState(): PreState;
   onChange(cb: (s: PreState) => void): () => void;

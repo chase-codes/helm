@@ -18,10 +18,13 @@ import { createMessagesRepo } from './messagesRepo'
 import { createMessagesScheduleRepo } from './messagesScheduleRepo'
 import { createMessageInstaller } from './messageInstaller'
 import { createMessageSource } from './messageSource'
+import { createPreCardsRepo } from './preCardsRepo'
+import { createPreserviceEngine } from './preserviceEngine'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
 import { registerMediaProtocol, libraryRoot } from './library'
+import { presentation } from './stateStore'
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'helm-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
@@ -129,6 +132,16 @@ app.whenReady().then(() => {
     { source: createMessageSource() }
   )
 
+  const preCardsRepo = createPreCardsRepo(db)
+  const preserviceEngine = createPreserviceEngine(preCardsRepo, {
+    cue: (k, s) => presentation.cue(k, s),
+    goLive: (k, s) => presentation.goLive(k, s),
+    liveKey: () => presentation.get().liveKey
+  })
+  preserviceEngine.onChange((s) => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)
+  })
+
   registerIpc(
     repo,
     biblesRepo,
@@ -137,7 +150,8 @@ app.whenReady().then(() => {
     installer,
     messagesRepo,
     messagesScheduleRepo,
-    messageInstaller
+    messageInstaller,
+    preserviceEngine
   )
 
   buildMenu()

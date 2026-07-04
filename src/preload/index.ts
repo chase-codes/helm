@@ -58,5 +58,21 @@ const api: HelmApi = {
     list: () => ipcRenderer.invoke(CH.quoteScheduleList),
     add: (msgId, ord) => ipcRenderer.invoke(CH.quoteScheduleAdd, msgId, ord),
   },
+  preservice: {
+    getState: () => ipcRenderer.invoke(CH.preserviceGetState),
+    onState: sub(CH.preserviceState),
+    engage: () => ipcRenderer.send(CH.preserviceEngage),
+    disengage: () => ipcRenderer.send(CH.preserviceDisengage),
+    showCard: (idx) => ipcRenderer.send(CH.preserviceShow, idx),
+    step: (dir) => ipcRenderer.send(CH.preserviceStep, dir),
+    toggleLoop: () => ipcRenderer.send(CH.preserviceToggleLoop),
+    setDwell: (delta) => ipcRenderer.send(CH.preserviceSetDwell, delta),
+    toggleEnabled: (id) => ipcRenderer.send(CH.preserviceToggleEnabled, id),
+    saveCard: (c) => ipcRenderer.send(CH.preserviceSaveCard, c),
+    removeCard: (id) => ipcRenderer.send(CH.preserviceRemoveCard, id),
+    addMinute: () => ipcRenderer.send(CH.preserviceAddMinute),
+    resetCountdown: () => ipcRenderer.send(CH.preserviceReset),
+    togglePause: () => ipcRenderer.send(CH.preserviceTogglePause),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

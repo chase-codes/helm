@@ -62,6 +62,13 @@ export const CH = {
   messageInstallProgress: 'message:installProgress',   // main → all
   messageAudioProgress: 'message:audioProgress',        // main → all
   quoteScheduleList: 'quoteSchedule:list', quoteScheduleAdd: 'quoteSchedule:add',
+  preserviceGetState: 'preservice:getState', preserviceState: 'preservice:state',   // main → all windows
+  preserviceEngage: 'preservice:engage', preserviceDisengage: 'preservice:disengage',
+  preserviceShow: 'preservice:show', preserviceStep: 'preservice:step',
+  preserviceToggleLoop: 'preservice:toggleLoop', preserviceSetDwell: 'preservice:setDwell',
+  preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
+  preserviceRemoveCard: 'preservice:removeCard', preserviceAddMinute: 'preservice:addMinute',
+  preserviceReset: 'preservice:reset', preserviceTogglePause: 'preservice:togglePause',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -99,6 +106,11 @@ export interface AudioDownloadProgress {
 }
 
 export interface QuoteScheduleItem { id: string; msgId: string; ord: number; label: string; tapeNo: string; title: string }
+
+export interface PreState {
+  engaged: boolean; loopOn: boolean; idx: number; dwellS: number;
+  countdownText: string; paused: boolean; cards: PreCard[];
+}
 
 // Re-exports so consumers can pull these API-surface types from '../shared/types' alongside
 // everything else, without a separate import path. The source modules do not import from
@@ -157,5 +169,16 @@ export interface HelmApi {
   quoteSchedule: {
     list(): Promise<QuoteScheduleItem[]>;
     add(msgId: string, ord: number): Promise<QuoteScheduleItem[]>;
+  };
+  preservice: {
+    getState(): Promise<PreState>;
+    onState(cb: (s: PreState) => void): () => void;
+    engage(): void; disengage(): void;
+    showCard(idx: number): void; step(dir: 1 | -1): void;
+    toggleLoop(): void; setDwell(delta: number): void;
+    toggleEnabled(id: string): void;
+    saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;
+    removeCard(id: string): void;
+    addMinute(): void; resetCountdown(): void; togglePause(): void;
   };
 }

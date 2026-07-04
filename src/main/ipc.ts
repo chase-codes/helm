@@ -4,6 +4,7 @@ import {
   type MessageImportResult,
   type NewSongInput,
   type OutputMode,
+  type PreCard,
   type ScriptureReading,
   type SearchField,
   type Slide,
@@ -16,6 +17,7 @@ import type { BibleInstaller } from './bibleInstaller';
 import type { MessagesRepo } from './messagesRepo';
 import type { MessagesScheduleRepo } from './messagesScheduleRepo';
 import type { MessageInstaller } from './messageInstaller';
+import type { PreserviceEngine } from './preserviceEngine';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { displayStatus, openTestOutput } from './displays';
@@ -29,6 +31,7 @@ export function registerIpc(
   messagesRepo: MessagesRepo,
   messagesScheduleRepo: MessagesScheduleRepo,
   messageInstaller: MessageInstaller,
+  preserviceEngine: PreserviceEngine,
 ): void {
   ipcMain.handle(CH.songsSearch, (_e, q: string, field: SearchField) => repo.search(q, field));
   ipcMain.handle(CH.songsList, () => repo.list());
@@ -76,4 +79,20 @@ export function registerIpc(
   ipcMain.handle(CH.quoteScheduleAdd, (_e, msgId: string, ord: number) =>
     messagesScheduleRepo.add(msgId, ord),
   );
+
+  ipcMain.handle(CH.preserviceGetState, () => preserviceEngine.getState());
+  ipcMain.on(CH.preserviceEngage, () => preserviceEngine.engage());
+  ipcMain.on(CH.preserviceDisengage, () => preserviceEngine.disengage());
+  ipcMain.on(CH.preserviceShow, (_e, idx: number) => preserviceEngine.showCard(idx));
+  ipcMain.on(CH.preserviceStep, (_e, dir: 1 | -1) => preserviceEngine.step(dir));
+  ipcMain.on(CH.preserviceToggleLoop, () => preserviceEngine.toggleLoop());
+  ipcMain.on(CH.preserviceSetDwell, (_e, d: number) => preserviceEngine.setDwell(d));
+  ipcMain.on(CH.preserviceToggleEnabled, (_e, id: string) => preserviceEngine.toggleEnabled(id));
+  ipcMain.on(CH.preserviceSaveCard, (_e, c: Omit<PreCard, 'id'> & { id?: string }) =>
+    preserviceEngine.saveCard(c),
+  );
+  ipcMain.on(CH.preserviceRemoveCard, (_e, id: string) => preserviceEngine.removeCard(id));
+  ipcMain.on(CH.preserviceAddMinute, () => preserviceEngine.addMinute());
+  ipcMain.on(CH.preserviceReset, () => preserviceEngine.resetCountdown());
+  ipcMain.on(CH.preserviceTogglePause, () => preserviceEngine.togglePause());
 }
