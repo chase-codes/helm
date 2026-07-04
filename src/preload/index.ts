@@ -41,5 +41,21 @@ const api: HelmApi = {
     get: (key, fallback) => ipcRenderer.invoke(CH.settingsGet, key, fallback),
     set: (key, value) => ipcRenderer.send(CH.settingsSet, key, value),
   },
+  message: {
+    search: (q, scope) => ipcRenderer.invoke(CH.messageSearch, q, scope),
+    list: () => ipcRenderer.invoke(CH.messageList),
+    get: (id) => ipcRenderer.invoke(CH.messageGet, id),
+    installCorpus: () => ipcRenderer.send(CH.messageInstallCorpus),
+    importParse: (kind, data) => ipcRenderer.invoke(CH.messageImportParse, kind, data),
+    importSave: (r) => ipcRenderer.invoke(CH.messageImportSave, r),
+    downloadAudio: (id) => ipcRenderer.send(CH.messageDownloadAudio, id),
+    timing: (id) => ipcRenderer.invoke(CH.messageTiming, id),
+    onInstallProgress: sub(CH.messageInstallProgress),
+    onAudioProgress: sub(CH.messageAudioProgress),
+  },
+  quoteSchedule: {
+    list: () => ipcRenderer.invoke(CH.quoteScheduleList),
+    add: (msgId, ord) => ipcRenderer.invoke(CH.quoteScheduleAdd, msgId, ord),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

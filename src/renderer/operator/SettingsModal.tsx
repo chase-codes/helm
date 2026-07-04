@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
-import type { BibleInstallProgress, BibleManifestEntry } from '../../shared/types';
+import { MessageImport } from './MessageImport';
+import type { BibleInstallProgress, BibleManifestEntry, MessageInstallProgress, MessageMeta } from '../../shared/types';
 
 export interface SettingsModalProps {
   open: boolean;
@@ -16,7 +17,7 @@ const SECTIONS = [
   { id: 'bibles', label: 'Bibles', enabled: true },
   { id: 'displays', label: 'Displays', enabled: false },
   { id: 'songs', label: 'Songs', enabled: false },
-  { id: 'message', label: 'Message', enabled: false },
+  { id: 'message', label: 'Message', enabled: true },
   { id: 'backup', label: 'Backup', enabled: false }
 ] as const;
 type SettingsSection = (typeof SECTIONS)[number]['id'];
@@ -44,6 +45,14 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
   // handleRemoveClick's uninstall promise (fired from a click, outside the effect) can
   // check it the same way.
   const liveRef = useRef(true);
+
+  // Message section: unlike bibles (many installable translations, one row each),
+  // installCorpus() targets a single corpus — so its progress is one value, not a
+  // per-id map. Corpus install talks to the real (deferred-scraper) source and may not
+  // succeed until slice 4a; the UI surfaces its error calmly rather than assuming success.
+  const [messageCount, setMessageCount] = useState<number | null>(null);
+  const [messageProgress, setMessageProgress] = useState<MessageInstallProgress | null>(null);
+  const [messageImportOpen, setMessageImportOpen] = useState(false);
 
   const clearConfirmTimer = (): void => {
     if (confirmTimerRef.current !== null) {
@@ -81,10 +90,29 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
           .catch(console.error);
       }
     });
+    void window.helm.message
+      .list()
+      .then((list) => {
+        if (live) setMessageCount(list.length);
+      })
+      .catch(console.error);
+    const offMessageProgress = window.helm.message.onInstallProgress((p) => {
+      if (!live) return;
+      setMessageProgress(p);
+      if (p.phase === 'done') {
+        void window.helm.message
+          .list()
+          .then((list) => {
+            if (live) setMessageCount(list.length);
+          })
+          .catch(console.error);
+      }
+    });
     return () => {
       live = false;
       liveRef.current = false;
       offProgress();
+      offMessageProgress();
       clearConfirmTimer();
     };
   }, []);
@@ -241,6 +269,15 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
     fontSize: '12.5px',
     whiteSpace: 'nowrap'
   };
+  // Corpus install is deferred to slice 4a (the live scraper is an unverified stub) — the
+  // button stays visible for discoverability but disabled/dimmed so it can't be clicked.
+  const installBtnDisabledStyle: CSSProperties = {
+    ...installBtnStyle,
+    background: T.panel3,
+    color: T.faint,
+    opacity: 0.6,
+    cursor: 'not-allowed'
+  };
   const footerStyle: CSSProperties = {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -256,6 +293,42 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
     fontSize: '13.5px',
     fontWeight: 600,
     color: T.dim
+  };
+
+  const installMessageCorpus = (): void => {
+    window.helm.message.installCorpus();
+  };
+
+  const renderMessageInstallStatus = (): JSX.Element => {
+    if (messageProgress && (messageProgress.phase === 'downloading' || messageProgress.phase === 'installing')) {
+      const label =
+        messageProgress.phase === 'downloading'
+          ? 'Downloading…'
+          : messageProgress.total
+            ? `Installing ${messageProgress.count ?? 0}/${messageProgress.total}…`
+            : 'Installing…';
+      return (
+        <>
+          <span style={pulseDotStyle} />
+          <span style={progressLabelStyle}>{label}</span>
+        </>
+      );
+    }
+    if (messageProgress && messageProgress.phase === 'error') {
+      return (
+        <>
+          <span style={errorLabelStyle}>{messageProgress.error ?? 'Install failed'}</span>
+          <button style={retryBtnStyle} onClick={installMessageCorpus}>
+            Retry
+          </button>
+        </>
+      );
+    }
+    return (
+      <button style={installBtnDisabledStyle} disabled title="Coming in a later update">
+        Install corpus (coming soon)
+      </button>
+    );
   };
 
   const renderStatus = (entry: BibleManifestEntry): JSX.Element => {
@@ -299,51 +372,83 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
   };
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={stop}>
-        <div style={{ padding: '16px 22px', borderBottom: `1px solid ${T.hairline}`, fontWeight: 700, fontSize: '18px' }}>
-          Settings
-        </div>
-        <div style={bodyStyle}>
-          <div style={navStyle}>
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                style={navItemStyle(section === s.id, s.enabled)}
-                disabled={!s.enabled}
-                title={s.enabled ? undefined : 'Coming with later slices'}
-                onClick={() => s.enabled && setSection(s.id)}
-              >
-                {s.label}
-              </button>
-            ))}
+    <>
+      <div style={overlayStyle} onClick={onClose}>
+        <div style={modalStyle} onClick={stop}>
+          <div style={{ padding: '16px 22px', borderBottom: `1px solid ${T.hairline}`, fontWeight: 700, fontSize: '18px' }}>
+            Settings
           </div>
-          <div style={contentStyle}>
-            {section === 'bibles' && (
-              <>
-                <div style={sectionTitleStyle}>Bibles</div>
-                <div style={sectionHintStyle}>
-                  Installed translations appear in the sermon-mode compare picker. KJV ships with Helm and can&rsquo;t be removed.
-                </div>
-                <div>
-                  {manifest.map((entry) => (
-                    <div key={entry.id} style={rowStyle}>
-                      <span style={abbrChipStyle}>{entry.abbr}</span>
-                      <span style={nameStyle}>{entry.name}</span>
-                      {renderStatus(entry)}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+          <div style={bodyStyle}>
+            <div style={navStyle}>
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  style={navItemStyle(section === s.id, s.enabled)}
+                  disabled={!s.enabled}
+                  title={s.enabled ? undefined : 'Coming with later slices'}
+                  onClick={() => s.enabled && setSection(s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <div style={contentStyle}>
+              {section === 'bibles' && (
+                <>
+                  <div style={sectionTitleStyle}>Bibles</div>
+                  <div style={sectionHintStyle}>
+                    Installed translations appear in the sermon-mode compare picker. KJV ships with Helm and can&rsquo;t be removed.
+                  </div>
+                  <div>
+                    {manifest.map((entry) => (
+                      <div key={entry.id} style={rowStyle}>
+                        <span style={abbrChipStyle}>{entry.abbr}</span>
+                        <span style={nameStyle}>{entry.name}</span>
+                        {renderStatus(entry)}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {section === 'message' && (
+                <>
+                  <div style={sectionTitleStyle}>Message</div>
+                  <div style={sectionHintStyle}>
+                    Import a transcript file by hand and review it before it&rsquo;s added to the library. Installing the full
+                    sermon-tape corpus is coming in a later update.
+                  </div>
+                  <div style={rowStyle}>
+                    <span style={nameStyle}>
+                      {messageCount === null ? 'Loading…' : `${messageCount} tape${messageCount === 1 ? '' : 's'} in library`}
+                    </span>
+                    {renderMessageInstallStatus()}
+                  </div>
+                  <div style={sectionHintStyle}>
+                    Downloading from Voice of God Recordings is coming in a later update — use Import for now.
+                  </div>
+                  <div>
+                    <button style={ghostBtnStyle(false)} onClick={() => setMessageImportOpen(true)}>
+                      Import file…
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-        <div style={footerStyle}>
-          <button style={doneBtnStyle} onClick={onClose}>
-            Done
-          </button>
+          <div style={footerStyle}>
+            <button style={doneBtnStyle} onClick={onClose}>
+              Done
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      {messageImportOpen && (
+        <MessageImport
+          open={messageImportOpen}
+          onClose={() => setMessageImportOpen(false)}
+          onSaved={(list: MessageMeta[]) => setMessageCount(list.length)}
+        />
+      )}
+    </>
   );
 }

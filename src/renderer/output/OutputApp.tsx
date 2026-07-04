@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import type { OutputPayload } from '../../shared/types'
 import { SlideCanvas } from '../shared/SlideCanvas'
+import { ReadingCanvas } from '../shared/ReadingCanvas'
 
 export function OutputApp(): React.JSX.Element {
   const [payload, setPayload] = useState<OutputPayload>({ slide: { kind: 'black' }, variant: 'audience' })
@@ -11,7 +12,11 @@ export function OutputApp(): React.JSX.Element {
   }, [])
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
-      <SlideCanvas slide={payload.slide} variant={payload.variant} fill />
+      {payload.slide.kind === 'reading' ? (
+        <ReadingCanvas slide={payload.slide} fill />
+      ) : (
+        <SlideCanvas slide={payload.slide} variant={payload.variant} fill />
+      )}
     </div>
   )
 }

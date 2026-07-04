@@ -10,6 +10,7 @@ import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePan
 import { SermonCenter } from './SermonCenter';
 import { VersionPicker } from './VersionPicker';
 import { ChapterRail } from './ChapterRail';
+import { MessageMode, type MessageKeyRef } from './MessageMode';
 
 export interface SermonModeProps {
   themeMode: ThemeMode;
@@ -41,6 +42,13 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   const [chapter, setChapter] = useState<ChapterData | null>(null);
   const [schedule, setSchedule] = useState<ScriptureReading[]>([]);
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([]);
+
+  // Private ref MessageMode populates with its own arrow/goLive handlers while it's
+  // mounted and active — kept separate from `keyHandlerRef` below so SermonMode remains
+  // that ref's sole owner (see the keyHandlerRef-registration effect's comment and
+  // MessageMode's MessageKeyHandler doc comment for why: two effects racing to write the
+  // same ref is order-dependent on which mode committed last).
+  const messageKeyRef: MessageKeyRef = useRef(null);
 
   // Guards the persist-on-change effect below from firing with the ['kjv'] default
   // before settings.get resolves (which would clobber a real saved selection).
@@ -325,9 +333,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       onEscape: () => false,
       onArrow: (dir) => {
         if (track === 'scripture') stepVerse(dir);
+        else if (track === 'message') messageKeyRef.current?.onArrow(dir);
       },
       onGoLive: () => {
         if (track === 'scripture') goLive();
+        else if (track === 'message') messageKeyRef.current?.onGoLive();
       },
       // SermonMode has no App-level modal of its own (unlike SongsMode's QuickAdd) —
       // Settings, its only modal, is tracked directly in App via settingsOpen.
@@ -363,53 +373,66 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
 
   return (
     <div style={rootStyle}>
-      <SchedulePanel
-        theme={T}
-        width={SCHEDULE_PANEL_W}
-        track={track}
-        setTrack={setTrack}
-        entryQ={entryQ}
-        setEntryQ={setEntryQ}
-        onEntryKeyDown={onEntryKeyDown}
-        hasParse={hasParse}
-        addLabel={addLabel}
-        onAdd={addReading}
-        rows={scheduleRows}
-      />
-      {track === 'scripture' ? (
-        <>
-          <SermonCenter
-            theme={T}
-            output={output}
-            cuedIsLive={cuedIsLive}
-            heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
-            cols={liveCols}
-            ondeckTag={ondeckTag}
-            ondeckTagColor={ondeckTagColor}
-            ondeckTitle={ondeckTitle}
-            ondeckPreview={ondeckPreview}
-            versionPicker={versionPicker}
-            onPrev={() => stepVerse(-1)}
-            onNext={() => stepVerse(1)}
-            onGoLive={goLive}
-            onToggleLogo={toggleLogo}
-          />
-          <ChapterRail
-            theme={T}
-            dark={dark}
-            width={RIGHT_PANEL_W}
-            book={scrBook}
-            ch={scrCh}
-            verseCount={verseCount}
-            plannedSet={plannedSet}
-            cuedV={scrV}
-            isVerseLive={isVerseLive}
-            previewOf={previewOf}
-            onSelect={setScrV}
-          />
-        </>
+      {track === 'message' ? (
+        // Message track: MessageMode renders its own single left rail (TrackTabs +
+        // MessageSearchRail) plus the center hero and ParagraphRail — SchedulePanel is
+        // NOT also rendered here, since that would double up the rail (SchedulePanel's
+        // tabs-only panel as one column, MessageSearchRail as a second sibling column).
+        <MessageMode themeMode={themeMode} messageKeyRef={messageKeyRef} active={active} track={track} setTrack={setTrack} />
       ) : (
-        <div style={comingStyle}>Coming in slice 4/5 — see the spec</div>
+        <>
+          <SchedulePanel
+            theme={T}
+            width={SCHEDULE_PANEL_W}
+            track={track}
+            setTrack={setTrack}
+            entryQ={entryQ}
+            setEntryQ={setEntryQ}
+            onEntryKeyDown={onEntryKeyDown}
+            hasParse={hasParse}
+            addLabel={addLabel}
+            onAdd={addReading}
+            rows={scheduleRows}
+          />
+          {track === 'scripture' ? (
+            <>
+              <SermonCenter
+                theme={T}
+                variant="verse"
+                accent={T.scripture}
+                output={output}
+                cuedIsLive={cuedIsLive}
+                heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
+                cols={liveCols}
+                ondeckTag={ondeckTag}
+                ondeckTagColor={ondeckTagColor}
+                ondeckTitle={ondeckTitle}
+                ondeckPreview={ondeckPreview}
+                nextLabel={'Next verse ›'}
+                versionPicker={versionPicker}
+                onPrev={() => stepVerse(-1)}
+                onNext={() => stepVerse(1)}
+                onGoLive={goLive}
+                onToggleLogo={toggleLogo}
+              />
+              <ChapterRail
+                theme={T}
+                dark={dark}
+                width={RIGHT_PANEL_W}
+                book={scrBook}
+                ch={scrCh}
+                verseCount={verseCount}
+                plannedSet={plannedSet}
+                cuedV={scrV}
+                isVerseLive={isVerseLive}
+                previewOf={previewOf}
+                onSelect={setScrV}
+              />
+            </>
+          ) : (
+            <div style={comingStyle}>Coming in slice 5 — see the spec</div>
+          )}
+        </>
       )}
     </div>
   );

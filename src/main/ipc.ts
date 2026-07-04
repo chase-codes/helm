@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import {
   CH,
+  type MessageImportResult,
   type NewSongInput,
   type OutputMode,
   type ScriptureReading,
@@ -12,6 +13,10 @@ import type { BiblesRepo } from './biblesRepo';
 import type { ScheduleRepo } from './scheduleRepo';
 import type { SettingsRepo } from './settingsRepo';
 import type { BibleInstaller } from './bibleInstaller';
+import type { MessagesRepo } from './messagesRepo';
+import type { MessagesScheduleRepo } from './messagesScheduleRepo';
+import type { MessageInstaller } from './messageInstaller';
+import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { displayStatus, openTestOutput } from './displays';
 
@@ -21,6 +26,9 @@ export function registerIpc(
   scheduleRepo: ScheduleRepo,
   settingsRepo: SettingsRepo,
   installer: BibleInstaller,
+  messagesRepo: MessagesRepo,
+  messagesScheduleRepo: MessagesScheduleRepo,
+  messageInstaller: MessageInstaller,
 ): void {
   ipcMain.handle(CH.songsSearch, (_e, q: string, field: SearchField) => repo.search(q, field));
   ipcMain.handle(CH.songsList, () => repo.list());
@@ -44,4 +52,21 @@ export function registerIpc(
     settingsRepo.get(key, fallback),
   );
   ipcMain.on(CH.settingsSet, (_e, key: string, value: unknown) => settingsRepo.set(key, value));
+
+  ipcMain.handle(CH.messageSearch, (_e, q: string, scope: string | null) =>
+    messagesRepo.search(q, scope),
+  );
+  ipcMain.handle(CH.messageList, () => messagesRepo.list());
+  ipcMain.handle(CH.messageGet, (_e, id: string) => messagesRepo.get(id));
+  ipcMain.on(CH.messageInstallCorpus, () => messageInstaller.installCorpus());
+  ipcMain.handle(CH.messageImportParse, (_e, _kind: 'txt' | 'pdf', data: string) =>
+    parseMessageText(data),
+  );
+  ipcMain.handle(CH.messageImportSave, (_e, r: MessageImportResult) => messagesRepo.addImported(r));
+  ipcMain.on(CH.messageDownloadAudio, (_e, id: string) => messageInstaller.downloadAudio(id));
+  ipcMain.handle(CH.messageTiming, (_e, id: string) => messagesRepo.timings(id));
+  ipcMain.handle(CH.quoteScheduleList, () => messagesScheduleRepo.list());
+  ipcMain.handle(CH.quoteScheduleAdd, (_e, msgId: string, ord: number) =>
+    messagesScheduleRepo.add(msgId, ord),
+  );
 }
