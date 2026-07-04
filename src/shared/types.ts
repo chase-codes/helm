@@ -12,13 +12,13 @@ export interface NewSongInput { title: string; author?: string; text: string; so
 
 export type SlideKind =
   | 'lyrics' | 'scripture' | 'quote' | 'title' | 'sermon'
-  | 'countdown' | 'logo' | 'black' | 'blank' | 'reading';
+  | 'countdown' | 'logo' | 'black' | 'blank' | 'reading' | 'image';
 export interface SlideColumn { version: string; text: string }
 export interface Slide {
   kind: SlideKind; accent?: string; label?: string; lines?: string[];
   ref?: string; columns?: SlideColumn[]; text?: string; source?: string;
   title?: string; subtitle?: string; points?: string[];
-  message?: string; countdownText?: string; bg?: string;
+  message?: string; countdownText?: string; bg?: string; src?: string;
   paras?: { label: string; text: string }[]; activeOrd?: number;
 }
 
