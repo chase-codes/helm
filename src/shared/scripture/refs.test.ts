@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { matchBook, parseRef, formatRef } from './refs'
+import { matchBook, matchBookExact, parseRef, formatRef } from './refs'
 
 test('exact aliases win', () => {
   expect(matchBook('jn')).toBe('John')
@@ -35,4 +35,15 @@ test('parseRef rejects garbage', () => {
 test('formatRef', () => {
   expect(formatRef({ book: 'John', ch: 3, from: 16, to: 16 })).toBe('John 3:16')
   expect(formatRef({ book: 'Genesis', ch: 1, from: 1, to: 10 })).toBe('Genesis 1:1–10')
+})
+
+test('matchBookExact matches exact aliases only, no prefix', () => {
+  expect(matchBookExact('jn')).toBe('John')
+  expect(matchBookExact('1john')).toBe('1 John')
+  expect(matchBookExact('1 john')).toBe('1 John')
+  expect(matchBookExact('2 cor')).toBe('2 Corinthians')
+  // prefix-only inputs that matchBook would resolve must NOT resolve here
+  expect(matchBookExact('1')).toBeNull()
+  expect(matchBookExact('gene')).toBeNull()
+  expect(matchBookExact('zzz')).toBeNull()
 })
