@@ -50,6 +50,16 @@ export function createMessageInstaller(
   let corpusInFlight = false
   const audioInFlight = new Set<string>()
 
+  // NOT ATOMIC — TODO before slice 4a wires the real scraper into the (currently disabled,
+  // unreachable in slice 4) "Install corpus" button: `repo.installIndex(index)` commits index
+  // rows immediately, then each `fetchSermon`/`installSermon` happens one at a time in the
+  // loop below. If the scrape fails partway (network error, bad entry, etc.), the already
+  // committed index rows are left behind with no corresponding sermon content — and there is
+  // no message-delete/uninstall API to clean them up, so they'd pollute the library forever.
+  // Before this can be safely triggered from the UI again, make it atomic: buffer every
+  // fetched sermon payload in memory first, and only after the *entire* fetchIndex +
+  // fetchSermon* sequence succeeds, commit `installIndex` and all `installSermon` calls
+  // together inside a single DB transaction.
   function installCorpus(): void {
     if (corpusInFlight) return
     corpusInFlight = true

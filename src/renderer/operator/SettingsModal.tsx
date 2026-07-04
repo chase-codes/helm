@@ -269,6 +269,15 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
     fontSize: '12.5px',
     whiteSpace: 'nowrap'
   };
+  // Corpus install is deferred to slice 4a (the live scraper is an unverified stub) — the
+  // button stays visible for discoverability but disabled/dimmed so it can't be clicked.
+  const installBtnDisabledStyle: CSSProperties = {
+    ...installBtnStyle,
+    background: T.panel3,
+    color: T.faint,
+    opacity: 0.6,
+    cursor: 'not-allowed'
+  };
   const footerStyle: CSSProperties = {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -316,8 +325,8 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
       );
     }
     return (
-      <button style={installBtnStyle} onClick={installMessageCorpus}>
-        Install corpus
+      <button style={installBtnDisabledStyle} disabled title="Coming in a later update">
+        Install corpus (coming soon)
       </button>
     );
   };
@@ -405,8 +414,8 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
                 <>
                   <div style={sectionTitleStyle}>Message</div>
                   <div style={sectionHintStyle}>
-                    Install the full sermon-tape corpus, or import a transcript file by hand and review it before it&rsquo;s added
-                    to the library.
+                    Import a transcript file by hand and review it before it&rsquo;s added to the library. Installing the full
+                    sermon-tape corpus is coming in a later update.
                   </div>
                   <div style={rowStyle}>
                     <span style={nameStyle}>
@@ -414,7 +423,10 @@ export function SettingsModal({ open, onClose, onBiblesChanged }: SettingsModalP
                     </span>
                     {renderMessageInstallStatus()}
                   </div>
-                  <div style={{ marginTop: '14px' }}>
+                  <div style={sectionHintStyle}>
+                    Downloading from Voice of God Recordings is coming in a later update — use Import for now.
+                  </div>
+                  <div>
                     <button style={ghostBtnStyle(false)} onClick={() => setMessageImportOpen(true)}>
                       Import file…
                     </button>
