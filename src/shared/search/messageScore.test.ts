@@ -31,4 +31,23 @@ describe('messageScore', () => {
     expect(rankTapes('', TAPES)).toEqual([]);
     expect(rankQuotes('', QUOTES)).toEqual([]);
   });
+
+  it('tolerates a genuine typo via the fuzzy path (not a substring match)', () => {
+    // 'raptdre' is not a substring of any tape blob, so this must go through lev()
+    const r = rankTapes('raptdre', TAPES);
+    expect(r[0].id).toBe('rapture');
+  });
+
+  it('caps quote results at 12 even when more match', () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      msgId: `m${i}`,
+      tapeNo: `65-120${i % 10}`,
+      title: 'The Rapture',
+      ord: i,
+      label: String(i),
+      text: `grace and truth, portion number ${i}`,
+      snippet: '',
+    }));
+    expect(rankQuotes('grace', many)).toHaveLength(12);
+  });
 });
