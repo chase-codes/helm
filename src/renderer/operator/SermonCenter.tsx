@@ -6,35 +6,54 @@ export interface SermonCenterProps {
   theme: Theme;
   output: OutputMode;
   cuedIsLive: boolean;
+  /** Track accent driving the cued-live hero border/label color — T.scripture for the
+   * verse variant, T.message for the quote variant (Lectern.pretty.html:1318/1320). */
+  accent: string;
   heroLabel: string;
-  cols: SlideColumn[];
   ondeckTag: string;
   ondeckTagColor: string;
   ondeckTitle: string;
   ondeckPreview: string;
-  /** The version-picker button + popover (Task 6's VersionPicker), rendered in the
-   * transport row where the design's static version button used to sit. */
-  versionPicker: JSX.Element;
+  /** "Next verse ›" / "Next ¶ ›" (Lectern.pretty.html:1326) — the "‹ Back" label never
+   * varies by track. */
+  nextLabel: string;
   onPrev: () => void;
   onNext: () => void;
   onGoLive: () => void;
   onToggleLogo: () => void;
+  variant: 'verse' | 'quote';
+  /** verse-only */
+  cols?: SlideColumn[];
+  /** The version-picker button + popover (Task 6's VersionPicker), rendered in the
+   * transport row where the design's static version button used to sit — verse-only,
+   * omitted entirely for the quote variant (Lectern.pretty.html:361: `trackIsScripture`). */
+  versionPicker?: JSX.Element;
+  /** quote-only */
+  quoteText?: string;
+  quoteSource?: string;
 }
 
 const INSTALL_HINT = '[ Install a Bible in Settings ]';
 
-/** Now-bar, hero verse card, on-deck preview, and transport for the Scripture track. */
+/** Now-bar, hero card (verse columns or a message quote), on-deck preview, and
+ * transport — shared shell for the Scripture and Message tracks (Lectern.pretty.html
+ * computes heroCardStyle/heroLabelStyle/ondeck/transport once for both). */
 export function SermonCenter({
   theme: T,
   output,
   cuedIsLive,
+  accent,
   heroLabel,
   cols,
+  quoteText,
+  quoteSource,
   ondeckTag,
   ondeckTagColor,
   ondeckTitle,
   ondeckPreview,
+  nextLabel,
   versionPicker,
+  variant,
   onPrev,
   onNext,
   onGoLive,
@@ -72,24 +91,41 @@ export function SermonCenter({
     overflowY: 'auto',
     borderRadius: '14px',
     background: T.panel,
-    boxShadow: cuedIsLive ? `inset 0 0 0 2px ${T.scripture}66` : `inset 0 0 0 1px ${T.hairline}`
+    boxShadow: cuedIsLive ? `inset 0 0 0 2px ${accent}66` : `inset 0 0 0 1px ${T.hairline}`
   };
   const heroLabelStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: '12px',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
-    color: cuedIsLive ? T.scripture : T.faint,
+    color: cuedIsLive ? accent : T.faint,
     fontWeight: 500
   };
-  const verseColMax = cols.length > 1 ? '50%' : '100%';
+  const verseCols = cols ?? [];
+  const verseColMax = verseCols.length > 1 ? '50%' : '100%';
   const verseVerStyle: CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', letterSpacing: '0.14em', color: T.faint, marginBottom: '8px' };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
-    fontSize: cols.length > 1 ? '21.0px' : 'clamp(26.0px, 2.70vw, 38.0px)',
+    fontSize: verseCols.length > 1 ? '21.0px' : 'clamp(26.0px, 2.70vw, 38.0px)',
     lineHeight: 1.4,
     color: T.text,
     fontWeight: 400
+  };
+  const quoteTextStyle: CSSProperties = {
+    fontFamily: "'Newsreader', Georgia, serif",
+    fontSize: 'clamp(22.0px, 2.10vw, 30.0px)',
+    lineHeight: 1.55,
+    color: T.text,
+    textAlign: 'left',
+    marginTop: '18px'
+  };
+  const quoteSourceStyle: CSSProperties = {
+    fontFamily: "'JetBrains Mono',monospace",
+    fontSize: '11.5px',
+    letterSpacing: '0.08em',
+    color: T.faint,
+    marginTop: '18px',
+    textAlign: 'left'
   };
   const ondeckStyle: CSSProperties = { flexShrink: 0, padding: '12px 15px', borderRadius: '12px', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}` };
   const ondeckTagStyle: CSSProperties = {
@@ -157,21 +193,29 @@ export function SermonCenter({
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={heroCardStyle}>
-          <div style={{ margin: 'auto', width: '100%', maxWidth: '680px', textAlign: 'center', padding: '22px 30px' }}>
-            <div style={heroLabelStyle}>{heroLabel}</div>
-            {cols.length ? (
-              <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', textAlign: 'left', marginTop: '18px' }}>
-                {cols.map((c, i) => (
-                  <div key={i} style={{ flex: 1, maxWidth: verseColMax }}>
-                    <div style={verseVerStyle}>{c.version}</div>
-                    <div style={verseTextStyle}>{c.text}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ marginTop: '18px', fontSize: '13px', color: T.faint }}>{INSTALL_HINT}</div>
-            )}
-          </div>
+          {variant === 'verse' ? (
+            <div style={{ margin: 'auto', width: '100%', maxWidth: '680px', textAlign: 'center', padding: '22px 30px' }}>
+              <div style={heroLabelStyle}>{heroLabel}</div>
+              {verseCols.length ? (
+                <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', textAlign: 'left', marginTop: '18px' }}>
+                  {verseCols.map((c, i) => (
+                    <div key={i} style={{ flex: 1, maxWidth: verseColMax }}>
+                      <div style={verseVerStyle}>{c.version}</div>
+                      <div style={verseTextStyle}>{c.text}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ marginTop: '18px', fontSize: '13px', color: T.faint }}>{INSTALL_HINT}</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ margin: 'auto', width: '100%', maxWidth: '720px', padding: '26px 36px' }}>
+              <div style={heroLabelStyle}>{heroLabel}</div>
+              <div style={quoteTextStyle}>{quoteText}</div>
+              <div style={quoteSourceStyle}>{quoteSource}</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -193,7 +237,7 @@ export function SermonCenter({
           &lsaquo; Back
         </button>
         <button style={ghostBtn} onClick={onNext}>
-          Next verse &rsaquo;
+          {nextLabel}
         </button>
         <div style={{ flex: 1 }} />
         <button style={goLiveStyle} onClick={onGoLive}>
