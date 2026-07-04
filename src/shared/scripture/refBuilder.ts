@@ -1,4 +1,5 @@
 import type { BookExtent } from '../types'
+import { type ParsedRef } from './refs'
 
 export type BuilderStage = 'book' | 'chapter' | 'verse' | 'endVerse'
 export interface RefBuilderState {
@@ -37,4 +38,23 @@ export function renderBuilder(s: RefBuilderState): string {
   out += '-'
   if (s.endVerse !== null) out += s.endVerse
   return out
+}
+
+export function toParsedRef(s: RefBuilderState): ParsedRef | null {
+  if (s.book === null || s.chapter === null) return null
+  const from0 = s.startVerse ?? 1
+  const end0 = s.endVerse ?? from0
+  return { book: s.book, ch: s.chapter, from: Math.min(from0, end0), to: Math.max(from0, end0) }
+}
+
+export function fromParsedRef(p: ParsedRef): RefBuilderState {
+  const isRange = p.to > p.from
+  return {
+    stage: isRange ? 'endVerse' : 'verse',
+    bookQuery: '',
+    book: p.book,
+    chapter: p.ch,
+    startVerse: p.from,
+    endVerse: isRange ? p.to : null
+  }
 }
