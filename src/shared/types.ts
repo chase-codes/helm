@@ -70,6 +70,13 @@ export interface TimingSpan { ord: number; tStart: number; tEnd: number }
 export type TimingMap = TimingSpan[];
 export interface MessageMeta { id: string; tapeNo: string; title: string; date: string; durationS: number; hasAudio: boolean }
 
+export interface MessageInstallProgress {
+  phase: 'downloading' | 'installing' | 'done' | 'error'; count?: number; total?: number; error?: string;
+}
+export interface AudioDownloadProgress {
+  msgId: string; phase: 'downloading' | 'done' | 'error'; received?: number; total?: number; error?: string;
+}
+
 export interface HelmApi {
   songs: {
     search(q: string, field: SearchField): Promise<SongSearchResult[]>;
