@@ -17,10 +17,10 @@ export interface SchedulePanelProps {
   width: number;
   track: SermonTrack;
   setTrack: (t: SermonTrack) => void;
-  entryQ: string;
-  setEntryQ: (q: string) => void;
+  value: string;
+  onEntryChange: (v: string) => void;
   onEntryKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
-  hasParse: boolean;
+  canAdd: boolean;
   addLabel: string;
   onAdd: () => void;
   rows: ScheduleRow[];
@@ -34,10 +34,10 @@ export function SchedulePanel({
   width,
   track,
   setTrack,
-  entryQ,
-  setEntryQ,
+  value,
+  onEntryChange,
   onEntryKeyDown,
-  hasParse,
+  canAdd,
   addLabel,
   onAdd,
   rows
@@ -103,13 +103,13 @@ export function SchedulePanel({
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
               <input
                 style={{ flex: 1, fontSize: '13.5px', fontFamily: "'JetBrains Mono',monospace" }}
-                value={entryQ}
-                onChange={(e) => setEntryQ(e.target.value)}
+                value={value}
+                onChange={(e) => onEntryChange(e.target.value)}
                 onKeyDown={onEntryKeyDown}
                 placeholder="Add reading — John 3:16"
               />
             </div>
-            {hasParse && (
+            {canAdd && (
               <button style={schedAddStyle} onClick={onAdd}>
                 {addLabel}
               </button>
