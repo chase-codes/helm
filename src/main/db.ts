@@ -43,6 +43,22 @@ CREATE TABLE IF NOT EXISTS paragraph_timings (
   message_id TEXT NOT NULL, ord INTEGER NOT NULL, t_start REAL NOT NULL, t_end REAL NOT NULL,
   PRIMARY KEY (message_id, ord)
 );
+CREATE TABLE IF NOT EXISTS pre_cards (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  position INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_items (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  file_path TEXT,
+  slides_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL
+);
 `;
 export function openDb(path: string): Database.Database {
   const db = new Database(path);

@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu } from 'electron'
+import { app, shell, BrowserWindow, Menu, protocol } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -18,9 +18,19 @@ import { createMessagesRepo } from './messagesRepo'
 import { createMessagesScheduleRepo } from './messagesScheduleRepo'
 import { createMessageInstaller } from './messageInstaller'
 import { createMessageSource } from './messageSource'
+import { createPreCardsRepo } from './preCardsRepo'
+import { createPreserviceEngine } from './preserviceEngine'
+import { createMediaRepo } from './mediaRepo'
+import { createMediaImport } from './mediaImport'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
+import { registerMediaProtocol, libraryRoot } from './library'
+import { presentation } from './stateStore'
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'helm-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
 
 let operatorWindow: BrowserWindow | null = null
 
@@ -97,6 +107,8 @@ app.whenReady().then(() => {
   })
 
   const db = openDb(join(app.getPath('userData'), 'helm.db'))
+  const libRoot = libraryRoot()
+  registerMediaProtocol(libRoot)
   const repo = createSongsRepo(db)
   seedIfEmpty(repo)
   const biblesRepo = createBiblesRepo(db)
@@ -122,6 +134,20 @@ app.whenReady().then(() => {
     { source: createMessageSource() }
   )
 
+  const preCardsRepo = createPreCardsRepo(db)
+  const preserviceEngine = createPreserviceEngine(preCardsRepo, {
+    cue: (k, s) => presentation.cue(k, s),
+    goLive: (k, s) => presentation.goLive(k, s),
+    liveKey: () => presentation.get().liveKey,
+    isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k }
+  })
+  preserviceEngine.onChange((s) => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)
+  })
+
+  const mediaRepo = createMediaRepo(db)
+  const mediaImport = createMediaImport(mediaRepo, libRoot)
+
   registerIpc(
     repo,
     biblesRepo,
@@ -130,7 +156,10 @@ app.whenReady().then(() => {
     installer,
     messagesRepo,
     messagesScheduleRepo,
-    messageInstaller
+    messageInstaller,
+    preserviceEngine,
+    mediaRepo,
+    mediaImport
   )
 
   buildMenu()

@@ -12,14 +12,33 @@ export interface NewSongInput { title: string; author?: string; text: string; so
 
 export type SlideKind =
   | 'lyrics' | 'scripture' | 'quote' | 'title' | 'sermon'
-  | 'countdown' | 'logo' | 'black' | 'blank' | 'reading';
+  | 'countdown' | 'logo' | 'black' | 'blank' | 'reading' | 'image';
 export interface SlideColumn { version: string; text: string }
 export interface Slide {
   kind: SlideKind; accent?: string; label?: string; lines?: string[];
   ref?: string; columns?: SlideColumn[]; text?: string; source?: string;
   title?: string; subtitle?: string; points?: string[];
-  message?: string; countdownText?: string; bg?: string;
+  message?: string; countdownText?: string; bg?: string; src?: string;
   paras?: { label: string; text: string }[]; activeOrd?: number;
+}
+
+export type PreCardType = 'countdown' | 'message' | 'verse' | 'list' | 'logo' | 'image';
+export interface PreCard {
+  id: string; type: PreCardType; title: string; enabled: boolean;
+  headline?: string; subtitle?: string;      // message
+  ref?: string; text?: string;               // verse
+  points?: string[];                         // list
+  src?: string;                              // image (helm-media:// url)
+}
+
+export type MediaItemType = 'image' | 'deck' | 'video';
+export interface MediaItem {
+  id: string;
+  type: MediaItemType;
+  title: string;
+  filePath: string | null; // relative to library/, for image|video; null for deck
+  slides: string[]; // relative image paths, for deck (empty otherwise)
+  createdAt: number;
 }
 
 export type OutputMode = 'live' | 'logo' | 'black';
@@ -53,6 +72,16 @@ export const CH = {
   messageInstallProgress: 'message:installProgress',   // main → all
   messageAudioProgress: 'message:audioProgress',        // main → all
   quoteScheduleList: 'quoteSchedule:list', quoteScheduleAdd: 'quoteSchedule:add',
+  preserviceGetState: 'preservice:getState', preserviceState: 'preservice:state',   // main → all windows
+  preserviceEngage: 'preservice:engage', preserviceDisengage: 'preservice:disengage',
+  preserviceShow: 'preservice:show', preserviceStep: 'preservice:step',
+  preserviceToggleLoop: 'preservice:toggleLoop', preserviceSetDwell: 'preservice:setDwell',
+  preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
+  preserviceRemoveCard: 'preservice:removeCard', preserviceAddMinute: 'preservice:addMinute',
+  preserviceReset: 'preservice:reset', preserviceTogglePause: 'preservice:togglePause',
+  mediaList: 'media:list', mediaImportImages: 'media:importImages',
+  mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
+  mediaRemove: 'media:remove',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -90,6 +119,11 @@ export interface AudioDownloadProgress {
 }
 
 export interface QuoteScheduleItem { id: string; msgId: string; ord: number; label: string; tapeNo: string; title: string }
+
+export interface PreState {
+  engaged: boolean; loopOn: boolean; idx: number; dwellS: number;
+  countdownText: string; paused: boolean; cards: PreCard[];
+}
 
 // Re-exports so consumers can pull these API-surface types from '../shared/types' alongside
 // everything else, without a separate import path. The source modules do not import from
@@ -148,5 +182,23 @@ export interface HelmApi {
   quoteSchedule: {
     list(): Promise<QuoteScheduleItem[]>;
     add(msgId: string, ord: number): Promise<QuoteScheduleItem[]>;
+  };
+  preservice: {
+    getState(): Promise<PreState>;
+    onState(cb: (s: PreState) => void): () => void;
+    engage(): void; disengage(): void;
+    showCard(idx: number): void; step(dir: 1 | -1): void;
+    toggleLoop(): void; setDwell(delta: number): void;
+    toggleEnabled(id: string): void;
+    saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;
+    removeCard(id: string): void;
+    addMinute(): void; resetCountdown(): void; togglePause(): void;
+  };
+  media: {
+    list(): Promise<MediaItem[]>;
+    importImages(): Promise<MediaItem[]>;
+    importVideo(): Promise<MediaItem[]>;
+    importDeck(): Promise<{ items: MediaItem[]; error?: 'no-libreoffice' }>;
+    remove(id: string): Promise<MediaItem[]>;
   };
 }

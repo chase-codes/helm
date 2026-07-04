@@ -1,27 +1,29 @@
 import type { CSSProperties, JSX } from 'react';
 import type { Theme } from '../../shared/theme';
-import type { OutputMode, SlideColumn } from '../../shared/types';
+import type { OutputMode, Slide, SlideColumn } from '../../shared/types';
+import { SlideCanvas } from '../shared/SlideCanvas';
 
 export interface SermonCenterProps {
   theme: Theme;
   output: OutputMode;
   cuedIsLive: boolean;
   /** Track accent driving the cued-live hero border/label color — T.scripture for the
-   * verse variant, T.message for the quote variant (Lectern.pretty.html:1318/1320). */
+   * verse variant, T.message for the quote variant, T.sermon for the slide variant
+   * (Lectern.pretty.html:1318/1320; Lectern.dc.html:953 `trackColor`). */
   accent: string;
   heroLabel: string;
   ondeckTag: string;
   ondeckTagColor: string;
   ondeckTitle: string;
   ondeckPreview: string;
-  /** "Next verse ›" / "Next ¶ ›" (Lectern.pretty.html:1326) — the "‹ Back" label never
-   * varies by track. */
+  /** "Next verse ›" / "Next ¶ ›" / "Next slide ›" (Lectern.pretty.html:1326) — the
+   * "‹ Back" label never varies by track. */
   nextLabel: string;
   onPrev: () => void;
   onNext: () => void;
   onGoLive: () => void;
   onToggleLogo: () => void;
-  variant: 'verse' | 'quote';
+  variant: 'verse' | 'quote' | 'slide';
   /** verse-only */
   cols?: SlideColumn[];
   /** The version-picker button + popover (Task 6's VersionPicker), rendered in the
@@ -31,6 +33,9 @@ export interface SermonCenterProps {
   /** quote-only */
   quoteText?: string;
   quoteSource?: string;
+  /** slide-only: the cued deck/image/video slide, full-bleed (Lectern.dc.html:244-246
+   * `liveIsSlide` branch — no heroLabel is shown alongside it, unlike verse/quote). */
+  slide?: Slide;
 }
 
 const INSTALL_HINT = '[ Install a Bible in Settings ]';
@@ -54,6 +59,7 @@ export function SermonCenter({
   nextLabel,
   versionPicker,
   variant,
+  slide,
   onPrev,
   onNext,
   onGoLive,
@@ -209,11 +215,25 @@ export function SermonCenter({
                 <div style={{ marginTop: '18px', fontSize: '13px', color: T.faint }}>{INSTALL_HINT}</div>
               )}
             </div>
-          ) : (
+          ) : variant === 'quote' ? (
             <div style={{ margin: 'auto', width: '100%', maxWidth: '720px', padding: '26px 36px' }}>
               <div style={heroLabelStyle}>{heroLabel}</div>
               <div style={quoteTextStyle}>{quoteText}</div>
               <div style={quoteSourceStyle}>{quoteSource}</div>
+            </div>
+          ) : (
+            <div
+              style={{
+                margin: 'auto',
+                width: 'min(100%, 680px)',
+                aspectRatio: '16/9',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                position: 'relative',
+                boxShadow: '0 10px 30px rgba(0,0,0,.28)'
+              }}
+            >
+              <SlideCanvas slide={slide ?? { kind: 'logo', title: 'HELM' }} variant="audience" fill />
             </div>
           )}
         </div>

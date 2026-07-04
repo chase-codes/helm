@@ -60,3 +60,13 @@ test('default (no fill) keeps aspectRatio 16 / 9', () => {
   const root = container.firstChild as HTMLElement;
   expect(root.style.aspectRatio).toBe('16 / 9');
 });
+
+test('renders an image slide as an <img> with the given src', () => {
+  const { container } = render(
+    <SlideCanvas slide={{ kind: 'image', src: 'helm-media://images/x.jpg' }} fill />
+  );
+  const img = container.querySelector('img');
+  expect(img).not.toBeNull();
+  expect(img?.getAttribute('src')).toBe('helm-media://images/x.jpg');
+  expect(img?.style.objectFit).toBe('contain');
+});

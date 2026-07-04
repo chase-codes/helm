@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
-import { themeFor, type Theme } from '../../shared/theme';
+import { themeFor } from '../../shared/theme';
 import { Header } from './Header';
+import { PreServiceMode } from './PreServiceMode';
 import { SermonMode } from './SermonMode';
 import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
@@ -31,29 +32,6 @@ export interface ModeKeyHandler {
 }
 
 export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
-
-function Placeholder({ theme, title }: { theme: Theme; title: string }): JSX.Element {
-  const wrapStyle: CSSProperties = {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    textAlign: 'center'
-  };
-  const titleStyle: CSSProperties = { fontSize: '20px', fontWeight: 700, color: theme.text };
-  const bodyStyle: CSSProperties = { fontSize: '13px', color: theme.faint, maxWidth: '420px' };
-  return (
-    <div style={wrapStyle}>
-      <div style={titleStyle}>{title}</div>
-      <div style={bodyStyle}>
-        Coming in a later slice — see docs/superpowers/specs/2026-07-03-helm-design.md §11.
-      </div>
-    </div>
-  );
-}
 
 function App(): JSX.Element {
   const [mode, setMode] = useState<Mode>('songs');
@@ -134,7 +112,7 @@ function App(): JSX.Element {
       <div style={rootStyle}>
         <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
-          {mode === 'pre' && <Placeholder theme={theme} title="Pre-service" />}
+          {mode === 'pre' && <PreServiceMode themeMode={themeMode} active={mode === 'pre'} />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
               state — cued song/section, sermon reading, schedule — survives tab switches.
               The inactive one is hidden via `display:none`; `display:contents` while active
