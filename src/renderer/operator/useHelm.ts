@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DisplayStatus, PresentationState } from '../../shared/types';
+import type { DisplayStatus, PresentationState, PreState } from '../../shared/types';
 
 export function usePresentationState(): PresentationState {
   const [st, setSt] = useState<PresentationState>({ output: 'black', liveKey: null, liveSnap: null });
@@ -10,6 +10,16 @@ export function usePresentationState(): PresentationState {
     return () => { live = false; off(); };
   }, []);
   return st;
+}
+export function usePreState(): PreState {
+  const [s, setS] = useState<PreState>({ engaged: false, loopOn: true, idx: 0, dwellS: 12, countdownText: '10:00', paused: false, cards: [] });
+  useEffect(() => {
+    let live = true;
+    void window.helm.preservice.getState().then((st) => { if (live) setS(st); });
+    const off = window.helm.preservice.onState(setS);
+    return () => { live = false; off(); };
+  }, []);
+  return s;
 }
 export function useDisplayStatus(): DisplayStatus {
   const [d, setD] = useState<DisplayStatus>({ outputs: 0 });
