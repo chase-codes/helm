@@ -46,6 +46,23 @@ describe('messagesRepo', () => {
     expect(r.search('grace', 'a').quotes.every((q) => q.msgId === 'a')).toBe(true);
   });
 
+  it('scoped search still finds a typo in the scoped tape even when the corpus has many exact hits elsewhere', () => {
+    // 35 paragraphs across other messages contain the exact word "believe" -> >=30 global FTS hits.
+    r.installIndex(Array.from({ length: 35 }, (_, i) => ({
+      id: `x${i}`, tapeNo: `60-000${i % 10}`, title: `Other ${i}`, date: '', durationS: 1,
+    })));
+    for (let i = 0; i < 35; i++) {
+      r.installSermon(`x${i}`, [{ label: '1', text: 'you must believe the word' }], []);
+    }
+    // Target tape T has ONLY a misspelling of "believe" (no exact FTS hit).
+    r.installIndex([{ id: 'T', tapeNo: '65-1204', title: 'The Rapture', date: '', durationS: 1 }]);
+    r.installSermon('T', [{ label: '76', text: 'you must beleive, for beleive is the victory' }], []);
+
+    const res = r.search('believe', 'T');
+    expect(res.quotes.length).toBeGreaterThanOrEqual(1);
+    expect(res.quotes.every((q) => q.msgId === 'T')).toBe(true);
+  });
+
   it('sets an audio path', () => {
     r.installIndex([{ id: 'rapture', tapeNo: '65-1204', title: 'The Rapture', date: '', durationS: 1 }]);
     r.setAudioPath('rapture', '/library/65-1204.mp3');

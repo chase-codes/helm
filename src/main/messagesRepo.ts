@@ -118,20 +118,26 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
     if (!tokens.length) return { tapes, quotes: [] };
 
     const match = tokens.map((t) => `"${t}"*`).join(' OR ');
-    const rowids = (db.prepare('SELECT rowid FROM paragraph_fts WHERE paragraph_fts MATCH ?').all(match) as { rowid: number }[]).map((r) => r.rowid);
+    const ftsSql = `
+      SELECT f.rowid AS rowid
+      FROM paragraph_fts f JOIN paragraphs p ON p.rowid = f.rowid
+      WHERE f.text MATCH ?${scope ? ' AND p.message_id = ?' : ''}
+    `;
+    const rowids = (
+      scope ? db.prepare(ftsSql).all(match, scope) : db.prepare(ftsSql).all(match)
+    ) as { rowid: number }[];
 
     let candidates: QuoteRow[];
     if (rowids.length >= 30) {
       const qs = rowids.map(() => '?').join(',');
-      const rows = (db.prepare(`
+      candidates = (db.prepare(`
         SELECT p.message_id AS msgId, p.ord AS ord, p.label AS label, p.text AS text,
                m.tape_no AS tapeNo, m.title AS title
         FROM paragraphs p JOIN messages m ON m.id = p.message_id
         WHERE p.rowid IN (${qs})
-      `).all(...rowids) as QuoteCandidateRow[]).map(toQuoteRow);
-      candidates = scope ? rows.filter((r) => r.msgId === scope) : rows;
+      `).all(...rowids.map((r) => r.rowid)) as QuoteCandidateRow[]).map(toQuoteRow);
     } else {
-      candidates = allParagraphCandidates(scope); // sparse FTS hits → typo likely; scan, scorer handles fuzz
+      candidates = allParagraphCandidates(scope); // sparse scoped FTS hits → typo likely; scan scope, scorer handles fuzz
     }
     const quotes = rankQuotes(q, candidates);
     return { tapes, quotes };
