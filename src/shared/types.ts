@@ -31,6 +31,16 @@ export interface PreCard {
   src?: string;                              // image (helm-media:// url)
 }
 
+export type MediaItemType = 'image' | 'deck' | 'video';
+export interface MediaItem {
+  id: string;
+  type: MediaItemType;
+  title: string;
+  filePath: string | null; // relative to library/, for image|video; null for deck
+  slides: string[]; // relative image paths, for deck (empty otherwise)
+  createdAt: number;
+}
+
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;

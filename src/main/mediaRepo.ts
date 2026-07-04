@@ -1,14 +1,8 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
+import type { MediaItem } from '../shared/types';
 
-export interface MediaItem {
-  id: string;
-  type: 'image' | 'deck' | 'video';
-  title: string;
-  filePath: string | null; // relative to library/, for image|video; null for deck
-  slides: string[]; // relative image paths, for deck (empty otherwise)
-  createdAt: number;
-}
+export type { MediaItem };
 
 export interface MediaRepo {
   list(): MediaItem[];
