@@ -30,4 +30,20 @@ describe('parseMessageText', () => {
     const r = parseMessageText('T\n65-1204\nJan 1, 1965\n\n1 First line\ncontinues here.\n2 Second.');
     expect(r.paragraphs[0]).toEqual({ label: '1', text: 'First line continues here.' });
   });
+  it('confines header parsing to the preamble — title-like-paragraph and body tape refs do not corrupt output', () => {
+    const raw = [
+      '1953 The Anointed Ones At The End Time',
+      '65-1204',
+      'December 4, 1965',
+      '',
+      '1 As I said on tape 47-0412, faith is the substance.',
+      '2 Second paragraph.',
+    ].join('\n');
+    const r = parseMessageText(raw);
+    expect(r.title).toBe('1953 The Anointed Ones At The End Time');
+    expect(r.tapeNo).toBe('65-1204');
+    expect(r.date).toBe('December 4, 1965');
+    expect(r.paragraphs).toHaveLength(2);
+    expect(r.paragraphs[0].label).toBe('1');
+  });
 });
