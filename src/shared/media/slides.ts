@@ -18,6 +18,7 @@ export function buildVideoPlaceholderSlide(title: string): Slide {
 
 export function slidesOf(item: MediaItem): Slide[] {
   if (item.type === 'deck') {
+    if (item.slides.length === 0) return [{ kind: 'logo', title: 'HELM' }];
     return item.slides.map((relPath) => buildImageSlide(mediaSrc(relPath)));
   }
   if (item.type === 'image') {

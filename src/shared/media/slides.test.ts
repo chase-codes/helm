@@ -100,6 +100,21 @@ describe('slidesOf', () => {
     ]);
   });
 
+  it('returns a safe fallback slide for a deck with no slides', () => {
+    const item: MediaItem = {
+      id: 'd2',
+      type: 'deck',
+      title: 'Empty Deck',
+      filePath: null,
+      slides: [],
+      createdAt: 0
+    };
+    const slides = slidesOf(item);
+    expect(slides).toHaveLength(1);
+    expect(slides[0]).toEqual({ kind: 'logo', title: 'HELM' });
+    expect(slides[0].kind).toBeTruthy();
+  });
+
   it('guards against a null filePath on image/video items rather than emitting helm-media://null', () => {
     const item: MediaItem = {
       id: 'i2',

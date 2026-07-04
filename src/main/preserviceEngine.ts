@@ -6,6 +6,7 @@ export interface PresentationSink {
   cue(key: string, slide: Slide): void;
   goLive(key: string, slide: Slide): void;
   liveKey(): string | null;
+  isLive(key: string): boolean;
 }
 export type { PreState };
 export interface PreserviceEngine {
@@ -42,7 +43,15 @@ export function createPreserviceEngine(
   const slideFor = (i: number): Slide => preSlideFor(cards[i] ?? cards[0], countdownText());
   const clampIdx = (): void => { if (idx >= cards.length) idx = Math.max(0, cards.length - 1); };
 
-  const pushLive = (): void => { const c = cards[idx]; if (c) sink.goLive(preKey(c.id), slideFor(idx)); };
+  const pushLive = (): void => {
+    const c = cards[idx]; if (!c) return;
+    const key = preKey(c.id);
+    // Already live and showing this exact key: hot-update via cue so goLive's
+    // same-key toggle-to-black semantics never fire on us (re-engage, single
+    // enabled card rotation, tapping the on-screen card, step onto same idx).
+    if (sink.isLive(key)) sink.cue(key, slideFor(idx));
+    else sink.goLive(key, slideFor(idx));
+  };
   const pushCue = (): void => { const c = cards[idx]; if (c) sink.cue(preKey(c.id), slideFor(idx)); };
 
   const startTimer = (): void => { if (!timer) timer = setInterval(() => tick(now()), 1000); };

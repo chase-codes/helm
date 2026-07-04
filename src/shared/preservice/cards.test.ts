@@ -30,18 +30,19 @@ describe('preSlideFor', () => {
   });
 });
 
-const cards = (flags: boolean[]) => flags.map((enabled, i) => ({ id: String(i), type: 'logo', title: 't', enabled }));
+const cards = (flags: boolean[]): PreCard[] =>
+  flags.map((enabled, i) => ({ id: String(i), type: 'logo' as const, title: 't', enabled }));
 
 describe('nextEnabledIdx', () => {
   it('skips disabled and wraps forward', () => {
-    expect(nextEnabledIdx(cards([true, false, true]) as any, 0, 1)).toBe(2);
-    expect(nextEnabledIdx(cards([true, false, true]) as any, 2, 1)).toBe(0);
+    expect(nextEnabledIdx(cards([true, false, true]), 0, 1)).toBe(2);
+    expect(nextEnabledIdx(cards([true, false, true]), 2, 1)).toBe(0);
   });
   it('steps backward', () => {
-    expect(nextEnabledIdx(cards([true, true, false]) as any, 1, -1)).toBe(0);
+    expect(nextEnabledIdx(cards([true, true, false]), 1, -1)).toBe(0);
   });
   it('returns from when nothing enabled', () => {
-    expect(nextEnabledIdx(cards([false, false]) as any, 1, 1)).toBe(1);
+    expect(nextEnabledIdx(cards([false, false]), 1, 1)).toBe(1);
   });
 });
 describe('countdown', () => {
