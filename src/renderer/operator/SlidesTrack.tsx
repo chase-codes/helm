@@ -138,12 +138,18 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   // PowerPoint import: unlike Images/Video, importDeck's success value carries an
   // optional `error` (no-LibreOffice is a structural result, not a rejection) AND the
   // promise can still reject mid-conversion (D1 flagged this) — so both paths route to
-  // the same calm fallback modal rather than letting either crash the UI (spec §9). On
-  // real success the repo is ordered newest-first (mediaRepo's `ORDER BY created_at
-  // DESC`), so the just-imported deck is always `items[0]` — select it directly so its
-  // slide rail shows immediately, rather than reusing refreshFrom's keep-current logic.
+  // the same calm fallback modal rather than letting either crash the UI (spec §9).
+  // importDeck's resolved `{ items }` is indistinguishable between a real import and a
+  // cancelled OS file picker (no IPC discriminator) — so a cancel still resolves with
+  // the unchanged library. We diff the returned items against `prevItems` (captured from
+  // this render's `items`, i.e. the library as it stood right before this click) by id;
+  // only a genuinely new id (real import; repo orders newest-first via mediaRepo's
+  // `ORDER BY created_at DESC`, so it's `res.items[0]`) reassigns selection. A cancel —
+  // same ids, same order — leaves selId/slideIdx untouched, so it doesn't silently steal
+  // the operator's current selection or re-fire the cue effect during a live service.
   const importDeck = (): void => {
     setImportOpen(false);
+    const prevItems = items;
     void window.helm.media
       .importDeck()
       .then((res) => {
@@ -151,9 +157,13 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
           setDeckFallback('no-libreoffice');
           return;
         }
+        const prevIds = new Set(prevItems.map((i) => i.id));
+        const added = res.items.find((i) => !prevIds.has(i.id));
         setItems(res.items);
-        setSelId(res.items[0]?.id ?? '');
-        setSlideIdx(0);
+        if (added) {
+          setSelId(added.id);
+          setSlideIdx(0);
+        }
       })
       .catch((err: unknown) => {
         console.error(err);

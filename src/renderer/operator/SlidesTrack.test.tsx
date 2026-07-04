@@ -99,4 +99,32 @@ describe('SlidesTrack', () => {
       )
     ).toBeTruthy()
   })
+
+  it('cancelling the PowerPoint picker (same items, no new id) leaves the current selection untouched', async () => {
+    const { cue } = installHelmStub()
+    // Select the image item first, so we can prove a cancelled deck-import doesn't
+    // silently steal selection back to the deck (items[0]).
+    renderTrack()
+    const imgRow = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
+    fireEvent.click(imgRow)
+    await screen.findByText('▣ Welcome.jpg')
+    cue.mockClear()
+
+    // Simulate a cancelled OS file picker: importDeck resolves with the SAME items
+    // (no new id) — the only signal a cancel gives, per the IPC contract.
+    window.helm.media.importDeck = vi.fn(async () => ({ items }))
+    const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
+    fireEvent.click(importBtn)
+    const pptBtn = (await screen.findByText('PowerPoint')).closest('button') as HTMLButtonElement
+    fireEvent.click(pptBtn)
+
+    // Give the resolved promise a tick to flush.
+    await screen.findByText('▣ Welcome.jpg')
+    // No slide rail (deck rail only renders when a deck is selected) — selection is
+    // still the image, not silently reassigned to items[0] (the deck).
+    expect(screen.queryByText('1')).toBeNull()
+    expect(screen.queryByText('2')).toBeNull()
+    // The cue effect must not have re-fired for the deck as a result of the cancel.
+    expect(cue).not.toHaveBeenCalledWith(expect.stringContaining('deck1'), expect.anything())
+  })
 })
