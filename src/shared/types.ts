@@ -22,6 +22,15 @@ export interface Slide {
   paras?: { label: string; text: string }[]; activeOrd?: number;
 }
 
+export type PreCardType = 'countdown' | 'message' | 'verse' | 'list' | 'logo' | 'image';
+export interface PreCard {
+  id: string; type: PreCardType; title: string; enabled: boolean;
+  headline?: string; subtitle?: string;      // message
+  ref?: string; text?: string;               // verse
+  points?: string[];                         // list
+  src?: string;                              // image (helm-media:// url)
+}
+
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
