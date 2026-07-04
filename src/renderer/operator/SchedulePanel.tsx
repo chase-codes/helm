@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX, KeyboardEvent } from 'react';
 import type { Theme } from '../../shared/theme';
+import { TrackTabs } from './TrackTabs';
 
 export type SermonTrack = 'scripture' | 'message' | 'slides';
 
@@ -10,12 +11,6 @@ export interface ScheduleRow {
   isCurrent: boolean;
   onClick: () => void;
 }
-
-const TRACK_TABS: Array<{ id: SermonTrack; label: string }> = [
-  { id: 'scripture', label: 'Scripture' },
-  { id: 'message', label: 'Message' },
-  { id: 'slides', label: 'Slides' }
-];
 
 export interface SchedulePanelProps {
   theme: Theme;
@@ -48,20 +43,6 @@ export function SchedulePanel({
   rows
 }: SchedulePanelProps): JSX.Element {
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
-  const trackWrapStyle: CSSProperties = { display: 'flex', gap: '4px', background: T.panel2, padding: '4px', borderRadius: '10px' };
-  const trackColor = (id: SermonTrack): string => (id === 'scripture' ? T.scripture : id === 'message' ? T.message : T.sermon);
-  const trackTabStyle = (id: SermonTrack): CSSProperties => ({
-    flex: 1,
-    height: '34px',
-    borderRadius: '8px',
-    fontSize: '12.5px',
-    fontWeight: track === id ? 700 : 600,
-    color: track === id ? '#fff' : T.dim,
-    background: track === id ? trackColor(id) : 'transparent',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  });
   const schedInputStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -112,13 +93,7 @@ export function SchedulePanel({
   return (
     <div style={panelStyle}>
       <div style={{ padding: '12px 12px 10px', flexShrink: 0 }}>
-        <div style={trackWrapStyle}>
-          {TRACK_TABS.map((t) => (
-            <button key={t.id} style={trackTabStyle(t.id)} onClick={() => setTrack(t.id)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <TrackTabs theme={T} track={track} setTrack={setTrack} />
       </div>
 
       {track === 'scripture' && (

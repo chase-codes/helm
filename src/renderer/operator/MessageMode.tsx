@@ -3,10 +3,13 @@ import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { buildQuoteSlide, keyForMessageQuote } from '../../shared/message/slides';
+import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow } from '../../shared/types';
 import { MessageSearchRail, type MsgQuoteRow, type MsgScheduleRow, type MsgTapeRow } from './MessageSearchRail';
 import { ParagraphRail } from './ParagraphRail';
+import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
+import { TrackTabs } from './TrackTabs';
 
 /**
  * Delegate this mode populates on `messageKeyRef` while active — a ref private to the
@@ -28,15 +31,19 @@ export interface MessageModeProps {
   themeMode: ThemeMode;
   messageKeyRef: MessageKeyRef;
   active: boolean;
+  track: SermonTrack;
+  setTrack: (t: SermonTrack) => void;
 }
 
 const RAIL_W = 270;
 const RIGHT_PANEL_W = 330;
 
-/** Message track: search/scope the tape corpus on the left, the cued quote as the
- * center hero, and the current tape's paragraphs (planned quotes highlighted) on the
- * right. Ported character-exact from Lectern.pretty.html's `trackIsMessage` branch. */
-export function MessageMode({ themeMode, messageKeyRef, active }: MessageModeProps): JSX.Element {
+/** Message track: a single left rail (track tabs + search/scope the tape corpus, owned
+ * here rather than split across SchedulePanel and a sibling MessageSearchRail column —
+ * see TrackTabs/MessageSearchRail doc comments), the cued quote as the center hero, and
+ * the current tape's paragraphs (planned quotes highlighted) on the right. Ported
+ * character-exact from Lectern.pretty.html's `trackIsMessage` branch. */
+export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack }: MessageModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -196,7 +203,9 @@ export function MessageMode({ themeMode, messageKeyRef, active }: MessageModePro
 
   // Gated on `hasSearch` (rather than relying on `searchRes` being reset) so a stale
   // result from a just-cleared query never renders — see the search effect's comment.
-  const hasSearch = q.trim().length > 0;
+  // Uses `norm` (not a plain trim) so a punctuation-only query falls back to the QUOTE
+  // SCHEDULE idle view, matching the design's `hasMsgSearch` (Lectern.pretty.html:1170).
+  const hasSearch = !!norm(q);
   const tapeRows: MsgTapeRow[] =
     hasSearch && !scope
       ? searchRes.tapes.map((t) => ({
@@ -223,21 +232,26 @@ export function MessageMode({ themeMode, messageKeyRef, active }: MessageModePro
   }));
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
+  const railStyle: CSSProperties = { width: `${RAIL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
 
   return (
     <div style={rootStyle}>
-      <MessageSearchRail
-        theme={T}
-        width={RAIL_W}
-        q={q}
-        onQChange={setQ}
-        scopeLabel={scopeTitle}
-        onClearScope={clearScope}
-        tapeRows={tapeRows}
-        quoteRows={quoteRows}
-        scheduleRows={scheduleRows}
-        tapePlayer={null}
-      />
+      <div style={railStyle}>
+        <div style={{ padding: '12px 12px 10px', flexShrink: 0 }}>
+          <TrackTabs theme={T} track={track} setTrack={setTrack} />
+        </div>
+        <MessageSearchRail
+          theme={T}
+          q={q}
+          onQChange={setQ}
+          scopeLabel={scopeTitle}
+          onClearScope={clearScope}
+          tapeRows={tapeRows}
+          quoteRows={quoteRows}
+          scheduleRows={scheduleRows}
+          tapePlayer={null}
+        />
+      </div>
       <SermonCenter
         theme={T}
         variant="quote"

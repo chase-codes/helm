@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX, KeyboardEvent } from 'react';
 import type { Theme } from '../../shared/theme';
+import { norm } from '../../shared/search/fuzzy';
 
 export interface MsgScheduleRow {
   id: string;
@@ -23,7 +24,6 @@ export interface MsgQuoteRow {
 
 export interface MessageSearchRailProps {
   theme: Theme;
-  width: number;
   q: string;
   onQChange: (q: string) => void;
   /** Chip label when scoped to a tape (its title), else null — drives the `›` vs chip
@@ -38,12 +38,13 @@ export interface MessageSearchRailProps {
   tapePlayer: JSX.Element | null;
 }
 
-/** Left rail for the Message track: scope chip + search box, TAPES/QUOTES search
- * results (or the QUOTE SCHEDULE list when the box is empty), and the tape-player
- * slot. Ported character-exact from Lectern.pretty.html:207-281 / 1294-1313. */
+/** Body of the Message track's left rail: scope chip + search box, TAPES/QUOTES search
+ * results (or the QUOTE SCHEDULE list when the box is empty), and the tape-player slot.
+ * Rendered beneath TrackTabs inside MessageMode's single rail panel (no panel chrome
+ * of its own — MessageMode owns that, matching SchedulePanel's shape for the other
+ * tracks). Ported character-exact from Lectern.pretty.html:207-281 / 1294-1313. */
 export function MessageSearchRail({
   theme: T,
-  width,
   q,
   onQChange,
   scopeLabel,
@@ -53,7 +54,6 @@ export function MessageSearchRail({
   scheduleRows,
   tapePlayer
 }: MessageSearchRailProps): JSX.Element {
-  const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const schedInputStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -126,7 +126,7 @@ export function MessageSearchRail({
   const rowMetaStyle: CSSProperties = { fontSize: '11px', color: T.faint, marginTop: '1px' };
   const emptyStyle: CSSProperties = { padding: '12px 8px', color: T.faint, fontSize: '12.5px', lineHeight: 1.5 };
 
-  const hasSearch = q.trim().length > 0;
+  const hasSearch = !!norm(q);
   const hasTapeMatches = hasSearch && tapeRows.length > 0;
   const hasQuoteMatches = hasSearch && quoteRows.length > 0;
   const searchEmpty = hasSearch && !hasTapeMatches && !hasQuoteMatches;
@@ -138,7 +138,7 @@ export function MessageSearchRail({
   };
 
   return (
-    <div style={panelStyle}>
+    <>
       <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
         <div style={schedInputStyle}>
           {scopeLabel ? (
@@ -207,6 +207,6 @@ export function MessageSearchRail({
       )}
 
       {tapePlayer}
-    </div>
+    </>
   );
 }

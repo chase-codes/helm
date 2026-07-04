@@ -373,58 +373,66 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
 
   return (
     <div style={rootStyle}>
-      <SchedulePanel
-        theme={T}
-        width={SCHEDULE_PANEL_W}
-        track={track}
-        setTrack={setTrack}
-        entryQ={entryQ}
-        setEntryQ={setEntryQ}
-        onEntryKeyDown={onEntryKeyDown}
-        hasParse={hasParse}
-        addLabel={addLabel}
-        onAdd={addReading}
-        rows={scheduleRows}
-      />
-      {track === 'scripture' ? (
-        <>
-          <SermonCenter
-            theme={T}
-            variant="verse"
-            accent={T.scripture}
-            output={output}
-            cuedIsLive={cuedIsLive}
-            heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
-            cols={liveCols}
-            ondeckTag={ondeckTag}
-            ondeckTagColor={ondeckTagColor}
-            ondeckTitle={ondeckTitle}
-            ondeckPreview={ondeckPreview}
-            nextLabel={'Next verse ›'}
-            versionPicker={versionPicker}
-            onPrev={() => stepVerse(-1)}
-            onNext={() => stepVerse(1)}
-            onGoLive={goLive}
-            onToggleLogo={toggleLogo}
-          />
-          <ChapterRail
-            theme={T}
-            dark={dark}
-            width={RIGHT_PANEL_W}
-            book={scrBook}
-            ch={scrCh}
-            verseCount={verseCount}
-            plannedSet={plannedSet}
-            cuedV={scrV}
-            isVerseLive={isVerseLive}
-            previewOf={previewOf}
-            onSelect={setScrV}
-          />
-        </>
-      ) : track === 'message' ? (
-        <MessageMode themeMode={themeMode} messageKeyRef={messageKeyRef} active={active} />
+      {track === 'message' ? (
+        // Message track: MessageMode renders its own single left rail (TrackTabs +
+        // MessageSearchRail) plus the center hero and ParagraphRail — SchedulePanel is
+        // NOT also rendered here, since that would double up the rail (SchedulePanel's
+        // tabs-only panel as one column, MessageSearchRail as a second sibling column).
+        <MessageMode themeMode={themeMode} messageKeyRef={messageKeyRef} active={active} track={track} setTrack={setTrack} />
       ) : (
-        <div style={comingStyle}>Coming in slice 5 — see the spec</div>
+        <>
+          <SchedulePanel
+            theme={T}
+            width={SCHEDULE_PANEL_W}
+            track={track}
+            setTrack={setTrack}
+            entryQ={entryQ}
+            setEntryQ={setEntryQ}
+            onEntryKeyDown={onEntryKeyDown}
+            hasParse={hasParse}
+            addLabel={addLabel}
+            onAdd={addReading}
+            rows={scheduleRows}
+          />
+          {track === 'scripture' ? (
+            <>
+              <SermonCenter
+                theme={T}
+                variant="verse"
+                accent={T.scripture}
+                output={output}
+                cuedIsLive={cuedIsLive}
+                heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
+                cols={liveCols}
+                ondeckTag={ondeckTag}
+                ondeckTagColor={ondeckTagColor}
+                ondeckTitle={ondeckTitle}
+                ondeckPreview={ondeckPreview}
+                nextLabel={'Next verse ›'}
+                versionPicker={versionPicker}
+                onPrev={() => stepVerse(-1)}
+                onNext={() => stepVerse(1)}
+                onGoLive={goLive}
+                onToggleLogo={toggleLogo}
+              />
+              <ChapterRail
+                theme={T}
+                dark={dark}
+                width={RIGHT_PANEL_W}
+                book={scrBook}
+                ch={scrCh}
+                verseCount={verseCount}
+                plannedSet={plannedSet}
+                cuedV={scrV}
+                isVerseLive={isVerseLive}
+                previewOf={previewOf}
+                onSelect={setScrV}
+              />
+            </>
+          ) : (
+            <div style={comingStyle}>Coming in slice 5 — see the spec</div>
+          )}
+        </>
       )}
     </div>
   );
