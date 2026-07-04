@@ -2,10 +2,20 @@ import { useCallback, useContext, useEffect, useRef, useState, type CSSPropertie
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
-import { formatRef, matchBook, parseRef, type ParsedRef } from '../../shared/scripture/refs';
+import { formatRef, parseRef, type ParsedRef } from '../../shared/scripture/refs';
+import {
+  initialBuilder,
+  applyKey,
+  renderBuilder,
+  toParsedRef,
+  fromParsedRef,
+  setStart,
+  setEnd,
+  EMPTY_EXTENT,
+  type RefBuilderState
+} from '../../shared/scripture/refBuilder';
 import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
-import { norm } from '../../shared/search/fuzzy';
-import type { BibleManifestEntry, ChapterData, ScriptureReading } from '../../shared/types';
+import type { BibleManifestEntry, BookExtent, ChapterData, ScriptureReading } from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { VersionPicker } from './VersionPicker';
@@ -38,7 +48,12 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   const [scrCh, setScrCh] = useState(1);
   const [scrV, setScrV] = useState(1);
   const [versions, setVersions] = useState<string[]>(['kjv']);
-  const [entryQ, setEntryQ] = useState('');
+  const [builder, setBuilder] = useState<RefBuilderState>(initialBuilder());
+  // Per-book chapter/verse-count cache for the builder's digit clamping. Kept as state
+  // (not a ref) so reading it during render — for `curExtent` below — doesn't trip
+  // react-hooks' no-ref-reads-during-render check; the effect below only writes an entry
+  // once per book, so this never grows unbounded or re-fetches.
+  const [bookExtents, setBookExtents] = useState<Record<string, BookExtent>>({});
   const [chapter, setChapter] = useState<ChapterData | null>(null);
   const [schedule, setSchedule] = useState<ScriptureReading[]>([]);
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([]);
@@ -153,6 +168,26 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     };
   }, [scrBook, scrCh, versions]);
 
+  // Fetch (once, cached) the BookExtent for the builder's resolved book so digit clamping
+  // has real chapter/verse maxima. Version-agnostic — main resolves the installed version.
+  useEffect(() => {
+    const b = builder.book;
+    if (!b || bookExtents[b]) return;
+    let live = true;
+    void window.helm.bibles
+      .bookExtent(b)
+      .then((ext) => {
+        if (!live) return;
+        setBookExtents((prev) => ({ ...prev, [b]: ext }));
+      })
+      .catch(console.error);
+    return () => {
+      live = false;
+    };
+  }, [builder.book, bookExtents]);
+
+  const curExtent = builder.book ? bookExtents[builder.book] ?? EMPTY_EXTENT : EMPTY_EXTENT;
+
   const abbrOf = useCallback(
     (id: string): string => {
       const m = manifest.find((e) => e.id === id);
@@ -229,52 +264,119 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     window.helm.presentation.goLive(key, slide);
   };
 
-  // Mid-service headline flow: type a ref, Enter — it's on screen. Jumps the reading
-  // state, schedules it, and goes live immediately (reusing the cached chapter when it
-  // already matches, else fetching fresh so the live slide never shows stale text).
-  const addReading = (): void => {
-    const p = parseRef(entryQ);
+  // The rail previews the builder's book+chapter when resolved, else the cued chapter.
+  const previewBook = builder.book ?? scrBook;
+  const previewCh = builder.chapter ?? scrCh;
+  const selectedRange =
+    builder.startVerse !== null
+      ? {
+          from: Math.min(builder.startVerse, builder.endVerse ?? builder.startVerse),
+          to: Math.max(builder.startVerse, builder.endVerse ?? builder.startVerse)
+        }
+      : null;
+
+  // Preview chapter data, kept separate from `chapter` (the live/cued chapter cache
+  // above) so previewing a different book/chapter while building a ref doesn't disturb
+  // the live-cued chapter fetch.
+  const [previewChapter, setPreviewChapter] = useState<ChapterData | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void window.helm.bibles
+      .getChapter(previewBook, previewCh)
+      .then((c) => {
+        if (live) setPreviewChapter(c);
+      })
+      .catch(console.error);
+    return () => {
+      live = false;
+    };
+  }, [previewBook, previewCh, versions]);
+
+  const railChapter =
+    previewChapter && previewChapter.book === previewBook && previewChapter.chapter === previewCh
+      ? previewChapter
+      : null;
+  const railVerseCount = railChapter?.verseCount || 1;
+  const railPreviewOf = useCallback(
+    (v: number): string => railChapter?.verses[v]?.[versions[0]] ?? '',
+    [railChapter, versions]
+  );
+
+  // Mid-service headline flow: build a ref, Enter — it's on screen. Schedules it, resets
+  // the builder, and (Enter, not Shift+Enter) jumps + goes live immediately (reusing the
+  // cached chapter when it already matches, else fetching fresh so the live slide never
+  // shows stale text).
+  const commitBuilder = (goLiveToo: boolean): void => {
+    const p = toParsedRef(builder);
     if (!p) return;
     window.helm.schedule.add(p).then(setSchedule).catch(console.error);
-    setEntryQ('');
+    setBuilder(initialBuilder());
     setTrack('scripture');
-    jumpTo(p.book, p.ch, p.from);
-    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
-      goLiveWithChapter(p, chapter);
-    } else {
-      window.helm.bibles
-        .getChapter(p.book, p.ch)
-        .then((c) => {
-          setChapter(c);
-          goLiveWithChapter(p, c);
-        })
-        .catch(console.error);
+    if (goLiveToo) {
+      jumpTo(p.book, p.ch, p.from);
+      if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
+        goLiveWithChapter(p, chapter);
+      } else {
+        window.helm.bibles
+          .getChapter(p.book, p.ch)
+          .then((c) => {
+            setChapter(c);
+            goLiveWithChapter(p, c);
+          })
+          .catch(console.error);
+      }
     }
   };
 
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      addReading();
-    } else if (e.key === ' ') {
-      if (!/\d/.test(entryQ)) {
-        const b = matchBook(entryQ.trim());
-        if (b && norm(b) !== norm(entryQ.trim())) {
-          e.preventDefault();
-          setEntryQ(b + ' ');
-        }
-      }
-    } else if (e.key === 'Escape') {
-      // Clear the input first (mirrors SongsMode's search box); a second Escape once
-      // it's already empty is a no-op here and falls through to the document-level
-      // handler's modal-close semantics (Settings, if open) via normal bubbling.
-      if (entryQ) setEntryQ('');
+      commitBuilder(e.shiftKey);
+      return;
     }
+    if (e.key === 'Escape') {
+      // Clear the builder first; a second Escape (already empty) falls through to the
+      // document-level modal-close handler (Settings) via normal bubbling — matches today.
+      if (renderBuilder(builder) !== '') {
+        e.preventDefault();
+        setBuilder(initialBuilder());
+      }
+      return;
+    }
+    const r = applyKey(builder, e.key, e.shiftKey, curExtent);
+    if (r.preventDefault) e.preventDefault();
+    if (r.state !== builder) setBuilder(r.state);
   };
 
-  const parsed = parseRef(entryQ);
-  const hasParse = !!parsed;
+  // Paste / IME: if the whole field parses as a ref, load it structurally.
+  const onEntryChange = (v: string): void => {
+    const p = parseRef(v);
+    if (p) setBuilder(fromParsedRef(p));
+  };
+
+  const parsed = toParsedRef(builder);
+  const canAdd = parsed !== null;
   const addLabel = parsed ? `+ Add ${formatRef(parsed)}` : '';
+
+  // Click-select in the rail writes the same RefBuilderState as typing. If the builder has
+  // no resolved book yet, seed it from the previewed (cued) chapter so a click there starts
+  // a fresh selection in that chapter.
+  const onRailSelectVerse = (v: number, shift: boolean): void => {
+    setBuilder((b) => {
+      const seeded: RefBuilderState =
+        b.book === null || b.chapter === null
+          ? { ...initialBuilder(), stage: 'verse', book: previewBook, chapter: previewCh, startVerse: null, endVerse: null }
+          : b;
+      const ext = bookExtents[seeded.book ?? ''] ?? EMPTY_EXTENT;
+      if (shift) return setEnd(seeded, v, ext);
+      // No open selection (fresh or just-completed range) -> start; a start set with no end
+      // and a *different* verse -> end; same verse -> stay single.
+      if (seeded.startVerse === null || seeded.endVerse !== null) return setStart(seeded, v, ext);
+      if (v === seeded.startVerse) return seeded;
+      return setEnd(seeded, v, ext);
+    });
+  };
 
   const scheduleRows: ScheduleRow[] = schedule.map((r) => {
     const isCurrent = r.book === scrBook && r.ch === scrCh && scrV >= r.from && scrV <= r.to;
@@ -386,12 +488,12 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             width={SCHEDULE_PANEL_W}
             track={track}
             setTrack={setTrack}
-            entryQ={entryQ}
-            setEntryQ={setEntryQ}
+            value={renderBuilder(builder)}
+            onEntryChange={onEntryChange}
             onEntryKeyDown={onEntryKeyDown}
-            hasParse={hasParse}
+            canAdd={canAdd}
             addLabel={addLabel}
-            onAdd={addReading}
+            onAdd={() => commitBuilder(false)}
             rows={scheduleRows}
           />
           {track === 'scripture' ? (
@@ -419,14 +521,15 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
                 theme={T}
                 dark={dark}
                 width={RIGHT_PANEL_W}
-                book={scrBook}
-                ch={scrCh}
-                verseCount={verseCount}
+                book={previewBook}
+                ch={previewCh}
+                verseCount={railVerseCount}
                 plannedSet={plannedSet}
                 cuedV={scrV}
                 isVerseLive={isVerseLive}
-                previewOf={previewOf}
-                onSelect={setScrV}
+                previewOf={railPreviewOf}
+                selectedRange={selectedRange}
+                onSelectVerse={onRailSelectVerse}
               />
             </>
           ) : (
