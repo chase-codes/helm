@@ -74,5 +74,12 @@ const api: HelmApi = {
     resetCountdown: () => ipcRenderer.send(CH.preserviceReset),
     togglePause: () => ipcRenderer.send(CH.preserviceTogglePause),
   },
+  media: {
+    list: () => ipcRenderer.invoke(CH.mediaList),
+    importImages: () => ipcRenderer.invoke(CH.mediaImportImages),
+    importVideo: () => ipcRenderer.invoke(CH.mediaImportVideo),
+    importDeck: () => ipcRenderer.invoke(CH.mediaImportDeck),
+    remove: (id) => ipcRenderer.invoke(CH.mediaRemove, id),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

@@ -18,6 +18,8 @@ import type { MessagesRepo } from './messagesRepo';
 import type { MessagesScheduleRepo } from './messagesScheduleRepo';
 import type { MessageInstaller } from './messageInstaller';
 import type { PreserviceEngine } from './preserviceEngine';
+import type { MediaRepo } from './mediaRepo';
+import type { MediaImport } from './mediaImport';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { displayStatus, openTestOutput } from './displays';
@@ -32,6 +34,8 @@ export function registerIpc(
   messagesScheduleRepo: MessagesScheduleRepo,
   messageInstaller: MessageInstaller,
   preserviceEngine: PreserviceEngine,
+  mediaRepo: MediaRepo,
+  mediaImport: MediaImport,
 ): void {
   ipcMain.handle(CH.songsSearch, (_e, q: string, field: SearchField) => repo.search(q, field));
   ipcMain.handle(CH.songsList, () => repo.list());
@@ -95,4 +99,10 @@ export function registerIpc(
   ipcMain.on(CH.preserviceAddMinute, () => preserviceEngine.addMinute());
   ipcMain.on(CH.preserviceReset, () => preserviceEngine.resetCountdown());
   ipcMain.on(CH.preserviceTogglePause, () => preserviceEngine.togglePause());
+
+  ipcMain.handle(CH.mediaList, () => mediaRepo.list());
+  ipcMain.handle(CH.mediaImportImages, () => mediaImport.importImages());
+  ipcMain.handle(CH.mediaImportVideo, () => mediaImport.importVideo());
+  ipcMain.handle(CH.mediaImportDeck, () => mediaImport.importDeck());
+  ipcMain.handle(CH.mediaRemove, (_e, id: string) => mediaRepo.remove(id));
 }

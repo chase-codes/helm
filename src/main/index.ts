@@ -20,6 +20,8 @@ import { createMessageInstaller } from './messageInstaller'
 import { createMessageSource } from './messageSource'
 import { createPreCardsRepo } from './preCardsRepo'
 import { createPreserviceEngine } from './preserviceEngine'
+import { createMediaRepo } from './mediaRepo'
+import { createMediaImport } from './mediaImport'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
@@ -142,6 +144,9 @@ app.whenReady().then(() => {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)
   })
 
+  const mediaRepo = createMediaRepo(db)
+  const mediaImport = createMediaImport(mediaRepo, libRoot)
+
   registerIpc(
     repo,
     biblesRepo,
@@ -151,7 +156,9 @@ app.whenReady().then(() => {
     messagesRepo,
     messagesScheduleRepo,
     messageInstaller,
-    preserviceEngine
+    preserviceEngine,
+    mediaRepo,
+    mediaImport
   )
 
   buildMenu()

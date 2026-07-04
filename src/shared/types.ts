@@ -79,6 +79,9 @@ export const CH = {
   preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
   preserviceRemoveCard: 'preservice:removeCard', preserviceAddMinute: 'preservice:addMinute',
   preserviceReset: 'preservice:reset', preserviceTogglePause: 'preservice:togglePause',
+  mediaList: 'media:list', mediaImportImages: 'media:importImages',
+  mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
+  mediaRemove: 'media:remove',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -190,5 +193,12 @@ export interface HelmApi {
     saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;
     removeCard(id: string): void;
     addMinute(): void; resetCountdown(): void; togglePause(): void;
+  };
+  media: {
+    list(): Promise<MediaItem[]>;
+    importImages(): Promise<MediaItem[]>;
+    importVideo(): Promise<MediaItem[]>;
+    importDeck(): Promise<{ items: MediaItem[]; error?: 'no-libreoffice' }>;
+    remove(id: string): Promise<MediaItem[]>;
   };
 }
