@@ -51,6 +51,14 @@ CREATE TABLE IF NOT EXISTS pre_cards (
   enabled INTEGER NOT NULL DEFAULT 1,
   position INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS media_items (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  file_path TEXT,
+  slides_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL
+);
 `;
 export function openDb(path: string): Database.Database {
   const db = new Database(path);
