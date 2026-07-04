@@ -186,10 +186,10 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     // `liveCols` reads as [] and would build the install-hint slide even though a
     // bible IS installed and the real verse text is just one tick away. Bail out here
     // rather than going live with that false hint; the cue effect re-cues once
-    // getChapter resolves and the operator can press again. When no bible is
-    // installed at all, liveChapter is legitimately null every time too, so this
-    // guard just means go-live is a no-op then — the cued install-hint slide (from
-    // the effect above) stays the correct thing on screen instead.
+    // getChapter resolves and the operator can press again. The no-bible-installed
+    // case is unaffected: getChapter still resolves to a (verse-less) ChapterData,
+    // so liveChapter is non-null, this guard passes, liveCols is legitimately empty,
+    // and the install-hint slide goes live, which is then the correct thing to show.
     if (!liveChapter) return;
     const slide = buildScriptureSlide(
       formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
