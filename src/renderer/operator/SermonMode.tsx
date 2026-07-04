@@ -181,6 +181,16 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   };
 
   const goLive = (): void => {
+    // Right after a cross-book/chapter jump, `chapter` still holds the previous
+    // chapter's data for a render or two (see the `liveChapter` comment above) — so
+    // `liveCols` reads as [] and would build the install-hint slide even though a
+    // bible IS installed and the real verse text is just one tick away. Bail out here
+    // rather than going live with that false hint; the cue effect re-cues once
+    // getChapter resolves and the operator can press again. When no bible is
+    // installed at all, liveChapter is legitimately null every time too, so this
+    // guard just means go-live is a no-op then — the cued install-hint slide (from
+    // the effect above) stays the correct thing on screen instead.
+    if (!liveChapter) return;
     const slide = buildScriptureSlide(
       formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
       liveCols.length ? liveCols : [{ version: '', text: INSTALL_HINT }]
