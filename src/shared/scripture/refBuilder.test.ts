@@ -8,6 +8,7 @@ import {
   renderBuilder,
   toParsedRef,
   fromParsedRef,
+  applyKey,
   type RefBuilderState
 } from './refBuilder'
 
@@ -80,4 +81,87 @@ test('round-trip toParsedRef(fromParsedRef(p)) === p', () => {
     { book: 'John', ch: 3, from: 16, to: 16 },
     { book: 'Genesis', ch: 1, from: 1, to: 10 }
   ]) expect(toParsedRef(fromParsedRef(p))).toEqual(p)
+})
+
+// Helper: feed a string of single-char keys through applyKey.
+function type(s: RefBuilderState, keys: string, extent: BookExtent): RefBuilderState {
+  let st = s
+  for (const k of keys) st = applyKey(st, k, false, extent).state
+  return st
+}
+
+test('space swallowed at every stage', () => {
+  expect(applyKey(initialBuilder(), ' ', false, james).preventDefault).toBe(true)
+})
+
+test('book: prefix completion advances (jame -> James)', () => {
+  const st = applyKey(type(initialBuilder(), 'jame', james), ' ', false, james).state
+  expect(st).toMatchObject({ stage: 'chapter', book: 'James', bookQuery: '' })
+})
+
+test('book: unresolved space stays in book', () => {
+  const st = applyKey(type(initialBuilder(), 'zz', james), ' ', false, james).state
+  expect(st.stage).toBe('book')
+  expect(st.book).toBeNull()
+})
+
+test('book: numbered book via exact alias advances (1john -> 1 John)', () => {
+  const st = applyKey(type(initialBuilder(), '1john', james), ' ', false, james).state
+  expect(st).toMatchObject({ stage: 'chapter', book: '1 John' })
+})
+
+test('book: bare "1" + space does NOT jump to 1 Samuel; inserts a literal space', () => {
+  const st = applyKey(type(initialBuilder(), '1', james), ' ', false, james).state
+  expect(st.stage).toBe('book')
+  expect(st.book).toBeNull()
+  expect(st.bookQuery).toBe('1 ')
+})
+
+test('chapter digits clamp to max', () => {
+  let st = applyKey(type(initialBuilder(), 'jame', james), ' ', false, james).state // -> chapter
+  st = type(st, '9', james)
+  expect(st.chapter).toBe(5) // clamped from 9 to 5
+})
+
+test('full typed range James 1:1-10 with clamping', () => {
+  let st = applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state
+  st = applyKey(type(st, '1', james), ' ', false, james).state // chapter 1 -> verse
+  st = applyKey(type(st, '1', james), ' ', false, james).state // start 1 -> endVerse
+  st = type(st, '10', james)
+  expect(renderBuilder(st)).toBe('James 1:1-10')
+  expect(toParsedRef(st)).toEqual({ book: 'James', ch: 1, from: 1, to: 10 })
+})
+
+test('colon and hyphen advance like space', () => {
+  let st = applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state
+  st = type(st, '1', james)
+  st = applyKey(st, ':', false, james).state // -> verse
+  expect(st.stage).toBe('verse')
+  st = type(st, '2', james)
+  st = applyKey(st, '-', false, james).state // -> endVerse
+  expect(st.stage).toBe('endVerse')
+})
+
+test('verse clamps to chapter verse count', () => {
+  let st = applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state
+  st = applyKey(type(st, '1', james), ' ', false, james).state // chapter 1 -> verse
+  st = type(st, '99', james)
+  expect(st.startVerse).toBe(27) // James 1 has 27 verses
+})
+
+test('backspace deletes within a numeric token then steps back', () => {
+  let st = applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state
+  st = type(st, '12', james) // chapter clamps: 1 -> 12 -> clamp 5
+  expect(st.chapter).toBe(5)
+  st = applyKey(st, 'Backspace', false, james).state // 5 -> null? Math.floor(5/10)=0 -> null
+  expect(st.chapter).toBeNull()
+  st = applyKey(st, 'Backspace', false, james).state // empty chapter -> step back to book
+  expect(st.stage).toBe('book')
+  expect(st.book).toBeNull()
+  expect(st.bookQuery).toBe('James')
+})
+
+test('no extent: cannot advance past chapter clamp', () => {
+  const st = type(applyKey(type(initialBuilder(), 'james', EMPTY_EXTENT), ' ', false, EMPTY_EXTENT).state, '3', EMPTY_EXTENT)
+  expect(st.chapter).toBeNull() // clampChapter(3, EMPTY) === 0 -> null
 })
