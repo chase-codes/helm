@@ -2,14 +2,25 @@ import { useContext, useEffect, useState, type CSSProperties, type JSX, type Mut
 import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
-import { buildQuoteSlide, keyForMessageQuote } from '../../shared/message/slides';
+import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
 import { norm } from '../../shared/search/fuzzy';
-import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow } from '../../shared/types';
+import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
 import { MessageSearchRail, type MsgQuoteRow, type MsgScheduleRow, type MsgTapeRow } from './MessageSearchRail';
 import { ParagraphRail } from './ParagraphRail';
 import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
+import { TapePlayer } from './TapePlayer';
 import { TrackTabs } from './TrackTabs';
+
+/** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
+ * playable by an HTML5 `<audio>` element. Handles POSIX paths (`/a/b.m4a`) and Windows
+ * drive paths (`C:\a\b.m4a` → `file:///C:/a/b.m4a`) the same way: normalize slashes,
+ * ensure a leading `/`, percent-encode. */
+function audioFileUrl(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  const abs = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  return `file://${encodeURI(abs)}`;
+}
 
 /**
  * Delegate this mode populates on `messageKeyRef` while active — a ref private to the
@@ -56,6 +67,14 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
   const [scope, setScope] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<QuoteScheduleItem[]>([]);
   const [searchRes, setSearchRes] = useState<{ tapes: TapeRow[]; quotes: QuoteRow[] }>({ tapes: [], quotes: [] });
+  // Tape-player state: `timing` and `activeOrd` drive the reading-view sync (Task 12);
+  // `downloading` mirrors an in-flight on-demand audio fetch for the *current* tape,
+  // owned here (not TapePlayer) so an `onAudioProgress` error can clear it cleanly
+  // instead of leaving the player stuck. All three are tape-scoped and reset below
+  // alongside the message refetch whenever `msgId` changes.
+  const [timing, setTiming] = useState<TimingMap>([]);
+  const [activeOrd, setActiveOrd] = useState(0);
+  const [downloading, setDownloading] = useState(false);
 
   // Initial load: the tape list (picking the first as current) and the quote schedule.
   // `live` guards each against unmount (track switched away) before the promise resolves.
@@ -80,6 +99,22 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
     };
   }, []);
 
+  // Reset the tape-scoped player state (`activeOrd`/`downloading`/`timing`) the instant
+  // `msgId` changes — a stale `activeOrd` from the previous tape would otherwise make a
+  // same-render Follow-along click cue the *new* tape at the *old* tape's ord. This is
+  // React's sanctioned "adjust state when a prop changes" pattern (setState during
+  // render, guarded by comparing against a mirrored-in-state previous value) rather than
+  // an effect — `react-hooks/set-state-in-effect` flags unconditional setState calls at
+  // the top of a `useEffect` body, and this also avoids the extra committed render an
+  // effect-based reset would cost.
+  const [resetForMsgId, setResetForMsgId] = useState(msgId);
+  if (msgId !== resetForMsgId) {
+    setResetForMsgId(msgId);
+    setActiveOrd(0);
+    setDownloading(false);
+    setTiming([]);
+  }
+
   // Full message (paragraphs) refetch on tape change. Skips the fetch (without touching
   // state) while msgId is still empty pre-load — `liveMsg` below already reads as null
   // in that case since no fetched `msg.id` will ever equal ''.
@@ -95,6 +130,50 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
     return () => {
       live = false;
     };
+  }, [msgId]);
+
+  // The tape's timing map (Task 5's `activeOrdAt`/`TimingMap`) — `[]` for every tape in
+  // slice 4 (aeneas alignment is slice 4b; see
+  // docs/superpowers/notes/2026-07-03-the-table-acquisition.md), which makes
+  // `activeOrdAt` always resolve to ord 0. The reading view therefore won't auto-scroll
+  // yet, but the plumbing is wired so it "just works" once 4b populates real spans.
+  useEffect(() => {
+    if (!msgId) return;
+    let live = true;
+    void window.helm.message
+      .timing(msgId)
+      .then((t) => {
+        if (live) setTiming(t);
+      })
+      .catch(console.error);
+    return () => {
+      live = false;
+    };
+  }, [msgId]);
+
+  // On-demand audio download progress for the *current* tape. Re-`get`s the message on
+  // `done` so `audioSrc` (derived from `liveMsg.audioPath` below) picks up the freshly
+  // cached path; clears `downloading` on both `done` and `error` so a failed download
+  // doesn't leave the player stuck.
+  useEffect(() => {
+    if (!msgId) return;
+    const off = window.helm.message.onAudioProgress((p) => {
+      if (p.msgId !== msgId) return;
+      if (p.phase === 'done') {
+        setDownloading(false);
+        void window.helm.message
+          .get(msgId)
+          .then((m) => {
+            if (m) setMsg(m);
+          })
+          .catch(console.error);
+      } else if (p.phase === 'error') {
+        setDownloading(false);
+      } else {
+        setDownloading(true);
+      }
+    });
+    return off;
   }, [msgId]);
 
   // Tape/quote search, scoped to `scope` when set. Skips the fetch (without touching
@@ -139,6 +218,34 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
   const goLive = (): void => {
     if (!liveMsg) return;
     window.helm.presentation.goLive(keyForMessageQuote(msgId, msgIdx), buildQuoteSlide(liveMsg, msgIdx));
+  };
+
+  // Playable URL for the tape player, derived (not stored) from `liveMsg.audioPath` so
+  // it updates for free once the audio-progress effect above re-`get`s the message.
+  const audioSrc = liveMsg?.audioPath ? audioFileUrl(liveMsg.audioPath) : null;
+
+  const ensureAudio = (): void => {
+    if (!liveMsg || liveMsg.audioPath) return;
+    setDownloading(true);
+    window.helm.message.downloadAudio(msgId);
+  };
+
+  // TapePlayer dedupes `timeupdate` → ord changes itself, so every call here is a real
+  // boundary crossing: track it (for the Follow-along Go Live below) and re-cue the
+  // reading slide so a live/hot-updated reading view scrolls along. This is entirely
+  // separate from the quote-slide cue effect above — the two slide kinds/keys never
+  // collide (`keyForReading` vs `keyForMessageQuote`).
+  const handleActiveOrd = (ord: number): void => {
+    setActiveOrd(ord);
+    if (!liveMsg) return;
+    window.helm.presentation.cue(keyForReading(msgId), buildReadingSlide(liveMsg, ord));
+  };
+
+  // "Follow along": puts the scrolling reading view on screen at the tape's current
+  // position (separate from — and doesn't disturb — the quote-slide Go Live path above).
+  const followAlong = (): void => {
+    if (!liveMsg) return;
+    window.helm.presentation.goLive(keyForReading(msgId), buildReadingSlide(liveMsg, activeOrd));
   };
 
   const toggleLogo = (): void => {
@@ -233,6 +340,33 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const railStyle: CSSProperties = { width: `${RAIL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
+  // No design source for this action — the reading view is new in slice 4 — so it's
+  // styled to sit quietly under the ported tape-player card rather than ported from
+  // Lectern.pretty.html. `key={msgId}` below remounts TapePlayer (fresh `playing`/`pos`/
+  // dedupe state, a fresh `<audio>` element) whenever the tape changes, instead of
+  // relying on prop-diffing to reset it.
+  const followAlongStyle: CSSProperties = {
+    margin: '0 12px 12px',
+    height: '30px',
+    borderRadius: '9px',
+    background: T.message + '18',
+    color: T.message,
+    fontSize: '11.5px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: 'inset 0 0 0 1px ' + T.message + '40',
+    flexShrink: 0
+  };
+  const tapePlayer = liveMsg ? (
+    <>
+      <TapePlayer key={msgId} theme={T} msg={liveMsg} audioSrc={audioSrc} timing={timing} downloading={downloading} onActiveOrd={handleActiveOrd} onEnsureAudio={ensureAudio} />
+      <button style={followAlongStyle} onClick={followAlong}>
+        Follow along ›
+      </button>
+    </>
+  ) : null;
 
   return (
     <div style={rootStyle}>
@@ -249,7 +383,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
           tapeRows={tapeRows}
           quoteRows={quoteRows}
           scheduleRows={scheduleRows}
-          tapePlayer={null}
+          tapePlayer={tapePlayer}
         />
       </div>
       <SermonCenter
