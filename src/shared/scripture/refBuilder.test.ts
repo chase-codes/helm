@@ -193,6 +193,49 @@ test('verse clamps to chapter verse count', () => {
   expect(st.startVerse).toBe(27) // James 1 has 27 verses
 })
 
+test('typing an inverted end renders inverted but commits normalized', () => {
+  let st = applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state
+  st = applyKey(type(st, '1', james), ' ', false, james).state // chapter 1 -> verse
+  st = applyKey(type(st, '8', james), ' ', false, james).state // start 8 -> endVerse
+  st = type(st, '3', james)
+  expect(renderBuilder(st)).toBe('James 1:8-3')
+  expect(toParsedRef(st)).toEqual({ book: 'James', ch: 1, from: 3, to: 8 })
+})
+
+test('backspace deletes within the verse numeric token then steps back to chapter', () => {
+  let st: RefBuilderState = {
+    ...initialBuilder(),
+    stage: 'verse',
+    book: 'James',
+    chapter: 1,
+    startVerse: 12
+  }
+  st = applyKey(st, 'Backspace', false, james).state // 12 -> 1 (Math.floor(12/10))
+  expect(st.startVerse).toBe(1)
+  expect(st.stage).toBe('verse')
+  st = applyKey(st, 'Backspace', false, james).state // 1 -> null, stays in verse stage
+  expect(st.startVerse).toBeNull()
+  expect(st.stage).toBe('verse')
+  st = applyKey(st, 'Backspace', false, james).state // empty startVerse -> step back to chapter
+  expect(st.stage).toBe('chapter')
+})
+
+test('backspace deletes within the endVerse numeric token then steps back to verse', () => {
+  let st: RefBuilderState = {
+    ...initialBuilder(),
+    stage: 'endVerse',
+    book: 'James',
+    chapter: 1,
+    startVerse: 3,
+    endVerse: 8
+  }
+  st = applyKey(st, 'Backspace', false, james).state // 8 -> null (single digit)
+  expect(st.endVerse).toBeNull()
+  expect(st.stage).toBe('endVerse')
+  st = applyKey(st, 'Backspace', false, james).state // empty endVerse -> step back to verse
+  expect(st.stage).toBe('verse')
+})
+
 test('backspace deletes within a numeric token then steps back', () => {
   let st = applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state
   st = type(st, '12', james) // chapter clamps: 1 -> 12 -> clamp 5

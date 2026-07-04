@@ -37,6 +37,11 @@ export interface SermonModeProps {
 const INSTALL_HINT = '[ Install a Bible in Settings ]';
 const SCHEDULE_PANEL_W = 270;
 const RIGHT_PANEL_W = 330;
+// Stable no-op fallbacks for ChapterRail's planned/cued/live tint props when the rail is
+// previewing a book/chapter OTHER than the cued one (see `railIsCued` below) — module-level
+// so passing them doesn't allocate a fresh Set/closure every render.
+const EMPTY_PLANNED = new Set<number>();
+const NEVER_LIVE = (): boolean => false;
 
 export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, biblesRevision }: SermonModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
@@ -168,10 +173,14 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     };
   }, [scrBook, scrCh, versions]);
 
-  // Fetch (once, cached) the BookExtent for the builder's resolved book so digit clamping
-  // has real chapter/verse maxima. Version-agnostic — main resolves the installed version.
+  // Fetch (once, cached) the BookExtent for the builder's resolved book, falling back to
+  // the previewed (cued) book when the builder hasn't resolved one yet (`builder.book ??
+  // scrBook`, same fallback `previewBook` uses below) — otherwise a fresh session never
+  // fetches the cued book's extent, and the first click on a cued-chapter verse rail card
+  // seeds `book: previewBook` with no extent cached, clamping to EMPTY_EXTENT and dropping
+  // the click. Version-agnostic — main resolves the installed version.
   useEffect(() => {
-    const b = builder.book;
+    const b = builder.book ?? scrBook;
     if (!b || bookExtents[b]) return;
     let live = true;
     void window.helm.bibles
@@ -184,7 +193,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     return () => {
       live = false;
     };
-  }, [builder.book, bookExtents]);
+  }, [builder.book, scrBook, bookExtents]);
 
   const curExtent = builder.book ? bookExtents[builder.book] ?? EMPTY_EXTENT : EMPTY_EXTENT;
 
@@ -302,6 +311,14 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     (v: number): string => railChapter?.verses[v]?.[versions[0]] ?? '',
     [railChapter, versions]
   );
+
+  // `plannedSet`/`cuedV`/`isVerseLive` below are all computed against the CUED book/chapter
+  // (scrBook/scrCh), but the rail previews `previewBook`/`previewCh` — which diverge while
+  // the operator is building a reading in a different book/chapter than the one currently
+  // cued. Gate them off (empty set / no-match verse / always-false) so a chapter the
+  // operator is merely previewing doesn't pick up the cued chapter's planned highlights,
+  // a spurious CUED badge, or a misleading LIVE badge.
+  const railIsCued = previewBook === scrBook && previewCh === scrCh;
 
   // Mid-service headline flow: build a ref, Enter — it's on screen. Schedules it, resets
   // the builder, and (Enter, not Shift+Enter) jumps + goes live immediately (reusing the
@@ -524,9 +541,9 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
                 book={previewBook}
                 ch={previewCh}
                 verseCount={railVerseCount}
-                plannedSet={plannedSet}
-                cuedV={scrV}
-                isVerseLive={isVerseLive}
+                plannedSet={railIsCued ? plannedSet : EMPTY_PLANNED}
+                cuedV={railIsCued ? scrV : -1}
+                isVerseLive={railIsCued ? isVerseLive : NEVER_LIVE}
                 previewOf={railPreviewOf}
                 selectedRange={selectedRange}
                 onSelectVerse={onRailSelectVerse}

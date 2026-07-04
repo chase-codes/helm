@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX } from 'react'
+import { useEffect, useRef, type CSSProperties, type JSX } from 'react'
 import type { Theme } from '../../shared/theme'
 
 export interface ChapterRailProps {
@@ -19,8 +19,11 @@ export interface ChapterRailProps {
 const HINT = 'Planned verses are highlighted. Tap any verse — and keep reading right past the plan.'
 
 /** Right rail for the Scripture track: one card per verse in the current chapter,
- * tinted by planned/cued/live tier, click jumps `scrV` (the cue effect in SermonMode
- * handles cueing/hot-updating live output). Mirrors SectionRail's tap-to-navigate shape. */
+ * tinted by planned/cued/live tier. Tapping a card (or shift-tapping to extend) writes a
+ * range select into the caller's `RefBuilderState` via `onSelectVerse`, rather than jumping
+ * the live/cued verse directly — the builder is the single source of truth for what's
+ * selected, and the caller decides when/whether that turns into a live preview. Mirrors
+ * SectionRail's tap-to-navigate shape. */
 export function ChapterRail({
   theme: T,
   dark,
@@ -44,6 +47,16 @@ export function ChapterRail({
     minHeight: 0
   }
   const plannedLabel = plannedSet.size ? `${plannedSet.size} planned` : 'none planned'
+
+  // Auto-scroll the selection's start row into view. A `useEffect` (rather than an inline
+  // callback ref) so it only runs when the selected verse actually changes, not on every
+  // re-render — a callback ref gets a fresh closure identity each render and React would
+  // re-invoke it every time, fighting a user who's manually scrolled the rail away from the
+  // selection.
+  const selectedFromRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    selectedFromRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [selectedRange?.from])
 
   const rowStyle = (
     isLive: boolean,
@@ -162,11 +175,7 @@ export function ChapterRail({
               data-selected={selected}
               style={rowStyle(isLive, isCued, planned, selected)}
               onClick={(e) => onSelectVerse(v, e.shiftKey)}
-              ref={
-                selected && v === selectedRange?.from
-                  ? (el) => el?.scrollIntoView?.({ block: 'nearest' })
-                  : undefined
-              }
+              ref={v === selectedRange?.from ? selectedFromRef : undefined}
             >
               <div
                 style={{
