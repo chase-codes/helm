@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { SCHEMA } from './db';
 import { createPreCardsRepo } from './preCardsRepo';
