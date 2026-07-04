@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { ChapterData, InstalledVersion, NormalizedBible } from '../shared/types'
+import type { BookExtent, ChapterData, InstalledVersion, NormalizedBible } from '../shared/types'
 
 export interface BiblesRepo {
   installed(): InstalledVersion[]
@@ -7,6 +7,7 @@ export interface BiblesRepo {
   uninstall(id: string): void
   getChapter(book: string, chapter: number): ChapterData
   isInstalled(id: string): boolean
+  bookExtent(book: string, versionId: string): BookExtent
 }
 
 interface VerseRow {
@@ -26,6 +27,9 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
   const deleteVersion = db.prepare('DELETE FROM bible_versions WHERE id = ?')
   const selectChapter = db.prepare(
     'SELECT version_id, verse, text FROM verses WHERE book = ? AND chapter = ?'
+  )
+  const selectExtent = db.prepare(
+    'SELECT chapter, MAX(verse) AS mv FROM verses WHERE version_id = ? AND book = ? GROUP BY chapter ORDER BY chapter'
   )
 
   return {
@@ -59,6 +63,10 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
         if (r.verse > verseCount) verseCount = r.verse
       }
       return { book, chapter, verseCount, verses }
+    },
+    bookExtent(book, versionId) {
+      const rows = selectExtent.all(versionId, book) as { chapter: number; mv: number }[]
+      return { chapters: rows.length, verseCounts: rows.map((r) => r.mv) }
     }
   }
 }

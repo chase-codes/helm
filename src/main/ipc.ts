@@ -46,6 +46,13 @@ export function registerIpc(
   ipcMain.handle(CH.biblesGetChapter, (_e, book: string, chapter: number) =>
     biblesRepo.getChapter(book, chapter),
   );
+  ipcMain.handle(CH.biblesBookExtent, (_e, book: string) => {
+    // Version-agnostic to the caller: chapter/verse counts are canonically stable across
+    // the KJV-family translations for clamping, so resolve to the first installed version
+    // (or return {0, []} when none is installed — the builder then can't advance past book).
+    const versionId = biblesRepo.installed()[0]?.id
+    return versionId ? biblesRepo.bookExtent(book, versionId) : { chapters: 0, verseCounts: [] }
+  });
   ipcMain.handle(CH.scheduleList, () => scheduleRepo.list());
   ipcMain.handle(CH.scheduleAdd, (_e, r: Omit<ScriptureReading, 'id'>) => scheduleRepo.add(r));
   ipcMain.handle(CH.settingsGet, (_e, key: string, fallback: unknown) =>

@@ -15,6 +15,12 @@ export function matchBook(token: string): string | null {
   for (const b of BOOKS) if (b.aliases.some((a) => a.startsWith(t))) return b.name
   return null
 }
+export function matchBookExact(token: string): string | null {
+  const t = norm(token)
+  if (!t) return null
+  for (const b of BOOKS) if (b.aliases.includes(t)) return b.name
+  return null
+}
 export function parseRef(raw: string): ParsedRef | null {
   const m = (raw || '')
     .trim()

@@ -43,6 +43,7 @@ export const CH = {
   biblesUninstall: 'bibles:uninstall',
   biblesProgress: 'bibles:progress',  // main → all windows
   biblesGetChapter: 'bibles:getChapter',
+  biblesBookExtent: 'bibles:bookExtent',
   scheduleList: 'schedule:list', scheduleAdd: 'schedule:add',
   settingsGet: 'settings:get', settingsSet: 'settings:set',
   messageSearch: 'message:search', messageList: 'message:list', messageGet: 'message:get',
@@ -59,6 +60,7 @@ export interface ChapterData {
   book: string; chapter: number; verseCount: number;
   verses: Record<number, Record<string, string>>;
 }
+export interface BookExtent { chapters: number; verseCounts: number[] } // verseCounts[chapterIndex0] = verses in chapter (index+1)
 export interface ScriptureReading { id: string; book: string; ch: number; from: number; to: number }
 export interface NormalizedBible {
   id: string; abbr: string; name: string; language: string;
@@ -120,6 +122,7 @@ export interface HelmApi {
     install(id: string): void;                       // async; progress via onProgress
     uninstall(id: string): Promise<BibleManifestEntry[]>;
     getChapter(book: string, chapter: number): Promise<ChapterData>;
+    bookExtent(book: string): Promise<BookExtent>;
     onProgress(cb: (p: BibleInstallProgress) => void): () => void;
   };
   schedule: {

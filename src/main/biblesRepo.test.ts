@@ -138,3 +138,43 @@ test('install is transactional: a fixture with a duplicate verse PK rolls back e
   ).n
   expect(n).toBe(0)
 })
+
+const multi: NormalizedBible = {
+  id: 'kjvx',
+  abbr: 'KJVX',
+  name: 'KJV Extra',
+  language: 'en',
+  books: [
+    {
+      name: 'James',
+      chapters: [
+        {
+          n: 1,
+          verses: [
+            { n: 1, text: 'a' },
+            { n: 2, text: 'b' },
+            { n: 3, text: 'c' }
+          ]
+        },
+        {
+          n: 2,
+          verses: [
+            { n: 1, text: 'd' },
+            { n: 2, text: 'e' }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+test('bookExtent returns chapter count and per-chapter verse counts', () => {
+  repo.install(multi)
+  const ext = repo.bookExtent('James', 'kjvx')
+  expect(ext).toEqual({ chapters: 2, verseCounts: [3, 2] })
+})
+
+test('bookExtent returns {0, []} for an unknown book', () => {
+  repo.install(multi)
+  expect(repo.bookExtent('Nahum', 'kjvx')).toEqual({ chapters: 0, verseCounts: [] })
+})
