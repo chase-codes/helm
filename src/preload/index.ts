@@ -31,6 +31,7 @@ const api: HelmApi = {
     install: (id) => ipcRenderer.send(CH.biblesInstall, id),
     uninstall: (id) => ipcRenderer.invoke(CH.biblesUninstall, id),
     getChapter: (book, chapter) => ipcRenderer.invoke(CH.biblesGetChapter, book, chapter),
+    bookExtent: (book) => ipcRenderer.invoke(CH.biblesBookExtent, book),
     onProgress: sub(CH.biblesProgress),
   },
   schedule: {
