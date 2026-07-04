@@ -9,6 +9,8 @@ import {
   toParsedRef,
   fromParsedRef,
   applyKey,
+  setStart,
+  setEnd,
   type RefBuilderState
 } from './refBuilder'
 
@@ -210,4 +212,43 @@ test('no extent: cannot advance past chapter clamp', () => {
     EMPTY_EXTENT
   )
   expect(st.chapter).toBeNull() // clampChapter(3, EMPTY) === 0 -> null
+})
+
+const base: RefBuilderState = {
+  stage: 'verse',
+  bookQuery: '',
+  book: 'James',
+  chapter: 1,
+  startVerse: 3,
+  endVerse: null
+}
+
+test('setStart sets a fresh single-verse selection', () => {
+  expect(setStart(base, 7, james)).toMatchObject({ stage: 'verse', startVerse: 7, endVerse: null })
+})
+
+test('setStart clamps to chapter verse count', () => {
+  expect(setStart(base, 99, james).startVerse).toBe(27)
+})
+
+test('setEnd builds an ascending range', () => {
+  expect(setEnd({ ...base, startVerse: 3 }, 9, james)).toMatchObject({
+    stage: 'endVerse',
+    startVerse: 3,
+    endVerse: 9
+  })
+})
+
+test('setEnd normalizes when the end is below the start', () => {
+  expect(setEnd({ ...base, startVerse: 8 }, 3, james)).toMatchObject({
+    startVerse: 3,
+    endVerse: 8
+  })
+})
+
+test('setStart/setEnd no-op without a chapter/start', () => {
+  const noChapter: RefBuilderState = { ...initialBuilder(), book: 'James' }
+  expect(setStart(noChapter, 5, james)).toBe(noChapter)
+  const noStart: RefBuilderState = { ...base, startVerse: null }
+  expect(setEnd(noStart, 5, james)).toBe(noStart)
 })

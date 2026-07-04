@@ -138,3 +138,21 @@ function backspace(s: RefBuilderState): RefBuilderState {
       return { ...s, endVerse: Math.floor(s.endVerse / 10) || null }
   }
 }
+
+export function setStart(s: RefBuilderState, v: number, extent: BookExtent): RefBuilderState {
+  if (s.chapter === null) return s
+  const start = clampVerse(v, s.chapter, extent)
+  return { ...s, stage: 'verse', startVerse: start || null, endVerse: null }
+}
+
+export function setEnd(s: RefBuilderState, v: number, extent: BookExtent): RefBuilderState {
+  if (s.chapter === null || s.startVerse === null) return s
+  const e = clampVerse(v, s.chapter, extent)
+  if (!e) return s
+  return {
+    ...s,
+    stage: 'endVerse',
+    startVerse: Math.min(s.startVerse, e),
+    endVerse: Math.max(s.startVerse, e)
+  }
+}
