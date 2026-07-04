@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu } from 'electron'
+import { app, shell, BrowserWindow, Menu, protocol } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -21,6 +21,11 @@ import { createMessageSource } from './messageSource'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
+import { registerMediaProtocol, libraryRoot } from './library'
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'helm-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
 
 let operatorWindow: BrowserWindow | null = null
 
@@ -97,6 +102,8 @@ app.whenReady().then(() => {
   })
 
   const db = openDb(join(app.getPath('userData'), 'helm.db'))
+  const libRoot = libraryRoot()
+  registerMediaProtocol(libRoot)
   const repo = createSongsRepo(db)
   seedIfEmpty(repo)
   const biblesRepo = createBiblesRepo(db)
