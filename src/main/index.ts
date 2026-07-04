@@ -2,13 +2,22 @@ import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { CH, type BibleInstallProgress } from '../shared/types'
+import {
+  CH,
+  type AudioDownloadProgress,
+  type BibleInstallProgress,
+  type MessageInstallProgress
+} from '../shared/types'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { createBiblesRepo } from './biblesRepo'
 import { createScheduleRepo } from './scheduleRepo'
 import { createSettingsRepo } from './settingsRepo'
 import { createBibleInstaller } from './bibleInstaller'
+import { createMessagesRepo } from './messagesRepo'
+import { createMessagesScheduleRepo } from './messagesScheduleRepo'
+import { createMessageInstaller } from './messageInstaller'
+import { createMessageSource } from './messageSource'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
@@ -98,7 +107,31 @@ app.whenReady().then(() => {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.biblesProgress, p)
   }
   const installer = createBibleInstaller(biblesRepo, broadcastBibleProgress)
-  registerIpc(repo, biblesRepo, scheduleRepo, settingsRepo, installer)
+
+  const messagesRepo = createMessagesRepo(db)
+  const messagesScheduleRepo = createMessagesScheduleRepo(db)
+  const broadcastMessageInstallProgress = (p: MessageInstallProgress): void => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.messageInstallProgress, p)
+  }
+  const broadcastAudioProgress = (p: AudioDownloadProgress): void => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.messageAudioProgress, p)
+  }
+  const messageInstaller = createMessageInstaller(
+    messagesRepo,
+    (p) => ('msgId' in p ? broadcastAudioProgress(p) : broadcastMessageInstallProgress(p)),
+    { source: createMessageSource() }
+  )
+
+  registerIpc(
+    repo,
+    biblesRepo,
+    scheduleRepo,
+    settingsRepo,
+    installer,
+    messagesRepo,
+    messagesScheduleRepo,
+    messageInstaller
+  )
 
   buildMenu()
   createWindow()
