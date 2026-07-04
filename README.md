@@ -9,12 +9,26 @@ one shared presentation state, so what you see in the preview is exactly what th
 sees. See `docs/superpowers/specs/2026-07-03-helm-design.md` §1 for the full purpose and
 success criteria.
 
-**Status:** slice 1–2 (songs mode) and slice 3 (scripture) are implemented — song search,
-cue, go-live, quick-add, keyboard control, resizable panels, auto-attaching output window;
-scripture reference parsing, bundled KJV plus an in-app Bible installer, sermon-mode
-scripture track with chapter rail and translation compare, and full keyboard parity.
-Sermon quotes, the pre-service loop, and multi-display roles are deferred to later slices
-(spec §11).
+**Status:** slice 1–2 (songs mode), slice 3 (scripture), and slice 4 (the Message track)
+are implemented — song search, cue, go-live, quick-add, keyboard control, resizable panels,
+auto-attaching output window; scripture reference parsing, bundled KJV plus an in-app Bible
+installer, sermon-mode scripture track with chapter rail and translation compare; and the
+Message track — William Branham sermon "tapes" with full-text offline search (tape search,
+quote search, search-within-a-tape), quote slides, a tape audio player, and a scrolling
+follow-along reading view. The pre-service loop and multi-display roles are deferred to
+later slices (spec §11).
+
+**Message track — acquisition & audio (spec `docs/superpowers/specs/2026-07-03-helm-slice-4-message-design.md`).**
+Sermon text and audio come from Voice of God Recordings' official distribution only.
+Text installs in full (small, fully searchable offline); audio (`.m4a`) is downloaded
+**on demand** and cached in the app-data `library/` folder — never a bulk pre-download.
+**Local import** (Settings → Message → Import) is the other authoritative path: `.txt`
+and `.pdf` transcripts the church already has are parsed into tape number / title / date /
+numbered paragraphs, with an operator review screen before save. Two follow-ups are
+noted in `docs/superpowers/notes/2026-07-03-the-table-acquisition.md`: the live branham.org
+downloader (**4a** — the source is scrape-based, so the in-app "Install corpus" button is
+wired but not yet functional) and hands-free audio↔text sync for the reading view via
+forced alignment (**4b** — until then the reading view renders but does not auto-scroll).
 
 ## Project setup
 
@@ -82,3 +96,7 @@ per-display renders of that same state; they hold no local state of their own.
 4. Sermon tab → type a reference — `john 3:16` — and press **Enter** to put it on screen
    immediately. Settings → Bibles has KJV installed out of the box; install more
    translations there (needs a network connection) to compare versions side by side.
+5. Message tab → search a tape (or a quote by phrase), pick a paragraph, **Go live** to
+   put the quote on screen. To play a tape, press ▶ on the player card (audio downloads
+   and caches on first play). Load tapes ahead of time via Settings → Message → Import
+   (`.txt`/`.pdf`) — review the parsed paragraphs, then save.
