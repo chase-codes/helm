@@ -21,6 +21,7 @@ import { SermonCenter } from './SermonCenter';
 import { VersionPicker } from './VersionPicker';
 import { ChapterRail } from './ChapterRail';
 import { MessageMode, type MessageKeyRef } from './MessageMode';
+import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack';
 
 export interface SermonModeProps {
   themeMode: ThemeMode;
@@ -69,6 +70,10 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // MessageMode's MessageKeyHandler doc comment for why: two effects racing to write the
   // same ref is order-dependent on which mode committed last).
   const messageKeyRef: MessageKeyRef = useRef(null);
+
+  // Private ref SlidesTrack populates with its own arrow/goLive handlers while it's
+  // mounted and active — same pattern as messageKeyRef above, for the same reason.
+  const slidesKeyRef: SlidesKeyRef = useRef(null);
 
   // Guards the persist-on-change effect below from firing with the ['kjv'] default
   // before settings.get resolves (which would clobber a real saved selection).
@@ -453,10 +458,12 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       onArrow: (dir) => {
         if (track === 'scripture') stepVerse(dir);
         else if (track === 'message') messageKeyRef.current?.onArrow(dir);
+        else if (track === 'slides') slidesKeyRef.current?.onArrow(dir);
       },
       onGoLive: () => {
         if (track === 'scripture') goLive();
         else if (track === 'message') messageKeyRef.current?.onGoLive();
+        else if (track === 'slides') slidesKeyRef.current?.onGoLive();
       },
       // SermonMode has no App-level modal of its own (unlike SongsMode's QuickAdd) —
       // Settings, its only modal, is tracked directly in App via settingsOpen.
@@ -478,17 +485,6 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   );
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
-  const comingStyle: CSSProperties = {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    textAlign: 'center',
-    color: T.faint,
-    fontSize: '13px',
-    background: T.appBg
-  };
 
   return (
     <div style={rootStyle}>
@@ -498,6 +494,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
         // NOT also rendered here, since that would double up the rail (SchedulePanel's
         // tabs-only panel as one column, MessageSearchRail as a second sibling column).
         <MessageMode themeMode={themeMode} messageKeyRef={messageKeyRef} active={active} track={track} setTrack={setTrack} />
+      ) : track === 'slides' ? (
+        // Slides track: same reasoning as Message above — SlidesTrack owns its own
+        // TrackTabs + media-library rail + hero + deck rail, so SchedulePanel (whose
+        // body only ever renders for 'scripture') is not also rendered as a sibling.
+        <SlidesTrack slidesKeyRef={slidesKeyRef} active={active} track={track} setTrack={setTrack} />
       ) : (
         <>
           <SchedulePanel
@@ -513,45 +514,39 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             onAdd={() => commitBuilder(false)}
             rows={scheduleRows}
           />
-          {track === 'scripture' ? (
-            <>
-              <SermonCenter
-                theme={T}
-                variant="verse"
-                accent={T.scripture}
-                output={output}
-                cuedIsLive={cuedIsLive}
-                heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
-                cols={liveCols}
-                ondeckTag={ondeckTag}
-                ondeckTagColor={ondeckTagColor}
-                ondeckTitle={ondeckTitle}
-                ondeckPreview={ondeckPreview}
-                nextLabel={'Next verse ›'}
-                versionPicker={versionPicker}
-                onPrev={() => stepVerse(-1)}
-                onNext={() => stepVerse(1)}
-                onGoLive={goLive}
-                onToggleLogo={toggleLogo}
-              />
-              <ChapterRail
-                theme={T}
-                dark={dark}
-                width={RIGHT_PANEL_W}
-                book={previewBook}
-                ch={previewCh}
-                verseCount={railVerseCount}
-                plannedSet={railIsCued ? plannedSet : EMPTY_PLANNED}
-                cuedV={railIsCued ? scrV : -1}
-                isVerseLive={railIsCued ? isVerseLive : NEVER_LIVE}
-                previewOf={railPreviewOf}
-                selectedRange={selectedRange}
-                onSelectVerse={onRailSelectVerse}
-              />
-            </>
-          ) : (
-            <div style={comingStyle}>Coming in slice 5 — see the spec</div>
-          )}
+          <SermonCenter
+            theme={T}
+            variant="verse"
+            accent={T.scripture}
+            output={output}
+            cuedIsLive={cuedIsLive}
+            heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
+            cols={liveCols}
+            ondeckTag={ondeckTag}
+            ondeckTagColor={ondeckTagColor}
+            ondeckTitle={ondeckTitle}
+            ondeckPreview={ondeckPreview}
+            nextLabel={'Next verse ›'}
+            versionPicker={versionPicker}
+            onPrev={() => stepVerse(-1)}
+            onNext={() => stepVerse(1)}
+            onGoLive={goLive}
+            onToggleLogo={toggleLogo}
+          />
+          <ChapterRail
+            theme={T}
+            dark={dark}
+            width={RIGHT_PANEL_W}
+            book={previewBook}
+            ch={previewCh}
+            verseCount={railVerseCount}
+            plannedSet={railIsCued ? plannedSet : EMPTY_PLANNED}
+            cuedV={railIsCued ? scrV : -1}
+            isVerseLive={railIsCued ? isVerseLive : NEVER_LIVE}
+            previewOf={railPreviewOf}
+            selectedRange={selectedRange}
+            onSelectVerse={onRailSelectVerse}
+          />
         </>
       )}
     </div>
