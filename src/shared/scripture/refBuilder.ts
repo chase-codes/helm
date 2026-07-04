@@ -14,7 +14,14 @@ export interface RefBuilderState {
 export const EMPTY_EXTENT: BookExtent = { chapters: 0, verseCounts: [] }
 
 export function initialBuilder(): RefBuilderState {
-  return { stage: 'book', bookQuery: '', book: null, chapter: null, startVerse: null, endVerse: null }
+  return {
+    stage: 'book',
+    bookQuery: '',
+    book: null,
+    chapter: null,
+    startVerse: null,
+    endVerse: null
+  }
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(Math.max(n, lo), hi)
@@ -63,7 +70,12 @@ type Applied = { state: RefBuilderState; preventDefault: boolean }
 const isDigit = (k: string): boolean => k >= '0' && k <= '9'
 const isAlnum = (k: string): boolean => /^[a-z0-9]$/i.test(k)
 
-export function applyKey(s: RefBuilderState, key: string, _shift: boolean, extent: BookExtent): Applied {
+export function applyKey(
+  s: RefBuilderState,
+  key: string,
+  _shift: boolean,
+  extent: BookExtent
+): Applied {
   if (key === 'Backspace') return { state: backspace(s), preventDefault: true }
   if (key.length !== 1) return { state: s, preventDefault: false }
   return { state: printable(s, key, extent), preventDefault: true }
@@ -115,7 +127,8 @@ function backspace(s: RefBuilderState): RefBuilderState {
     case 'book':
       return s.bookQuery ? { ...s, bookQuery: s.bookQuery.slice(0, -1) } : s
     case 'chapter':
-      if (s.chapter === null) return { ...s, stage: 'book', book: null, bookQuery: s.book ?? '', chapter: null }
+      if (s.chapter === null)
+        return { ...s, stage: 'book', book: null, bookQuery: s.book ?? '', chapter: null }
       return { ...s, chapter: Math.floor(s.chapter / 10) || null }
     case 'verse':
       if (s.startVerse === null) return { ...s, stage: 'chapter' }
