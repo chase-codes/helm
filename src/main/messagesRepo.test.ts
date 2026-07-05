@@ -1,11 +1,9 @@
-import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { SCHEMA } from './db';
+import { openTestDb } from './testDb';
 import { createMessagesRepo, type MessagesRepo } from './messagesRepo';
 
 function repo(): MessagesRepo {
-  const db = new Database(':memory:');
-  db.exec(SCHEMA);
+  const db = openTestDb();
   return createMessagesRepo(db);
 }
 

@@ -49,21 +49,22 @@ npm run lint           # eslint
 
 ### `better-sqlite3` and Electron's ABI
 
-`better-sqlite3` is a native module and must be compiled against whichever Node ABI is
-currently running it. `npm test` runs under plain Node, but `npm run dev` and any packaged
-build run under Electron's own (different) Node ABI. Switch between them as needed:
+`better-sqlite3` is a native module, so its compiled binary is tied to one Node ABI.
+The app runs under Electron's ABI, so **that is the only ABI the binary is ever built
+for** — `npm run postinstall` (electron-builder `install-app-deps`) keeps it there, and
+you should never need to rebuild it by hand.
 
-```bash
-# Before npm test (plain Node ABI):
-npm rebuild better-sqlite3
+`npm test` does **not** use `better-sqlite3`. The main-process tests open their database
+through `openTestDb()` (`src/main/testDb.ts`), which is backed by Node's built-in
+`node:sqlite` (no native binary, FTS5 included). So the test suite runs under plain Node
+without touching the Electron-ABI binary — no rebuild dance, and a stray `npm install`
+can't break the app's build. Production code (`openDb` in `src/main/db.ts`) still uses
+`better-sqlite3`; only the tests are decoupled from it.
 
-# Before npm run dev / packaging (Electron's ABI):
-npx electron-rebuild -f -w better-sqlite3
-# (equivalent to `npm run postinstall`, which runs electron-builder install-app-deps)
-```
-
-If `better-sqlite3` throws a "was compiled against a different Node.js version" error,
-you're on the wrong ABI for what you just ran — rebuild for the other side.
+If `better-sqlite3` ever throws a "was compiled against a different Node.js version"
+error when launching the app, its binary got rebuilt for plain Node (usually by an
+`npm install`) — run `npx electron-rebuild -f -w better-sqlite3` (or `npm run postinstall`)
+to put it back on Electron's ABI.
 
 ## Build / package (smoke only — see spec §11, cross-platform installers are a later slice)
 

@@ -1,11 +1,11 @@
 import { beforeEach, expect, test } from 'vitest';
-import { openDb } from './db';
+import { openTestDb } from './testDb';
 import { createSongsRepo, type SongsRepo } from './songsRepo';
 import { seedIfEmpty } from './seed';
 
 let repo: SongsRepo;
 beforeEach(() => {
-  repo = createSongsRepo(openDb(':memory:'));
+  repo = createSongsRepo(openTestDb());
 });
 
 test('add parses text into sections and persists', () => {

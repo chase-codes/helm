@@ -1,14 +1,12 @@
-import Database from 'better-sqlite3'
 import { beforeEach, expect, test, vi } from 'vitest'
-import { SCHEMA } from './db'
+import { openTestDb } from './testDb'
 import { createMessageInstaller } from './messageInstaller'
 import { createMessagesRepo, type MessagesRepo, type SermonIndexEntry } from './messagesRepo'
 import type { MessageSource, SermonPayload } from './messageSource'
 import type { AudioDownloadProgress, MessageInstallProgress } from '../shared/types'
 
 function repo(): MessagesRepo {
-  const db = new Database(':memory:')
-  db.exec(SCHEMA)
+  const db = openTestDb()
   return createMessagesRepo(db)
 }
 

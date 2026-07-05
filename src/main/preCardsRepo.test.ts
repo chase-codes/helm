@@ -1,12 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import Database from 'better-sqlite3';
-import { SCHEMA } from './db';
+import { openTestDb } from './testDb';
 import { createPreCardsRepo } from './preCardsRepo';
 
 function freshRepo(): ReturnType<typeof createPreCardsRepo> {
-  const db = new Database(':memory:');
-  db.exec(SCHEMA);
-  return createPreCardsRepo(db);
+  return createPreCardsRepo(openTestDb());
 }
 
 describe('preCardsRepo', () => {
@@ -18,15 +15,13 @@ describe('preCardsRepo', () => {
     expect(cards.find((c) => c.type === 'verse')?.ref).toBe('Psalm 122:1');
   });
   it('does not re-seed when rows already exist', () => {
-    const db = new Database(':memory:');
-    db.exec(SCHEMA);
+    const db = openTestDb();
     createPreCardsRepo(db);
     const second = createPreCardsRepo(db);
     expect(second.list()).toHaveLength(5);
   });
   it('wipes and re-seeds a DB that still has a legacy countdown card', () => {
-    const db = new Database(':memory:');
-    db.exec(SCHEMA);
+    const db = openTestDb();
     const ins = db.prepare('INSERT INTO pre_cards (id, type, title, payload_json, enabled, position) VALUES (?,?,?,?,?,?)');
     ins.run('cd', 'countdown', 'Countdown', '{}', 1, 0);
     ins.run('m', 'message', 'Edited Welcome', '{}', 1, 1);
@@ -35,8 +30,7 @@ describe('preCardsRepo', () => {
     expect(cards.map((c) => c.type)).toEqual(['message', 'verse', 'list', 'list', 'logo']);
   });
   it('leaves a countdown-free populated DB untouched (migration does not re-fire)', () => {
-    const db = new Database(':memory:');
-    db.exec(SCHEMA);
+    const db = openTestDb();
     db.prepare('INSERT INTO pre_cards (id, type, title, payload_json, enabled, position) VALUES (?,?,?,?,?,?)')
       .run('only', 'message', 'Custom', '{}', 1, 0);
     const repo = createPreCardsRepo(db);

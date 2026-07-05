@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'vitest'
-import Database from 'better-sqlite3'
-import { openDb } from './db'
+import type Database from 'better-sqlite3'
+import { openTestDb } from './testDb'
 import { createBiblesRepo, type BiblesRepo } from './biblesRepo'
 import type { NormalizedBible } from '../shared/types'
 
@@ -54,7 +54,7 @@ const esv: NormalizedBible = {
 }
 
 beforeEach(() => {
-  db = openDb(':memory:')
+  db = openTestDb()
   repo = createBiblesRepo(db)
 })
 

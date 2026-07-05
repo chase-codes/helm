@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'vitest';
-import Database from 'better-sqlite3';
-import { SCHEMA } from './db';
+import type Database from 'better-sqlite3';
+import { openTestDb } from './testDb';
 import { createMessagesRepo } from './messagesRepo';
 import { createMessagesScheduleRepo, type MessagesScheduleRepo } from './messagesScheduleRepo';
 
@@ -8,8 +8,7 @@ let db: Database.Database;
 let repo: MessagesScheduleRepo;
 
 beforeEach(() => {
-  db = new Database(':memory:');
-  db.exec(SCHEMA);
+  db = openTestDb();
   const messages = createMessagesRepo(db);
   messages.installIndex([{ id: 'rapture', tapeNo: '65-1204', title: 'The Rapture', date: '', durationS: 1 }]);
   messages.installSermon('rapture', [

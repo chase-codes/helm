@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import Database from 'better-sqlite3';
-import { SCHEMA } from './db';
+import { openTestDb } from './testDb';
 import { createPreCardsRepo } from './preCardsRepo';
 import { createPreserviceEngine, type PresentationSink } from './preserviceEngine';
 import type { PresentationState, Slide } from '../shared/types';
@@ -19,7 +18,7 @@ function harness(): {
   presentation: () => PresentationState;
   setLive: (k: string | null) => void;
 } {
-  const db = new Database(':memory:'); db.exec(SCHEMA);
+  const db = openTestDb();
   const repo = createPreCardsRepo(db);
   let pres: PresentationState = initialPresentation();
   const calls: { m: string; key: string; slide: Slide }[] = [];

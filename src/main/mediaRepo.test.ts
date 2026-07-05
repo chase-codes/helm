@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import Database from 'better-sqlite3';
-import { SCHEMA } from './db';
+import { openTestDb } from './testDb';
 import { createMediaRepo } from './mediaRepo';
 
 function freshRepo(nowFn?: () => number): ReturnType<typeof createMediaRepo> {
-  const db = new Database(':memory:');
-  db.exec(SCHEMA);
+  const db = openTestDb();
   return createMediaRepo(db, nowFn);
 }
 

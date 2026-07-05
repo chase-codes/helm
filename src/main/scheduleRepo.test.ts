@@ -1,13 +1,13 @@
 import { beforeEach, expect, test } from 'vitest'
-import Database from 'better-sqlite3'
-import { openDb } from './db'
+import type Database from 'better-sqlite3'
+import { openTestDb } from './testDb'
 import { createScheduleRepo, type ScheduleRepo } from './scheduleRepo'
 
 let db: Database.Database
 let repo: ScheduleRepo
 
 beforeEach(() => {
-  db = openDb(':memory:')
+  db = openTestDb()
   repo = createScheduleRepo(db)
 })
 
