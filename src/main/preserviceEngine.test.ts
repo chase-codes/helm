@@ -11,7 +11,14 @@ import { applyCue, goLive, initialPresentation } from '../shared/presentation/co
 // functions from ../shared/presentation/core, instead of just recording calls. This
 // lets tests assert on the resulting output/liveKey STATE, which is what actually
 // matters to the audience screen — a call log can look fine while the state goes black.
-function harness() {
+function harness(): {
+  engine: ReturnType<typeof createPreserviceEngine>;
+  sink: PresentationSink;
+  calls: { m: string; key: string; slide: Slide }[];
+  repo: ReturnType<typeof createPreCardsRepo>;
+  presentation: () => PresentationState;
+  setLive: (k: string | null) => void;
+} {
   const db = new Database(':memory:'); db.exec(SCHEMA);
   const repo = createPreCardsRepo(db);
   let pres: PresentationState = initialPresentation();

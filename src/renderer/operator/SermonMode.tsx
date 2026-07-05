@@ -15,6 +15,7 @@ import {
   type RefBuilderState
 } from '../../shared/scripture/refBuilder';
 import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
+import { INSTALL_HINT } from '../../shared/scripture/labels';
 import type { BibleManifestEntry, BookExtent, ChapterData, ScriptureReading } from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
@@ -35,7 +36,6 @@ export interface SermonModeProps {
   biblesRevision: number;
 }
 
-const INSTALL_HINT = '[ Install a Bible in Settings ]';
 const SCHEDULE_PANEL_W = 270;
 const RIGHT_PANEL_W = 330;
 // Stable no-op fallbacks for ChapterRail's planned/cued/live tint props when the rail is

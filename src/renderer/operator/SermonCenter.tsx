@@ -2,6 +2,7 @@ import type { CSSProperties, JSX } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { OutputMode, Slide, SlideColumn } from '../../shared/types';
 import { SlideCanvas } from '../shared/SlideCanvas';
+import { INSTALL_HINT } from '../../shared/scripture/labels';
 
 export interface SermonCenterProps {
   theme: Theme;
@@ -37,8 +38,6 @@ export interface SermonCenterProps {
    * `liveIsSlide` branch — no heroLabel is shown alongside it, unlike verse/quote). */
   slide?: Slide;
 }
-
-const INSTALL_HINT = '[ Install a Bible in Settings ]';
 
 /** Now-bar, hero card (verse columns or a message quote), on-deck preview, and
  * transport — shared shell for the Scripture and Message tracks (Lectern.pretty.html

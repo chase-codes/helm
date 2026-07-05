@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { SCHEMA } from './db';
 import { createMediaRepo } from './mediaRepo';
 
-function freshRepo(nowFn?: () => number) {
+function freshRepo(nowFn?: () => number): ReturnType<typeof createMediaRepo> {
   const db = new Database(':memory:');
   db.exec(SCHEMA);
   return createMediaRepo(db, nowFn);

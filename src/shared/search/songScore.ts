@@ -1,7 +1,7 @@
 import type { Song, SongSearchResult, SearchField } from '../types';
-import { norm, lev } from './fuzzy';
+import { norm, lev, matchTol } from './fuzzy';
+import { lyricsOf } from '../songs/lyrics';
 
-const lyricsOf = (s: Song): string => s.sections.map((sc) => sc.lines.join(' ')).join(' ');
 const blobOf = (s: Song): string => `${s.title} ${s.author} ${lyricsOf(s)}`;
 
 export function scoreSong(query: string, song: Song, field: SearchField): { score: number; snippet: string } {
@@ -18,7 +18,7 @@ export function scoreSong(query: string, song: Song, field: SearchField): { scor
       if (w === t) { best = 0; break; }
       if (Math.abs(w.length - t.length) <= 2) { const dd = lev(t, w); if (dd < best) best = dd; }
     }
-    const tol = t.length <= 4 ? 1 : 2; if (best <= tol) matched++;
+    if (best <= matchTol(t.length)) matched++;
   }
   if (matched === qts.length && matched > 0) score = Math.max(score, 380 + matched * 12);
   for (const sc of song.sections) {

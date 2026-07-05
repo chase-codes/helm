@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchTol, rankQuotes, rankTapes, scoreTape } from './messageScore';
+import { rankQuotes, rankTapes, scoreTape } from './messageScore';
 
 const TAPES = [
   { id: 'rapture', tapeNo: '65-1204', title: 'The Rapture', date: 'December 4, 1965' },
@@ -11,11 +11,6 @@ const QUOTES = [
 ];
 
 describe('messageScore', () => {
-  it('shares the songScore tolerance rule (resolves len-5 divergence)', () => {
-    expect(matchTol(4)).toBe(1);
-    expect(matchTol(5)).toBe(2);
-    expect(matchTol(6)).toBe(2);
-  });
   it('ranks tapes by title/tape number with typo tolerance', () => {
     const r = rankTapes('raptur', TAPES);
     expect(r[0].id).toBe('rapture');

@@ -16,7 +16,7 @@ export function createOutputWindow(bounds: Electron.Rectangle, frameless = true)
   const win = new BrowserWindow({
     ...bounds, frame: !frameless, resizable: !frameless, movable: !frameless,
     backgroundColor: '#000000', autoHideMenuBar: true,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: false },
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   if (frameless) { win.setAlwaysOnTop(true, 'screen-saver'); win.setSkipTaskbar(true); win.setBounds(bounds); }
   loadOutput(win);
@@ -33,7 +33,13 @@ export function initDisplays(): void {
     for (const d of externals) {
       const existing = byDisplayId.get(d.id);
       if (existing && !existing.isDestroyed()) { existing.setBounds(d.bounds); continue; }
-      byDisplayId.set(d.id, createOutputWindow(d.bounds));
+      const win = createOutputWindow(d.bounds);
+      // Symmetric to testOutputs' 'closed' cleanup: if this output is torn down by
+      // any path other than our own sync/closeAllOutputs (e.g. Cmd+W), drop the stale
+      // map entry so displayStatus() doesn't over-count. Guard against clobbering a
+      // replacement window a later sync may have already put under this display id.
+      win.on('closed', () => { if (byDisplayId.get(d.id) === win) byDisplayId.delete(d.id); });
+      byDisplayId.set(d.id, win);
     }
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.displaysStatus, displayStatus());
   };

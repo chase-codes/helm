@@ -41,7 +41,7 @@ function snippetFor(card: PreCard, countdownText: string): string {
 // mounts this component while mode === 'pre', and engine state lives in main and is
 // re-read on mount) — kept in the prop list to match App's mount call and leave room
 // for a future keyboard delegate.
-export function PreServiceMode({ themeMode, active: _active }: PreServiceModeProps): JSX.Element {
+export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { engaged, dwellS, idx, countdownText, paused, cards } = usePreState();

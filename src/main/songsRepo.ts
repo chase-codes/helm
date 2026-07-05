@@ -4,6 +4,7 @@ import type { NewSongInput, SearchField, Song, SongSearchResult } from '../share
 import { norm } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
+import { lyricsOf } from '../shared/songs/lyrics';
 
 export interface SongsRepo {
   list(): Song[];
@@ -14,7 +15,6 @@ export interface SongsRepo {
 }
 interface Row { id: string; title: string; author: string; sections_json: string; source: string; created_at: number; rowid: number }
 const toSong = (r: Row): Song => ({ id: r.id, title: r.title, author: r.author, sections: JSON.parse(r.sections_json), source: r.source, createdAt: r.created_at });
-const lyricsOf = (s: Song): string => s.sections.map((x) => x.lines.join(' ')).join(' ');
 
 export function createSongsRepo(db: Database.Database): SongsRepo {
   const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at) VALUES (?,?,?,?,?,?)');

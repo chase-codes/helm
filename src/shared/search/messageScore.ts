@@ -1,11 +1,7 @@
-import { lev, norm } from './fuzzy';
+import { lev, matchTol, norm } from './fuzzy';
 
 export interface TapeRow { id: string; tapeNo: string; title: string; date: string }
 export interface QuoteRow { msgId: string; tapeNo: string; title: string; ord: number; label: string; text: string; snippet: string }
-
-export function matchTol(tokLen: number): number {
-  return tokLen <= 4 ? 1 : 2;
-}
 
 function tokensMatch(blob: string, qts: string[]): number {
   const words = blob.split(' ');

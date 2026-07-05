@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { norm, lev, fuzzyTok } from './fuzzy';
+import { norm, lev, fuzzyTok, matchTol } from './fuzzy';
 
 describe('norm', () => {
   test('lowercases, strips apostrophes and punctuation, collapses spaces', () => {
@@ -13,6 +13,13 @@ describe('lev', () => {
     expect(lev('grace', 'grace')).toBe(0);
     expect(lev('beleive', 'believe')).toBe(2);
     expect(lev('', 'abc')).toBe(3);
+  });
+});
+describe('matchTol', () => {
+  test('short tokens (≤4) allow 1 edit, longer allow 2 — resolves len-5 divergence', () => {
+    expect(matchTol(4)).toBe(1);
+    expect(matchTol(5)).toBe(2);
+    expect(matchTol(6)).toBe(2);
   });
 });
 describe('fuzzyTok', () => {
