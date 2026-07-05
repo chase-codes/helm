@@ -26,8 +26,7 @@ export function SlideCanvas({
 
   let bg = s.bg;
   if (!bg) {
-    if (kind === 'countdown') bg = 'radial-gradient(135% 135% at 50% 32%, #1d2330 0%, #07080b 74%)';
-    else if (kind === 'quote') bg = 'radial-gradient(135% 135% at 50% 0%, #1c1925 0%, #08070b 72%)';
+    if (kind === 'quote') bg = 'radial-gradient(135% 135% at 50% 0%, #1c1925 0%, #08070b 72%)';
     else if (kind === 'title' || kind === 'sermon')
       bg = 'radial-gradient(140% 130% at 0% 0%, #20283a 0%, #08090d 70%)';
     else bg = 'radial-gradient(135% 125% at 50% -10%, #181d28 0%, #08090c 74%)';
@@ -182,22 +181,6 @@ export function SlideCanvas({
     display: 'inline-block'
   };
 
-  const countdownStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontWeight: 500,
-    fontSize: 'clamp(20px,18cqmin,170px)',
-    letterSpacing: '0.01em',
-    color: '#fff',
-    fontVariantNumeric: 'tabular-nums'
-  };
-  const countdownMsgStyle: CSSProperties = {
-    fontWeight: 600,
-    fontSize: 'clamp(9px,3.2cqmin,28px)',
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase',
-    color: accent
-  };
-
   const isLogo = kind === 'logo';
   const blankStyle: CSSProperties = isLogo
     ? {
@@ -257,7 +240,7 @@ export function SlideCanvas({
   };
 
   const showLabel =
-    (isStage || isMain) && !!s.label && kind !== 'blank' && kind !== 'countdown' && kind !== 'logo' && kind !== 'black';
+    (isStage || isMain) && !!s.label && kind !== 'blank' && kind !== 'logo' && kind !== 'black';
   const labelStyle: CSSProperties = {
     position: 'absolute',
     top: '4cqmin',
@@ -335,19 +318,16 @@ export function SlideCanvas({
   const isQuote = active && kind === 'quote';
   const isTitle = active && (kind === 'title' || kind === 'sermon');
   const hasPoints = isTitle && (s.points || []).length > 0;
-  const isCountdown = active && kind === 'countdown';
   const isImage = active && kind === 'image';
   const isBlank = active && (kind === 'blank' || kind === 'black' || kind === 'logo');
   const blankText = isLogo ? s.title || 'HELM' : kind === 'black' ? '' : '—';
   const hasNext = isStage && !!next;
-  const isLowerThird = isLT && kind !== 'blank' && kind !== 'black' && kind !== 'logo' && kind !== 'countdown';
+  const isLowerThird = isLT && kind !== 'blank' && kind !== 'black' && kind !== 'logo';
   const showBackPlate = isLT;
 
   const lines = s.lines || [];
   const columns = s.columns || [];
   const points = s.points || [];
-  const countdownText = s.countdownText || '10:00';
-  const messageText = s.message || 'Service begins in';
 
   return (
     <div style={rootStyle}>
@@ -399,13 +379,6 @@ export function SlideCanvas({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {isCountdown && (
-        <div style={contentStyle}>
-          <div style={countdownMsgStyle}>{messageText}</div>
-          <div style={countdownStyle}>{countdownText}</div>
         </div>
       )}
 

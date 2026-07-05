@@ -12,7 +12,7 @@ export function usePresentationState(): PresentationState {
   return st;
 }
 export function usePreState(): PreState {
-  const [s, setS] = useState<PreState>({ engaged: false, loopOn: true, idx: 0, dwellS: 12, countdownText: '10:00', paused: false, cards: [] });
+  const [s, setS] = useState<PreState>({ engaged: false, loopOn: true, idx: 0, dwellS: 12, cards: [] });
   useEffect(() => {
     let live = true;
     void window.helm.preservice.getState().then((st) => { if (live) setS(st); });

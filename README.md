@@ -1,7 +1,7 @@
 # Helm
 
 A Mac + Windows desktop app for running a church service from one seat: congregational
-songs and scripture (sermon quotes and a pre-service loop are planned but not yet built) —
+songs, scripture, sermon quotes, and a rotating pre-service loop —
 searched by half-remembered lyric or typed reference, cued and taken live from an operator
 console, and projected full-screen to a second display over HDMI. Everything is stored
 locally in SQLite; the operator window and the physical output are both pure renders of
@@ -9,14 +9,15 @@ one shared presentation state, so what you see in the preview is exactly what th
 sees. See `docs/superpowers/specs/2026-07-03-helm-design.md` §1 for the full purpose and
 success criteria.
 
-**Status:** slice 1–2 (songs mode), slice 3 (scripture), and slice 4 (the Message track)
-are implemented — song search, cue, go-live, quick-add, keyboard control, resizable panels,
+**Status:** slice 1–2 (songs mode), slice 3 (scripture), slice 4 (the Message track), and
+slice 5 (the pre-service loop) are implemented — song search, cue, go-live, quick-add, keyboard control, resizable panels,
 auto-attaching output window; scripture reference parsing, bundled KJV plus an in-app Bible
 installer, sermon-mode scripture track with chapter rail and translation compare; and the
 Message track — William Branham sermon "tapes" with full-text offline search (tape search,
 quote search, search-within-a-tape), quote slides, a tape audio player, and a scrolling
-follow-along reading view. The pre-service loop and multi-display roles are deferred to
-later slices (spec §11).
+follow-along reading view. Slice 5 adds the pre-service loop — a rotating welcome / verse /
+announcements / prayer / logo card set on a dwell timer, engaged and taken live from the
+operator's Pre-Service tab. Multi-display roles remain deferred to later slices (spec §11).
 
 **Message track — acquisition & audio (spec `docs/superpowers/specs/2026-07-03-helm-slice-4-message-design.md`).**
 Sermon text and audio come from Voice of God Recordings' official distribution only.

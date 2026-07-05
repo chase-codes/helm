@@ -70,9 +70,6 @@ const api: HelmApi = {
     toggleEnabled: (id) => ipcRenderer.send(CH.preserviceToggleEnabled, id),
     saveCard: (c) => ipcRenderer.send(CH.preserviceSaveCard, c),
     removeCard: (id) => ipcRenderer.send(CH.preserviceRemoveCard, id),
-    addMinute: () => ipcRenderer.send(CH.preserviceAddMinute),
-    resetCountdown: () => ipcRenderer.send(CH.preserviceReset),
-    togglePause: () => ipcRenderer.send(CH.preserviceTogglePause),
   },
   media: {
     list: () => ipcRenderer.invoke(CH.mediaList),

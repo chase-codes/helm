@@ -6,7 +6,6 @@ interface Row { id: string; type: string; title: string; payload_json: string; e
 const PAYLOAD_KEYS = ['headline', 'subtitle', 'ref', 'text', 'points', 'src'] as const;
 
 const SEED: Omit<PreCard, 'id'>[] = [
-  { type: 'countdown', title: 'Countdown', enabled: true },
   { type: 'message', title: 'Welcome', headline: 'Welcome', subtitle: 'We\'re glad you\'re here this morning', enabled: true },
   { type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'I was glad when they said unto me, Let us go into the house of the LORD.', enabled: true },
   { type: 'list', title: 'Announcements', points: ['Fellowship dinner — next Sunday after service', 'Youth night — Wednesday 7:00 PM', 'Fall campout sign-up sheet in the foyer'], enabled: true },
@@ -42,11 +41,26 @@ export function createPreCardsRepo(db: Database.Database): PreCardsRepo {
 
   const list = (): PreCard[] => (selectAll.all() as Row[]).map(toCard);
 
-  if ((count.get() as { n: number }).n === 0) {
+  const seed = (): void => {
     const seedTx = db.transaction(() => {
       SEED.forEach((c, i) => insert.run(randomUUID(), c.type, c.title, payloadOf(c), c.enabled ? 1 : 0, i));
     });
     seedTx();
+  };
+
+  // One-time migration: older installs auto-seeded a now-removed 'countdown' card.
+  // Wipe the whole loop so the count==0 guard below re-seeds the countdown-free
+  // defaults. Self-limiting — after re-seed no countdown row remains, so it never
+  // fires again. Must run BEFORE the count==0 guard, or a populated countdown-bearing
+  // DB would slip through untouched. Acceptable wipe: pre-cards are still auto-seeded
+  // defaults at this stage, so any operator edits are discarded.
+  const hasCountdown = db.prepare("SELECT COUNT(*) AS n FROM pre_cards WHERE type = 'countdown'");
+  if ((hasCountdown.get() as { n: number }).n > 0) {
+    db.prepare('DELETE FROM pre_cards').run();
+  }
+
+  if ((count.get() as { n: number }).n === 0) {
+    seed();
   }
 
   return {

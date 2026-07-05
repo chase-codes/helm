@@ -22,10 +22,8 @@ const PRE_HINT =
   'The loop rotates through the cards on the left while people arrive. Tap any card to show it immediately. Move to Songs when the music starts.';
 
 /** Port of the prototype's per-row snippet logic (Lectern.dc.html ~L1023–1027). */
-function snippetFor(card: PreCard, countdownText: string): string {
+function snippetFor(card: PreCard): string {
   switch (card.type) {
-    case 'countdown':
-      return `Service begins in ${countdownText}`;
     case 'message':
       return (card.headline || 'Welcome') + (card.subtitle ? ` — ${card.subtitle}` : '');
     case 'verse':
@@ -44,14 +42,13 @@ function snippetFor(card: PreCard, countdownText: string): string {
 export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
-  const { engaged, dwellS, idx, countdownText, paused, cards } = usePreState();
+  const { engaged, dwellS, idx, cards } = usePreState();
 
   // null = closed, 'new' = add-card flow, a PreCard = editing that card.
   const [editing, setEditing] = useState<PreCard | 'new' | null>(null);
 
   const idxC = Math.max(0, Math.min(idx, cards.length - 1));
   const current = cards[idxC];
-  const isCountdown = current?.type === 'countdown';
   const enabledCount = cards.filter((c) => c.enabled).length;
 
   // ---------------- styles (ported verbatim from Lectern.dc.html's computed values) ----------------
@@ -162,7 +159,7 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
     background: T.appBg
   };
 
-  const cardForSlide: PreCard = current ?? { id: '', type: 'countdown', title: '', enabled: true };
+  const cardForSlide: PreCard = current ?? { id: '', type: 'logo', title: '', enabled: true };
 
   return (
     <div style={rootStyle}>
@@ -179,7 +176,7 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {cards.map((card, i) => {
             const isShowing = engaged && i === idxC;
-            const canEdit = card.type !== 'countdown' && card.type !== 'logo';
+            const canEdit = card.type !== 'logo';
             const rowStyle: CSSProperties = {
               display: 'block',
               width: '100%',
@@ -270,7 +267,7 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
                     </span>
                   </div>
                 </div>
-                <div style={snippetStyle}>{snippetFor(card, countdownText)}</div>
+                <div style={snippetStyle}>{snippetFor(card)}</div>
               </button>
             );
           })}
@@ -299,7 +296,7 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
               boxShadow: '0 18px 50px rgba(0,0,0,.3)'
             }}
           >
-            <SlideCanvas slide={preSlideFor(cardForSlide, countdownText)} fill />
+            <SlideCanvas slide={preSlideFor(cardForSlide)} fill />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
             <button style={ghostBtn} onClick={() => window.helm.preservice.step(-1)} title="Previous card">
@@ -324,20 +321,6 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
             <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(1)}>
               +
             </button>
-            {isCountdown && (
-              <>
-                <div style={dividerStyle} />
-                <button style={smallGhost} onClick={() => window.helm.preservice.addMinute()}>
-                  +1 min
-                </button>
-                <button style={smallGhost} onClick={() => window.helm.preservice.togglePause()}>
-                  {paused ? '▶ Resume' : '❚❚ Pause'}
-                </button>
-                <button style={smallGhost} onClick={() => window.helm.preservice.resetCountdown()}>
-                  Reset
-                </button>
-              </>
-            )}
           </div>
           <div style={{ fontSize: '13px', color: T.dim, marginTop: '18px', lineHeight: 1.5 }}>{PRE_HINT}</div>
         </div>

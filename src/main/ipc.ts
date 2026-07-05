@@ -96,9 +96,6 @@ export function registerIpc(
     preserviceEngine.saveCard(c),
   );
   ipcMain.on(CH.preserviceRemoveCard, (_e, id: string) => preserviceEngine.removeCard(id));
-  ipcMain.on(CH.preserviceAddMinute, () => preserviceEngine.addMinute());
-  ipcMain.on(CH.preserviceReset, () => preserviceEngine.resetCountdown());
-  ipcMain.on(CH.preserviceTogglePause, () => preserviceEngine.togglePause());
 
   ipcMain.handle(CH.mediaList, () => mediaRepo.list());
   ipcMain.handle(CH.mediaImportImages, () => mediaImport.importImages());

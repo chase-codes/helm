@@ -12,7 +12,7 @@ import type { PreCard, PreState } from '../../shared/types'
 afterEach(cleanup)
 
 const cards: PreCard[] = [
-  { id: 'a', type: 'countdown', title: 'Countdown', enabled: true },
+  { id: 'a', type: 'message', title: 'Greeting', headline: 'Welcome', enabled: true },
   { id: 'b', type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'I was glad…', enabled: true }
 ]
 
@@ -21,8 +21,6 @@ const baseState: PreState = {
   loopOn: true,
   idx: 0,
   dwellS: 12,
-  countdownText: '10:00',
-  paused: false,
   cards
 }
 
@@ -40,10 +38,7 @@ function installHelmStub(state: PreState): { showCard: ReturnType<typeof vi.fn> 
       setDwell: vi.fn(),
       toggleEnabled: vi.fn(),
       saveCard: vi.fn(),
-      removeCard: vi.fn(),
-      addMinute: vi.fn(),
-      resetCountdown: vi.fn(),
-      togglePause: vi.fn()
+      removeCard: vi.fn()
     }
   }
   return { showCard }
@@ -61,7 +56,7 @@ describe('PreServiceMode', () => {
         <PreServiceMode themeMode="dark" active />
       </ThemeCtx.Provider>
     )
-    expect(await screen.findByText('Countdown')).toBeTruthy()
+    expect(await screen.findByText('Greeting')).toBeTruthy()
     expect(await screen.findByText('Psalm 122:1')).toBeTruthy()
   })
 

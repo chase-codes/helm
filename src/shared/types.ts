@@ -12,17 +12,17 @@ export interface NewSongInput { title: string; author?: string; text: string; so
 
 export type SlideKind =
   | 'lyrics' | 'scripture' | 'quote' | 'title' | 'sermon'
-  | 'countdown' | 'logo' | 'black' | 'blank' | 'reading' | 'image';
+  | 'logo' | 'black' | 'blank' | 'reading' | 'image';
 export interface SlideColumn { version: string; text: string }
 export interface Slide {
   kind: SlideKind; accent?: string; label?: string; lines?: string[];
   ref?: string; columns?: SlideColumn[]; text?: string; source?: string;
   title?: string; subtitle?: string; points?: string[];
-  message?: string; countdownText?: string; bg?: string; src?: string;
+  bg?: string; src?: string;
   paras?: { label: string; text: string }[]; activeOrd?: number;
 }
 
-export type PreCardType = 'countdown' | 'message' | 'verse' | 'list' | 'logo' | 'image';
+export type PreCardType = 'message' | 'verse' | 'list' | 'logo' | 'image';
 export interface PreCard {
   id: string; type: PreCardType; title: string; enabled: boolean;
   headline?: string; subtitle?: string;      // message
@@ -77,8 +77,7 @@ export const CH = {
   preserviceShow: 'preservice:show', preserviceStep: 'preservice:step',
   preserviceToggleLoop: 'preservice:toggleLoop', preserviceSetDwell: 'preservice:setDwell',
   preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
-  preserviceRemoveCard: 'preservice:removeCard', preserviceAddMinute: 'preservice:addMinute',
-  preserviceReset: 'preservice:reset', preserviceTogglePause: 'preservice:togglePause',
+  preserviceRemoveCard: 'preservice:removeCard',
   mediaList: 'media:list', mediaImportImages: 'media:importImages',
   mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
   mediaRemove: 'media:remove',
@@ -121,8 +120,7 @@ export interface AudioDownloadProgress {
 export interface QuoteScheduleItem { id: string; msgId: string; ord: number; label: string; tapeNo: string; title: string }
 
 export interface PreState {
-  engaged: boolean; loopOn: boolean; idx: number; dwellS: number;
-  countdownText: string; paused: boolean; cards: PreCard[];
+  engaged: boolean; loopOn: boolean; idx: number; dwellS: number; cards: PreCard[];
 }
 
 // Re-exports so consumers can pull these API-surface types from '../shared/types' alongside
@@ -192,7 +190,6 @@ export interface HelmApi {
     toggleEnabled(id: string): void;
     saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;
     removeCard(id: string): void;
-    addMinute(): void; resetCountdown(): void; togglePause(): void;
   };
   media: {
     list(): Promise<MediaItem[]>;

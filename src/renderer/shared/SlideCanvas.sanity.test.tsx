@@ -19,12 +19,6 @@ test('title kind with points renders points', () => {
   expect(container.textContent).toContain('B');
 });
 
-test('countdown renders message and countdown text', () => {
-  const { container } = render(<SlideCanvas slide={{ kind: 'countdown', countdownText: '05:00' }} />);
-  expect(container.textContent).toContain('05:00');
-  expect(container.textContent).toContain('Service begins in');
-});
-
 test('stage variant shows chrome clock and next', () => {
   const { container } = render(
     <SlideCanvas slide={{ kind: 'lyrics', lines: ['L1'] }} variant="stage" clock="10:42" next="Chorus" />
