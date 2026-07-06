@@ -59,11 +59,27 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // Dragging the operator window onto (or off of) a display fires no `screen` event —
+  // display-added/removed/metrics-changed are display-topology events, not window-move
+  // events — so resyncDisplays() would never re-run and a stale output could keep
+  // running on the operator's new display (or a vacated display wouldn't get its
+  // output back). Resync on move, debounced (trailing-edge) since 'moved' can fire
+  // continuously during a drag and resyncDisplays() may destroy/create BrowserWindows.
+  let moveResyncTimer: NodeJS.Timeout | null = null
+  mainWindow.on('moved', () => {
+    if (moveResyncTimer) clearTimeout(moveResyncTimer)
+    moveResyncTimer = setTimeout(() => {
+      moveResyncTimer = null
+      resyncDisplays()
+    }, 200)
+  })
+
   // Output windows (real-display and test) are always-on-top and have no window
   // chrome of their own — if the operator window closes without taking them down,
   // they're orphaned with no way for the user to close them. Destroy them here.
   mainWindow.on('closed', () => {
     operatorWindow = null
+    if (moveResyncTimer) clearTimeout(moveResyncTimer)
     closeAllOutputs()
   })
 

@@ -106,7 +106,7 @@ function sync(): void {
     return {
       id: d.id,
       fingerprint: fingerprintDisplay(d),
-      label: d.label,
+      label: d.label ?? '',
       width: d.size.width,
       height: d.size.height,
       scaleFactor: d.scaleFactor,
