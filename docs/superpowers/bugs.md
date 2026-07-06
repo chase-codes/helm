@@ -18,8 +18,30 @@ Entry template:
 
 ## Open
 
+_(none)_
+
+---
+
+## Fixed
+
 ### BUG-001 — Stale focus ring persists on mouse-clicked controls after keyboard navigation
-**Status:** Open · **Area:** Songs → section rail + transport (`SectionRail.tsx`, `SongsMode.tsx`); likely app-wide
+**Status:** Fixed (`7b34971`) · **Area:** app-wide (operator) — first seen in Songs → section rail + transport (`SectionRail.tsx`, `SongsMode.tsx`)
+
+**Root cause (verified):** A mouse click focuses the clicked `<button>` (default pointer
+behavior). The app navigates via a global `document` keydown delegate (`App.tsx`) that
+updates React state **without moving DOM focus**, so the last-clicked button keeps focus;
+when arrow-key navigation begins, Chromium promotes that still-focused button to
+`:focus-visible` and paints a focus ring that lingers. Confirmed on both a stateful section
+row and a stateless transport button, which ruled out the diverging cued/live index
+hypothesis (the transport button has no cued/live styling yet showed the ring).
+
+**Fix:** A global click handler (`blurOnPointerClick.ts`, registered on `document` in
+`App.tsx`) blurs pointer-activated buttons (`click.detail > 0`) so no control retains focus
+into subsequent keyboard navigation. Keyboard-activated clicks (`detail === 0`) stay
+focused, preserving keyboard focus indication. Covered by `blurOnPointerClick.test.ts`.
+
+**Remaining:** on-screen visual confirmation in the running app (click a control → arrow-key
+away → no lingering ring) — natural to eyeball during the Windows smoke test.
 
 **Repro (two confirmed triggers):**
 - _Section rail:_
@@ -49,9 +71,3 @@ Rule out a diverging cued/live index during verification.
 
 **Notes:** Only observed after a mouse click; keyboard-only navigation doesn't leave a ring.
 Two distinct controls affected (section row + transport), suggesting broad scope.
-
----
-
-## Fixed
-
-_(none yet)_
