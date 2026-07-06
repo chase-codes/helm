@@ -134,7 +134,7 @@ export function Header({ mode, setMode, themeMode, toggleTheme, onOpenSettings }
       </div>
       <div style={{ flex: 1 }} />
       <span style={outputsChipStyle}>
-        {outputs} OUTPUT{outputs === 1 ? '' : 'S'}
+        {outputs} OUTPUT{outputs === 1 ? '' : 'S'}{isLive ? ' · LIVE' : ''}
       </span>
       <button
         style={liveStatusStyle}

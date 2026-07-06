@@ -4,6 +4,7 @@ import {
   type MessageImportResult,
   type NewSongInput,
   type OutputMode,
+  type OutputRole,
   type PreCard,
   type ScriptureReading,
   type SearchField,
@@ -23,7 +24,7 @@ import type { MediaImport } from './mediaImport';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { video } from './videoState';
-import { displayStatus, openTestOutput } from './displays';
+import { displayStatus, openTestOutput, setDisplayRole } from './displays';
 
 export function registerIpc(
   repo: SongsRepo,
@@ -48,6 +49,7 @@ export function registerIpc(
   ipcMain.on(CH.presSetOutput, (_e, mode: OutputMode) => presentation.setOutput(mode));
   ipcMain.handle(CH.displaysGet, () => displayStatus());
   ipcMain.on(CH.displaysOpenTest, () => openTestOutput());
+  ipcMain.on(CH.displaysSetRole, (_e, fp: string, role: OutputRole) => setDisplayRole(fp, role));
   ipcMain.handle(CH.biblesManifest, () => installer.manifest());
   ipcMain.on(CH.biblesInstall, (_e, id: string) => installer.install(id));
   ipcMain.handle(CH.biblesUninstall, (_e, id: string) => installer.uninstall(id));

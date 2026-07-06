@@ -73,7 +73,7 @@ export const CH = {
   presState: 'presentation:state',           // main → all windows
   outputSlide: 'output:slide',               // main → output windows
   displaysGet: 'displays:get', displaysStatus: 'displays:status',
-  displaysOpenTest: 'displays:openTest',
+  displaysOpenTest: 'displays:openTest', displaysSetRole: 'displays:setRole',
   biblesManifest: 'bibles:manifest', biblesInstall: 'bibles:install',
   biblesUninstall: 'bibles:uninstall',
   biblesProgress: 'bibles:progress',  // main → all windows
@@ -168,6 +168,7 @@ export interface HelmApi {
     get(): Promise<DisplayStatus>;
     onStatus(cb: (d: DisplayStatus) => void): () => void;
     openTest(): void;
+    setRole(fingerprint: string, role: OutputRole): void;
   };
   bibles: {
     manifest(): Promise<BibleManifestEntry[]>;
