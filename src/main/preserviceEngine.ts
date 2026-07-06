@@ -48,8 +48,14 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
 
   function tick(): void {
     if (!engaged) return;
-    const lk = sink.liveKey();
-    if (lk && !lk.startsWith('pre:')) { engaged = false; loopT = 0; stopTimer(); emit(); return; }
+    // Yield whenever the engine is no longer the thing actually on the audience screen.
+    // This covers BOTH another flow taking the live key (liveKey changes) AND the operator
+    // clearing the screen with ✕ Take down / Logo (output leaves 'live' while liveKey stays
+    // a stale 'pre:' key). Checking only liveKey missed the latter, so the loop resurrected
+    // itself at the next dwell boundary. `isLive` is true only when output==='live' AND the
+    // live key is this exact card, so both cases fall through to disengage.
+    const c = cards[idx];
+    if (!c || !sink.isLive(preKey(c.id))) { engaged = false; loopT = 0; stopTimer(); emit(); return; }
     if (!loopOn) return;
     loopT += 1;
     if (loopT >= dwellS) { idx = nextEnabledIdx(cards, idx, 1); loopT = 0; pushLive(); emit(); }

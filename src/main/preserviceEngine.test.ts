@@ -3,7 +3,7 @@ import { openTestDb } from './testDb';
 import { createPreCardsRepo } from './preCardsRepo';
 import { createPreserviceEngine, type PresentationSink } from './preserviceEngine';
 import type { PresentationState, Slide } from '../shared/types';
-import { applyCue, goLive, initialPresentation } from '../shared/presentation/core';
+import { applyCue, goLive, initialPresentation, setOutput } from '../shared/presentation/core';
 
 // The fake sink models REAL presentation-state semantics (goLive's toggle-to-black
 // on same-key, applyCue's same-flow hot-update) by delegating to the actual reducer
@@ -17,6 +17,7 @@ function harness(): {
   repo: ReturnType<typeof createPreCardsRepo>;
   presentation: () => PresentationState;
   setLive: (k: string | null) => void;
+  takeDown: () => void;
 } {
   const db = openTestDb();
   const repo = createPreCardsRepo(db);
@@ -34,7 +35,10 @@ function harness(): {
     presentation: () => pres,
     // Simulates another flow (e.g. a song) taking the live key, independent of the
     // engine — used to test that preservice yields when it's no longer showing.
-    setLive: (k: string | null) => { pres = { ...pres, liveKey: k }; }
+    setLive: (k: string | null) => { pres = { ...pres, liveKey: k }; },
+    // Simulates the operator's ✕ TAKE DOWN control (Header.tsx → setOutput('black')):
+    // the screen goes black but liveKey stays on the pre card.
+    takeDown: () => { pres = setOutput(pres, 'black'); }
   };
 }
 
@@ -63,6 +67,18 @@ describe('preserviceEngine', () => {
     setLive('song:abc:0');
     engine.tick();
     expect(engine.getState().engaged).toBe(false);
+  });
+  it('yields and does not resurrect after the screen is taken down', () => {
+    const { engine, presentation, takeDown } = harness();
+    engine.setDwell(-100); // clamp to min dwell so ticks reach a rotation boundary quickly
+    engine.engage();
+    expect(presentation().output).toBe('live');
+    takeDown(); // operator hits ✕ TAKE DOWN
+    expect(presentation().output).toBe('black');
+    const dwell = engine.getState().dwellS;
+    for (let t = 1; t <= dwell + 1; t++) engine.tick(); // tick past a dwell boundary
+    expect(presentation().output).toBe('black');       // stays down — no resurrection
+    expect(engine.getState().engaged).toBe(false);     // loop disengaged
   });
 
   describe('goLive toggle-to-black regression', () => {
