@@ -26,7 +26,7 @@ export type PreCardType = 'message' | 'verse' | 'list' | 'logo' | 'image';
 export interface PreCard {
   id: string; type: PreCardType; title: string; enabled: boolean;
   headline?: string; subtitle?: string;      // message
-  ref?: string; text?: string;               // verse
+  ref?: string; text?: string; version?: string;   // verse
   points?: string[];                         // list
   src?: string;                              // image (helm-media:// url)
 }

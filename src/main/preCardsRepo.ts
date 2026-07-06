@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type { PreCard, PreCardType } from '../shared/types';
 
 interface Row { id: string; type: string; title: string; payload_json: string; enabled: number; position: number }
-const PAYLOAD_KEYS = ['headline', 'subtitle', 'ref', 'text', 'points', 'src'] as const;
+const PAYLOAD_KEYS = ['headline', 'subtitle', 'ref', 'text', 'version', 'points', 'src'] as const;
 
 const SEED: Omit<PreCard, 'id'>[] = [
   { type: 'message', title: 'Welcome', headline: 'Welcome', subtitle: 'We\'re glad you\'re here this morning', enabled: true },

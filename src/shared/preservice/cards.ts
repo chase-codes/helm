@@ -7,7 +7,7 @@ export function preSlideFor(card: PreCard): Slide {
     case 'message':
       return { kind: 'title', accent: AMBER, title: card.headline || 'Welcome', subtitle: card.subtitle ?? '' };
     case 'verse':
-      return { kind: 'scripture', accent: '#6f9cf0', ref: card.ref || '', label: card.ref || '', columns: [{ version: 'KJV', text: card.text || '' }] };
+      return { kind: 'scripture', accent: '#6f9cf0', ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version || 'KJV', text: card.text || '' }] };
     case 'list':
       return { kind: 'title', accent: AMBER, title: card.title, points: card.points || [] };
     case 'image':

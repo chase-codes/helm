@@ -14,6 +14,11 @@ describe('preCardsRepo', () => {
     expect(cards.find((c) => c.type === 'logo')?.enabled).toBe(false);
     expect(cards.find((c) => c.type === 'verse')?.ref).toBe('Psalm 122:1');
   });
+  it('persists the version field on a verse card', () => {
+    const repo = freshRepo();
+    const after = repo.save({ type: 'verse', title: 'John 3:16', ref: 'John 3:16', text: 'For God…', version: 'WEB', enabled: true });
+    expect(after.find((c) => c.ref === 'John 3:16')?.version).toBe('WEB');
+  });
   it('does not re-seed when rows already exist', () => {
     const db = openTestDb();
     createPreCardsRepo(db);
