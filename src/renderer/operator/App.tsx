@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { themeFor } from '../../shared/theme';
+import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
 import { PreServiceMode } from './PreServiceMode';
 import { SermonMode } from './SermonMode';
@@ -94,6 +95,14 @@ function App(): JSX.Element {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [settingsOpen]);
+
+  // Release DOM focus from mouse-clicked buttons so the last-clicked control doesn't keep
+  // a lingering :focus-visible ring once keyboard navigation begins (BUG-001). See
+  // blurOnPointerClick for the full rationale; keyboard activation stays focused.
+  useEffect(() => {
+    document.addEventListener('click', blurOnPointerClick);
+    return () => document.removeEventListener('click', blurOnPointerClick);
+  }, []);
 
   const rootStyle: CSSProperties = {
     height: '100vh',
