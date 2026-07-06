@@ -3,6 +3,7 @@ import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { keyForSong } from '../../shared/presentation/core';
+import { stanzaLabel } from '../../shared/songs/stanza';
 import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
@@ -36,11 +37,10 @@ function loadWidth(key: string, fallback: number): number {
 }
 
 function toRow(song: Song, snippet: string, activeSongId: string | null): SongRow {
-  const sectionCount = song.sections.length;
   return {
     id: song.id,
     title: song.title,
-    author: `${song.author} · ${sectionCount}${sectionCount === 1 ? ' section' : ' sections'}`,
+    author: `${song.author} · ${stanzaLabel(song.sections.length)}`,
     snippet,
     hasSnippet: !!snippet,
     isActive: song.id === activeSongId
