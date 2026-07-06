@@ -1,3 +1,4 @@
+import '../shared/fonts'
 import './global.css'
 
 import { StrictMode } from 'react'
