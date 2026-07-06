@@ -18,11 +18,62 @@ Entry template:
 
 ## Open
 
-_(none)_
+> Bugs BUG-002…BUG-006 were found and **measured** in the song-search spike
+> (`docs/superpowers/specs/2026-07-06-song-search-spike-findings.md`). The harness
+> under `scratch/search-spike/` reproduces each against the real
+> `songsRepo.search`/`rankSongs`/FTS pipeline. Severity is fit-to-workflow
+> (`Enter`-takes-top ⇒ precision@1 is king).
+
+### BUG-003 — Accented songs found by FTS then scored 0 by `norm()` · **SEV 2**
+**Status:** Open · **Area:** Songs search (`fuzzy.ts` `norm`, `songScore.ts`) — **shared code**
+
+**Repro:**
+1. Library contains an accented title/lyric (e.g. `Renuévame`, `Señor`).
+2. Search `renuevame` (All) or `senor` (Lyric) — unaccented, as an operator would type.
+
+**Expected:** The accented song ranks 1.
+**Actual:** Returns nothing / drops the song. Harness localization: `ftsHit(target)=TRUE, scorerScore=0` — FTS folds diacritics (`schema.ts:14`, `remove_diacritics 2`) and *returns* the song, but `norm()` (`fuzzy.ts:2`, `replace(/[^a-z0-9 ]/g,' ')`) turns every accented letter into a space (`renuévame`→`renu vame`), so the scorer can't match. Measured accented-text p@1 = **60%**; multi-word accented titles survive only on the fragile 360 snippet floor.
+
+**Root cause (measured):** `norm()` destroys non-ASCII letters instead of folding them (NFD + strip combining marks + `ß`→`ss` would fix it).
+
+**Notes:** ⚠️ `norm` is **shared** with message search (`messagesRepo.ts:117`, `messageScore.ts`) and scripture book-name/ref parsing (`scripture/books.ts`, `scripture/refs.ts`) — the fix helps those too but must be validated there. Priority scales with how multilingual real congregations are (open question for the team).
+
+### BUG-004 — `≥30` FTS-hit fallback silently disables typo tolerance · **SEV 3**
+**Status:** Open · **Area:** Songs search candidate gate (`songsRepo.ts:43`)
+
+**Repro:**
+1. Library large enough that a common word returns ≥30 prefix hits (a few hundred songs).
+2. Search a multi-token query mixing a common correctly-spelled word with a misspelled *distinguishing* word: `holy reckelss` (meaning *Reckless Love*), `praise recukless`.
+
+**Expected:** Fuzzy match rescues the typo (`lev("reckelss","reckless")`≈1).
+**Actual:** Target **absent**. `songsRepo.ts:43`: `if (rowids.length >= 30)` ranks only the FTS candidates; the whole-library fuzzy scan (the only path that can catch a typo whose correct spelling isn't a token prefix) never runs. Harness: `holy reckelss` → ftsCount=252, fallback=false, *Reckless Love* ABSENT.
+
+**Root cause (measured):** typo tolerance is gated on an arbitrary hit-count constant (30) and library size, not on "did a token fail to match?".
+
+**Notes:** Single-token typos (the common audible mistype) are safe — they yield sparse FTS hits and full-scan fires — so this only bites the multi-token subset (measured misspelled-title p@1 was still 100%). Lower severity but a silent cliff. Fix: union FTS candidates with a fuzzy pass, or gate on unmatched tokens rather than raw count.
+
+### BUG-005 — No stemming; bare inflected single-token queries miss · **SEV 4 (minor)**
+**Status:** Open · **Area:** Songs search tokenization (`fuzzy.ts`, `songScore.ts`)
+**Repro:** search `praising` alone for a song whose lyric says "Praising" (base form `praise`). **Expected:** match. **Actual:** `lev("praise","praising")=3 > tol 2` → no token match; only rescued when the query also contains a clean token (why inflected-form measured 100% — those queries had a second matching word). **Notes:** shared `norm`/tokenizer surface; light suffix folding (`-ing/-ed/-s`) closes it. Low frequency.
+
+### BUG-006 — Search latency grows linearly; cheapest-to-mistype query hits the most expensive path · **SEV 4 (watch)**
+**Status:** Open · **Area:** Songs search (`songsRepo.ts` fallback scan, `SongsMode.tsx:104` parallel lyric pass)
+**Repro:** measure ms/search vs library size. Harness: **3.9 ms @200, 18.3 ms @1000, 56.5 ms @3000** songs. **Notes:** per keystroke; **Title mode doubles it** (parallel lyric search, `SongsMode.tsx:104`); the sparse-FTS fallback runs full-library Levenshtein, so a single-token typo — the hurried operator's likely input — triggers the most expensive path. Fine today; watch if libraries reach thousands. Fix candidates: debounce, drop/relax the double search, cap the fuzzy scan.
 
 ---
 
 ## Fixed
+
+### BUG-002 — `Enter` cues by DB insertion order, not relevance (score-tie plateaus) · **SEV 1**
+**Status:** Fixed (`00340da`) · **Area:** Songs search ranking (`songScore.ts`, consumed by `SongsMode.tsx` Enter path)
+
+**Root cause (measured):** flat score buckets — a single fuzzy token → `380+12·matched` for every song with that word; snippet floor `360` — plus `rankSongs` sorting by `score` only, so tied top hits fell through to `Array.sort` stability = **insertion order**. In production `list()` orders by `created_at, title` (`songsRepo.ts:22`), so an operator's later-pasted songs *lost* these ties. Harness proof: same ranker, targets inserted last instead of first → **p@1 91%→83%**, `faithfullness` 1→10, `amazin grace`/`grace amazing` 1→8.
+
+**Fix (A1 — deterministic relevance tie-breaker):** `scoreSong` now returns relevance sub-signals and `rankSongs` compares them after `score`, before any insertion-order fallback: title-token coverage → title-match closeness → overall coverage → title-starts-with → shorter title → title string (a content-based, fully deterministic final key). Primary score buckets are unchanged, so the clean cases that already measured 100% are untouched. `fuzzy.ts` is deliberately not touched (protects shared message + scripture search). Design: `docs/superpowers/specs/2026-07-06-song-search-tiebreaker-design.md`.
+
+**Proof:** spike harness now asserts order-independence — inserted-first p@1 == inserted-last p@1 = **91%** (was 83% when last), **0 flips**, **0/46** rank-1 pairs unresolved by relevance. Covered permanently by `songScore.test.ts` tie-breaker cases (`npm test`).
+
+**Remaining / follow-up:** `faithfullness` and its filler ties are separated deterministically but the *real* song still isn't rank 1 (target and fillers are identical on every title signal; only lyric term-frequency would distinguish them). That residue is the documented trigger for **A2** (spread the flat score buckets into a continuous score) — deferred, tracked in the spike findings' Recommendation.
 
 ### BUG-001 — Stale focus ring persists on mouse-clicked controls after keyboard navigation
 **Status:** Fixed (`7b34971`) · **Area:** app-wide (operator) — first seen in Songs → section rail + transport (`SectionRail.tsx`, `SongsMode.tsx`)
