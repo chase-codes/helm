@@ -225,7 +225,7 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
                   <input
                     style={{ ...inputStyle, flex: 1 }}
                     value={peRef}
-                    onChange={(e) => setPeRef(e.target.value)}
+                    onChange={(e) => { setPeRef(e.target.value); setVersion(undefined); setLookupMsg(''); }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -245,7 +245,7 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
                 <textarea
                   style={areaStyle}
                   value={peText}
-                  onChange={(e) => setPeText(e.target.value)}
+                  onChange={(e) => { setPeText(e.target.value); setVersion(undefined); setLookupMsg(''); }}
                   placeholder="I was glad when they said unto me…"
                 />
               </div>

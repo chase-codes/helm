@@ -85,4 +85,20 @@ describe('PreCardEditor verse look-up', () => {
     expect(saveCard).toHaveBeenCalledWith(expect.objectContaining({ type: 'verse', ref: 'Acts 2:38', text: 'Repent…' }))
     expect(saveCard.mock.calls[0][0].version).toBeUndefined()
   })
+
+  it('leaves pre-existing verse text intact when a look-up fails', async () => {
+    installHelm()
+    render(
+      <ThemeCtx.Provider value={themeFor('dark')}>
+        <PreCardEditor
+          card={{ id: 'c1', type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'existing verse text', version: 'KJV', enabled: true }}
+          onClose={() => {}}
+        />
+      </ThemeCtx.Provider>
+    )
+    fireEvent.change(screen.getByPlaceholderText('Psalm 122:1'), { target: { value: 'psalm 122:1-2' } })
+    fireEvent.click(screen.getByText('Look up'))
+    expect(await screen.findByText('Enter a single verse, e.g. James 1:1')).toBeTruthy()
+    expect((screen.getByPlaceholderText('I was glad when they said unto me…') as HTMLTextAreaElement).value).toBe('existing verse text')
+  })
 })
