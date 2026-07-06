@@ -97,23 +97,19 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   }, [q, field]);
 
   // In Title mode only, run a parallel lyric-scored pass so a thin title search can show a
-  // subordinate "Also in lyrics" hint (see secondaryLyricRows). Cleared when not applicable.
-  // The clear branch defers its setState into a microtask (rather than calling it inline)
-  // so this stays a subscribe-to-external-system effect rather than a synchronous render loop.
+  // subordinate "Also in lyrics" hint (see secondaryLyricRows). Outside Title mode the result
+  // is never consumed (secondaryResults below is gated on field === 'title'), so there's no
+  // need to clear it here — which also keeps this a plain fetch effect with no synchronous
+  // setState in its body.
   useEffect(() => {
+    if (field !== 'title' || !q.trim()) return;
     let live = true;
-    if (field === 'title' && q.trim()) {
-      void window.helm.songs
-        .search(q, 'lyric')
-        .then((r) => {
-          if (live) setLyricHint(r);
-        })
-        .catch(console.error);
-    } else {
-      void Promise.resolve().then(() => {
-        if (live) setLyricHint([]);
-      });
-    }
+    void window.helm.songs
+      .search(q, 'lyric')
+      .then((r) => {
+        if (live) setLyricHint(r);
+      })
+      .catch(console.error);
     return () => {
       live = false;
     };
