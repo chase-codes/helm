@@ -37,6 +37,9 @@ export interface SermonCenterProps {
   /** slide-only: the cued deck/image/video slide, full-bleed (Lectern.dc.html:244-246
    * `liveIsSlide` branch — no heroLabel is shown alongside it, unlike verse/quote). */
   slide?: Slide;
+  /** slide-only: when provided, replaces the hero's SlideCanvas — used to mount a
+   * synced <video> (VideoCanvas) for video items instead of a static poster. */
+  heroMedia?: JSX.Element;
 }
 
 /** Now-bar, hero card (verse columns or a message quote), on-deck preview, and
@@ -59,6 +62,7 @@ export function SermonCenter({
   versionPicker,
   variant,
   slide,
+  heroMedia,
   onPrev,
   onNext,
   onGoLive,
@@ -232,7 +236,7 @@ export function SermonCenter({
                 boxShadow: '0 10px 30px rgba(0,0,0,.28)'
               }}
             >
-              <SlideCanvas slide={slide ?? { kind: 'logo', title: 'HELM' }} variant="audience" fill />
+              {heroMedia ?? <SlideCanvas slide={slide ?? { kind: 'logo', title: 'HELM' }} variant="audience" fill />}
             </div>
           )}
         </div>

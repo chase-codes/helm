@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { SlidesTrack } from './SlidesTrack'
 import { ThemeCtx } from './ThemeCtx'
@@ -13,7 +13,8 @@ afterEach(cleanup)
 
 const items: MediaItem[] = [
   { id: 'deck1', type: 'deck', title: 'Sermon.pptx', filePath: null, slides: ['deck1/1.png', 'deck1/2.png'], createdAt: 1 },
-  { id: 'img1', type: 'image', title: 'Welcome.jpg', filePath: 'img1.jpg', slides: [], createdAt: 2 }
+  { id: 'img1', type: 'image', title: 'Welcome.jpg', filePath: 'img1.jpg', slides: [], createdAt: 2 },
+  { id: 'vid1', type: 'video', title: 'Promo.mp4', filePath: 'video/promo.mp4', slides: [], createdAt: 3 }
 ]
 
 function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<typeof vi.fn> } {
@@ -34,6 +35,12 @@ function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<
       goLive,
       setOutput: vi.fn(),
       onState: () => () => {}
+    },
+    video: {
+      get: () => Promise.resolve({ key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false }),
+      onState: () => () => {},
+      load: vi.fn(), play: vi.fn(), pause: vi.fn(),
+      seek: vi.fn(), setVolume: vi.fn(), setMuted: vi.fn(), reportDuration: vi.fn()
     }
   }
   return { goLive, cue }
@@ -126,5 +133,23 @@ describe('SlidesTrack', () => {
     expect(screen.queryByText('2')).toBeNull()
     // The cue effect must not have re-fired for the deck as a result of the cancel.
     expect(cue).not.toHaveBeenCalledWith(expect.stringContaining('deck1'), expect.anything())
+  })
+
+  it('selecting a video item loads it into the shared video state', async () => {
+    installHelmStub()
+    renderTrack()
+    const vidRow = (await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement
+    fireEvent.click(vidRow)
+    await waitFor(() =>
+      expect(window.helm.video.load).toHaveBeenCalledWith('pres:vid1:0', 'helm-media://video/promo.mp4')
+    )
+  })
+
+  it('a selected video item renders a <video> preview in the hero', async () => {
+    installHelmStub()
+    renderTrack()
+    const vidRow = (await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement
+    fireEvent.click(vidRow)
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
   })
 })

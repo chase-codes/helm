@@ -1,11 +1,12 @@
 import { useContext, useEffect, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
 import { ThemeCtx } from './ThemeCtx';
-import { usePresentationState } from './useHelm';
+import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
 import type { MediaItem, Slide } from '../../shared/types';
 import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { SlideCanvas } from '../shared/SlideCanvas';
+import { VideoCanvas } from '../shared/VideoCanvas';
 import { TrackTabs } from './TrackTabs';
 
 /**
@@ -41,6 +42,13 @@ function metaFor(item: MediaItem): string {
   return 'Image';
 }
 
+function fmtClock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 /** Slides track: a media library (left rail), the cued slide as the center hero (shared
  * with Scripture/Message via SermonCenter's `variant="slide"`), and — for decks only —
  * a numbered slide rail on the right. Ported character-exact from Lectern.dc.html's
@@ -51,6 +59,9 @@ function metaFor(item: MediaItem): string {
 export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTrackProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { output, liveKey } = usePresentationState();
+  const vstate = useVideoState();
+  const [posMs, setPosMs] = useState(0);
+  const [durMs, setDurMs] = useState(0);
 
   const [items, setItems] = useState<MediaItem[]>([]);
   const [selId, setSelId] = useState('');
@@ -99,6 +110,16 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     const idx = Math.max(0, Math.min(slideIdx, sl.length - 1));
     window.helm.presentation.cue(keyForMedia(sel.id, idx), sl[idx]);
   }, [items, selId, slideIdx]);
+
+  // Video items are backed by the shared main-owned video state: arm the selected
+  // clip so the operator hero previews it (muted) and Go Live can mirror it. Uses
+  // slidesOf's src so the key/src match what SlideCanvas/VideoCanvas render.
+  useEffect(() => {
+    const sel = items.find((i) => i.id === selId);
+    if (!sel || sel.type !== 'video') return;
+    const vsl = slidesOf(sel)[0];
+    window.helm.video.load(keyForMedia(sel.id, 0), vsl.src ?? '');
+  }, [items, selId]);
 
   const curKey = selected ? keyForMedia(selected.id, curIdx) : '';
   const cuedIsLive = output === 'live' && liveKey === curKey;
@@ -275,6 +296,14 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     boxShadow: isLive ? `0 0 0 2px ${T.sermon}, 0 6px 18px rgba(0,0,0,.25)` : isCued ? `0 0 0 2px ${T.sermon}66` : `inset 0 0 0 1px ${T.border}`
   });
   const deckRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent' };
+  const transportBtnStyle: CSSProperties = {
+    height: '34px', padding: '0 14px', borderRadius: '9px', background: T.panel2,
+    boxShadow: `inset 0 0 0 1px ${T.border}`, fontSize: '13px', fontWeight: 600, color: T.dim,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap'
+  };
+  const transportTimeStyle: CSSProperties = {
+    fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: T.dim, fontVariantNumeric: 'tabular-nums'
+  };
 
   // Calm fallback modal for deck import — overlay/card values copied character-exact
   // from PreCardEditor's shell (the smallest single-purpose modal in the app; see that
@@ -309,6 +338,18 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     fontWeight: 600,
     color: T.dim
   };
+
+  const heroMedia =
+    selected && selected.type === 'video' ? (
+      <VideoCanvas
+        slide={curSlide}
+        forceMuted
+        fill
+        onTime={setPosMs}
+        onDuration={(ms) => { setDurMs(ms); window.helm.video.reportDuration(ms); }}
+        onEnded={() => window.helm.video.pause()}
+      />
+    ) : undefined;
 
   return (
     <div style={rootStyle}>
@@ -364,6 +405,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
         cuedIsLive={cuedIsLive}
         heroLabel=""
         slide={curSlide}
+        heroMedia={heroMedia}
         ondeckTag={ondeckTag}
         ondeckTagColor={ondeckTagColor}
         ondeckTitle={ondeckTitle}
@@ -399,6 +441,52 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {selected && selected.type === 'video' && (
+        <div style={comingPanelStyle}>
+          <div style={{ padding: '14px 15px 10px', flexShrink: 0 }}>
+            <div style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>VIDEO</div>
+            <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45 }}>
+              Preview plays here muted; the audience hears it once it&rsquo;s live.
+            </div>
+          </div>
+          <div style={{ padding: '0 15px 15px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button
+                style={transportBtnStyle}
+                onClick={() => (vstate.playing ? window.helm.video.pause() : window.helm.video.play())}
+              >
+                {vstate.playing ? '❙❙ Pause' : '▶ Play'}
+              </button>
+              <div style={transportTimeStyle}>
+                {fmtClock(posMs)} / {fmtClock(durMs)}
+              </div>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(1, durMs)}
+              value={Math.min(posMs, durMs || 0)}
+              onInput={(e) => setPosMs(Number((e.target as HTMLInputElement).value))}
+              onChange={(e) => window.helm.video.seek(Number(e.target.value))}
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button style={transportBtnStyle} onClick={() => window.helm.video.setMuted(!vstate.muted)}>
+                {vstate.muted ? 'Muted' : 'Mute'}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(vstate.volume * 100)}
+                onChange={(e) => window.helm.video.setVolume(Number(e.target.value) / 100)}
+                style={{ flex: 1 }}
+              />
+            </div>
           </div>
         </div>
       )}

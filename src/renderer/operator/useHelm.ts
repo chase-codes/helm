@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DisplayStatus, PresentationState, PreState } from '../../shared/types';
+import type { DisplayStatus, PresentationState, PreState, VideoStateWire } from '../../shared/types';
 
 export function usePresentationState(): PresentationState {
   const [st, setSt] = useState<PresentationState>({ output: 'black', liveKey: null, liveSnap: null });
@@ -34,4 +34,14 @@ export function useClock(): string {
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const p = (n: number): string => (n < 10 ? '0' : '') + n;
   return `${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+}
+export function useVideoState(): VideoStateWire {
+  const [s, setS] = useState<VideoStateWire>({ key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false });
+  useEffect(() => {
+    let live = true;
+    void window.helm.video.get().then((v) => { if (live) setS(v); });
+    const off = window.helm.video.onState(setS);
+    return () => { live = false; off(); };
+  }, []);
+  return s;
 }
