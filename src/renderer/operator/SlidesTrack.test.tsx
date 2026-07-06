@@ -145,11 +145,18 @@ describe('SlidesTrack', () => {
     )
   })
 
-  it('a selected video item renders a <video> preview in the hero', async () => {
+  it('a selected video item renders the synced VideoCanvas (not just a poster) in the hero', async () => {
     installHelmStub()
     renderTrack()
     const vidRow = (await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement
     fireEvent.click(vidRow)
-    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    // VideoCanvas renders <video playsInline> with NO preload attribute; SlideCanvas
+    // posters (e.g. the left-rail thumbnails) always have preload="metadata". A video
+    // element lacking preload="metadata" therefore proves the heroMedia/VideoCanvas
+    // wiring is present — a bare querySelector('video') would match a rail poster instead.
+    await waitFor(() => {
+      const videos = Array.from(document.querySelectorAll('video'))
+      expect(videos.some((v) => v.getAttribute('preload') !== 'metadata')).toBe(true)
+    })
   })
 })
