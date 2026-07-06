@@ -45,6 +45,11 @@ export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
 }
+export interface VideoStateWire {
+  key: string | null; src: string | null;
+  playing: boolean; positionMs: number; durationMs: number;
+  volume: number; muted: boolean;
+}
 export type OutputVariant = 'audience' | 'main' | 'stage' | 'leader' | 'livestream';
 export interface OutputPayload { slide: Slide; variant: OutputVariant }
 export interface DisplayStatus { outputs: number }
