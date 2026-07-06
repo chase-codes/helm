@@ -76,6 +76,20 @@ describe('PreCardEditor verse look-up', () => {
     expect(await screen.findByText('Psalm 122 has no verse 9 in KJV')).toBeTruthy()
   })
 
+  it('flags a non-existent chapter distinctly from a missing verse', async () => {
+    installHelm({ getChapter: () => Promise.resolve({ book: 'Psalm', chapter: 200, verseCount: 0, verses: {} }) })
+    renderEditor()
+    await lookUp('psalm 200:1')
+    expect(await screen.findByText('Psalm has no chapter 200 in KJV')).toBeTruthy()
+  })
+
+  it('shows a message when the Bible lookup fails', async () => {
+    installHelm({ getChapter: () => Promise.reject(new Error('ipc down')) })
+    renderEditor()
+    await lookUp('psalm 122:1')
+    expect(await screen.findByText('Couldn’t reach the Bible — try again')).toBeTruthy()
+  })
+
   it('saves a hand-typed verse card with no version', async () => {
     const { saveCard } = installHelm()
     renderEditor()

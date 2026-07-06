@@ -43,16 +43,21 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
     const parsed = parseRef(peRef);
     if (!parsed) { setLookupMsg('Enter a reference like Psalm 122:1'); return; }
     if (parsed.from !== parsed.to) { setLookupMsg('Enter a single verse, e.g. James 1:1'); return; }
-    const manifest = await window.helm.bibles.manifest();
-    const primary = manifest.find((m) => m.installed);
-    if (!primary) { setLookupMsg('Install a Bible first (Settings → Bibles)'); return; }
-    const chapter = await window.helm.bibles.getChapter(parsed.book, parsed.ch);
-    const text = verseText(chapter, parsed.from, primary.id);
-    if (text == null) { setLookupMsg(`${parsed.book} ${parsed.ch} has no verse ${parsed.from} in ${primary.abbr}`); return; }
-    setPeRef(formatRef(parsed));
-    setPeText(text);
-    setVersion(primary.abbr);
-    setLookupMsg(`✓ ${primary.abbr}`);
+    try {
+      const manifest = await window.helm.bibles.manifest();
+      const primary = manifest.find((m) => m.installed);
+      if (!primary) { setLookupMsg('Install a Bible first (Settings → Bibles)'); return; }
+      const chapter = await window.helm.bibles.getChapter(parsed.book, parsed.ch);
+      if (chapter.verseCount === 0) { setLookupMsg(`${parsed.book} has no chapter ${parsed.ch} in ${primary.abbr}`); return; }
+      const text = verseText(chapter, parsed.from, primary.id);
+      if (text == null) { setLookupMsg(`${parsed.book} ${parsed.ch} has no verse ${parsed.from} in ${primary.abbr}`); return; }
+      setPeRef(formatRef(parsed));
+      setPeText(text);
+      setVersion(primary.abbr);
+      setLookupMsg(`✓ ${primary.abbr}`);
+    } catch {
+      setLookupMsg('Couldn’t reach the Bible — try again');
+    }
   };
 
   // Port of the prototype's savePreEdit field-mapping (Lectern.dc.html ~L856-866).
