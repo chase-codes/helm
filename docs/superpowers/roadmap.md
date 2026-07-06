@@ -37,14 +37,11 @@ Several items below share these foundations — worth building once as reusable 
 - **Quick edit (right-click → Edit) — in-place, non-disruptive.** A super-fast path to fix
   typos without disrupting the service for the song leader. Stays in the current view and
   edits **directly in the preview**. **Enter saves**; **Shift+Enter inserts a real newline.**
-- **Count label: "X verses" instead of "X sections."** Replace the current
-  `song.sections.length` "sections" label (`SongsMode.tsx:39,43`) with a verse count =
-  the number of actual verse sections **plus one chorus, counted a single time even though
-  it repeats.** (Counting rule depends on section-label semantics — Verse/Chorus/Bridge.)
-- **Secondary lyric matches under a title search.** Even when "search by title" is selected,
-  show a small secondary subsection of likely **lyric** matches — roughly the **top 3** —
-  clearly subordinate and **never taking precedence over the title results**. Not a full
-  lyric search; just a "you might also mean…" hint.
+- ~~**Count label: "X verses" instead of "X sections."**~~ ✅ **Shipped** (`69a6fce`) — landed
+  as **"N stanzas"** (accurate for any block: verse/chorus/bridge/tag) = `song.sections.length`,
+  matching the Section Rail row count. See `docs/superpowers/specs/2026-07-06-songs-quick-wins-design.md`.
+- ~~**Secondary lyric matches under a title search.**~~ ✅ **Shipped** (`10f1509`) — a subordinate
+  "Also in lyrics" group (top 3, deduped) shown only when title results are thin (fewer than 3).
 - **Assignable navigation/action hotkeys** (part of the hotkey system above). Concrete asks:
   - **Home** → jump back to the chorus quickly.
   - **Ctrl+X then a number** → jump to that verse.
