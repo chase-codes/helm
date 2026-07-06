@@ -12,7 +12,7 @@ export interface NewSongInput { title: string; author?: string; text: string; so
 
 export type SlideKind =
   | 'lyrics' | 'scripture' | 'quote' | 'title' | 'sermon'
-  | 'logo' | 'black' | 'blank' | 'reading' | 'image';
+  | 'logo' | 'black' | 'blank' | 'reading' | 'image' | 'video';
 export interface SlideColumn { version: string; text: string }
 export interface Slide {
   kind: SlideKind; accent?: string; label?: string; lines?: string[];

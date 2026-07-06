@@ -5,7 +5,7 @@ import {
   keyForMedia,
   mediaSrc,
   buildImageSlide,
-  buildVideoPlaceholderSlide,
+  buildVideoSlide,
   slidesOf
 } from './slides';
 
@@ -35,13 +35,11 @@ describe('buildImageSlide', () => {
   });
 });
 
-describe('buildVideoPlaceholderSlide', () => {
-  it('builds a title-kind placeholder slide', () => {
-    expect(buildVideoPlaceholderSlide('Welcome Reel')).toEqual({
-      kind: 'title',
-      accent: '#6f9c7a',
-      title: '▶ Welcome Reel',
-      subtitle: 'Video plays in Slice 5b'
+describe('buildVideoSlide', () => {
+  it('builds a video slide with the given src', () => {
+    expect(buildVideoSlide('helm-media://videos/clip.mp4')).toEqual({
+      kind: 'video',
+      src: 'helm-media://videos/clip.mp4'
     });
   });
 });
@@ -86,7 +84,7 @@ describe('slidesOf', () => {
     expect(slidesOf(item)).toEqual([{ kind: 'image', src: 'helm-media://images/pic.jpg' }]);
   });
 
-  it('returns a single video placeholder slide for a video item', () => {
+  it('returns a single video slide for a video item', () => {
     const item: MediaItem = {
       id: 'v1',
       type: 'video',
@@ -95,9 +93,7 @@ describe('slidesOf', () => {
       slides: [],
       createdAt: 0
     };
-    expect(slidesOf(item)).toEqual([
-      { kind: 'title', accent: '#6f9c7a', title: '▶ Announcement Clip', subtitle: 'Video plays in Slice 5b' }
-    ]);
+    expect(slidesOf(item)).toEqual([{ kind: 'video', src: 'helm-media://videos/clip.mp4' }]);
   });
 
   it('returns a safe fallback slide for a deck with no slides', () => {

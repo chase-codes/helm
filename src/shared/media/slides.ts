@@ -12,8 +12,8 @@ export function buildImageSlide(src: string, label?: string): Slide {
   return label === undefined ? { kind: 'image', src } : { kind: 'image', src, label };
 }
 
-export function buildVideoPlaceholderSlide(title: string): Slide {
-  return { kind: 'title', accent: '#6f9c7a', title: `▶ ${title}`, subtitle: 'Video plays in Slice 5b' };
+export function buildVideoSlide(src: string): Slide {
+  return { kind: 'video', src };
 }
 
 export function slidesOf(item: MediaItem): Slide[] {
@@ -24,5 +24,5 @@ export function slidesOf(item: MediaItem): Slide[] {
   if (item.type === 'image') {
     return [buildImageSlide(item.filePath ? mediaSrc(item.filePath) : '')];
   }
-  return [buildVideoPlaceholderSlide(item.title)];
+  return [buildVideoSlide(item.filePath ? mediaSrc(item.filePath) : '')];
 }
