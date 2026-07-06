@@ -22,7 +22,7 @@ export function usePreState(): PreState {
   return s;
 }
 export function useDisplayStatus(): DisplayStatus {
-  const [d, setD] = useState<DisplayStatus>({ outputs: 0 });
+  const [d, setD] = useState<DisplayStatus>({ outputs: 0, displays: [] });
   useEffect(() => {
     void window.helm.displays.get().then(setD);
     return window.helm.displays.onStatus(setD);

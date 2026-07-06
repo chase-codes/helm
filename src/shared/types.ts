@@ -51,8 +51,19 @@ export interface VideoStateWire {
   volume: number; muted: boolean;
 }
 export type OutputVariant = 'audience' | 'main' | 'stage' | 'leader' | 'livestream';
+export type OutputRole = 'audience' | 'stage' | 'livestream';  // declared here; roles.ts imports it
 export interface OutputPayload { slide: Slide; variant: OutputVariant }
-export interface DisplayStatus { outputs: number }
+export interface DisplayInfo {
+  id: number;
+  fingerprint: string;
+  label: string;            // human label or '' — 6b shows resolution when empty
+  width: number;            // logical size.width
+  height: number;           // logical size.height
+  scaleFactor: number;      // 6b renders "1920×1080 @2x" from size + scaleFactor
+  role: OutputRole | null;  // null for the operator display (not an output)
+  isOperator: boolean;
+}
+export interface DisplayStatus { outputs: number; displays: DisplayInfo[] }
 
 export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',

@@ -23,7 +23,7 @@ export function createOutputWindow(bounds: Electron.Rectangle, frameless = true)
   presentation.registerOutput(win);
   return win;
 }
-export function displayStatus(): DisplayStatus { return { outputs: byDisplayId.size }; }
+export function displayStatus(): DisplayStatus { return { outputs: byDisplayId.size, displays: [] }; }
 
 export function initDisplays(): void {
   const sync = (): void => {
