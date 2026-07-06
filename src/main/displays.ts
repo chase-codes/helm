@@ -1,7 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
-import { CH, type DisplayStatus } from '../shared/types';
+import { CH, type DisplayStatus, type OutputVariant } from '../shared/types';
 import { presentation } from './stateStore';
 
 const byDisplayId = new Map<number, BrowserWindow>();
@@ -12,7 +12,7 @@ function loadOutput(win: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/output/index.html`);
   else win.loadFile(join(__dirname, '../renderer/output/index.html'));
 }
-export function createOutputWindow(bounds: Electron.Rectangle, frameless = true): BrowserWindow {
+export function createOutputWindow(bounds: Electron.Rectangle, frameless = true, variant: OutputVariant = 'audience'): BrowserWindow {
   const win = new BrowserWindow({
     ...bounds, frame: !frameless, resizable: !frameless, movable: !frameless,
     backgroundColor: '#000000', autoHideMenuBar: true,
@@ -20,7 +20,7 @@ export function createOutputWindow(bounds: Electron.Rectangle, frameless = true)
   });
   if (frameless) { win.setAlwaysOnTop(true, 'screen-saver'); win.setSkipTaskbar(true); win.setBounds(bounds); }
   loadOutput(win);
-  presentation.registerOutput(win);
+  presentation.registerOutput(win, variant);
   return win;
 }
 export function displayStatus(): DisplayStatus { return { outputs: byDisplayId.size, displays: [] }; }

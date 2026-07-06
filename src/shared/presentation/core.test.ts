@@ -35,9 +35,16 @@ test('applyCue while black never touches the screen', () => {
   const st = applyCue(initialPresentation(), 'song:a:0', slide('V1'));
   expect(st.liveSnap).toBeNull();
 });
-test('outputPayload derives the audience slide', () => {
+test('outputPayload derives the audience slide by default', () => {
   expect(outputPayload(initialPresentation()).slide.kind).toBe('black');
+  expect(outputPayload(initialPresentation()).variant).toBe('audience');
   expect(outputPayload(setOutput(initialPresentation(), 'logo')).slide).toEqual({ kind: 'logo', title: 'HELM' });
   const live = goLive(initialPresentation(), 'song:a:0', slide('V1'));
   expect(outputPayload(live).slide.label).toBe('V1');
+});
+test('outputPayload passes through the requested variant', () => {
+  expect(outputPayload(initialPresentation(), 'stage').variant).toBe('stage');
+  expect(outputPayload(initialPresentation(), 'livestream').variant).toBe('livestream');
+  // variant does not change slide derivation
+  expect(outputPayload(setOutput(initialPresentation(), 'logo'), 'stage').slide).toEqual({ kind: 'logo', title: 'HELM' });
 });

@@ -1,4 +1,4 @@
-import type { OutputMode, OutputPayload, PresentationState, Slide } from '../types';
+import type { OutputMode, OutputPayload, OutputVariant, PresentationState, Slide } from '../types';
 
 export function initialPresentation(): PresentationState {
   return { output: 'black', liveKey: null, liveSnap: null };
@@ -24,9 +24,9 @@ export function goLive(st: PresentationState, key: string, slide: Slide): Presen
 export function setOutput(st: PresentationState, mode: OutputMode): PresentationState {
   return { ...st, output: mode };
 }
-export function outputPayload(st: PresentationState, logoTitle = 'HELM'): OutputPayload {
+export function outputPayload(st: PresentationState, variant: OutputVariant = 'audience', logoTitle = 'HELM'): OutputPayload {
   const slide: Slide = st.output === 'black' ? { kind: 'black' }
     : st.output === 'logo' ? { kind: 'logo', title: logoTitle }
     : st.liveSnap ?? { kind: 'blank' };
-  return { slide, variant: 'audience' };
+  return { slide, variant };
 }
