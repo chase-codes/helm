@@ -319,6 +319,7 @@ export function SlideCanvas({
   const isTitle = active && (kind === 'title' || kind === 'sermon');
   const hasPoints = isTitle && (s.points || []).length > 0;
   const isImage = active && kind === 'image';
+  const isVideo = active && kind === 'video';
   const isBlank = active && (kind === 'blank' || kind === 'black' || kind === 'logo');
   const blankText = isLogo ? s.title || 'HELM' : kind === 'black' ? '' : '—';
   const hasNext = isStage && !!next;
@@ -388,6 +389,15 @@ export function SlideCanvas({
         <img
           src={s.src || ''}
           alt=""
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 1 }}
+        />
+      )}
+
+      {isVideo && (
+        <video
+          src={s.src || ''}
+          muted
+          preload="metadata"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 1 }}
         />
       )}

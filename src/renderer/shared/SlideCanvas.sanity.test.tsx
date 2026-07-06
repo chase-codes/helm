@@ -64,3 +64,14 @@ test('renders an image slide as an <img> with the given src', () => {
   expect(img?.getAttribute('src')).toBe('helm-media://images/x.jpg');
   expect(img?.style.objectFit).toBe('contain');
 });
+
+test('renders a video slide as a <video> poster with the given src', () => {
+  const { container } = render(
+    <SlideCanvas slide={{ kind: 'video', src: 'helm-media://videos/clip.mp4' }} fill />
+  );
+  const video = container.querySelector('video');
+  expect(video).not.toBeNull();
+  expect(video?.getAttribute('src')).toBe('helm-media://videos/clip.mp4');
+  expect(video?.getAttribute('preload')).toBe('metadata');
+  expect(video?.style.objectFit).toBe('contain');
+});
