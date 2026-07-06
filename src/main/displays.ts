@@ -16,7 +16,7 @@ export function createOutputWindow(bounds: Electron.Rectangle, frameless = true)
   const win = new BrowserWindow({
     ...bounds, frame: !frameless, resizable: !frameless, movable: !frameless,
     backgroundColor: '#000000', autoHideMenuBar: true,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: false, autoplayPolicy: 'no-user-gesture-required' },
   });
   if (frameless) { win.setAlwaysOnTop(true, 'screen-saver'); win.setSkipTaskbar(true); win.setBounds(bounds); }
   loadOutput(win);
