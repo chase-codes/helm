@@ -78,5 +78,16 @@ const api: HelmApi = {
     importDeck: () => ipcRenderer.invoke(CH.mediaImportDeck),
     remove: (id) => ipcRenderer.invoke(CH.mediaRemove, id),
   },
+  video: {
+    get: () => ipcRenderer.invoke(CH.videoGetState),
+    onState: sub(CH.videoState),
+    load: (key, src) => ipcRenderer.send(CH.videoLoad, key, src),
+    play: () => ipcRenderer.send(CH.videoPlay),
+    pause: () => ipcRenderer.send(CH.videoPause),
+    seek: (ms) => ipcRenderer.send(CH.videoSeek, ms),
+    setVolume: (v) => ipcRenderer.send(CH.videoSetVolume, v),
+    setMuted: (m) => ipcRenderer.send(CH.videoSetMuted, m),
+    reportDuration: (ms) => ipcRenderer.send(CH.videoReportDuration, ms)
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

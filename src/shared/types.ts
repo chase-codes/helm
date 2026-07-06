@@ -86,6 +86,10 @@ export const CH = {
   mediaList: 'media:list', mediaImportImages: 'media:importImages',
   mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
   mediaRemove: 'media:remove',
+  videoGetState: 'video:getState', videoState: 'video:state',   // main → all windows
+  videoLoad: 'video:load', videoPlay: 'video:play', videoPause: 'video:pause',
+  videoSeek: 'video:seek', videoSetVolume: 'video:setVolume',
+  videoSetMuted: 'video:setMuted', videoReportDuration: 'video:reportDuration',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -202,5 +206,14 @@ export interface HelmApi {
     importVideo(): Promise<MediaItem[]>;
     importDeck(): Promise<{ items: MediaItem[]; error?: 'no-libreoffice' }>;
     remove(id: string): Promise<MediaItem[]>;
+  };
+  video: {
+    get(): Promise<VideoStateWire>;
+    onState(cb: (s: VideoStateWire) => void): () => void;
+    load(key: string, src: string): void;
+    play(): void; pause(): void;
+    seek(ms: number): void;
+    setVolume(v: number): void; setMuted(m: boolean): void;
+    reportDuration(ms: number): void;
   };
 }

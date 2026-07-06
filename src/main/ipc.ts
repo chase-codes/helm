@@ -22,6 +22,7 @@ import type { MediaRepo } from './mediaRepo';
 import type { MediaImport } from './mediaImport';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
+import { video } from './videoState';
 import { displayStatus, openTestOutput } from './displays';
 
 export function registerIpc(
@@ -102,4 +103,13 @@ export function registerIpc(
   ipcMain.handle(CH.mediaImportVideo, () => mediaImport.importVideo());
   ipcMain.handle(CH.mediaImportDeck, () => mediaImport.importDeck());
   ipcMain.handle(CH.mediaRemove, (_e, id: string) => mediaRepo.remove(id));
+
+  ipcMain.handle(CH.videoGetState, () => video.get());
+  ipcMain.on(CH.videoLoad, (_e, key: string, src: string) => video.load(key, src));
+  ipcMain.on(CH.videoPlay, () => video.play());
+  ipcMain.on(CH.videoPause, () => video.pause());
+  ipcMain.on(CH.videoSeek, (_e, ms: number) => video.seek(ms));
+  ipcMain.on(CH.videoSetVolume, (_e, v: number) => video.setVolume(v));
+  ipcMain.on(CH.videoSetMuted, (_e, m: boolean) => video.setMuted(m));
+  ipcMain.on(CH.videoReportDuration, (_e, ms: number) => video.reportDuration(ms));
 }
