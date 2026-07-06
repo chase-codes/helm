@@ -176,6 +176,10 @@ No cross-process clock sync: the wire carries `positionMs` computed by main at b
 
 The operator hero's `<video>` fires `ended` → `onEnded` → `window.helm.video.pause()`. `pauseVideo` clamps the anchor to `durationMs`, broadcast holds the last frame on every window. (The elements are already paused at the last frame natively; the state just reflects it so a late-joiner and the operator UI show paused-at-end.)
 
+### 5.4 Output mode vs the video clock (accepted behavior)
+
+Setting output to `black`/`logo` sends a `black`/`logo` slide, so the audience `VideoCanvas` unmounts and its audio stops — but main's `videoState` is **not** paused: if `playing`, the anchor keeps advancing by wall-clock. On return to `live`, the freshly-mounted audience video seeks to the now-advanced position, i.e. the clip plays on as if it had never been hidden. This is **intended**: the operator hero keeps playing during black too, so operator and audience stay at the *same* position — the video behaves as a continuous timeline that a cut-to-black merely hides, never a pause. (Pausing the clock on black would instead desync the still-playing operator hero from a frozen audience, and couple `videoState` to presentation output mode.) An operator who wants the clip to hold uses the transport **Pause**, which is the actual pause control.
+
 ---
 
 ## 6. Operator UI (`SlidesTrack.tsx`)
@@ -183,7 +187,7 @@ The operator hero's `<video>` fires `ended` → `onEnded` → `window.helm.video
 - **On selecting a video item:** an effect calls `window.helm.video.load(keyForMedia(id,0), src)`. Selecting a non-video item does nothing to video-state (a lingering active video is harmless). Re-selecting the active video is idempotent (keeps position).
 - **Hero:** for a video item the hero renders `VideoCanvas` (force-muted, wired to `onTime`/`onDuration`/`onEnded`) instead of the static `SlideCanvas`. This is delivered via a new **optional `heroMedia?: JSX.Element` prop** on `SermonCenter` — when provided (slide variant only), it replaces the `SlideCanvas` in the hero card. Purely additive; verse/quote variants and existing callers are untouched.
 - **Transport row** (shown only for video items, below the on-deck panel or in place of it): play/pause toggle · scrubber (`<input type=range>`, `onInput` for a smooth thumb, `onChange` → `video.seek`) · elapsed / total (`mm:ss`) · volume slider + mute toggle. All drive `window.helm.video.*`.
-- **Go Live** is unchanged — it flips presentation visibility (`presentation.goLive(key, slide)`); it does **not** touch transport. A defensive `video.load` fires on go-live if the selected video's key ≠ the active key, guaranteeing the audience gets the right clip paused@0.
+- **Go Live** flips presentation visibility (`presentation.goLive(key, slide)`) and, for a video going live (not a takedown), **lands it paused**: it arms the clip if the active key differs (`video.load` → paused@0) and then `video.pause()`s so the audience never gets surprise audio the instant it goes live (scope decision #1). Because `pause()` freezes at the current anchor, a *previewed/scrubbed* position is preserved (scope decision #3) — go-live is "paused at wherever the operator parked it," which is frame 0 for an untouched clip. The operator then presses **Play**. Takedown of an already-live video and non-video items are unchanged.
 - Styling tokens (buttons, scrubber, hairlines) are drawn from the existing `SlidesTrack` / `SermonCenter` chrome — no invented visual language. There is no design mock for video transport (video was deferred at design time), so the transport is built consistent with the app's existing control character.
 
 New `useVideoState()` hook in `src/renderer/operator/useHelm.ts` (subscribe + initial `get()`), mirroring `usePresentationState`.
