@@ -165,7 +165,7 @@ app.whenReady().then(() => {
 
   buildMenu()
   createWindow()
-  initDisplays()
+  initDisplays(() => operatorWindow, settingsRepo)
 
   // Fire-and-forget: awaiting this before createWindow() would block boot by ~2s
   // on first run. The UI catches up via bibles:progress broadcasts / manifest() polling.
