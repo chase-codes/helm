@@ -1,0 +1,88 @@
+// @vitest-environment jsdom
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PreCardEditor } from './PreCardEditor'
+import { ThemeCtx } from './ThemeCtx'
+import { themeFor } from '../../shared/theme'
+import type { BibleManifestEntry, ChapterData } from '../../shared/types'
+
+afterEach(cleanup)
+
+const KJV: BibleManifestEntry = { id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }
+const PS122: ChapterData = {
+  book: 'Psalm', chapter: 122, verseCount: 2,
+  verses: { 1: { kjv: 'I was glad when they said unto me' }, 2: { kjv: 'Our feet shall stand' } }
+}
+
+function installHelm(over: {
+  manifest?: BibleManifestEntry[]
+  getChapter?: (book: string, ch: number) => Promise<ChapterData>
+} = {}): { saveCard: ReturnType<typeof vi.fn> } {
+  const saveCard = vi.fn()
+  ;(window as unknown as { helm: unknown }).helm = {
+    preservice: { saveCard, removeCard: vi.fn() },
+    bibles: {
+      manifest: () => Promise.resolve(over.manifest ?? [KJV]),
+      getChapter: over.getChapter ?? (() => Promise.resolve(PS122))
+    }
+  }
+  return { saveCard }
+}
+
+function renderEditor(): void {
+  render(
+    <ThemeCtx.Provider value={themeFor('dark')}>
+      <PreCardEditor card={null} onClose={() => {}} />
+    </ThemeCtx.Provider>
+  )
+}
+
+async function lookUp(ref: string): Promise<void> {
+  const refInput = screen.getByPlaceholderText('Psalm 122:1') as HTMLInputElement
+  fireEvent.change(refInput, { target: { value: ref } })
+  fireEvent.click(screen.getByText('Look up'))
+}
+
+describe('PreCardEditor verse look-up', () => {
+  it('fills verse text, canonicalizes the reference, and shows the version', async () => {
+    installHelm()
+    renderEditor()
+    await lookUp('psalm 122:1')
+    const textArea = await screen.findByPlaceholderText('I was glad when they said unto me…') as HTMLTextAreaElement
+    await waitFor(() => expect(textArea.value).toBe('I was glad when they said unto me'))
+    expect((screen.getByPlaceholderText('Psalm 122:1') as HTMLInputElement).value).toBe('Psalm 122:1')
+    expect(screen.getByText('✓ KJV')).toBeTruthy()
+  })
+
+  it('rejects a range and leaves the fields unchanged', async () => {
+    installHelm()
+    renderEditor()
+    await lookUp('psalm 122:1-2')
+    expect(await screen.findByText('Enter a single verse, e.g. James 1:1')).toBeTruthy()
+    expect((screen.getByPlaceholderText('I was glad when they said unto me…') as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('shows a message when no Bible is installed', async () => {
+    installHelm({ manifest: [] })
+    renderEditor()
+    await lookUp('psalm 122:1')
+    expect(await screen.findByText('Install a Bible first (Settings → Bibles)')).toBeTruthy()
+  })
+
+  it('shows a message when the verse is absent from the chapter', async () => {
+    installHelm()
+    renderEditor()
+    await lookUp('psalm 122:9')
+    expect(await screen.findByText('Psalm 122 has no verse 9 in KJV')).toBeTruthy()
+  })
+
+  it('saves a hand-typed verse card with no version', async () => {
+    const { saveCard } = installHelm()
+    renderEditor()
+    fireEvent.change(screen.getByPlaceholderText('Psalm 122:1'), { target: { value: 'Acts 2:38' } })
+    fireEvent.change(screen.getByPlaceholderText('I was glad when they said unto me…'), { target: { value: 'Repent…' } })
+    fireEvent.click(screen.getByText('Add to loop'))
+    expect(saveCard).toHaveBeenCalledWith(expect.objectContaining({ type: 'verse', ref: 'Acts 2:38', text: 'Repent…' }))
+    expect(saveCard.mock.calls[0][0].version).toBeUndefined()
+  })
+})

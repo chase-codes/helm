@@ -1,6 +1,8 @@
 import { useContext, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import type { PreCard, PreCardType } from '../../shared/types';
+import { parseRef, formatRef } from '../../shared/scripture/refs';
+import { verseText } from '../../shared/scripture/preVerse';
 
 export interface PreCardEditorProps {
   card: PreCard | null;
@@ -32,8 +34,26 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
   const [peLines, setPeLines] = useState((card?.points ?? []).join('\n'));
   const [peHeadline, setPeHeadline] = useState(card?.headline ?? '');
   const [peSubtitle, setPeSubtitle] = useState(card?.subtitle ?? '');
+  const [version, setVersion] = useState<string | undefined>(card?.version);
+  const [lookupMsg, setLookupMsg] = useState('');
 
   const stop = (e: ReactMouseEvent): void => e.stopPropagation();
+
+  const lookUp = async (): Promise<void> => {
+    const parsed = parseRef(peRef);
+    if (!parsed) { setLookupMsg('Enter a reference like Psalm 122:1'); return; }
+    if (parsed.from !== parsed.to) { setLookupMsg('Enter a single verse, e.g. James 1:1'); return; }
+    const manifest = await window.helm.bibles.manifest();
+    const primary = manifest.find((m) => m.installed);
+    if (!primary) { setLookupMsg('Install a Bible first (Settings → Bibles)'); return; }
+    const chapter = await window.helm.bibles.getChapter(parsed.book, parsed.ch);
+    const text = verseText(chapter, parsed.from, primary.id);
+    if (text == null) { setLookupMsg(`${parsed.book} ${parsed.ch} has no verse ${parsed.from} in ${primary.abbr}`); return; }
+    setPeRef(formatRef(parsed));
+    setPeText(text);
+    setVersion(primary.abbr);
+    setLookupMsg(`✓ ${primary.abbr}`);
+  };
 
   // Port of the prototype's savePreEdit field-mapping (Lectern.dc.html ~L856-866).
   const save = (): void => {
@@ -45,7 +65,8 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
         enabled,
         title: peTitle.trim() || peRef.trim() || 'Verse',
         ref: peRef.trim(),
-        text: peText.trim()
+        text: peText.trim(),
+        version
       });
     } else if (peType === 'list') {
       window.helm.preservice.saveCard({
@@ -153,6 +174,18 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
     justifyContent: 'center',
     gap: '7px'
   };
+  const lookupBtnStyle: CSSProperties = {
+    height: '38px',
+    padding: '0 14px',
+    borderRadius: '9px',
+    background: T.panel2,
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    fontSize: '12.5px',
+    fontWeight: 600,
+    color: T.dim,
+    flexShrink: 0
+  };
+  const lookupMsgStyle: CSSProperties = { fontSize: '11.5px', color: T.dim, marginTop: '6px' };
   const tabStyle = (active: boolean): CSSProperties => ({
     flex: 1,
     height: '32px',
@@ -188,7 +221,24 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
             <>
               <div>
                 <div style={fieldLabelStyle}>REFERENCE</div>
-                <input style={inputStyle} value={peRef} onChange={(e) => setPeRef(e.target.value)} placeholder="Psalm 122:1" />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={peRef}
+                    onChange={(e) => setPeRef(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void lookUp();
+                      }
+                    }}
+                    placeholder="Psalm 122:1"
+                  />
+                  <button style={lookupBtnStyle} onClick={() => void lookUp()}>
+                    Look up
+                  </button>
+                </div>
+                {lookupMsg && <div style={lookupMsgStyle}>{lookupMsg}</div>}
               </div>
               <div>
                 <div style={fieldLabelStyle}>VERSE TEXT</div>

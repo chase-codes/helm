@@ -17,7 +17,8 @@ Message track — William Branham sermon "tapes" with full-text offline search (
 quote search, search-within-a-tape), quote slides, a tape audio player, and a scrolling
 follow-along reading view. Slice 5 adds the pre-service loop — a rotating welcome / verse /
 announcements / prayer / logo card set on a dwell timer, engaged and taken live from the
-operator's Pre-Service tab. Multi-display roles remain deferred to later slices (spec §11).
+operator's Pre-Service tab; verse cards can pull their text from the installed Bible by
+reference. Multi-display roles remain deferred to later slices (spec §11).
 
 **Message track — acquisition & audio (spec `docs/superpowers/specs/2026-07-03-helm-slice-4-message-design.md`).**
 Sermon text and audio come from Voice of God Recordings' official distribution only.
