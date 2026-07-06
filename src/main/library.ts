@@ -74,6 +74,7 @@ export function registerMediaProtocol(root: string): void {
       const range = parseRangeHeader(rangeHeader, size);
       if (range) {
         const stream = createReadStream(abs, { start: range.start, end: range.end });
+        stream.on('error', (err) => console.error('[helm-media] stream error', err));
         return new Response(Readable.toWeb(stream) as ReadableStream, {
           status: 206,
           headers: {

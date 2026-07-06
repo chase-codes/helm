@@ -57,6 +57,7 @@ export function VideoCanvas({
         ref={ref}
         src={src}
         playsInline
+        muted={forceMuted}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
         onLoadedMetadata={(e) => { onDuration?.(Math.round(e.currentTarget.duration * 1000)); reapply(); }}
         onTimeUpdate={(e) => onTime?.(Math.round(e.currentTarget.currentTime * 1000))}

@@ -145,6 +145,17 @@ describe('SlidesTrack', () => {
     )
   })
 
+  it('going live on a video lands it paused (no surprise audio on go-live)', async () => {
+    installHelmStub()
+    renderTrack()
+    const vidRow = (await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement
+    fireEvent.click(vidRow)
+    const goLiveBtn = (await screen.findByText('● Go live')).closest('button') as HTMLButtonElement
+    fireEvent.click(goLiveBtn)
+    await waitFor(() => expect(window.helm.video.pause).toHaveBeenCalled())
+    expect(window.helm.presentation.goLive).toHaveBeenCalledWith('pres:vid1:0', expect.anything())
+  })
+
   it('a selected video item renders the synced VideoCanvas (not just a poster) in the hero', async () => {
     installHelmStub()
     renderTrack()

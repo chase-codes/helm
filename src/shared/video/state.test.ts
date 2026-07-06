@@ -95,6 +95,21 @@ describe('setVolume / setMuted / setDuration', () => {
   });
 });
 
+describe('non-finite IPC input guards', () => {
+  it('seekVideo ignores NaN', () => {
+    const st = { ...initialVideo(), key: 'pres:a:0', src: 'x', anchorMs: 1000, durationMs: 8000 };
+    expect(seekVideo(st, NaN, 5000)).toBe(st);
+  });
+  it('setDuration ignores Infinity', () => {
+    const st = { ...initialVideo(), durationMs: 5000 };
+    expect(setDuration(st, Infinity)).toBe(st);
+  });
+  it('setVolume ignores NaN', () => {
+    const st = { ...initialVideo(), volume: 0.5 };
+    expect(setVolume(st, NaN)).toBe(st);
+  });
+});
+
 describe('toWire', () => {
   it('projects the internal state with the effective position', () => {
     const st = { ...initialVideo(), key: 'pres:a:0', src: 'x', playing: true, anchorMs: 1000, anchorAt: 0, durationMs: 9000 };

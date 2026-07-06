@@ -41,10 +41,12 @@ export function pauseVideo(st: VideoStateInternal, now: number): VideoStateInter
 }
 
 export function seekVideo(st: VideoStateInternal, ms: number, now: number): VideoStateInternal {
+  if (!Number.isFinite(ms)) return st; // guard against NaN/Infinity arriving over IPC
   return { ...st, anchorMs: clampMs(ms, st.durationMs), anchorAt: now };
 }
 
 export function setVolume(st: VideoStateInternal, volume: number): VideoStateInternal {
+  if (!Number.isFinite(volume)) return st; // guard against NaN/Infinity arriving over IPC
   return { ...st, volume: Math.max(0, Math.min(1, volume)) };
 }
 
@@ -53,6 +55,7 @@ export function setMuted(st: VideoStateInternal, muted: boolean): VideoStateInte
 }
 
 export function setDuration(st: VideoStateInternal, durationMs: number): VideoStateInternal {
+  if (!Number.isFinite(durationMs)) return st; // guard against NaN/Infinity arriving over IPC
   const d = Math.max(0, durationMs);
   return { ...st, durationMs: d, anchorMs: clampMs(st.anchorMs, d) };
 }

@@ -136,7 +136,16 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
 
   const goLive = (): void => {
     if (!selected || !slides.length) return;
-    window.helm.presentation.goLive(keyForMedia(selected.id, curIdx), slides[curIdx]);
+    const key = keyForMedia(selected.id, curIdx);
+    // Scope decision: Go Live on a video lands it PAUSED, never auto-playing audio —
+    // the operator presses Play once it's on-air. This also preserves any position the
+    // operator scrubbed to while previewing. A takedown (already live) and non-video
+    // items are unaffected.
+    if (selected.type === 'video' && !cuedIsLive) {
+      if (vstate.key !== key) window.helm.video.load(key, curSlide.src ?? '');
+      window.helm.video.pause(); // idempotent if already paused; re-anchors to the current position
+    }
+    window.helm.presentation.goLive(key, slides[curIdx]);
   };
 
   const toggleLogo = (): void => {
