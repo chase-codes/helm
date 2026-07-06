@@ -4,6 +4,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { keyForSong } from '../../shared/presentation/core';
 import { stanzaLabel } from '../../shared/songs/stanza';
+import { secondaryLyricRows } from '../../shared/songs/secondaryLyric';
 import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
@@ -21,6 +22,8 @@ const LIST_W_MAX = 360;
 const SECTION_W_DEFAULT = 380;
 const SECTION_W_MIN = 260;
 const SECTION_W_MAX = 620;
+const SECONDARY_TITLE_MAX = 3;
+const SECONDARY_LIMIT = 3;
 
 type DragTarget = 'list' | 'sections' | null;
 
@@ -55,6 +58,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [q, setQ] = useState('');
   const [field, setField] = useState<SearchField>('all');
   const [results, setResults] = useState<SongSearchResult[]>([]);
+  const [lyricHint, setLyricHint] = useState<SongSearchResult[]>([]);
   const [library, setLibrary] = useState<Song[]>([]);
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [section, setSection] = useState(0);
@@ -87,6 +91,29 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     void window.helm.songs.search(q, field).then((r) => {
       if (live) setResults(r);
     }).catch(console.error);
+    return () => {
+      live = false;
+    };
+  }, [q, field]);
+
+  // In Title mode only, run a parallel lyric-scored pass so a thin title search can show a
+  // subordinate "Also in lyrics" hint (see secondaryLyricRows). Cleared when not applicable.
+  // The clear branch defers its setState into a microtask (rather than calling it inline)
+  // so this stays a subscribe-to-external-system effect rather than a synchronous render loop.
+  useEffect(() => {
+    let live = true;
+    if (field === 'title' && q.trim()) {
+      void window.helm.songs
+        .search(q, 'lyric')
+        .then((r) => {
+          if (live) setLyricHint(r);
+        })
+        .catch(console.error);
+    } else {
+      void Promise.resolve().then(() => {
+        if (live) setLyricHint([]);
+      });
+    }
     return () => {
       live = false;
     };
@@ -125,6 +152,9 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId))
     : library.map((s) => toRow(s, '', activeSongId));
   const noResults = hasQuery && results.length === 0;
+  const secondaryResults =
+    field === 'title' && hasQuery ? secondaryLyricRows(results, lyricHint, SECONDARY_TITLE_MAX, SECONDARY_LIMIT) : [];
+  const secondaryRows: SongRow[] = secondaryResults.map((r) => toRow(r.song, r.snippet, activeSongId));
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
@@ -363,6 +393,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         field={field}
         setField={setField}
         rows={displayedRows}
+        secondaryRows={secondaryRows}
         noResults={noResults}
         emptyText={emptyText}
         onKeyDown={onInputKeyDown}

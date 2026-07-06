@@ -26,6 +26,7 @@ export interface SongSearchRailProps {
   field: SearchField;
   setField: (f: SearchField) => void;
   rows: SongRow[];
+  secondaryRows?: SongRow[];
   noResults: boolean;
   emptyText: string;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
@@ -42,6 +43,7 @@ export function SongSearchRail({
   field,
   setField,
   rows,
+  secondaryRows,
   noResults,
   emptyText,
   onKeyDown,
@@ -182,6 +184,37 @@ export function SongSearchRail({
             {r.isActive && <div style={activeBadgeStyle}>●</div>}
           </button>
         ))}
+        {!!secondaryRows?.length && (
+          <>
+            <div style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600, margin: '10px 2px 6px' }}>
+              ALSO IN LYRICS
+            </div>
+            <div style={{ opacity: 0.72 }}>
+              {secondaryRows.map((r) => (
+                <button key={r.id} style={rowStyle(r.isActive)} onClick={() => onSelect(r.id)}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        color: r.isActive ? T.accent : T.text
+                      }}
+                    >
+                      {r.title}
+                    </div>
+                    <div style={{ fontSize: '11px', color: T.faint, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.author}
+                    </div>
+                    {r.hasSnippet && <div style={snippetStyle}>&ldquo;{r.snippet}&rdquo;</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         {noResults && <div style={{ padding: '14px 8px', color: T.faint, fontSize: '12.5px', lineHeight: 1.5 }}>{emptyText}</div>}
         <button style={pasteSongStyle} onClick={onAddSong}>
           + Add a song — search or paste
