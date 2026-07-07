@@ -38,6 +38,7 @@ const api: HelmApi = {
   schedule: {
     list: () => ipcRenderer.invoke(CH.scheduleList),
     add: (r) => ipcRenderer.invoke(CH.scheduleAdd, r),
+    remove: (id) => ipcRenderer.invoke(CH.scheduleRemove, id),
   },
   settings: {
     get: (key, fallback) => ipcRenderer.invoke(CH.settingsGet, key, fallback),

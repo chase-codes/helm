@@ -47,3 +47,18 @@ test('list round-trips after reopening a repo on the same db handle', () => {
   expect(list).toHaveLength(1)
   expect(list[0]).toMatchObject({ book: 'Genesis', ch: 1, from: 1, to: 2 })
 })
+
+test('remove deletes by id and returns the updated list', () => {
+  repo.add({ book: 'Genesis', ch: 1, from: 1, to: 2 })
+  const two = repo.add({ book: 'John', ch: 3, from: 16, to: 16 })
+  const target = two.find((r) => r.book === 'John')!
+  const after = repo.remove(target.id)
+  expect(after).toHaveLength(1)
+  expect(after[0].book).toBe('Genesis')
+})
+
+test('remove of an unknown id is a no-op returning the current list', () => {
+  repo.add({ book: 'Genesis', ch: 1, from: 1, to: 2 })
+  const after = repo.remove('does-not-exist')
+  expect(after).toHaveLength(1)
+})
