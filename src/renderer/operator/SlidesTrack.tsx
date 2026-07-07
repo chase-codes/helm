@@ -271,7 +271,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     background: T.panel3,
     borderRadius: '12px',
     padding: '6px',
-    boxShadow: `0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px ${T.border}`
+    boxShadow: T.floatShadow
   };
   const importRowStyle: CSSProperties = {
     display: 'flex',

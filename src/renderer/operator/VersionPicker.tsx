@@ -42,7 +42,7 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
     background: T.panel3,
     borderRadius: '12px',
     padding: '10px 8px 8px',
-    boxShadow: `0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px ${T.border}`
+    boxShadow: T.floatShadow
   };
   const rowStyle = (installed: boolean, sel: boolean): CSSProperties => ({
     display: 'flex',

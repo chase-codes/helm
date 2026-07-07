@@ -173,7 +173,7 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
     background: T.panel3,
     borderRadius: '10px',
     padding: '5px',
-    boxShadow: `0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px ${T.border}`,
+    boxShadow: T.floatShadow,
     outline: 'none'
   };
   const itemStyle = (it: ContextMenuItem, i: number): CSSProperties => ({
