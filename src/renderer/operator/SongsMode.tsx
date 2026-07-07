@@ -9,6 +9,7 @@ import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/ty
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
+import { useContextMenu } from './useContextMenu';
 
 export interface SongsModeProps {
   themeMode: ThemeMode;
@@ -54,6 +55,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
+  const contextMenu = useContextMenu();
 
   const [q, setQ] = useState('');
   const [field, setField] = useState<SearchField>('all');
@@ -136,6 +138,14 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const selectSong = (id: string): void => {
     setActiveSongId(id);
     setSection(0);
+  };
+
+  // Stub for the Songs quick-edit follow-up. The context menu is the deliverable here;
+  // this just proves the wiring by surfacing the intent and selecting the row. Replace
+  // with the real in-preview quick-edit when that feature lands.
+  const onEditSong = (id: string): void => {
+    selectSong(id);
+    console.info('[songs] quick-edit requested for', id);
   };
 
   const onQuickAddSaved = (song: Song): void => {
@@ -395,6 +405,9 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
         onAddSong={() => setQuickAddOpen(true)}
+        onRowContextMenu={(id, e) =>
+          contextMenu.open(e, [{ label: 'Edit', onSelect: () => onEditSong(id) }])
+        }
       />
 
       <div style={{ ...dividerStyle(10), background: T.appBg }} title="Drag to resize" onMouseDown={(e) => startColDrag('list', e)}>
@@ -465,6 +478,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         </div>
       </div>
 
+      {contextMenu.menu}
       {quickAddOpen && <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />}
     </div>
   );

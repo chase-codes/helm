@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX, KeyboardEvent } from 'react';
+import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
 
@@ -32,6 +32,7 @@ export interface SongSearchRailProps {
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSelect: (id: string) => void;
   onAddSong: () => void;
+  onRowContextMenu?: (id: string, e: ReactMouseEvent) => void;
 }
 
 export function SongSearchRail({
@@ -48,7 +49,8 @@ export function SongSearchRail({
   emptyText,
   onKeyDown,
   onSelect,
-  onAddSong
+  onAddSong,
+  onRowContextMenu
 }: SongSearchRailProps): JSX.Element {
   const opRailStyle: CSSProperties = {
     width: `${width}px`,
@@ -162,7 +164,12 @@ export function SongSearchRail({
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>
         {rows.map((r) => (
-          <button key={r.id} style={rowStyle(r.isActive)} onClick={() => onSelect(r.id)}>
+          <button
+            key={r.id}
+            style={rowStyle(r.isActive)}
+            onClick={() => onSelect(r.id)}
+            onContextMenu={(e) => onRowContextMenu?.(r.id, e)}
+          >
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
@@ -191,7 +198,12 @@ export function SongSearchRail({
             </div>
             <div style={{ opacity: 0.72 }}>
               {secondaryRows.map((r) => (
-                <button key={r.id} style={rowStyle(r.isActive)} onClick={() => onSelect(r.id)}>
+                <button
+                  key={r.id}
+                  style={rowStyle(r.isActive)}
+                  onClick={() => onSelect(r.id)}
+                  onContextMenu={(e) => onRowContextMenu?.(r.id, e)}
+                >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
