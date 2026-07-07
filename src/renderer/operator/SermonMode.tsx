@@ -25,6 +25,7 @@ import { MessageMode, type MessageKeyRef } from './MessageMode';
 import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack';
 import { useContextMenu } from './useContextMenu';
 import { useListSelection } from './useListSelection';
+import { useTimedUndo } from './useTimedUndo';
 
 export interface SermonModeProps {
   themeMode: ThemeMode;
@@ -68,8 +69,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
 
   const contextMenu = useContextMenu();
   const sel = useListSelection();
-  const [undo, setUndo] = useState<{ reading: ScriptureReading } | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undo = useTimedUndo<ScriptureReading>();
 
   // Private ref MessageMode populates with its own arrow/goLive handlers while it's
   // mounted and active — kept separate from `keyHandlerRef` below so SermonMode remains
@@ -272,32 +272,29 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     setScrV(v);
   };
 
-  // Immediate remove + a ~5s "Removed — Undo" affordance (design: no blocking dialog).
-  // Undo re-adds via schedule.add, which appends at the end (position-preserving restore
-  // is a follow-up — see the interaction-primitives design's Known caveats).
+  // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog).
+  // Toast/selection-clear happen on IPC success so a rejected remove doesn't falsely claim
+  // removal. Undo re-adds via schedule.add, which appends at the end (position-preserving
+  // restore is a follow-up — see the interaction-primitives design's Known caveats).
   const removeReading = (id: string): void => {
     const reading = schedule.find((r) => r.id === id);
     if (!reading) return;
-    window.helm.schedule.remove(id).then(setSchedule).catch(console.error);
-    if (sel.isSelected(id)) sel.clear();
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setUndo({ reading });
-    undoTimerRef.current = setTimeout(() => setUndo(null), 5000);
+    window.helm.schedule
+      .remove(id)
+      .then((rows) => {
+        setSchedule(rows);
+        if (sel.isSelected(id)) sel.clear();
+        undo.arm(reading);
+      })
+      .catch(console.error);
   };
 
   const undoRemove = (): void => {
-    if (!undo) return;
-    const { book, ch, from, to } = undo.reading;
+    if (!undo.pending) return;
+    const { book, ch, from, to } = undo.pending;
     window.helm.schedule.add({ book, ch, from, to }).then(setSchedule).catch(console.error);
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setUndo(null);
+    undo.cancel();
   };
-
-  useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    };
-  }, []);
 
   // Builds the live slide for a single verse (the reading's `from`, matching where the
   // cue effect lands scrV) — not the whole reading range, so the on-screen ref/label
@@ -558,7 +555,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             addLabel={addLabel}
             onAdd={() => commitBuilder(false)}
             rows={scheduleRows}
-            undo={undo ? { label: formatRef(undo.reading), onUndo: undoRemove } : undefined}
+            undo={undo.pending ? { label: formatRef(undo.pending), onUndo: undoRemove } : undefined}
           />
           <SermonCenter
             theme={T}
