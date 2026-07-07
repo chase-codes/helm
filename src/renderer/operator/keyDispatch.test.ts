@@ -16,7 +16,7 @@ function ev(key: string, tag = 'body'): KeyboardEvent {
   return { key, target: { tagName: tag.toUpperCase() }, preventDefault: vi.fn() } as unknown as KeyboardEvent
 }
 
-const baseCtx = () => ({ settingsOpen: false, closeSettings: vi.fn() })
+const baseCtx = (): { settingsOpen: boolean; closeSettings: () => void } => ({ settingsOpen: false, closeSettings: vi.fn() })
 
 describe('dispatchModeKey', () => {
   it('Delete dispatches onDelete when the mode provides one', () => {
@@ -63,5 +63,17 @@ describe('dispatchModeKey', () => {
     const onGoLive = vi.fn()
     dispatchModeKey(ev('Enter'), { ...baseCtx(), handler: makeHandler({ onGoLive, isModalOpen: () => true }) })
     expect(onGoLive).not.toHaveBeenCalled()
+  })
+
+  it('Delete is suppressed while settings is open', () => {
+    const onDelete = vi.fn()
+    dispatchModeKey(ev('Delete'), { settingsOpen: true, closeSettings: vi.fn(), handler: makeHandler({ onDelete }) })
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('Delete is suppressed while the mode reports a modal open', () => {
+    const onDelete = vi.fn()
+    dispatchModeKey(ev('Delete'), { settingsOpen: false, closeSettings: vi.fn(), handler: makeHandler({ onDelete, isModalOpen: () => true }) })
+    expect(onDelete).not.toHaveBeenCalled()
   })
 })

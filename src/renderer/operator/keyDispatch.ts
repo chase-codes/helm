@@ -44,9 +44,10 @@ export function dispatchModeKey(e: KeyboardEvent, ctx: KeyDispatchCtx): void {
     if (ctx.settingsOpen || handler?.isModalOpen()) return;
     handler?.onGoLive();
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    // Only act when the active mode offers a delete; otherwise leave the key alone
-    // (Backspace is the primary "delete" key on Mac keyboards, so both map here).
-    if (!handler?.onDelete) return;
+    // Only act when the active mode offers a delete AND no modal is up — mirrors the
+    // Enter/Space guard so a destructive delete can't fire behind Settings/QuickAdd.
+    // (Backspace is the primary "delete" key on Mac keyboards, so both map here.)
+    if (!handler?.onDelete || ctx.settingsOpen || handler.isModalOpen()) return;
     e.preventDefault();
     handler.onDelete();
   }
