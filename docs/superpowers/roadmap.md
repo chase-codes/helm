@@ -69,3 +69,20 @@ Several items below share these foundations — worth building once as reusable 
   schedule via the **`Delete` key**. Apply the same select-and-delete pattern **wherever a
   schedule/list appears** in the sermon view (scripture, sermon, and the other tracks).
   Builds on the *selectable list rows + Delete-key* and *context-menu* enablers.
+  - **Update (2026-07-07):** the two enablers + the **scripture** consumer shipped —
+    select a schedule row (click cues + selects), `Delete`/`Backspace` or right-click →
+    Delete removes it with an immediate "Removed — Undo" affordance. Message/slides tracks
+    still pending (they render no schedule list yet; the `useListSelection` /
+    `useTimedUndo` / `UndoToast` / context-menu pieces are reuse-ready). See
+    `docs/superpowers/specs/2026-07-06-interaction-primitives-design.md`.
+
+- **Scroll the scheduled reading to the top of the preview on select.** When a scheduled
+  verse (or verse range) is clicked in the schedule rail, scroll the chapter/verse preview
+  so the reading's **first verse sits at the top** of the visible area — don't just
+  highlight it in place. Today clicking a schedule row jumps the cue (`jumpTo` → `scrV` in
+  `SermonMode`) but the verse preview (`ChapterRail`) doesn't bring the target into view,
+  so a reading deep in a long chapter leaves the operator scrolling to find it mid-service.
+  Bringing the first verse to the top makes the passage immediately ready for both the
+  operator and the on-screen speaker. Likely a `scrollIntoView` on the cued/selected first
+  verse card in `ChapterRail`, triggered on schedule-row select. Consider the same courtesy
+  wherever a list drives a scrollable preview.
