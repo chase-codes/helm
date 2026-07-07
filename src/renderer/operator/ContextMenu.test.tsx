@@ -86,4 +86,18 @@ describe('ContextMenu', () => {
     renderMenu([{ label: 'Delete', onSelect: vi.fn(), danger: true }])
     expect(screen.getByRole('menuitem', { name: 'Delete' }).getAttribute('data-danger')).toBe('true')
   })
+
+  it('swallows every key while open, including ones it does not handle, so App\'s document delegate never sees them', () => {
+    const spy = vi.fn()
+    document.addEventListener('keydown', spy)
+    try {
+      renderMenu([{ label: 'Edit', onSelect: vi.fn() }])
+      const menu = screen.getByRole('menu')
+      fireEvent.keyDown(menu, { key: 'ArrowDown' })
+      fireEvent.keyDown(menu, { key: 'Delete' })
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      document.removeEventListener('keydown', spy)
+    }
+  })
 })

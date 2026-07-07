@@ -141,6 +141,11 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
       e.preventDefault();
       e.stopPropagation();
       onClose();
+    } else {
+      // While the menu owns focus, no key should reach App's document-level delegate
+      // (e.g. Delete/Backspace must not fall through to ModeKeyHandler.onDelete while
+      // a menu is open) — only stop propagation, don't preventDefault an unhandled key.
+      e.stopPropagation();
     }
   };
 
