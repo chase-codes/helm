@@ -76,14 +76,29 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
     };
   }, [open, restoreFocusTo]);
 
-  // Any scroll / resize / window blur dismisses the menu (its anchor point is now stale).
+  // While open: dismiss on scroll/resize/blur (anchor goes stale) and on any outside
+  // pointer/right-click. Listeners are on `document` in the CAPTURE phase so an outside
+  // right-click closes THIS menu before the target row's own onContextMenu (bubble phase)
+  // reopens one at the new spot — no scrim intercepting the click. Right-clicks inside the
+  // menu are swallowed (no native browser menu over our menu).
   useEffect(() => {
     if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      if (!menuRef.current?.contains(e.target as Node)) onClose();
+    };
+    const onCtx = (e: MouseEvent): void => {
+      if (menuRef.current?.contains(e.target as Node)) e.preventDefault();
+      else onClose();
+    };
     const dismiss = (): void => onClose();
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('contextmenu', onCtx, true);
     window.addEventListener('scroll', dismiss, true);
     window.addEventListener('resize', dismiss);
     window.addEventListener('blur', dismiss);
     return () => {
+      document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('contextmenu', onCtx, true);
       window.removeEventListener('scroll', dismiss, true);
       window.removeEventListener('resize', dismiss);
       window.removeEventListener('blur', dismiss);
@@ -149,7 +164,6 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
     }
   };
 
-  const scrimStyle: CSSProperties = { position: 'fixed', inset: 0, zIndex: 60 };
   const menuStyle: CSSProperties = {
     position: 'fixed',
     top: `${pos.y}px`,
@@ -178,31 +192,21 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
   });
 
   return (
-    <>
-      <div
-        style={scrimStyle}
-        onClick={onClose}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          onClose();
-        }}
-      />
-      <div ref={menuRef} role="menu" tabIndex={-1} style={menuStyle} onKeyDown={onKeyDown}>
-        {items.map((it, i) => (
-          <button
-            key={i}
-            role="menuitem"
-            aria-disabled={it.disabled || undefined}
-            data-danger={it.danger || undefined}
-            tabIndex={-1}
-            style={itemStyle(it, i)}
-            onMouseEnter={() => !it.disabled && setActive(i)}
-            onClick={() => activate(it)}
-          >
-            {it.label}
-          </button>
-        ))}
-      </div>
-    </>
+    <div ref={menuRef} role="menu" tabIndex={-1} style={menuStyle} onKeyDown={onKeyDown}>
+      {items.map((it, i) => (
+        <button
+          key={i}
+          role="menuitem"
+          aria-disabled={it.disabled || undefined}
+          data-danger={it.danger || undefined}
+          tabIndex={-1}
+          style={itemStyle(it, i)}
+          onMouseEnter={() => !it.disabled && setActive(i)}
+          onClick={() => activate(it)}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
   );
 }

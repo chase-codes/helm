@@ -55,16 +55,25 @@ describe('ContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('closes on outside (scrim) click', () => {
+  it('closes on an outside mousedown', () => {
     const onClose = vi.fn()
-    const { container } = render(
+    render(
       <ThemeCtx.Provider value={themeFor('dark')}>
         <ContextMenu open x={10} y={10} items={[{ label: 'Edit', onSelect: vi.fn() }]} onClose={onClose} />
       </ThemeCtx.Provider>
     )
-    // The scrim is the first fixed full-viewport div (inset:0).
-    const scrim = container.querySelector('div[style*="inset"]') as HTMLElement
-    fireEvent.click(scrim)
+    fireEvent.mouseDown(document.body)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes on an outside right-click (so the target row can reopen it)', () => {
+    const onClose = vi.fn()
+    render(
+      <ThemeCtx.Provider value={themeFor('dark')}>
+        <ContextMenu open x={10} y={10} items={[{ label: 'Edit', onSelect: vi.fn() }]} onClose={onClose} />
+      </ThemeCtx.Provider>
+    )
+    fireEvent.contextMenu(document.body)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
