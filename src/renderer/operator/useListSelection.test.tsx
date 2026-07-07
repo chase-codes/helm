@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { JSX } from 'react'
 import { useListSelection } from './useListSelection'
 
 afterEach(cleanup)
 
 // Tiny host component so we exercise the hook through real React state transitions.
-function Host() {
+function Host(): JSX.Element {
   const sel = useListSelection()
   return (
     <div>
