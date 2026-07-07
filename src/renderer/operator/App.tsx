@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type JSX, type Mutable
 import { themeFor } from '../../shared/theme';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
+import { dispatchModeKey } from './keyDispatch';
 import { PreServiceMode } from './PreServiceMode';
 import { SermonMode } from './SermonMode';
 import { SettingsModal } from './SettingsModal';
@@ -30,6 +31,12 @@ export interface ModeKeyHandler {
    * separate piece of App-level state per mode's modal.
    */
   isModalOpen: () => boolean;
+  /**
+   * Delete/Backspace (only while not typing): remove the mode's currently selected list
+   * row, if any. Optional — modes with no selectable list omit it, and App then leaves
+   * Delete/Backspace untouched. See useListSelection + the interaction-primitives design.
+   */
+  onDelete?: () => void;
 }
 
 export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
@@ -55,43 +62,12 @@ function App(): JSX.Element {
   const keyHandlerRef = useRef<ModeKeyHandler | null>(null);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent): void => {
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      const typing = tag === 'input' || tag === 'textarea';
-      const handler = keyHandlerRef.current;
-
-      // Escape fires even while typing (closes any open modal); no preventDefault,
-      // matching the prototype exactly. Settings sits above the mode layer, so an open
-      // settings modal closes first — the mode's own onEscape (e.g. QuickAdd) only
-      // gets a chance once settings is out of the way.
-      if (e.key === 'Escape') {
-        if (settingsOpen) {
-          setSettingsOpen(false);
-          return;
-        }
-        handler?.onEscape();
-        return;
-      }
-      if (typing) return;
-
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        handler?.onArrow(1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        handler?.onArrow(-1);
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        // Guard against Enter/Space firing goLive behind an open modal (quick-add or
-        // settings) — e.g. pressing Enter on a modal's own button/input must not also
-        // put content live on the output window behind it. Settings is app-level so its
-        // state is checked directly; the active mode's own modal (if any) is queried via
-        // the delegate so App doesn't need a piece of state per mode's modal.
-        if (settingsOpen || handler?.isModalOpen()) return;
-        handler?.onGoLive();
-      }
-    };
+    const onKeyDown = (e: KeyboardEvent): void =>
+      dispatchModeKey(e, {
+        settingsOpen,
+        closeSettings: () => setSettingsOpen(false),
+        handler: keyHandlerRef.current
+      });
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [settingsOpen]);
