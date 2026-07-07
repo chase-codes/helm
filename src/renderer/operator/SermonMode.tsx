@@ -23,6 +23,8 @@ import { VersionPicker } from './VersionPicker';
 import { ChapterRail } from './ChapterRail';
 import { MessageMode, type MessageKeyRef } from './MessageMode';
 import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack';
+import { useContextMenu } from './useContextMenu';
+import { useListSelection } from './useListSelection';
 
 export interface SermonModeProps {
   themeMode: ThemeMode;
@@ -63,6 +65,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   const [chapter, setChapter] = useState<ChapterData | null>(null);
   const [schedule, setSchedule] = useState<ScriptureReading[]>([]);
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([]);
+
+  const contextMenu = useContextMenu();
+  const sel = useListSelection();
+  const [undo, setUndo] = useState<{ reading: ScriptureReading } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Private ref MessageMode populates with its own arrow/goLive handlers while it's
   // mounted and active — kept separate from `keyHandlerRef` below so SermonMode remains
@@ -265,6 +272,33 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     setScrV(v);
   };
 
+  // Immediate remove + a ~5s "Removed — Undo" affordance (design: no blocking dialog).
+  // Undo re-adds via schedule.add, which appends at the end (position-preserving restore
+  // is a follow-up — see the interaction-primitives design's Known caveats).
+  const removeReading = (id: string): void => {
+    const reading = schedule.find((r) => r.id === id);
+    if (!reading) return;
+    window.helm.schedule.remove(id).then(setSchedule).catch(console.error);
+    if (sel.isSelected(id)) sel.clear();
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndo({ reading });
+    undoTimerRef.current = setTimeout(() => setUndo(null), 5000);
+  };
+
+  const undoRemove = (): void => {
+    if (!undo) return;
+    const { book, ch, from, to } = undo.reading;
+    window.helm.schedule.add({ book, ch, from, to }).then(setSchedule).catch(console.error);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndo(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
   // Builds the live slide for a single verse (the reading's `from`, matching where the
   // cue effect lands scrV) — not the whole reading range, so the on-screen ref/label
   // ("Genesis 1:1") matches what the hero and the cue effect would independently produce.
@@ -409,7 +443,15 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       title: formatRef(r),
       meta: `${n} ${n === 1 ? 'verse' : 'verses'} · ${primary}`,
       isCurrent,
-      onClick: () => jumpTo(r.book, r.ch, r.from)
+      isSelected: sel.isSelected(r.id),
+      onClick: () => {
+        jumpTo(r.book, r.ch, r.from);
+        sel.select(r.id);
+      },
+      onContextMenu: (e) => {
+        sel.select(r.id);
+        contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReading(r.id) }]);
+      }
     };
   });
 
@@ -467,7 +509,10 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       },
       // SermonMode has no App-level modal of its own (unlike SongsMode's QuickAdd) —
       // Settings, its only modal, is tracked directly in App via settingsOpen.
-      isModalOpen: () => false
+      isModalOpen: () => false,
+      onDelete: () => {
+        if (track === 'scripture' && sel.selectedId) removeReading(sel.selectedId);
+      }
     };
     return () => {
       keyHandlerRef.current = null;
@@ -513,6 +558,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             addLabel={addLabel}
             onAdd={() => commitBuilder(false)}
             rows={scheduleRows}
+            undo={undo ? { label: formatRef(undo.reading), onUndo: undoRemove } : undefined}
           />
           <SermonCenter
             theme={T}
@@ -549,6 +595,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
           />
         </>
       )}
+      {contextMenu.menu}
     </div>
   );
 }

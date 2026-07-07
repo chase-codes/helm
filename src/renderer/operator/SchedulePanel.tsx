@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX, KeyboardEvent } from 'react';
+import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type { Theme } from '../../shared/theme';
 import { TrackTabs } from './TrackTabs';
 
@@ -9,7 +9,9 @@ export interface ScheduleRow {
   title: string;
   meta: string;
   isCurrent: boolean;
+  isSelected: boolean;
   onClick: () => void;
+  onContextMenu: (e: ReactMouseEvent) => void;
 }
 
 export interface SchedulePanelProps {
@@ -24,6 +26,7 @@ export interface SchedulePanelProps {
   addLabel: string;
   onAdd: () => void;
   rows: ScheduleRow[];
+  undo?: { label: string; onUndo: () => void };
 }
 
 /** Left rail: track switcher + (Scripture only, for now) the add-reading input and
@@ -40,7 +43,8 @@ export function SchedulePanel({
   canAdd,
   addLabel,
   onAdd,
-  rows
+  rows,
+  undo
 }: SchedulePanelProps): JSX.Element {
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const schedInputStyle: CSSProperties = {
@@ -66,7 +70,7 @@ export function SchedulePanel({
     alignItems: 'center',
     justifyContent: 'center'
   };
-  const rowStyle = (isCurrent: boolean): CSSProperties => ({
+  const rowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
@@ -74,8 +78,12 @@ export function SchedulePanel({
     padding: '10px 11px',
     borderRadius: '11px',
     cursor: 'pointer',
-    background: isCurrent ? T.panel3 : 'transparent',
-    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.scripture}55` : 'none'
+    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
+    boxShadow: isSelected
+      ? `inset 0 0 0 1.5px ${T.accent}`
+      : isCurrent
+        ? `inset 0 0 0 1px ${T.scripture}55`
+        : 'none'
   });
   const iconStyle: CSSProperties = {
     width: '28px',
@@ -120,7 +128,13 @@ export function SchedulePanel({
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rows.map((r) => (
-              <button key={r.id} style={rowStyle(r.isCurrent)} onClick={r.onClick}>
+              <button
+                key={r.id}
+                style={rowStyle(r.isCurrent, r.isSelected)}
+                data-selected={r.isSelected || undefined}
+                onClick={r.onClick}
+                onContextMenu={r.onContextMenu}
+              >
                 <div style={iconStyle}>&#10013;</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
@@ -130,6 +144,32 @@ export function SchedulePanel({
               </button>
             ))}
           </div>
+
+          {undo && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                margin: '0 12px 12px',
+                padding: '9px 11px',
+                borderRadius: '9px',
+                background: T.panel2,
+                boxShadow: `inset 0 0 0 1px ${T.border}`,
+                flexShrink: 0
+              }}
+            >
+              <span style={{ flex: 1, fontSize: '12px', color: T.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Removed {undo.label}
+              </span>
+              <button
+                style={{ fontSize: '12px', fontWeight: 700, color: T.scripture, padding: '2px 4px' }}
+                onClick={undo.onUndo}
+              >
+                Undo
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
