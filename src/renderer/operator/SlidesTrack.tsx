@@ -247,25 +247,21 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     boxShadow: isCurrent ? `inset 0 0 0 1px ${T.sermon}55` : 'none'
   });
   const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
-  const importBtnStyle: CSSProperties = {
-    width: '100%',
-    height: '42px',
-    marginTop: '8px',
-    borderRadius: '11px',
+  const importHeaderBtnStyle: CSSProperties = {
+    height: '26px',
+    padding: '0 10px',
+    borderRadius: '8px',
     boxShadow: `inset 0 0 0 1px ${T.border}`,
     border: 'none',
     color: T.dim,
-    fontSize: '13.5px',
+    fontSize: '12px',
     fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     background: 'transparent'
   };
   const importPopStyle: CSSProperties = {
     position: 'absolute',
-    bottom: '46px',
-    left: 0,
+    top: '30px',   // opens DOWNWARD from the header button (was bottom: 46px)
+    right: 0,
     zIndex: 40,
     width: '180px',
     background: T.panel3,
@@ -284,6 +280,16 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     fontWeight: 600,
     color: T.text,
     background: 'transparent'
+  };
+  const emptyStateStyle: CSSProperties = {
+    margin: '8px 2px',
+    padding: '18px 14px',
+    borderRadius: '11px',
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    color: T.faint,
+    fontSize: '12.5px',
+    lineHeight: 1.5,
+    textAlign: 'center'
   };
 
   const comingPanelStyle: CSSProperties = { width: `${RIGHT_PANEL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
@@ -366,8 +372,30 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
         <div style={{ padding: '12px 12px 10px', flexShrink: 0 }}>
           <TrackTabs theme={T} track={track} setTrack={setTrack} />
         </div>
-        <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, padding: '0 14px 9px', flexShrink: 0 }}>PRESENTATIONS &amp; MEDIA</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 9px', flexShrink: 0 }}>
+          <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PRESENTATIONS &amp; MEDIA</div>
+          <div style={{ position: 'relative' }}>
+            <button style={importHeaderBtnStyle} onClick={() => setImportOpen((o) => !o)}>
+              + Import
+            </button>
+            {importOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setImportOpen(false)} />
+                <div style={importPopStyle}>
+                  <button style={importRowStyle} onClick={importImages}>Images</button>
+                  <button style={importRowStyle} onClick={importVideo}>Video</button>
+                  <button style={importRowStyle} onClick={importDeck}>Slides / PDF</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {items.length === 0 && (
+            <div style={emptyStateStyle}>
+              No media yet — import slides, images, or video with <b>+ Import</b> to get started.
+            </div>
+          )}
           {items.map((item) => (
             <button key={item.id} style={rowStyle(item.id === selId)} onClick={() => selectItem(item)}>
               <div style={thumbBoxStyle}>
@@ -382,27 +410,6 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
               {item.id === selId && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
             </button>
           ))}
-          <div style={{ position: 'relative' }}>
-            <button style={importBtnStyle} onClick={() => setImportOpen((o) => !o)}>
-              + Import
-            </button>
-            {importOpen && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setImportOpen(false)} />
-                <div style={importPopStyle}>
-                  <button style={importRowStyle} onClick={importImages}>
-                    Images
-                  </button>
-                  <button style={importRowStyle} onClick={importVideo}>
-                    Video
-                  </button>
-                  <button style={importRowStyle} onClick={importDeck}>
-                    PowerPoint
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </div>
 

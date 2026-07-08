@@ -17,22 +17,16 @@ const items: MediaItem[] = [
   { id: 'vid1', type: 'video', title: 'Promo.mp4', filePath: 'video/promo.mp4', slides: [], createdAt: 3 }
 ]
 
-function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<typeof vi.fn> } {
-  const goLive = vi.fn()
-  const cue = vi.fn()
+// Shared presentation/video sub-objects, used by both the default stub and any
+// test that needs a variant helm (e.g. an empty library) without duplicating
+// the whole shape.
+function baseHelm() {
   const state: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
-  ;(window as unknown as { helm: unknown }).helm = {
-    media: {
-      list: () => Promise.resolve(items),
-      importImages: vi.fn(() => Promise.resolve({ items })),
-      importVideo: vi.fn(() => Promise.resolve({ items })),
-      importDeck: vi.fn(() => Promise.resolve({ items })),
-      remove: vi.fn(() => Promise.resolve(items))
-    },
+  return {
     presentation: {
       get: () => Promise.resolve(state),
-      cue,
-      goLive,
+      cue: vi.fn(),
+      goLive: vi.fn(),
       setOutput: vi.fn(),
       onState: () => () => {}
     },
@@ -43,7 +37,25 @@ function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<
       seek: vi.fn(), setVolume: vi.fn(), setMuted: vi.fn(), reportDuration: vi.fn()
     }
   }
-  return { goLive, cue }
+}
+
+function makeHelm() {
+  return {
+    ...baseHelm(),
+    media: {
+      list: () => Promise.resolve(items),
+      importImages: vi.fn(() => Promise.resolve({ items })),
+      importVideo: vi.fn(() => Promise.resolve({ items })),
+      importDeck: vi.fn(() => Promise.resolve({ items })),
+      remove: vi.fn(() => Promise.resolve(items))
+    }
+  }
+}
+
+function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<typeof vi.fn> } {
+  const helm = makeHelm()
+  ;(window as unknown as { helm: unknown }).helm = helm
+  return { goLive: helm.presentation.goLive, cue: helm.presentation.cue }
 }
 
 function renderTrack(): void {
@@ -98,7 +110,7 @@ describe('SlidesTrack', () => {
     renderTrack()
     const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
     fireEvent.click(importBtn)
-    const pptBtn = (await screen.findByText('PowerPoint')).closest('button') as HTMLButtonElement
+    const pptBtn = (await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement
     fireEvent.click(pptBtn)
     expect(
       await screen.findByText(
@@ -122,7 +134,7 @@ describe('SlidesTrack', () => {
     window.helm.media.importDeck = vi.fn(async () => ({ items }))
     const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
     fireEvent.click(importBtn)
-    const pptBtn = (await screen.findByText('PowerPoint')).closest('button') as HTMLButtonElement
+    const pptBtn = (await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement
     fireEvent.click(pptBtn)
 
     // Give the resolved promise a tick to flush.
@@ -169,5 +181,27 @@ describe('SlidesTrack', () => {
       const videos = Array.from(document.querySelectorAll('video'))
       expect(videos.some((v) => v.getAttribute('preload') !== 'metadata')).toBe(true)
     })
+  })
+
+  it('shows an empty-state hint when the library has no items', async () => {
+    const empty = { ...makeHelm(), media: { list: () => Promise.resolve([]),
+      importImages: vi.fn(() => Promise.resolve({ items: [] })),
+      importVideo: vi.fn(() => Promise.resolve({ items: [] })),
+      importDeck: vi.fn(() => Promise.resolve({ items: [] })),
+      remove: vi.fn(() => Promise.resolve([])) } };
+    (window as unknown as { helm: unknown }).helm = empty;
+    renderTrack()
+    expect(await screen.findByText(/No media yet/i)).toBeTruthy()
+  })
+
+  it('the import menu opens downward (top-anchored, not bottom-anchored)', async () => {
+    installHelmStub()
+    renderTrack()
+    const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
+    fireEvent.click(importBtn)
+    const menu = (await screen.findByText('Images')).closest('div') as HTMLElement
+    // The popover container carries an explicit top offset and no bottom offset.
+    expect(menu.style.bottom).toBe('')
+    expect(menu.style.top).not.toBe('')
   })
 })
