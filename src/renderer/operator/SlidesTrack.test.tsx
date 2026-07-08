@@ -20,7 +20,18 @@ const items: MediaItem[] = [
 // Shared presentation/video sub-objects, used by both the default stub and any
 // test that needs a variant helm (e.g. an empty library) without duplicating
 // the whole shape.
-function baseHelm() {
+type StubHelm = {
+  presentation: {
+    get: () => Promise<PresentationState>
+    cue: ReturnType<typeof vi.fn>
+    goLive: ReturnType<typeof vi.fn>
+    setOutput: ReturnType<typeof vi.fn>
+    onState: () => () => void
+  }
+  video: Record<string, unknown>
+}
+
+function baseHelm(): StubHelm {
   const state: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
   return {
     presentation: {
@@ -39,7 +50,7 @@ function baseHelm() {
   }
 }
 
-function makeHelm() {
+function makeHelm(): StubHelm & { media: Record<string, unknown> } {
   return {
     ...baseHelm(),
     media: {

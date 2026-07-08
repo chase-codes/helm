@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pickNeighborId } from './pickNeighbor';
 
-const ids = (xs: string[]) => xs.map((id) => ({ id }));
+const ids = (xs: string[]): { id: string }[] => xs.map((id) => ({ id }));
 
 describe('pickNeighborId', () => {
   it('selects the next row when one follows', () => {
