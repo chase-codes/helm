@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { SlidesTrack } from './SlidesTrack'
 import { ThemeCtx } from './ThemeCtx'
@@ -17,22 +17,27 @@ const items: MediaItem[] = [
   { id: 'vid1', type: 'video', title: 'Promo.mp4', filePath: 'video/promo.mp4', slides: [], createdAt: 3 }
 ]
 
-function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<typeof vi.fn> } {
-  const goLive = vi.fn()
-  const cue = vi.fn()
+// Shared presentation/video sub-objects, used by both the default stub and any
+// test that needs a variant helm (e.g. an empty library) without duplicating
+// the whole shape.
+type StubHelm = {
+  presentation: {
+    get: () => Promise<PresentationState>
+    cue: ReturnType<typeof vi.fn>
+    goLive: ReturnType<typeof vi.fn>
+    setOutput: ReturnType<typeof vi.fn>
+    onState: () => () => void
+  }
+  video: Record<string, unknown>
+}
+
+function baseHelm(): StubHelm {
   const state: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
-  ;(window as unknown as { helm: unknown }).helm = {
-    media: {
-      list: () => Promise.resolve(items),
-      importImages: vi.fn(() => Promise.resolve(items)),
-      importVideo: vi.fn(() => Promise.resolve(items)),
-      importDeck: vi.fn(() => Promise.resolve({ items })),
-      remove: vi.fn(() => Promise.resolve(items))
-    },
+  return {
     presentation: {
       get: () => Promise.resolve(state),
-      cue,
-      goLive,
+      cue: vi.fn(),
+      goLive: vi.fn(),
       setOutput: vi.fn(),
       onState: () => () => {}
     },
@@ -43,7 +48,26 @@ function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<
       seek: vi.fn(), setVolume: vi.fn(), setMuted: vi.fn(), reportDuration: vi.fn()
     }
   }
-  return { goLive, cue }
+}
+
+function makeHelm(): StubHelm & { media: Record<string, unknown> } {
+  return {
+    ...baseHelm(),
+    media: {
+      list: () => Promise.resolve(items),
+      importImages: vi.fn(() => Promise.resolve({ items })),
+      importVideo: vi.fn(() => Promise.resolve({ items })),
+      importDeck: vi.fn(() => Promise.resolve({ items })),
+      remove: vi.fn(() => Promise.resolve(items)),
+      onImportProgress: () => () => {}
+    }
+  }
+}
+
+function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<typeof vi.fn> } {
+  const helm = makeHelm()
+  ;(window as unknown as { helm: unknown }).helm = helm
+  return { goLive: helm.presentation.goLive, cue: helm.presentation.cue }
 }
 
 function renderTrack(): void {
@@ -98,7 +122,7 @@ describe('SlidesTrack', () => {
     renderTrack()
     const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
     fireEvent.click(importBtn)
-    const pptBtn = (await screen.findByText('PowerPoint')).closest('button') as HTMLButtonElement
+    const pptBtn = (await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement
     fireEvent.click(pptBtn)
     expect(
       await screen.findByText(
@@ -107,9 +131,22 @@ describe('SlidesTrack', () => {
     ).toBeTruthy()
   })
 
-  it('cancelling the PowerPoint picker (same items, no new id) leaves the current selection untouched', async () => {
+  it('shows an importing spinner while a deck import is in flight, then clears it', async () => {
+    installHelmStub()
+    let resolveImport!: (r: { items: MediaItem[] }) => void
+    window.helm.media.importDeck = vi.fn(() => new Promise<{ items: MediaItem[] }>((res) => { resolveImport = res }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement)
+    expect(await screen.findByText(/Importing/i)).toBeTruthy()
+    resolveImport({ items })
+    await waitFor(() => expect(screen.queryByText(/Importing/i)).toBeNull())
+  })
+
+  it('a canceled import (canceled:true) leaves the current selection untouched', async () => {
     const { cue } = installHelmStub()
-    // Select the image item first, so we can prove a cancelled deck-import doesn't
+    // Select the image item first, so we can prove a canceled deck-import doesn't
     // silently steal selection back to the deck (items[0]).
     renderTrack()
     const imgRow = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
@@ -117,12 +154,12 @@ describe('SlidesTrack', () => {
     await screen.findByText('▣ Welcome.jpg')
     cue.mockClear()
 
-    // Simulate a cancelled OS file picker: importDeck resolves with the SAME items
-    // (no new id) — the only signal a cancel gives, per the IPC contract.
-    window.helm.media.importDeck = vi.fn(async () => ({ items }))
+    // Simulate a cancelled OS file picker via the explicit `canceled` flag (Task 2's
+    // MediaImportResult), not an id-diff heuristic.
+    window.helm.media.importDeck = vi.fn(async () => ({ items, canceled: true }))
     const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
     fireEvent.click(importBtn)
-    const pptBtn = (await screen.findByText('PowerPoint')).closest('button') as HTMLButtonElement
+    const pptBtn = (await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement
     fireEvent.click(pptBtn)
 
     // Give the resolved promise a tick to flush.
@@ -133,6 +170,33 @@ describe('SlidesTrack', () => {
     expect(screen.queryByText('2')).toBeNull()
     // The cue effect must not have re-fired for the deck as a result of the cancel.
     expect(cue).not.toHaveBeenCalledWith(expect.stringContaining('deck1'), expect.anything())
+  })
+
+  it('auto-selects a newly imported image (non-empty library) instead of keeping the old selection', async () => {
+    installHelmStub()
+    const newItem: MediaItem = { id: 'imgNEW', type: 'image', title: 'New.jpg', filePath: 'imgNEW.jpg', slides: [], createdAt: 9 }
+    window.helm.media.importImages = vi.fn(async () => ({ items: [newItem, ...items] }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')       // library loaded, deck selected by default
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Images')).closest('button') as HTMLButtonElement)
+    // The new image becomes selected (its row shows the live dot), old deck no longer selected.
+    await screen.findByText('▣ New.jpg')
+    await waitFor(() => {
+      const row = (screen.getByText('▣ New.jpg').closest('button')) as HTMLButtonElement
+      expect(row.querySelector('span[style*="border-radius: 50%"]')).toBeTruthy()
+    })
+  })
+
+  it('shows a brief "Imported ✓" confirmation after a successful import', async () => {
+    installHelmStub()
+    const newItem: MediaItem = { id: 'imgNEW', type: 'image', title: 'New.jpg', filePath: 'imgNEW.jpg', slides: [], createdAt: 9 }
+    window.helm.media.importImages = vi.fn(async () => ({ items: [newItem, ...items] }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Images')).closest('button') as HTMLButtonElement)
+    expect(await screen.findByText(/Imported/)).toBeTruthy()
   })
 
   it('selecting a video item loads it into the shared video state', async () => {
@@ -169,5 +233,93 @@ describe('SlidesTrack', () => {
       const videos = Array.from(document.querySelectorAll('video'))
       expect(videos.some((v) => v.getAttribute('preload') !== 'metadata')).toBe(true)
     })
+  })
+
+  it('shows an empty-state hint when the library has no items', async () => {
+    const empty = { ...makeHelm(), media: { list: () => Promise.resolve([]),
+      importImages: vi.fn(() => Promise.resolve({ items: [] })),
+      importVideo: vi.fn(() => Promise.resolve({ items: [] })),
+      importDeck: vi.fn(() => Promise.resolve({ items: [] })),
+      remove: vi.fn(() => Promise.resolve([])),
+      onImportProgress: () => () => {} } };
+    (window as unknown as { helm: unknown }).helm = empty;
+    renderTrack()
+    expect(await screen.findByText(/No media yet/i)).toBeTruthy()
+  })
+
+  it('the import menu opens downward (top-anchored, not bottom-anchored)', async () => {
+    installHelmStub()
+    renderTrack()
+    const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
+    fireEvent.click(importBtn)
+    const menu = (await screen.findByText('Images')).closest('div') as HTMLElement
+    // The popover container carries an explicit top offset and no bottom offset.
+    expect(menu.style.bottom).toBe('')
+    expect(menu.style.top).not.toBe('')
+  })
+
+  it('right-click Delete drops the row locally and arms an Undo toast without an immediate IPC remove', async () => {
+    installHelmStub()
+    renderTrack()
+    const row = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
+    fireEvent.contextMenu(row)
+    fireEvent.click(await screen.findByText('Delete'))
+    // Optimistically gone from the list, undo offered, but nothing deleted on disk yet.
+    await waitFor(() => expect(screen.queryByText('▣ Welcome.jpg')).toBeNull())
+    expect(await screen.findByText(/Removed/)).toBeTruthy()
+    expect(window.helm.media.remove).not.toHaveBeenCalled()
+  })
+
+  it('Undo restores the row and never calls media.remove', async () => {
+    installHelmStub()
+    renderTrack()
+    const row = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
+    fireEvent.contextMenu(row)
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(await screen.findByText('Undo'))
+    expect(await screen.findByText('▣ Welcome.jpg')).toBeTruthy()
+    expect(window.helm.media.remove).not.toHaveBeenCalled()
+  })
+
+  it('after the undo window expires, the removal commits via media.remove', async () => {
+    vi.useFakeTimers()
+    try {
+      installHelmStub()
+      renderTrack()
+      // findByText uses real timers internally; query synchronously after flushing microtasks.
+      await vi.waitFor(() => expect(screen.getByText('▣ Welcome.jpg')).toBeTruthy())
+      fireEvent.contextMenu(screen.getByText('▣ Welcome.jpg').closest('button') as HTMLButtonElement)
+      fireEvent.click(screen.getByText('Delete'))
+      act(() => { vi.advanceTimersByTime(5200) }) // useTimedUndo default 5000ms
+      expect(window.helm.media.remove).toHaveBeenCalledWith('img1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('deleting a second item while one is pending commits the first immediately (no dropped delete)', async () => {
+    installHelmStub()
+    renderTrack()
+    // Delete deck1 (arms undo), then delete img1 before the toast expires.
+    fireEvent.contextMenu((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.contextMenu((await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    // The superseded first delete committed now; the second is still pending (not yet committed).
+    await waitFor(() => expect(window.helm.media.remove).toHaveBeenCalledWith('deck1'))
+    expect(window.helm.media.remove).not.toHaveBeenCalledWith('img1')
+  })
+
+  it('unmounting with a pending delete commits it (no dropped delete on track switch)', async () => {
+    installHelmStub()
+    const view = render(
+      <ThemeCtx.Provider value={themeFor('dark')}>
+        <SlidesTrack slidesKeyRef={{ current: null }} active track="slides" setTrack={() => {}} />
+      </ThemeCtx.Provider>
+    )
+    fireEvent.contextMenu((await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    view.unmount()
+    await waitFor(() => expect(window.helm.media.remove).toHaveBeenCalledWith('img1'))
   })
 })

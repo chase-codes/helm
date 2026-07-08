@@ -79,6 +79,7 @@ const api: HelmApi = {
     importVideo: () => ipcRenderer.invoke(CH.mediaImportVideo),
     importDeck: () => ipcRenderer.invoke(CH.mediaImportDeck),
     remove: (id) => ipcRenderer.invoke(CH.mediaRemove, id),
+    onImportProgress: sub(CH.mediaImportProgress),
   },
   video: {
     get: () => ipcRenderer.invoke(CH.videoGetState),

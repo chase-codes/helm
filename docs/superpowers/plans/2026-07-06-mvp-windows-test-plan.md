@@ -62,6 +62,14 @@ git bundle create ~/helm.bundle --all
 ```
 *(Alternative: push to a private GitHub repo and `git clone` on Windows — cleaner if you want a backup + to iterate remotely. Requires creating the remote; ask if you want help wiring that up.)*
 
+### A3b · [Build machine] Stage the vendored LibreOffice tree (required for PPTX import)
+The per-OS LibreOffice-headless tree lives **outside git** (large). Before `build:win`
+(or `build:mac`) it MUST be staged at `resources/libreoffice` so electron-builder's
+`extraResources` copies it next to the app (`<resourcesPath>/libreoffice`). If it's
+absent the build still succeeds, but PPTX import degrades to the "PowerPoint import
+unavailable" modal at runtime. Windows layout expected by `bundledSofficeCandidates`:
+`resources/libreoffice/program/soffice.exe`.
+
 ### A4 · [Win] One-time toolchain (do the dry-run EARLY)
 1. **Node.js LTS 22.x** from nodejs.org — during install, **check "Tools for Native Modules"** (installs Python + Visual Studio Build Tools via Chocolatey). This is what makes `better-sqlite3` compile if no prebuilt exists. Do **not** use Node 26 on the box; stick to LTS for native-build reliability.
 2. **Git for Windows** (git-scm.com).
@@ -105,6 +113,14 @@ Plug in the projector as a second display, then walk each in-scope flow (checkli
 ### P2 — Explicitly deferred (do NOT do before Wednesday)
 - All roadmap features: right-click context menus, quick-edit-in-preview, hotkey system, count-label change, secondary lyric matches, select-and-delete schedule items, dedicated pre-service scripture search. *(All post-MVP; `docs/superpowers/roadmap.md`.)*
 - Media/deck/video flows — not a gating scope for Wednesday. If they happen to work, bonus. LibreOffice (deck import) already has a Windows path but degrades gracefully if absent; don't install it just for the test unless PPTX import is needed.
+- [ ] **Bundled LibreOffice PPTX/PDF import (self-contained) — NOT YET VERIFIED.** On a
+  packaged Windows build with **no** LibreOffice installed on the box: import a `.pptx`
+  and a `.pdf` via **+ Import → Slides / PDF**. Confirm (a) every slide/page renders as a
+  separate thumbnail on the projector (no first-slide-only truncation), (b) the file
+  picker opens **parented** to the operator window (a sheet/owned modal), never behind the
+  always-on-top audience output, and (c) right-click **Delete + Undo** works on a media
+  row. This exercises the *bundled* `findSoffice` leg (`<resourcesPath>/libreoffice`) that
+  cannot be driven from macOS. Leave unchecked until run on a real Windows box.
 
 ---
 

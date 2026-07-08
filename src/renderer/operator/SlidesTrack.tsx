@@ -1,13 +1,17 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
-import type { MediaItem, Slide } from '../../shared/types';
+import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
 import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { VideoCanvas } from '../shared/VideoCanvas';
 import { TrackTabs } from './TrackTabs';
+import { useContextMenu } from './useContextMenu';
+import { useTimedUndo } from './useTimedUndo';
+import { UndoToast } from './UndoToast';
+import { pickNeighborId } from './pickNeighbor';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -67,11 +71,18 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   const [selId, setSelId] = useState('');
   const [slideIdx, setSlideIdx] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  const [justImported, setJustImported] = useState(false);
   // Deck-import calm-fallback surface (spec §9: never let an import failure throw
   // uncaught). 'no-libreoffice' is the structural `{ error }` result D1's importDeck
   // resolves with when soffice isn't found; 'failed' covers the promise REJECTING
   // mid-conversion (D1 flagged this can happen) — same modal, different copy.
   const [deckFallback, setDeckFallback] = useState<'no-libreoffice' | 'failed' | null>(null);
+  // Spinner shown while a deck import (conversion + rasterization) is in flight — a
+  // multi-second PPTX/PDF import otherwise gives no feedback and looks hung.
+  const [importing, setImporting] = useState<null | { label: string }>(null);
+
+  const contextMenu = useContextMenu();
+  const undo = useTimedUndo<MediaItem>();
 
   // Initial load: the media library, picking the first item as current.
   useEffect(() => {
@@ -121,6 +132,26 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     window.helm.video.load(keyForMedia(sel.id, 0), vsl.src ?? '');
   }, [items, selId]);
 
+  // Progress broadcast from main (Task 2's media:importProgress) — updates the spinner
+  // label with page counts while a deck import converts/rasterizes.
+  useEffect(() => {
+    const off = window.helm.media.onImportProgress((p) => {
+      setImporting({
+        label: p.phase === 'converting'
+          ? 'Converting…'
+          : `Rasterizing ${p.page ?? 0}/${p.pageCount ?? 0}…`
+      });
+    });
+    return off;
+  }, []);
+
+  // Brief post-import confirmation; clears itself after 2.2s.
+  useEffect(() => {
+    if (!justImported) return;
+    const t = setTimeout(() => setJustImported(false), 2200);
+    return () => clearTimeout(t);
+  }, [justImported]);
+
   const curKey = selected ? keyForMedia(selected.id, curIdx) : '';
   const cuedIsLive = output === 'live' && liveKey === curKey;
 
@@ -128,6 +159,53 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     setSelId(item.id);
     setSlideIdx(0);
   };
+
+  // Deferred-commit delete. `useTimedUndo` has a single pending slot and can't distinguish a
+  // user cancel from a timer expiry, so we track the id awaiting real deletion in a ref and
+  // commit it exactly once — on natural expiry, when a newer delete supersedes it, or when
+  // this track unmounts (tab switch) before the toast expires. Dropping any of those would
+  // leave an item the operator saw removed still on disk until the next refresh.
+  const committedRef = useRef<string | null>(null);
+  const commitPending = useCallback((): void => {
+    const id = committedRef.current;
+    committedRef.current = null;
+    if (id) void window.helm.media.remove(id).catch(console.error);
+  }, []);
+
+  const removeItem = (item: MediaItem): void => {
+    contextMenu.close();
+    commitPending(); // a still-pending prior delete is superseded — commit it now, don't drop it
+    const neighborId = pickNeighborId(items, item.id);
+    setItems((l) => l.filter((i) => i.id !== item.id));
+    if (selId === item.id) { setSelId(neighborId); setSlideIdx(0); }
+    committedRef.current = item.id;
+    undo.arm(item);
+  };
+
+  const undoRemove = (): void => {
+    const item = undo.pending;
+    if (!item) return;
+    // Cancel the pending commit BEFORE cancel() flips `undo.pending` to null, so the expiry
+    // effect below sees nothing to commit (an undo and a timer expiry look identical from
+    // `undo.pending`'s perspective).
+    committedRef.current = null;
+    undo.cancel();
+    // Re-fetch to restore the exact prior order rather than guessing an insertion index.
+    void window.helm.media.list().then((l) => {
+      setItems(l);
+      setSelId(item.id);
+    }).catch(console.error);
+  };
+
+  // Commit on natural expiry: `undo.pending` clears while a commit is still armed. (Undo
+  // clears `committedRef` first, so this runs as a no-op in that case.)
+  useEffect(() => {
+    if (undo.pending) return;
+    commitPending();
+  }, [undo.pending, commitPending]);
+
+  // Commit a still-pending delete if this track unmounts before the toast expires.
+  useEffect(() => () => commitPending(), [commitPending]);
 
   const stepSlide = (dir: 1 | -1): void => {
     if (!slides.length) return;
@@ -152,53 +230,48 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
   };
 
-  const refreshFrom = (l: MediaItem[]): void => {
-    setItems(l);
-    setSelId((cur) => cur || (l[0]?.id ?? ''));
+  // Unified post-import handling for every media type: a canceled picker leaves selection
+  // untouched; otherwise select the newly-added item (diff against the ids captured before
+  // the import), scroll it into view, and flash "Imported ✓". Replaces the old per-type
+  // refreshFrom (which left a non-empty library stuck on its prior selection) and the
+  // fragile id-diff cancel heuristic (main now returns an explicit `canceled` flag).
+  const applyImport = (res: MediaImportResult, prevIds: Set<string>): void => {
+    if (res.canceled) return;
+    const added = res.items.find((i) => !prevIds.has(i.id));
+    setItems(res.items);
+    if (added) {
+      setSelId(added.id);
+      setSlideIdx(0);
+      setJustImported(true);
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-media-id="${added.id}"]`)?.scrollIntoView?.({ block: 'nearest' });
+      });
+    }
   };
 
-  const importImages = (): void => {
+  const runImport = (
+    call: () => Promise<MediaImportResult>,
+    onError?: (err: unknown) => void
+  ): void => {
     setImportOpen(false);
-    void window.helm.media.importImages().then(refreshFrom).catch(console.error);
-  };
-  const importVideo = (): void => {
-    setImportOpen(false);
-    void window.helm.media.importVideo().then(refreshFrom).catch(console.error);
-  };
-  // PowerPoint import: unlike Images/Video, importDeck's success value carries an
-  // optional `error` (no-LibreOffice is a structural result, not a rejection) AND the
-  // promise can still reject mid-conversion (D1 flagged this) — so both paths route to
-  // the same calm fallback modal rather than letting either crash the UI (spec §9).
-  // importDeck's resolved `{ items }` is indistinguishable between a real import and a
-  // cancelled OS file picker (no IPC discriminator) — so a cancel still resolves with
-  // the unchanged library. We diff the returned items against `prevItems` (captured from
-  // this render's `items`, i.e. the library as it stood right before this click) by id;
-  // only a genuinely new id (real import; repo orders newest-first via mediaRepo's
-  // `ORDER BY created_at DESC`, so it's `res.items[0]`) reassigns selection. A cancel —
-  // same ids, same order — leaves selId/slideIdx untouched, so it doesn't silently steal
-  // the operator's current selection or re-fire the cue effect during a live service.
-  const importDeck = (): void => {
-    setImportOpen(false);
-    const prevItems = items;
-    void window.helm.media
-      .importDeck()
+    const prevIds = new Set(items.map((i) => i.id));
+    void call()
       .then((res) => {
-        if (res.error === 'no-libreoffice') {
-          setDeckFallback('no-libreoffice');
-          return;
-        }
-        const prevIds = new Set(prevItems.map((i) => i.id));
-        const added = res.items.find((i) => !prevIds.has(i.id));
-        setItems(res.items);
-        if (added) {
-          setSelId(added.id);
-          setSlideIdx(0);
-        }
+        setImporting(null);
+        if (res.error === 'no-libreoffice') { setDeckFallback('no-libreoffice'); return; }
+        applyImport(res, prevIds);
       })
-      .catch((err: unknown) => {
-        console.error(err);
-        setDeckFallback('failed');
-      });
+      .catch((err: unknown) => { setImporting(null); console.error(err); onError?.(err); });
+  };
+
+  const importImages = (): void => runImport(() => window.helm.media.importImages());
+  const importVideo = (): void => runImport(() => window.helm.media.importVideo());
+  const importDeck = (): void => {
+    setImporting({ label: 'Importing…' });
+    runImport(
+      () => window.helm.media.importDeck(),
+      () => setDeckFallback('failed')
+    );
   };
 
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
@@ -247,25 +320,21 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     boxShadow: isCurrent ? `inset 0 0 0 1px ${T.sermon}55` : 'none'
   });
   const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
-  const importBtnStyle: CSSProperties = {
-    width: '100%',
-    height: '42px',
-    marginTop: '8px',
-    borderRadius: '11px',
+  const importHeaderBtnStyle: CSSProperties = {
+    height: '26px',
+    padding: '0 10px',
+    borderRadius: '8px',
     boxShadow: `inset 0 0 0 1px ${T.border}`,
     border: 'none',
     color: T.dim,
-    fontSize: '13.5px',
+    fontSize: '12px',
     fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     background: 'transparent'
   };
   const importPopStyle: CSSProperties = {
     position: 'absolute',
-    bottom: '46px',
-    left: 0,
+    top: '30px',   // opens DOWNWARD from the header button (was bottom: 46px)
+    right: 0,
     zIndex: 40,
     width: '180px',
     background: T.panel3,
@@ -284,6 +353,21 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     fontWeight: 600,
     color: T.text,
     background: 'transparent'
+  };
+  const importingRowStyle: CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    margin: '4px 2px', padding: '10px 12px', borderRadius: '10px',
+    background: T.panel3, color: T.dim, fontSize: '12.5px', fontWeight: 600
+  };
+  const emptyStateStyle: CSSProperties = {
+    margin: '8px 2px',
+    padding: '18px 14px',
+    borderRadius: '11px',
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    color: T.faint,
+    fontSize: '12.5px',
+    lineHeight: 1.5,
+    textAlign: 'center'
   };
 
   const comingPanelStyle: CSSProperties = { width: `${RIGHT_PANEL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
@@ -366,10 +450,45 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
         <div style={{ padding: '12px 12px 10px', flexShrink: 0 }}>
           <TrackTabs theme={T} track={track} setTrack={setTrack} />
         </div>
-        <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, padding: '0 14px 9px', flexShrink: 0 }}>PRESENTATIONS &amp; MEDIA</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 9px', flexShrink: 0 }}>
+          <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>
+            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button style={importHeaderBtnStyle} onClick={() => setImportOpen((o) => !o)}>
+              + Import
+            </button>
+            {importOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setImportOpen(false)} />
+                <div style={importPopStyle}>
+                  <button style={importRowStyle} onClick={importImages}>Images</button>
+                  <button style={importRowStyle} onClick={importVideo}>Video</button>
+                  <button style={importRowStyle} onClick={importDeck}>Slides / PDF</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {importing && (
+            <div style={importingRowStyle}>
+              <span style={{ opacity: 0.8 }}>⏳</span> {importing.label}
+            </div>
+          )}
+          {items.length === 0 && (
+            <div style={emptyStateStyle}>
+              No media yet — import slides, images, or video with <b>+ Import</b> to get started.
+            </div>
+          )}
           {items.map((item) => (
-            <button key={item.id} style={rowStyle(item.id === selId)} onClick={() => selectItem(item)}>
+            <button
+              key={item.id}
+              data-media-id={item.id}
+              style={rowStyle(item.id === selId)}
+              onClick={() => selectItem(item)}
+              onContextMenu={(e) => contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeItem(item) }])}
+            >
               <div style={thumbBoxStyle}>
                 <SlideCanvas slide={slidesOf(item)[0]} fill />
               </div>
@@ -382,28 +501,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
               {item.id === selId && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
             </button>
           ))}
-          <div style={{ position: 'relative' }}>
-            <button style={importBtnStyle} onClick={() => setImportOpen((o) => !o)}>
-              + Import
-            </button>
-            {importOpen && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setImportOpen(false)} />
-                <div style={importPopStyle}>
-                  <button style={importRowStyle} onClick={importImages}>
-                    Images
-                  </button>
-                  <button style={importRowStyle} onClick={importVideo}>
-                    Video
-                  </button>
-                  <button style={importRowStyle} onClick={importDeck}>
-                    PowerPoint
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
         </div>
+        {undo.pending && (
+          <UndoToast label={undo.pending.title} onUndo={undoRemove} />
+        )}
       </div>
 
       <SermonCenter
@@ -519,6 +620,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
           </div>
         </div>
       )}
+
+      {contextMenu.menu}
     </div>
   );
 }

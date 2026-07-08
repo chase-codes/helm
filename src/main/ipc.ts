@@ -105,7 +105,7 @@ export function registerIpc(
   ipcMain.handle(CH.mediaImportImages, () => mediaImport.importImages());
   ipcMain.handle(CH.mediaImportVideo, () => mediaImport.importVideo());
   ipcMain.handle(CH.mediaImportDeck, () => mediaImport.importDeck());
-  ipcMain.handle(CH.mediaRemove, (_e, id: string) => mediaRepo.remove(id));
+  ipcMain.handle(CH.mediaRemove, (_e, id: string) => mediaImport.removeMedia(id));
 
   ipcMain.handle(CH.videoGetState, () => video.get());
   ipcMain.on(CH.videoLoad, (_e, key: string, src: string) => video.load(key, src));

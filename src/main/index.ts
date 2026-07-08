@@ -6,6 +6,7 @@ import {
   CH,
   type AudioDownloadProgress,
   type BibleInstallProgress,
+  type MediaImportProgress,
   type MessageInstallProgress
 } from '../shared/types'
 import { openDb } from './db'
@@ -21,7 +22,7 @@ import { createMessageSource } from './messageSource'
 import { createPreCardsRepo } from './preCardsRepo'
 import { createPreserviceEngine } from './preserviceEngine'
 import { createMediaRepo } from './mediaRepo'
-import { createMediaImport } from './mediaImport'
+import { createMediaImport, findSoffice } from './mediaImport'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
@@ -163,7 +164,14 @@ app.whenReady().then(() => {
   })
 
   const mediaRepo = createMediaRepo(db)
-  const mediaImport = createMediaImport(mediaRepo, libRoot)
+  const broadcastMediaProgress = (p: MediaImportProgress): void => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.mediaImportProgress, p)
+  }
+  const mediaImport = createMediaImport(mediaRepo, libRoot, {
+    findSoffice: () => findSoffice(undefined, process.resourcesPath),
+    onProgress: broadcastMediaProgress,
+    getParentWindow: () => operatorWindow
+  })
 
   registerIpc(
     repo,

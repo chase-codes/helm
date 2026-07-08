@@ -1,12 +1,14 @@
 import { dialog } from 'electron';
-import { existsSync, copyFileSync, mkdirSync, readdirSync } from 'fs';
+import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import { basename, extname, join } from 'path';
+import { basename, dirname, extname, join } from 'path';
 import type { MediaRepo, MediaItem } from './mediaRepo';
+import type { MediaImportProgress, MediaImportResult } from '../shared/types';
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'];
+const DECK_EXTENSIONS = ['pptx', 'ppt', 'odp', 'pdf'];
 
 // Known install locations to probe, in priority order, before falling back to PATH.
 const KNOWN_SOFFICE_PATHS = [
@@ -14,14 +16,6 @@ const KNOWN_SOFFICE_PATHS = [
   'C:\\Program Files\\LibreOffice\\program\\soffice.exe', // Windows
   '/usr/bin/soffice', // common Linux install
   '/usr/local/bin/soffice'
-];
-
-// Known install locations for poppler's pdftoppm, probed before falling back to PATH.
-const KNOWN_PDFTOPPM_PATHS = [
-  '/opt/homebrew/bin/pdftoppm', // macOS Homebrew (Apple Silicon)
-  '/usr/local/bin/pdftoppm', // macOS Homebrew (Intel) / common Linux
-  '/usr/bin/pdftoppm', // common Linux install (poppler-utils)
-  'C:\\Program Files\\poppler\\Library\\bin\\pdftoppm.exe' // Windows (poppler for Windows)
 ];
 
 function probeForBinary(
@@ -67,22 +61,33 @@ export function parsePngOutput(files: string[]): string[] {
 }
 
 /**
- * Probe known LibreOffice install locations plus PATH for a `soffice`
- * binary. Accepts an injected existence predicate for testability; defaults
- * to `fs.existsSync`.
+ * Candidate paths for a LibreOffice `soffice` binary bundled next to the app via
+ * electron-builder `extraResources` (staged at `<resourcesPath>/libreoffice`). Layout
+ * differs per OS because the vendored tree mirrors LibreOffice's own install shape.
  */
-export function findSoffice(exists: (p: string) => boolean = existsSync): string | null {
-  return probeForBinary(KNOWN_SOFFICE_PATHS, 'soffice', 'soffice.exe', exists);
+export function bundledSofficeCandidates(resourcesPath: string): string[] {
+  const root = join(resourcesPath, 'libreoffice');
+  if (process.platform === 'win32') return [join(root, 'program', 'soffice.exe')];
+  if (process.platform === 'darwin') return [join(root, 'MacOS', 'soffice'), join(root, 'program', 'soffice')];
+  return [join(root, 'program', 'soffice'), join(root, 'opt', 'libreoffice', 'program', 'soffice')];
 }
 
 /**
- * Probe known poppler-utils install locations plus PATH for a `pdftoppm`
- * binary, mirroring `findSoffice`. Used to rasterize the intermediate PDF
- * into per-slide PNGs; when absent, deck conversion degrades to a single
- * PNG (see `runConvertProd`).
+ * Probe known LibreOffice install locations plus PATH for a `soffice`
+ * binary. Accepts an injected existence predicate for testability; defaults
+ * to `fs.existsSync`. When `resourcesPath` is given, bundled candidates under
+ * it are checked first, before known install locations and PATH.
  */
-export function findPdftoppm(exists: (p: string) => boolean = existsSync): string | null {
-  return probeForBinary(KNOWN_PDFTOPPM_PATHS, 'pdftoppm', 'pdftoppm.exe', exists);
+export function findSoffice(
+  exists: (p: string) => boolean = existsSync,
+  resourcesPath?: string
+): string | null {
+  if (resourcesPath) {
+    for (const candidate of bundledSofficeCandidates(resourcesPath)) {
+      if (exists(candidate)) return candidate;
+    }
+  }
+  return probeForBinary(KNOWN_SOFFICE_PATHS, 'soffice', 'soffice.exe', exists);
 }
 
 function copyPickedFiles(
@@ -91,19 +96,122 @@ function copyPickedFiles(
   subfolder: string,
   type: MediaItem['type'],
   filePaths: string[]
-): void {
+): MediaItem[] {
   const destDir = join(libRoot, subfolder);
   mkdirSync(destDir, { recursive: true });
-
+  const added: MediaItem[] = [];
   for (const filePath of filePaths) {
-    const ext = extname(filePath); // includes leading dot, or '' if none
+    const ext = extname(filePath);
     const relPath = `${subfolder}/${randomUUID()}${ext}`;
     copyFileSync(filePath, join(libRoot, relPath));
-    repo.add({ type, title: basename(filePath), filePath: relPath, slides: [] });
+    added.push(repo.add({ type, title: basename(filePath), filePath: relPath, slides: [] }));
   }
+  return added;
 }
 
-/** Runs an external binary to completion, rejecting on non-zero exit or spawn error. */
+export interface MediaImport {
+  importImages(): Promise<MediaImportResult>;
+  importVideo(): Promise<MediaImportResult>;
+  importDeck(): Promise<MediaImportResult>;
+  removeMedia(id: string): MediaItem[];
+}
+
+/**
+ * Injectable seams for `createMediaImport`. Tests inject fakes so importDeck runs
+ * without spawning soffice or invoking pdfjs, and removeMedia runs without touching disk.
+ * Production wires the real soffice (`convertToPdf`), pdfjs+canvas (`rasterize`),
+ * fs unlink (`deleteFiles`) and progress broadcast (`onProgress`) in Tasks 3, 4 and 8.
+ */
+export interface MediaImportOptions {
+  findSoffice?: () => string | null;
+  convertToPdf?: (soffice: string, src: string, outDir: string) => Promise<string>;
+  rasterize?: (pdfPath: string, outDir: string, onPage?: (page: number, pageCount: number) => void) => Promise<string[]>;
+  deleteFiles?: (absPaths: string[]) => void;
+  onProgress?: (p: MediaImportProgress) => void;
+  getParentWindow?: () => Electron.BrowserWindow | null;
+}
+
+export function createMediaImport(
+  repo: MediaRepo,
+  libRoot: string,
+  options: MediaImportOptions = {}
+): MediaImport {
+  const findSofficeFn = options.findSoffice ?? (() => findSoffice());
+  const convertToPdf = options.convertToPdf ?? convertToPdfProd;   // Task 3
+  const rasterize = options.rasterize ?? rasterizeProd;            // Task 3
+  const deleteFiles = options.deleteFiles ?? deleteFilesProd;      // Task 8
+  const emit = options.onProgress ?? (() => {});
+
+  async function pickFiles(extensions: string[], filterName: string, multi = true): Promise<{ paths: string[]; canceled: boolean }> {
+    const parent = options.getParentWindow?.() ?? null;
+    const dialogOpts = {
+      properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
+      filters: [{ name: filterName, extensions }]
+    } as Electron.OpenDialogOptions;
+    const result = parent
+      ? await dialog.showOpenDialog(parent, dialogOpts)
+      : await dialog.showOpenDialog(dialogOpts);
+    if (result.canceled) return { paths: [], canceled: true };
+    return { paths: result.filePaths, canceled: false };
+  }
+
+  return {
+    async importImages() {
+      const { paths, canceled } = await pickFiles(IMAGE_EXTENSIONS, 'Images');
+      if (canceled) return { items: repo.list(), canceled: true };
+      copyPickedFiles(repo, libRoot, 'images', 'image', paths);
+      return { items: repo.list() };
+    },
+
+    async importVideo() {
+      const { paths, canceled } = await pickFiles(VIDEO_EXTENSIONS, 'Video');
+      if (canceled) return { items: repo.list(), canceled: true };
+      copyPickedFiles(repo, libRoot, 'video', 'video', paths);
+      return { items: repo.list() };
+    },
+
+    async importDeck() {
+      const { paths, canceled } = await pickFiles(DECK_EXTENSIONS, 'Presentations', false);
+      if (canceled) return { items: repo.list(), canceled: true };
+
+      const srcPath = paths[0];
+      const isPdf = extname(srcPath).toLowerCase() === '.pdf';
+
+      // Only office formats need LibreOffice; a PDF rasterizes directly. Resolve/verify the
+      // converter up front for those (fail fast before creating the deck dir); a PDF skips it.
+      const soffice = isPdf ? null : findSofficeFn();
+      if (!isPdf && soffice === null) return { items: repo.list(), error: 'no-libreoffice' };
+
+      const relDeckDir = `decks/${randomUUID()}`;
+      const deckDir = join(libRoot, relDeckDir);
+      mkdirSync(deckDir, { recursive: true });
+
+      let pdfPath: string;
+      if (isPdf) {
+        pdfPath = srcPath;
+      } else {
+        emit({ phase: 'converting' });
+        // soffice is non-null here: the !isPdf branch above returned when it was null.
+        pdfPath = await convertToPdf(soffice as string, srcPath, deckDir);
+      }
+
+      const pngFiles = await rasterize(pdfPath, deckDir, (page, pageCount) =>
+        emit({ phase: 'rasterizing', page, pageCount })
+      );
+      const slides = parsePngOutput(pngFiles).map((name) => `${relDeckDir}/${name}`);
+
+      repo.add({ type: 'deck', title: basename(srcPath), filePath: null, slides });
+      return { items: repo.list() };
+    },
+
+    removeMedia(id) {
+      const item = repo.get(id);
+      if (item) deleteFiles(absPathsForItem(libRoot, item));  // Task 8 defines absPathsForItem
+      return repo.remove(id);
+    }
+  };
+}
+
 function runExternal(cmd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args);
@@ -120,101 +228,59 @@ function runExternal(cmd: string, args: string[]): Promise<void> {
 }
 
 /**
- * Production `runConvert`: converts `src` (a .pptx) to PDF via soffice, then
- * rasterizes each PDF page to a PNG via poppler's `pdftoppm` — this yields
- * true per-slide PNGs, unlike soffice's own `--convert-to png`, which emits
- * only the first slide on many builds.
- *
- * If `pdftoppm` is unavailable, degrades calmly: falls back to soffice's
- * single-PNG (first-slide-only) export and logs the limitation, rather than
- * failing the import outright.
- *
- * Returns filenames relative to `outDir` (not full paths) — callers combine
- * them with the deck's own relative directory before storing in the DB.
+ * Convert a .pptx/.ppt/.odp to a PDF in `outDir` via headless LibreOffice, returning
+ * the produced PDF's absolute path. soffice names the output `<basename>.pdf`.
  */
-async function runConvertProd(soffice: string, src: string, outDir: string): Promise<string[]> {
+async function convertToPdfProd(soffice: string, src: string, outDir: string): Promise<string> {
   await runExternal(soffice, ['--headless', '--convert-to', 'pdf', '--outdir', outDir, src]);
-
-  const pdftoppm = findPdftoppm();
-  if (pdftoppm !== null) {
-    const pdfPath = join(outDir, `${basename(src, extname(src))}.pdf`);
-    await runExternal(pdftoppm, ['-png', pdfPath, join(outDir, 'slide')]);
-  } else {
-    console.warn(
-      '[mediaImport] pdftoppm not found; importing deck as a single-slide image (per-slide PNGs unavailable). Install poppler-utils for full per-slide conversion.'
-    );
-    await runExternal(soffice, ['--headless', '--convert-to', 'png', '--outdir', outDir, src]);
-  }
-
-  return readdirSync(outDir).filter((f) => f.toLowerCase().endsWith('.png'));
-}
-
-export interface MediaImport {
-  importImages(): Promise<MediaItem[]>;
-  importVideo(): Promise<MediaItem[]>;
-  importDeck(): Promise<{ items: MediaItem[]; error?: 'no-libreoffice' }>;
+  return join(outDir, `${basename(src, extname(src))}.pdf`);
 }
 
 /**
- * Injectable seams for `createMediaImport`, defaulted to the real
- * `findSoffice`/`runConvertProd` in production. Tests inject fakes here so
- * `importDeck` can be exercised without spawning soffice/pdftoppm or
- * touching a real file-open dialog's underlying tools.
+ * Rasterize every page of `pdfPath` to a zero-padded PNG in `outDir` (`slide-0001.png`…)
+ * using pdfjs-dist + @napi-rs/canvas. Page count drives slide count — no first-slide-only
+ * truncation. Returns the PNG basenames in page order; calls `onPage(n, total)` per page.
  */
-export interface MediaImportOptions {
-  findSoffice?: () => string | null;
-  runConvert?: (soffice: string, src: string, outDir: string) => Promise<string[]>;
+async function rasterizeProd(
+  pdfPath: string,
+  outDir: string,
+  onPage?: (page: number, pageCount: number) => void
+): Promise<string[]> {
+  const { createCanvas } = await import('@napi-rs/canvas');
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const data = new Uint8Array(readFileSync(pdfPath));
+  const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise;
+  const names: string[] = [];
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 2 }); // 2x for crisp projection
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d');
+      await page.render({
+        canvasContext: ctx as unknown as CanvasRenderingContext2D,
+        canvas: canvas as unknown as HTMLCanvasElement,
+        viewport
+      }).promise;
+      const name = `slide-${String(n).padStart(4, '0')}.png`;
+      writeFileSync(join(outDir, name), canvas.toBuffer('image/png'));
+      names.push(name);
+      onPage?.(n, doc.numPages);
+    }
+  } finally {
+    await doc.destroy();
+  }
+  return names;
+}
+/** Absolute on-disk paths owned by a media item: the deck's directory, or the single file. */
+function absPathsForItem(libRoot: string, item: MediaItem): string[] {
+  if (item.type === 'deck') {
+    if (item.slides.length === 0) return [];
+    return [dirname(join(libRoot, item.slides[0]))];
+  }
+  return item.filePath ? [join(libRoot, item.filePath)] : [];
 }
 
-export function createMediaImport(
-  repo: MediaRepo,
-  libRoot: string,
-  options: MediaImportOptions = {}
-): MediaImport {
-  const findSofficeFn = options.findSoffice ?? (() => findSoffice());
-  const runConvert = options.runConvert ?? runConvertProd;
-
-  async function pickFiles(extensions: string[], filterName: string, multi = true): Promise<string[]> {
-    const result = await dialog.showOpenDialog({
-      properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
-      filters: [{ name: filterName, extensions }]
-    });
-    if (result.canceled) return [];
-    return result.filePaths;
-  }
-
-  return {
-    async importImages() {
-      const filePaths = await pickFiles(IMAGE_EXTENSIONS, 'Images');
-      copyPickedFiles(repo, libRoot, 'images', 'image', filePaths);
-      return repo.list();
-    },
-
-    async importVideo() {
-      const filePaths = await pickFiles(VIDEO_EXTENSIONS, 'Video');
-      copyPickedFiles(repo, libRoot, 'video', 'video', filePaths);
-      return repo.list();
-    },
-
-    async importDeck() {
-      const soffice = findSofficeFn();
-      if (soffice === null) {
-        return { items: repo.list(), error: 'no-libreoffice' };
-      }
-
-      const filePaths = await pickFiles(['pptx'], 'PowerPoint', false);
-      if (filePaths.length === 0) return { items: repo.list() };
-
-      const srcPath = filePaths[0];
-      const relDeckDir = `decks/${randomUUID()}`;
-      const deckDir = join(libRoot, relDeckDir);
-      mkdirSync(deckDir, { recursive: true });
-
-      const pngFiles = await runConvert(soffice, srcPath, deckDir);
-      const slides = parsePngOutput(pngFiles).map((name) => `${relDeckDir}/${name}`);
-
-      repo.add({ type: 'deck', title: basename(srcPath), filePath: null, slides });
-      return { items: repo.list() };
-    }
-  };
+function deleteFilesProd(absPaths: string[]): void {
+  for (const p of absPaths) rmSync(p, { recursive: true, force: true });
 }

@@ -11,9 +11,15 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+# resources/libreoffice is a vendored, per-OS LibreOffice-headless tree kept OUTSIDE git
+# (large). It MUST be staged on the build machine before build:win / build:mac. If the
+# folder is absent the build still succeeds but PPTX import degrades to the
+# no-libreoffice fallback modal at runtime.
 extraResources:
   - from: resources/bibles
     to: bibles
+  - from: resources/libreoffice
+    to: libreoffice
 win:
   executableName: Helm
 nsis:

@@ -40,6 +40,16 @@ export interface MediaItem {
   slides: string[]; // relative image paths, for deck (empty otherwise)
   createdAt: number;
 }
+export interface MediaImportProgress {
+  phase: 'converting' | 'rasterizing';
+  page?: number;
+  pageCount?: number;
+}
+export interface MediaImportResult {
+  items: MediaItem[];
+  canceled?: boolean;
+  error?: 'no-libreoffice';
+}
 
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
@@ -96,7 +106,7 @@ export const CH = {
   preserviceRemoveCard: 'preservice:removeCard',
   mediaList: 'media:list', mediaImportImages: 'media:importImages',
   mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
-  mediaRemove: 'media:remove',
+  mediaRemove: 'media:remove', mediaImportProgress: 'media:importProgress',
   videoGetState: 'video:getState', videoState: 'video:state',   // main → all windows
   videoLoad: 'video:load', videoPlay: 'video:play', videoPause: 'video:pause',
   videoSeek: 'video:seek', videoSetVolume: 'video:setVolume',
@@ -215,10 +225,11 @@ export interface HelmApi {
   };
   media: {
     list(): Promise<MediaItem[]>;
-    importImages(): Promise<MediaItem[]>;
-    importVideo(): Promise<MediaItem[]>;
-    importDeck(): Promise<{ items: MediaItem[]; error?: 'no-libreoffice' }>;
+    importImages(): Promise<MediaImportResult>;
+    importVideo(): Promise<MediaImportResult>;
+    importDeck(): Promise<MediaImportResult>;
     remove(id: string): Promise<MediaItem[]>;
+    onImportProgress(cb: (p: MediaImportProgress) => void): () => void;
   };
   video: {
     get(): Promise<VideoStateWire>;
