@@ -128,6 +128,7 @@ export interface MediaImportOptions {
   rasterize?: (pdfPath: string, outDir: string, onPage?: (page: number, pageCount: number) => void) => Promise<string[]>;
   deleteFiles?: (absPaths: string[]) => void;
   onProgress?: (p: MediaImportProgress) => void;
+  getParentWindow?: () => Electron.BrowserWindow | null;
 }
 
 export function createMediaImport(
@@ -142,10 +143,14 @@ export function createMediaImport(
   const emit = options.onProgress ?? (() => {});
 
   async function pickFiles(extensions: string[], filterName: string, multi = true): Promise<{ paths: string[]; canceled: boolean }> {
-    const result = await dialog.showOpenDialog({
+    const parent = options.getParentWindow?.() ?? null;
+    const dialogOpts = {
       properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
       filters: [{ name: filterName, extensions }]
-    });
+    } as Electron.OpenDialogOptions;
+    const result = parent
+      ? await dialog.showOpenDialog(parent, dialogOpts)
+      : await dialog.showOpenDialog(dialogOpts);
     if (result.canceled) return { paths: [], canceled: true };
     return { paths: result.filePaths, canceled: false };
   }

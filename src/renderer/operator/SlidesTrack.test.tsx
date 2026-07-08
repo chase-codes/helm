@@ -47,7 +47,8 @@ function makeHelm() {
       importImages: vi.fn(() => Promise.resolve({ items })),
       importVideo: vi.fn(() => Promise.resolve({ items })),
       importDeck: vi.fn(() => Promise.resolve({ items })),
-      remove: vi.fn(() => Promise.resolve(items))
+      remove: vi.fn(() => Promise.resolve(items)),
+      onImportProgress: () => () => {}
     }
   }
 }
@@ -117,6 +118,19 @@ describe('SlidesTrack', () => {
         'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
       )
     ).toBeTruthy()
+  })
+
+  it('shows an importing spinner while a deck import is in flight, then clears it', async () => {
+    installHelmStub()
+    let resolveImport!: (r: { items: MediaItem[] }) => void
+    window.helm.media.importDeck = vi.fn(() => new Promise<{ items: MediaItem[] }>((res) => { resolveImport = res }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement)
+    expect(await screen.findByText(/Importing/i)).toBeTruthy()
+    resolveImport({ items })
+    await waitFor(() => expect(screen.queryByText(/Importing/i)).toBeNull())
   })
 
   it('a canceled import (canceled:true) leaves the current selection untouched', async () => {
@@ -215,7 +229,8 @@ describe('SlidesTrack', () => {
       importImages: vi.fn(() => Promise.resolve({ items: [] })),
       importVideo: vi.fn(() => Promise.resolve({ items: [] })),
       importDeck: vi.fn(() => Promise.resolve({ items: [] })),
-      remove: vi.fn(() => Promise.resolve([])) } };
+      remove: vi.fn(() => Promise.resolve([])),
+      onImportProgress: () => () => {} } };
     (window as unknown as { helm: unknown }).helm = empty;
     renderTrack()
     expect(await screen.findByText(/No media yet/i)).toBeTruthy()

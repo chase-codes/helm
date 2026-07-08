@@ -6,6 +6,7 @@ import {
   CH,
   type AudioDownloadProgress,
   type BibleInstallProgress,
+  type MediaImportProgress,
   type MessageInstallProgress
 } from '../shared/types'
 import { openDb } from './db'
@@ -163,8 +164,13 @@ app.whenReady().then(() => {
   })
 
   const mediaRepo = createMediaRepo(db)
+  const broadcastMediaProgress = (p: MediaImportProgress): void => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.mediaImportProgress, p)
+  }
   const mediaImport = createMediaImport(mediaRepo, libRoot, {
-    findSoffice: () => findSoffice(undefined, process.resourcesPath)
+    findSoffice: () => findSoffice(undefined, process.resourcesPath),
+    onProgress: broadcastMediaProgress,
+    getParentWindow: () => operatorWindow
   })
 
   registerIpc(

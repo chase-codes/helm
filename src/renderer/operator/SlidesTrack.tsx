@@ -73,6 +73,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   // resolves with when soffice isn't found; 'failed' covers the promise REJECTING
   // mid-conversion (D1 flagged this can happen) — same modal, different copy.
   const [deckFallback, setDeckFallback] = useState<'no-libreoffice' | 'failed' | null>(null);
+  // Spinner shown while a deck import (conversion + rasterization) is in flight — a
+  // multi-second PPTX/PDF import otherwise gives no feedback and looks hung.
+  const [importing, setImporting] = useState<null | { label: string }>(null);
 
   // Initial load: the media library, picking the first item as current.
   useEffect(() => {
@@ -121,6 +124,19 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     const vsl = slidesOf(sel)[0];
     window.helm.video.load(keyForMedia(sel.id, 0), vsl.src ?? '');
   }, [items, selId]);
+
+  // Progress broadcast from main (Task 2's media:importProgress) — updates the spinner
+  // label with page counts while a deck import converts/rasterizes.
+  useEffect(() => {
+    const off = window.helm.media.onImportProgress((p) => {
+      setImporting({
+        label: p.phase === 'converting'
+          ? 'Converting…'
+          : `Rasterizing ${p.page ?? 0}/${p.pageCount ?? 0}…`
+      });
+    });
+    return off;
+  }, []);
 
   // Brief post-import confirmation; clears itself after 2.2s.
   useEffect(() => {
@@ -187,18 +203,22 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     const prevIds = new Set(items.map((i) => i.id));
     void call()
       .then((res) => {
+        setImporting(null);
         if (res.error === 'no-libreoffice') { setDeckFallback('no-libreoffice'); return; }
         applyImport(res, prevIds);
       })
-      .catch((err: unknown) => { console.error(err); onError?.(err); });
+      .catch((err: unknown) => { setImporting(null); console.error(err); onError?.(err); });
   };
 
   const importImages = (): void => runImport(() => window.helm.media.importImages());
   const importVideo = (): void => runImport(() => window.helm.media.importVideo());
-  const importDeck = (): void => runImport(
-    () => window.helm.media.importDeck(),
-    () => setDeckFallback('failed')
-  );
+  const importDeck = (): void => {
+    setImporting({ label: 'Importing…' });
+    runImport(
+      () => window.helm.media.importDeck(),
+      () => setDeckFallback('failed')
+    );
+  };
 
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
   // messageKeyRef-registration effect) — no deps array so it always captures the latest
@@ -279,6 +299,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     fontWeight: 600,
     color: T.text,
     background: 'transparent'
+  };
+  const importingRowStyle: CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    margin: '4px 2px', padding: '10px 12px', borderRadius: '10px',
+    background: T.panel3, color: T.dim, fontSize: '12.5px', fontWeight: 600
   };
   const emptyStateStyle: CSSProperties = {
     margin: '8px 2px',
@@ -392,6 +417,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {importing && (
+            <div style={importingRowStyle}>
+              <span style={{ opacity: 0.8 }}>⏳</span> {importing.label}
+            </div>
+          )}
           {items.length === 0 && (
             <div style={emptyStateStyle}>
               No media yet — import slides, images, or video with <b>+ Import</b> to get started.

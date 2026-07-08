@@ -5,6 +5,7 @@ import { join } from 'path';
 import { dialog } from 'electron';
 import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport } from './mediaImport';
 import type { MediaRepo, MediaItem } from './mediaRepo';
+import type { MediaImportProgress } from '../shared/types';
 
 vi.mock('electron', () => ({
   dialog: { showOpenDialog: vi.fn() }
@@ -176,5 +177,41 @@ describe('createMediaImport / importDeck', () => {
     const mediaImport = createMediaImport(repo, libRoot, {});
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
     expect(await mediaImport.importImages()).toEqual({ items: [], canceled: true });
+  });
+
+  it('emits converting then per-page rasterizing progress for a pptx import', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/d/Deck.pptx'] } as never);
+    const progress: MediaImportProgress[] = [];
+    const rasterize = vi.fn(async (_pdf: string, _out: string, onPage?: (p: number, n: number) => void) => {
+      onPage?.(1, 2); onPage?.(2, 2);
+      return ['slide-0001.png', 'slide-0002.png'];
+    });
+    const mediaImport = createMediaImport(repo, libRoot, {
+      findSoffice: () => '/usr/bin/soffice',
+      convertToPdf: vi.fn().mockResolvedValue('/tmp/Deck.pdf'),
+      rasterize,
+      onProgress: (p) => progress.push(p)
+    });
+    await mediaImport.importDeck();
+    expect(progress[0]).toEqual({ phase: 'converting' });
+    expect(progress).toContainEqual({ phase: 'rasterizing', page: 1, pageCount: 2 });
+    expect(progress).toContainEqual({ phase: 'rasterizing', page: 2, pageCount: 2 });
+  });
+
+  it('does not emit a converting phase for a direct pdf import', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/d/Report.pdf'] } as never);
+    const progress: MediaImportProgress[] = [];
+    const mediaImport = createMediaImport(repo, libRoot, {
+      findSoffice: () => '/usr/bin/soffice',
+      convertToPdf: vi.fn(),
+      rasterize: vi.fn(async (_p, _o, onPage) => { onPage?.(1, 1); return ['slide-0001.png']; }),
+      onProgress: (p) => progress.push(p)
+    });
+    await mediaImport.importDeck();
+    expect(progress.some((p) => p.phase === 'converting')).toBe(false);
   });
 });
