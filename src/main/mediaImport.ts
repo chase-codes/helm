@@ -1,12 +1,13 @@
 import { dialog } from 'electron';
-import { existsSync, copyFileSync, mkdirSync, readdirSync } from 'fs';
-import { spawn } from 'child_process';
+import { existsSync, copyFileSync, mkdirSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { basename, extname, join } from 'path';
 import type { MediaRepo, MediaItem } from './mediaRepo';
+import type { MediaImportProgress, MediaImportResult } from '../shared/types';
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'];
+const DECK_EXTENSIONS = ['pptx', 'ppt', 'odp', 'pdf'];
 
 // Known install locations to probe, in priority order, before falling back to PATH.
 const KNOWN_SOFFICE_PATHS = [
@@ -14,14 +15,6 @@ const KNOWN_SOFFICE_PATHS = [
   'C:\\Program Files\\LibreOffice\\program\\soffice.exe', // Windows
   '/usr/bin/soffice', // common Linux install
   '/usr/local/bin/soffice'
-];
-
-// Known install locations for poppler's pdftoppm, probed before falling back to PATH.
-const KNOWN_PDFTOPPM_PATHS = [
-  '/opt/homebrew/bin/pdftoppm', // macOS Homebrew (Apple Silicon)
-  '/usr/local/bin/pdftoppm', // macOS Homebrew (Intel) / common Linux
-  '/usr/bin/pdftoppm', // common Linux install (poppler-utils)
-  'C:\\Program Files\\poppler\\Library\\bin\\pdftoppm.exe' // Windows (poppler for Windows)
 ];
 
 function probeForBinary(
@@ -75,95 +68,44 @@ export function findSoffice(exists: (p: string) => boolean = existsSync): string
   return probeForBinary(KNOWN_SOFFICE_PATHS, 'soffice', 'soffice.exe', exists);
 }
 
-/**
- * Probe known poppler-utils install locations plus PATH for a `pdftoppm`
- * binary, mirroring `findSoffice`. Used to rasterize the intermediate PDF
- * into per-slide PNGs; when absent, deck conversion degrades to a single
- * PNG (see `runConvertProd`).
- */
-export function findPdftoppm(exists: (p: string) => boolean = existsSync): string | null {
-  return probeForBinary(KNOWN_PDFTOPPM_PATHS, 'pdftoppm', 'pdftoppm.exe', exists);
-}
-
 function copyPickedFiles(
   repo: MediaRepo,
   libRoot: string,
   subfolder: string,
   type: MediaItem['type'],
   filePaths: string[]
-): void {
+): MediaItem[] {
   const destDir = join(libRoot, subfolder);
   mkdirSync(destDir, { recursive: true });
-
+  const added: MediaItem[] = [];
   for (const filePath of filePaths) {
-    const ext = extname(filePath); // includes leading dot, or '' if none
+    const ext = extname(filePath);
     const relPath = `${subfolder}/${randomUUID()}${ext}`;
     copyFileSync(filePath, join(libRoot, relPath));
-    repo.add({ type, title: basename(filePath), filePath: relPath, slides: [] });
+    added.push(repo.add({ type, title: basename(filePath), filePath: relPath, slides: [] }));
   }
-}
-
-/** Runs an external binary to completion, rejecting on non-zero exit or spawn error. */
-function runExternal(cmd: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args);
-    let stderr = '';
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    proc.on('error', reject);
-    proc.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} ${args.join(' ')} exited with code ${String(code)}: ${stderr}`));
-    });
-  });
-}
-
-/**
- * Production `runConvert`: converts `src` (a .pptx) to PDF via soffice, then
- * rasterizes each PDF page to a PNG via poppler's `pdftoppm` — this yields
- * true per-slide PNGs, unlike soffice's own `--convert-to png`, which emits
- * only the first slide on many builds.
- *
- * If `pdftoppm` is unavailable, degrades calmly: falls back to soffice's
- * single-PNG (first-slide-only) export and logs the limitation, rather than
- * failing the import outright.
- *
- * Returns filenames relative to `outDir` (not full paths) — callers combine
- * them with the deck's own relative directory before storing in the DB.
- */
-async function runConvertProd(soffice: string, src: string, outDir: string): Promise<string[]> {
-  await runExternal(soffice, ['--headless', '--convert-to', 'pdf', '--outdir', outDir, src]);
-
-  const pdftoppm = findPdftoppm();
-  if (pdftoppm !== null) {
-    const pdfPath = join(outDir, `${basename(src, extname(src))}.pdf`);
-    await runExternal(pdftoppm, ['-png', pdfPath, join(outDir, 'slide')]);
-  } else {
-    console.warn(
-      '[mediaImport] pdftoppm not found; importing deck as a single-slide image (per-slide PNGs unavailable). Install poppler-utils for full per-slide conversion.'
-    );
-    await runExternal(soffice, ['--headless', '--convert-to', 'png', '--outdir', outDir, src]);
-  }
-
-  return readdirSync(outDir).filter((f) => f.toLowerCase().endsWith('.png'));
+  return added;
 }
 
 export interface MediaImport {
-  importImages(): Promise<MediaItem[]>;
-  importVideo(): Promise<MediaItem[]>;
-  importDeck(): Promise<{ items: MediaItem[]; error?: 'no-libreoffice' }>;
+  importImages(): Promise<MediaImportResult>;
+  importVideo(): Promise<MediaImportResult>;
+  importDeck(): Promise<MediaImportResult>;
+  removeMedia(id: string): MediaItem[];
 }
 
 /**
- * Injectable seams for `createMediaImport`, defaulted to the real
- * `findSoffice`/`runConvertProd` in production. Tests inject fakes here so
- * `importDeck` can be exercised without spawning soffice/pdftoppm or
- * touching a real file-open dialog's underlying tools.
+ * Injectable seams for `createMediaImport`. Tests inject fakes so importDeck runs
+ * without spawning soffice or invoking pdfjs, and removeMedia runs without touching disk.
+ * Production wires the real soffice (`convertToPdf`), pdfjs+canvas (`rasterize`),
+ * fs unlink (`deleteFiles`) and progress broadcast (`onProgress`) in Tasks 3, 4 and 8.
  */
 export interface MediaImportOptions {
   findSoffice?: () => string | null;
-  runConvert?: (soffice: string, src: string, outDir: string) => Promise<string[]>;
+  convertToPdf?: (soffice: string, src: string, outDir: string) => Promise<string>;
+  rasterize?: (pdfPath: string, outDir: string, onPage?: (page: number, pageCount: number) => void) => Promise<string[]>;
+  deleteFiles?: (absPaths: string[]) => void;
+  onProgress?: (p: MediaImportProgress) => void;
 }
 
 export function createMediaImport(
@@ -172,49 +114,83 @@ export function createMediaImport(
   options: MediaImportOptions = {}
 ): MediaImport {
   const findSofficeFn = options.findSoffice ?? (() => findSoffice());
-  const runConvert = options.runConvert ?? runConvertProd;
+  const convertToPdf = options.convertToPdf ?? convertToPdfProd;   // Task 3
+  const rasterize = options.rasterize ?? rasterizeProd;            // Task 3
+  const deleteFiles = options.deleteFiles ?? deleteFilesProd;      // Task 8
+  const emit = options.onProgress ?? (() => {});
 
-  async function pickFiles(extensions: string[], filterName: string, multi = true): Promise<string[]> {
+  async function pickFiles(extensions: string[], filterName: string, multi = true): Promise<{ paths: string[]; canceled: boolean }> {
     const result = await dialog.showOpenDialog({
       properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
       filters: [{ name: filterName, extensions }]
     });
-    if (result.canceled) return [];
-    return result.filePaths;
+    if (result.canceled) return { paths: [], canceled: true };
+    return { paths: result.filePaths, canceled: false };
   }
 
   return {
     async importImages() {
-      const filePaths = await pickFiles(IMAGE_EXTENSIONS, 'Images');
-      copyPickedFiles(repo, libRoot, 'images', 'image', filePaths);
-      return repo.list();
+      const { paths, canceled } = await pickFiles(IMAGE_EXTENSIONS, 'Images');
+      if (canceled) return { items: repo.list(), canceled: true };
+      copyPickedFiles(repo, libRoot, 'images', 'image', paths);
+      return { items: repo.list() };
     },
 
     async importVideo() {
-      const filePaths = await pickFiles(VIDEO_EXTENSIONS, 'Video');
-      copyPickedFiles(repo, libRoot, 'video', 'video', filePaths);
-      return repo.list();
+      const { paths, canceled } = await pickFiles(VIDEO_EXTENSIONS, 'Video');
+      if (canceled) return { items: repo.list(), canceled: true };
+      copyPickedFiles(repo, libRoot, 'video', 'video', paths);
+      return { items: repo.list() };
     },
 
     async importDeck() {
       const soffice = findSofficeFn();
-      if (soffice === null) {
-        return { items: repo.list(), error: 'no-libreoffice' };
-      }
+      if (soffice === null) return { items: repo.list(), error: 'no-libreoffice' };
 
-      const filePaths = await pickFiles(['pptx'], 'PowerPoint', false);
-      if (filePaths.length === 0) return { items: repo.list() };
+      const { paths, canceled } = await pickFiles(DECK_EXTENSIONS, 'Presentations', false);
+      if (canceled) return { items: repo.list(), canceled: true };
 
-      const srcPath = filePaths[0];
+      const srcPath = paths[0];
       const relDeckDir = `decks/${randomUUID()}`;
       const deckDir = join(libRoot, relDeckDir);
       mkdirSync(deckDir, { recursive: true });
 
-      const pngFiles = await runConvert(soffice, srcPath, deckDir);
+      let pdfPath: string;
+      if (extname(srcPath).toLowerCase() === '.pdf') {
+        pdfPath = srcPath;
+      } else {
+        emit({ phase: 'converting' });
+        pdfPath = await convertToPdf(soffice, srcPath, deckDir);
+      }
+
+      const pngFiles = await rasterize(pdfPath, deckDir, (page, pageCount) =>
+        emit({ phase: 'rasterizing', page, pageCount })
+      );
       const slides = parsePngOutput(pngFiles).map((name) => `${relDeckDir}/${name}`);
 
       repo.add({ type: 'deck', title: basename(srcPath), filePath: null, slides });
       return { items: repo.list() };
+    },
+
+    removeMedia(id) {
+      const item = repo.get(id);
+      if (item) deleteFiles(absPathsForItem(libRoot, item));  // Task 8 defines absPathsForItem
+      return repo.remove(id);
     }
   };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function convertToPdfProd(_soffice: string, _src: string, _outDir: string): Promise<string> {
+  throw new Error('convertToPdfProd not yet implemented');
+}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function rasterizeProd(_pdfPath: string, _outDir: string, _onPage?: (p: number, n: number) => void): Promise<string[]> {
+  throw new Error('rasterizeProd not yet implemented');
+}
+function deleteFilesProd(_absPaths: string[]): void {
+  throw new Error('deleteFilesProd not yet implemented');
+}
+function absPathsForItem(_libRoot: string, _item: MediaItem): string[] {
+  throw new Error('absPathsForItem not yet implemented');
 }

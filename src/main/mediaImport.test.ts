@@ -3,7 +3,7 @@ import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { dialog } from 'electron';
-import { findSoffice, findPdftoppm, parsePngOutput, createMediaImport } from './mediaImport';
+import { findSoffice, parsePngOutput, createMediaImport } from './mediaImport';
 import type { MediaRepo, MediaItem } from './mediaRepo';
 
 vi.mock('electron', () => ({
@@ -77,66 +77,86 @@ describe('findSoffice', () => {
   });
 });
 
-describe('findPdftoppm', () => {
-  it('returns the first known path that exists', () => {
-    const exists = (p: string): boolean => p === '/opt/homebrew/bin/pdftoppm';
-    expect(findPdftoppm(exists)).toBe('/opt/homebrew/bin/pdftoppm');
-  });
-
-  it('returns null when no candidate exists', () => {
-    expect(findPdftoppm(() => false)).toBeNull();
-  });
-});
-
 describe('createMediaImport / importDeck', () => {
-  it('returns the no-libreoffice error without opening a file picker when findSoffice yields null', async () => {
+  it('returns { items, error: no-libreoffice } without opening a picker when findSoffice is null', async () => {
     const repo = makeFakeRepo();
-    const runConvert = vi.fn();
-    const mediaImport = createMediaImport(repo, '/lib', {
-      findSoffice: () => null,
-      runConvert
-    });
-
+    const convertToPdf = vi.fn();
+    const rasterize = vi.fn();
+    const mediaImport = createMediaImport(repo, '/lib', { findSoffice: () => null, convertToPdf, rasterize });
     const result = await mediaImport.importDeck();
-
     expect(result).toEqual({ items: [], error: 'no-libreoffice' });
-    expect(runConvert).not.toHaveBeenCalled();
+    expect(convertToPdf).not.toHaveBeenCalled();
     expect(dialog.showOpenDialog).not.toHaveBeenCalled();
   });
 
-  it('converts a picked deck via the injected runConvert and stores slides in parsePngOutput order', async () => {
+  it('a cancelled picker resolves { items, canceled: true } and adds nothing', async () => {
+    const repo = makeFakeRepo();
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: true, filePaths: [] } as never);
+    const mediaImport = createMediaImport(repo, '/lib', {
+      findSoffice: () => '/usr/bin/soffice',
+      convertToPdf: vi.fn(),
+      rasterize: vi.fn()
+    });
+    const result = await mediaImport.importDeck();
+    expect(result).toEqual({ items: [], canceled: true });
+  });
+
+  it('converts a .pptx via convertToPdf then rasterize, storing slides in page order', async () => {
     const repo = makeFakeRepo();
     const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
-    vi.mocked(dialog.showOpenDialog).mockResolvedValue({
-      canceled: false,
-      filePaths: ['/decks/src/MyDeck.pptx']
-    } as Awaited<ReturnType<typeof dialog.showOpenDialog>>);
-
-    const listing = ['slide-1.png', 'slide-10.png', 'slide-2.png'];
-    const runConvert = vi.fn().mockResolvedValue(listing);
-
-    const mediaImport = createMediaImport(repo, libRoot, {
-      findSoffice: () => '/usr/bin/soffice',
-      runConvert
-    });
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/decks/MyDeck.pptx'] } as never);
+    const convertToPdf = vi.fn().mockResolvedValue('/tmp/MyDeck.pdf');
+    const rasterize = vi.fn().mockResolvedValue(['slide-0001.png', 'slide-0002.png', 'slide-0003.png']);
+    const mediaImport = createMediaImport(repo, libRoot, { findSoffice: () => '/usr/bin/soffice', convertToPdf, rasterize });
 
     const result = await mediaImport.importDeck();
 
     expect(result.error).toBeUndefined();
-    expect(runConvert).toHaveBeenCalledTimes(1);
-    const [sofficeArg, srcArg, outDirArg] = runConvert.mock.calls[0] as [string, string, string];
-    expect(sofficeArg).toBe('/usr/bin/soffice');
-    expect(srcArg).toBe('/decks/src/MyDeck.pptx');
+    expect(convertToPdf).toHaveBeenCalledWith('/usr/bin/soffice', '/decks/MyDeck.pptx', expect.any(String));
+    const [pdfArg, outDirArg] = rasterize.mock.calls[0] as [string, string];
+    expect(pdfArg).toBe('/tmp/MyDeck.pdf');
     expect(outDirArg.startsWith(join(libRoot, 'decks'))).toBe(true);
-
     expect(result.items).toHaveLength(1);
     const item = result.items[0];
     expect(item.type).toBe('deck');
     expect(item.filePath).toBeNull();
-    expect(item.title).toBe('MyDeck.pptx');
-
-    const expectedOrder = parsePngOutput(listing);
-    expect(item.slides.map((s) => s.split('/').pop())).toEqual(expectedOrder);
+    expect(item.slides.map((s) => s.split('/').pop())).toEqual(['slide-0001.png', 'slide-0002.png', 'slide-0003.png']);
     expect(item.slides.every((s) => s.startsWith('decks/'))).toBe(true);
+  });
+
+  it('imports a .pdf directly (no convertToPdf) and rasterizes it', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/decks/Report.pdf'] } as never);
+    const convertToPdf = vi.fn();
+    const rasterize = vi.fn().mockResolvedValue(['slide-0001.png']);
+    const mediaImport = createMediaImport(repo, libRoot, { findSoffice: () => '/usr/bin/soffice', convertToPdf, rasterize });
+
+    const result = await mediaImport.importDeck();
+
+    expect(convertToPdf).not.toHaveBeenCalled();
+    const [pdfArg] = rasterize.mock.calls[0] as [string];
+    expect(pdfArg).toBe('/decks/Report.pdf');
+    expect(result.items[0].type).toBe('deck');
+    expect(result.items[0].slides).toHaveLength(1);
+  });
+
+  it('offers pptx, ppt, odp and pdf to the picker', async () => {
+    const repo = makeFakeRepo();
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: true, filePaths: [] } as never);
+    const mediaImport = createMediaImport(repo, '/lib', {
+      findSoffice: () => '/usr/bin/soffice', convertToPdf: vi.fn(), rasterize: vi.fn()
+    });
+    await mediaImport.importDeck();
+    const opts = vi.mocked(dialog.showOpenDialog).mock.calls[0][0] as Electron.OpenDialogOptions;
+    expect(opts.filters?.[0].extensions).toEqual(['pptx', 'ppt', 'odp', 'pdf']);
+  });
+
+  it('importImages resolves { items } and { canceled: true } on cancel', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    const mediaImport = createMediaImport(repo, libRoot, {});
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] } as never);
+    expect(await mediaImport.importImages()).toEqual({ items: [], canceled: true });
   });
 });

@@ -159,11 +159,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
 
   const importImages = (): void => {
     setImportOpen(false);
-    void window.helm.media.importImages().then(refreshFrom).catch(console.error);
+    void window.helm.media.importImages().then((r) => refreshFrom(r.items)).catch(console.error);
   };
   const importVideo = (): void => {
     setImportOpen(false);
-    void window.helm.media.importVideo().then(refreshFrom).catch(console.error);
+    void window.helm.media.importVideo().then((r) => refreshFrom(r.items)).catch(console.error);
   };
   // PowerPoint import: unlike Images/Video, importDeck's success value carries an
   // optional `error` (no-LibreOffice is a structural result, not a rejection) AND the

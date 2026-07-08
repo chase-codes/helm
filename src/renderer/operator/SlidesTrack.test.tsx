@@ -24,8 +24,8 @@ function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<
   ;(window as unknown as { helm: unknown }).helm = {
     media: {
       list: () => Promise.resolve(items),
-      importImages: vi.fn(() => Promise.resolve(items)),
-      importVideo: vi.fn(() => Promise.resolve(items)),
+      importImages: vi.fn(() => Promise.resolve({ items })),
+      importVideo: vi.fn(() => Promise.resolve({ items })),
       importDeck: vi.fn(() => Promise.resolve({ items })),
       remove: vi.fn(() => Promise.resolve(items))
     },
