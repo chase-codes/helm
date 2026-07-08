@@ -61,11 +61,32 @@ export function parsePngOutput(files: string[]): string[] {
 }
 
 /**
+ * Candidate paths for a LibreOffice `soffice` binary bundled next to the app via
+ * electron-builder `extraResources` (staged at `<resourcesPath>/libreoffice`). Layout
+ * differs per OS because the vendored tree mirrors LibreOffice's own install shape.
+ */
+export function bundledSofficeCandidates(resourcesPath: string): string[] {
+  const root = join(resourcesPath, 'libreoffice');
+  if (process.platform === 'win32') return [join(root, 'program', 'soffice.exe')];
+  if (process.platform === 'darwin') return [join(root, 'MacOS', 'soffice'), join(root, 'program', 'soffice')];
+  return [join(root, 'program', 'soffice'), join(root, 'opt', 'libreoffice', 'program', 'soffice')];
+}
+
+/**
  * Probe known LibreOffice install locations plus PATH for a `soffice`
  * binary. Accepts an injected existence predicate for testability; defaults
- * to `fs.existsSync`.
+ * to `fs.existsSync`. When `resourcesPath` is given, bundled candidates under
+ * it are checked first, before known install locations and PATH.
  */
-export function findSoffice(exists: (p: string) => boolean = existsSync): string | null {
+export function findSoffice(
+  exists: (p: string) => boolean = existsSync,
+  resourcesPath?: string
+): string | null {
+  if (resourcesPath) {
+    for (const candidate of bundledSofficeCandidates(resourcesPath)) {
+      if (exists(candidate)) return candidate;
+    }
+  }
   return probeForBinary(KNOWN_SOFFICE_PATHS, 'soffice', 'soffice.exe', exists);
 }
 

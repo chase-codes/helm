@@ -3,7 +3,7 @@ import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { dialog } from 'electron';
-import { findSoffice, parsePngOutput, createMediaImport } from './mediaImport';
+import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport } from './mediaImport';
 import type { MediaRepo, MediaItem } from './mediaRepo';
 
 vi.mock('electron', () => ({
@@ -74,6 +74,24 @@ describe('findSoffice', () => {
 
   it('returns null when no candidate exists', () => {
     expect(findSoffice(() => false)).toBeNull();
+  });
+
+  it('prefers the bundled soffice under resourcesPath over a known install', () => {
+    const bundled = bundledSofficeCandidates('/app/resources')[0];
+    const exists = (p: string): boolean =>
+      p === bundled || p === '/Applications/LibreOffice.app/Contents/MacOS/soffice';
+    expect(findSoffice(exists, '/app/resources')).toBe(bundled);
+  });
+
+  it('falls back to a known install when no bundled copy exists', () => {
+    const exists = (p: string): boolean => p === '/Applications/LibreOffice.app/Contents/MacOS/soffice';
+    expect(findSoffice(exists, '/app/resources')).toBe('/Applications/LibreOffice.app/Contents/MacOS/soffice');
+  });
+
+  it('bundledSofficeCandidates returns platform-appropriate paths under resourcesPath', () => {
+    const cands = bundledSofficeCandidates('/app/resources');
+    expect(cands.length).toBeGreaterThan(0);
+    expect(cands.every((c) => c.startsWith('/app/resources'))).toBe(true);
   });
 });
 
