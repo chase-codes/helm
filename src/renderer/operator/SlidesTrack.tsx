@@ -2,7 +2,7 @@ import { useContext, useEffect, useState, type CSSProperties, type JSX, type Mou
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
-import type { MediaItem, Slide } from '../../shared/types';
+import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
 import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { SlideCanvas } from '../shared/SlideCanvas';
@@ -67,6 +67,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   const [selId, setSelId] = useState('');
   const [slideIdx, setSlideIdx] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  const [justImported, setJustImported] = useState(false);
   // Deck-import calm-fallback surface (spec §9: never let an import failure throw
   // uncaught). 'no-libreoffice' is the structural `{ error }` result D1's importDeck
   // resolves with when soffice isn't found; 'failed' covers the promise REJECTING
@@ -121,6 +122,13 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     window.helm.video.load(keyForMedia(sel.id, 0), vsl.src ?? '');
   }, [items, selId]);
 
+  // Brief post-import confirmation; clears itself after 2.2s.
+  useEffect(() => {
+    if (!justImported) return;
+    const t = setTimeout(() => setJustImported(false), 2200);
+    return () => clearTimeout(t);
+  }, [justImported]);
+
   const curKey = selected ? keyForMedia(selected.id, curIdx) : '';
   const cuedIsLive = output === 'live' && liveKey === curKey;
 
@@ -152,54 +160,45 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
   };
 
-  const refreshFrom = (l: MediaItem[]): void => {
-    setItems(l);
-    setSelId((cur) => cur || (l[0]?.id ?? ''));
+  // Unified post-import handling for every media type: a canceled picker leaves selection
+  // untouched; otherwise select the newly-added item (diff against the ids captured before
+  // the import), scroll it into view, and flash "Imported ✓". Replaces the old per-type
+  // refreshFrom (which left a non-empty library stuck on its prior selection) and the
+  // fragile id-diff cancel heuristic (main now returns an explicit `canceled` flag).
+  const applyImport = (res: MediaImportResult, prevIds: Set<string>): void => {
+    if (res.canceled) return;
+    const added = res.items.find((i) => !prevIds.has(i.id));
+    setItems(res.items);
+    if (added) {
+      setSelId(added.id);
+      setSlideIdx(0);
+      setJustImported(true);
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-media-id="${added.id}"]`)?.scrollIntoView?.({ block: 'nearest' });
+      });
+    }
   };
 
-  const importImages = (): void => {
+  const runImport = (
+    call: () => Promise<MediaImportResult>,
+    onError?: (err: unknown) => void
+  ): void => {
     setImportOpen(false);
-    void window.helm.media.importImages().then((r) => refreshFrom(r.items)).catch(console.error);
-  };
-  const importVideo = (): void => {
-    setImportOpen(false);
-    void window.helm.media.importVideo().then((r) => refreshFrom(r.items)).catch(console.error);
-  };
-  // PowerPoint import: unlike Images/Video, importDeck's success value carries an
-  // optional `error` (no-LibreOffice is a structural result, not a rejection) AND the
-  // promise can still reject mid-conversion (D1 flagged this) — so both paths route to
-  // the same calm fallback modal rather than letting either crash the UI (spec §9).
-  // importDeck's resolved `{ items }` is indistinguishable between a real import and a
-  // cancelled OS file picker (no IPC discriminator) — so a cancel still resolves with
-  // the unchanged library. We diff the returned items against `prevItems` (captured from
-  // this render's `items`, i.e. the library as it stood right before this click) by id;
-  // only a genuinely new id (real import; repo orders newest-first via mediaRepo's
-  // `ORDER BY created_at DESC`, so it's `res.items[0]`) reassigns selection. A cancel —
-  // same ids, same order — leaves selId/slideIdx untouched, so it doesn't silently steal
-  // the operator's current selection or re-fire the cue effect during a live service.
-  const importDeck = (): void => {
-    setImportOpen(false);
-    const prevItems = items;
-    void window.helm.media
-      .importDeck()
+    const prevIds = new Set(items.map((i) => i.id));
+    void call()
       .then((res) => {
-        if (res.error === 'no-libreoffice') {
-          setDeckFallback('no-libreoffice');
-          return;
-        }
-        const prevIds = new Set(prevItems.map((i) => i.id));
-        const added = res.items.find((i) => !prevIds.has(i.id));
-        setItems(res.items);
-        if (added) {
-          setSelId(added.id);
-          setSlideIdx(0);
-        }
+        if (res.error === 'no-libreoffice') { setDeckFallback('no-libreoffice'); return; }
+        applyImport(res, prevIds);
       })
-      .catch((err: unknown) => {
-        console.error(err);
-        setDeckFallback('failed');
-      });
+      .catch((err: unknown) => { console.error(err); onError?.(err); });
   };
+
+  const importImages = (): void => runImport(() => window.helm.media.importImages());
+  const importVideo = (): void => runImport(() => window.helm.media.importVideo());
+  const importDeck = (): void => runImport(
+    () => window.helm.media.importDeck(),
+    () => setDeckFallback('failed')
+  );
 
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
   // messageKeyRef-registration effect) — no deps array so it always captures the latest
@@ -373,7 +372,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
           <TrackTabs theme={T} track={track} setTrack={setTrack} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 9px', flexShrink: 0 }}>
-          <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PRESENTATIONS &amp; MEDIA</div>
+          <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>
+            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
+          </div>
           <div style={{ position: 'relative' }}>
             <button style={importHeaderBtnStyle} onClick={() => setImportOpen((o) => !o)}>
               + Import
@@ -397,7 +398,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
             </div>
           )}
           {items.map((item) => (
-            <button key={item.id} style={rowStyle(item.id === selId)} onClick={() => selectItem(item)}>
+            <button key={item.id} data-media-id={item.id} style={rowStyle(item.id === selId)} onClick={() => selectItem(item)}>
               <div style={thumbBoxStyle}>
                 <SlideCanvas slide={slidesOf(item)[0]} fill />
               </div>

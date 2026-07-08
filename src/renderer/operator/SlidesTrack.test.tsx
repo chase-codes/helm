@@ -119,9 +119,9 @@ describe('SlidesTrack', () => {
     ).toBeTruthy()
   })
 
-  it('cancelling the PowerPoint picker (same items, no new id) leaves the current selection untouched', async () => {
+  it('a canceled import (canceled:true) leaves the current selection untouched', async () => {
     const { cue } = installHelmStub()
-    // Select the image item first, so we can prove a cancelled deck-import doesn't
+    // Select the image item first, so we can prove a canceled deck-import doesn't
     // silently steal selection back to the deck (items[0]).
     renderTrack()
     const imgRow = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
@@ -129,9 +129,9 @@ describe('SlidesTrack', () => {
     await screen.findByText('▣ Welcome.jpg')
     cue.mockClear()
 
-    // Simulate a cancelled OS file picker: importDeck resolves with the SAME items
-    // (no new id) — the only signal a cancel gives, per the IPC contract.
-    window.helm.media.importDeck = vi.fn(async () => ({ items }))
+    // Simulate a cancelled OS file picker via the explicit `canceled` flag (Task 2's
+    // MediaImportResult), not an id-diff heuristic.
+    window.helm.media.importDeck = vi.fn(async () => ({ items, canceled: true }))
     const importBtn = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
     fireEvent.click(importBtn)
     const pptBtn = (await screen.findByText('Slides / PDF')).closest('button') as HTMLButtonElement
@@ -145,6 +145,33 @@ describe('SlidesTrack', () => {
     expect(screen.queryByText('2')).toBeNull()
     // The cue effect must not have re-fired for the deck as a result of the cancel.
     expect(cue).not.toHaveBeenCalledWith(expect.stringContaining('deck1'), expect.anything())
+  })
+
+  it('auto-selects a newly imported image (non-empty library) instead of keeping the old selection', async () => {
+    installHelmStub()
+    const newItem: MediaItem = { id: 'imgNEW', type: 'image', title: 'New.jpg', filePath: 'imgNEW.jpg', slides: [], createdAt: 9 }
+    window.helm.media.importImages = vi.fn(async () => ({ items: [newItem, ...items] }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')       // library loaded, deck selected by default
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Images')).closest('button') as HTMLButtonElement)
+    // The new image becomes selected (its row shows the live dot), old deck no longer selected.
+    await screen.findByText('▣ New.jpg')
+    await waitFor(() => {
+      const row = (screen.getByText('▣ New.jpg').closest('button')) as HTMLButtonElement
+      expect(row.querySelector('span[style*="border-radius: 50%"]')).toBeTruthy()
+    })
+  })
+
+  it('shows a brief "Imported ✓" confirmation after a successful import', async () => {
+    installHelmStub()
+    const newItem: MediaItem = { id: 'imgNEW', type: 'image', title: 'New.jpg', filePath: 'imgNEW.jpg', slides: [], createdAt: 9 }
+    window.helm.media.importImages = vi.fn(async () => ({ items: [newItem, ...items] }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Images')).closest('button') as HTMLButtonElement)
+    expect(await screen.findByText(/Imported/)).toBeTruthy()
   })
 
   it('selecting a video item loads it into the shared video state', async () => {
