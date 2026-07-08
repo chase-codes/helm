@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { dialog } from 'electron';
@@ -213,5 +213,48 @@ describe('createMediaImport / importDeck', () => {
     });
     await mediaImport.importDeck();
     expect(progress.some((p) => p.phase === 'converting')).toBe(false);
+  });
+});
+
+describe('createMediaImport / removeMedia', () => {
+  it('deletes an image file and its row', async () => {
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-rm-'));
+    mkdirSync(join(libRoot, 'images'), { recursive: true });
+    const rel = 'images/pic.png';
+    writeFileSync(join(libRoot, rel), 'x');
+    const repo = makeFakeRepo();
+    const item = repo.add({ type: 'image', title: 'pic.png', filePath: rel, slides: [] });
+    const mediaImport = createMediaImport(repo, libRoot, {});
+    const remaining = mediaImport.removeMedia(item.id);
+    expect(existsSync(join(libRoot, rel))).toBe(false);
+    expect(remaining.find((i) => i.id === item.id)).toBeUndefined();
+  });
+
+  it('deletes an entire deck directory and its row', () => {
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-rm-'));
+    const deckDir = join(libRoot, 'decks', 'abc');
+    mkdirSync(deckDir, { recursive: true });
+    writeFileSync(join(deckDir, 'slide-0001.png'), 'x');
+    writeFileSync(join(deckDir, 'slide-0002.png'), 'x');
+    const repo = makeFakeRepo();
+    const item = repo.add({ type: 'deck', title: 'D', filePath: null, slides: ['decks/abc/slide-0001.png', 'decks/abc/slide-0002.png'] });
+    const mediaImport = createMediaImport(repo, libRoot, {});
+    mediaImport.removeMedia(item.id);
+    expect(existsSync(deckDir)).toBe(false);
+  });
+
+  it('deleteFiles seam is invoked with the resolved paths (no disk touch when injected)', () => {
+    const repo = makeFakeRepo();
+    const item = repo.add({ type: 'image', title: 'p', filePath: 'images/p.png', slides: [] });
+    const deleted: string[][] = [];
+    const mediaImport = createMediaImport(repo, '/lib', { deleteFiles: (paths) => deleted.push(paths) });
+    mediaImport.removeMedia(item.id);
+    expect(deleted[0]).toEqual([join('/lib', 'images/p.png')]);
+  });
+
+  it('removing an unknown id is a no-op that still returns the list', () => {
+    const repo = makeFakeRepo();
+    const mediaImport = createMediaImport(repo, '/lib', { deleteFiles: () => { throw new Error('should not delete'); } });
+    expect(() => mediaImport.removeMedia('nope')).not.toThrow();
   });
 });

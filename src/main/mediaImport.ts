@@ -1,8 +1,8 @@
 import { dialog } from 'electron';
-import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import { basename, extname, join } from 'path';
+import { basename, dirname, extname, join } from 'path';
 import type { MediaRepo, MediaItem } from './mediaRepo';
 import type { MediaImportProgress, MediaImportResult } from '../shared/types';
 
@@ -267,9 +267,15 @@ async function rasterizeProd(
   }
   return names;
 }
-function deleteFilesProd(_absPaths: string[]): void {
-  throw new Error('deleteFilesProd not yet implemented');
+/** Absolute on-disk paths owned by a media item: the deck's directory, or the single file. */
+function absPathsForItem(libRoot: string, item: MediaItem): string[] {
+  if (item.type === 'deck') {
+    if (item.slides.length === 0) return [];
+    return [dirname(join(libRoot, item.slides[0]))];
+  }
+  return item.filePath ? [join(libRoot, item.filePath)] : [];
 }
-function absPathsForItem(_libRoot: string, _item: MediaItem): string[] {
-  throw new Error('absPathsForItem not yet implemented');
+
+function deleteFilesProd(absPaths: string[]): void {
+  for (const p of absPaths) rmSync(p, { recursive: true, force: true });
 }
