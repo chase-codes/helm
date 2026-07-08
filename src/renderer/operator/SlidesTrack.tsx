@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
@@ -160,23 +160,34 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     setSlideIdx(0);
   };
 
-  // Deferred-commit delete: drop the row locally + arm undo; nothing leaves disk until the
-  // toast expires. Undo re-inserts and cancels. Deleting the live item degrades calmly —
-  // main's output already falls back when a cued key disappears (no re-cue here).
+  // Deferred-commit delete. `useTimedUndo` has a single pending slot and can't distinguish a
+  // user cancel from a timer expiry, so we track the id awaiting real deletion in a ref and
+  // commit it exactly once — on natural expiry, when a newer delete supersedes it, or when
+  // this track unmounts (tab switch) before the toast expires. Dropping any of those would
+  // leave an item the operator saw removed still on disk until the next refresh.
+  const committedRef = useRef<string | null>(null);
+  const commitPending = useCallback((): void => {
+    const id = committedRef.current;
+    committedRef.current = null;
+    if (id) void window.helm.media.remove(id).catch(console.error);
+  }, []);
+
   const removeItem = (item: MediaItem): void => {
     contextMenu.close();
+    commitPending(); // a still-pending prior delete is superseded — commit it now, don't drop it
     const neighborId = pickNeighborId(items, item.id);
     setItems((l) => l.filter((i) => i.id !== item.id));
     if (selId === item.id) { setSelId(neighborId); setSlideIdx(0); }
+    committedRef.current = item.id;
     undo.arm(item);
   };
 
   const undoRemove = (): void => {
     const item = undo.pending;
     if (!item) return;
-    // Clear the commit ref BEFORE cancel() flips `undo.pending` to null — the effect below
-    // can't otherwise tell an undo-triggered clear from a natural timer expiry (both look
-    // identical from `undo.pending`'s perspective), and would wrongly fire the IPC remove.
+    // Cancel the pending commit BEFORE cancel() flips `undo.pending` to null, so the expiry
+    // effect below sees nothing to commit (an undo and a timer expiry look identical from
+    // `undo.pending`'s perspective).
     committedRef.current = null;
     undo.cancel();
     // Re-fetch to restore the exact prior order rather than guessing an insertion index.
@@ -186,14 +197,15 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     }).catch(console.error);
   };
 
-  // Commit on expiry: when the pending item clears WITHOUT an undo, delete it for real.
-  const committedRef = useRef<string | null>(null);
+  // Commit on natural expiry: `undo.pending` clears while a commit is still armed. (Undo
+  // clears `committedRef` first, so this runs as a no-op in that case.)
   useEffect(() => {
-    if (undo.pending) { committedRef.current = undo.pending.id; return; }
-    const id = committedRef.current;
-    committedRef.current = null;
-    if (id) void window.helm.media.remove(id).catch(console.error);
-  }, [undo.pending]);
+    if (undo.pending) return;
+    commitPending();
+  }, [undo.pending, commitPending]);
+
+  // Commit a still-pending delete if this track unmounts before the toast expires.
+  useEffect(() => () => commitPending(), [commitPending]);
 
   const stepSlide = (dir: 1 | -1): void => {
     if (!slides.length) return;

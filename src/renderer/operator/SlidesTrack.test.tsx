@@ -285,4 +285,30 @@ describe('SlidesTrack', () => {
       vi.useRealTimers()
     }
   })
+
+  it('deleting a second item while one is pending commits the first immediately (no dropped delete)', async () => {
+    installHelmStub()
+    renderTrack()
+    // Delete deck1 (arms undo), then delete img1 before the toast expires.
+    fireEvent.contextMenu((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.contextMenu((await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    // The superseded first delete committed now; the second is still pending (not yet committed).
+    await waitFor(() => expect(window.helm.media.remove).toHaveBeenCalledWith('deck1'))
+    expect(window.helm.media.remove).not.toHaveBeenCalledWith('img1')
+  })
+
+  it('unmounting with a pending delete commits it (no dropped delete on track switch)', async () => {
+    installHelmStub()
+    const view = render(
+      <ThemeCtx.Provider value={themeFor('dark')}>
+        <SlidesTrack slidesKeyRef={{ current: null }} active track="slides" setTrack={() => {}} />
+      </ThemeCtx.Provider>
+    )
+    fireEvent.contextMenu((await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    view.unmount()
+    await waitFor(() => expect(window.helm.media.remove).toHaveBeenCalledWith('img1'))
+  })
 })
