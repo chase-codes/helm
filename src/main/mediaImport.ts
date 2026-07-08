@@ -171,23 +171,28 @@ export function createMediaImport(
     },
 
     async importDeck() {
-      const soffice = findSofficeFn();
-      if (soffice === null) return { items: repo.list(), error: 'no-libreoffice' };
-
       const { paths, canceled } = await pickFiles(DECK_EXTENSIONS, 'Presentations', false);
       if (canceled) return { items: repo.list(), canceled: true };
 
       const srcPath = paths[0];
+      const isPdf = extname(srcPath).toLowerCase() === '.pdf';
+
+      // Only office formats need LibreOffice; a PDF rasterizes directly. Resolve/verify the
+      // converter up front for those (fail fast before creating the deck dir); a PDF skips it.
+      const soffice = isPdf ? null : findSofficeFn();
+      if (!isPdf && soffice === null) return { items: repo.list(), error: 'no-libreoffice' };
+
       const relDeckDir = `decks/${randomUUID()}`;
       const deckDir = join(libRoot, relDeckDir);
       mkdirSync(deckDir, { recursive: true });
 
       let pdfPath: string;
-      if (extname(srcPath).toLowerCase() === '.pdf') {
+      if (isPdf) {
         pdfPath = srcPath;
       } else {
         emit({ phase: 'converting' });
-        pdfPath = await convertToPdf(soffice, srcPath, deckDir);
+        // soffice is non-null here: the !isPdf branch above returned when it was null.
+        pdfPath = await convertToPdf(soffice as string, srcPath, deckDir);
       }
 
       const pngFiles = await rasterize(pdfPath, deckDir, (page, pageCount) =>

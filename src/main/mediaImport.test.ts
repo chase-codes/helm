@@ -97,15 +97,34 @@ describe('findSoffice', () => {
 });
 
 describe('createMediaImport / importDeck', () => {
-  it('returns { items, error: no-libreoffice } without opening a picker when findSoffice is null', async () => {
+  it('returns no-libreoffice when a NON-pdf is picked and findSoffice is null', async () => {
     const repo = makeFakeRepo();
     const convertToPdf = vi.fn();
     const rasterize = vi.fn();
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/d/Deck.pptx'] } as never);
     const mediaImport = createMediaImport(repo, '/lib', { findSoffice: () => null, convertToPdf, rasterize });
     const result = await mediaImport.importDeck();
     expect(result).toEqual({ items: [], error: 'no-libreoffice' });
     expect(convertToPdf).not.toHaveBeenCalled();
-    expect(dialog.showOpenDialog).not.toHaveBeenCalled();
+    expect(rasterize).not.toHaveBeenCalled();
+    expect(dialog.showOpenDialog).toHaveBeenCalled(); // picker DID open (so a PDF could have been chosen)
+  });
+
+  it('imports a .pdf even when findSoffice is null (PDF needs no LibreOffice)', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/d/Report.pdf'] } as never);
+    const convertToPdf = vi.fn();
+    const rasterize = vi.fn().mockResolvedValue(['slide-0001.png', 'slide-0002.png']);
+    const mediaImport = createMediaImport(repo, libRoot, { findSoffice: () => null, convertToPdf, rasterize });
+    const result = await mediaImport.importDeck();
+    expect(result.error).toBeUndefined();
+    expect(convertToPdf).not.toHaveBeenCalled();
+    const [pdfArg] = rasterize.mock.calls[0] as [string];
+    expect(pdfArg).toBe('/d/Report.pdf');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].type).toBe('deck');
+    expect(result.items[0].slides).toHaveLength(2);
   });
 
   it('a cancelled picker resolves { items, canceled: true } and adds nothing', async () => {
