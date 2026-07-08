@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
+import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
@@ -8,6 +8,10 @@ import { SermonCenter } from './SermonCenter';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { VideoCanvas } from '../shared/VideoCanvas';
 import { TrackTabs } from './TrackTabs';
+import { useContextMenu } from './useContextMenu';
+import { useTimedUndo } from './useTimedUndo';
+import { UndoToast } from './UndoToast';
+import { pickNeighborId } from './pickNeighbor';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -76,6 +80,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   // Spinner shown while a deck import (conversion + rasterization) is in flight — a
   // multi-second PPTX/PDF import otherwise gives no feedback and looks hung.
   const [importing, setImporting] = useState<null | { label: string }>(null);
+
+  const contextMenu = useContextMenu();
+  const undo = useTimedUndo<MediaItem>();
 
   // Initial load: the media library, picking the first item as current.
   useEffect(() => {
@@ -152,6 +159,41 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     setSelId(item.id);
     setSlideIdx(0);
   };
+
+  // Deferred-commit delete: drop the row locally + arm undo; nothing leaves disk until the
+  // toast expires. Undo re-inserts and cancels. Deleting the live item degrades calmly —
+  // main's output already falls back when a cued key disappears (no re-cue here).
+  const removeItem = (item: MediaItem): void => {
+    contextMenu.close();
+    const neighborId = pickNeighborId(items, item.id);
+    setItems((l) => l.filter((i) => i.id !== item.id));
+    if (selId === item.id) { setSelId(neighborId); setSlideIdx(0); }
+    undo.arm(item);
+  };
+
+  const undoRemove = (): void => {
+    const item = undo.pending;
+    if (!item) return;
+    // Clear the commit ref BEFORE cancel() flips `undo.pending` to null — the effect below
+    // can't otherwise tell an undo-triggered clear from a natural timer expiry (both look
+    // identical from `undo.pending`'s perspective), and would wrongly fire the IPC remove.
+    committedRef.current = null;
+    undo.cancel();
+    // Re-fetch to restore the exact prior order rather than guessing an insertion index.
+    void window.helm.media.list().then((l) => {
+      setItems(l);
+      setSelId(item.id);
+    }).catch(console.error);
+  };
+
+  // Commit on expiry: when the pending item clears WITHOUT an undo, delete it for real.
+  const committedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (undo.pending) { committedRef.current = undo.pending.id; return; }
+    const id = committedRef.current;
+    committedRef.current = null;
+    if (id) void window.helm.media.remove(id).catch(console.error);
+  }, [undo.pending]);
 
   const stepSlide = (dir: 1 | -1): void => {
     if (!slides.length) return;
@@ -428,7 +470,13 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
             </div>
           )}
           {items.map((item) => (
-            <button key={item.id} data-media-id={item.id} style={rowStyle(item.id === selId)} onClick={() => selectItem(item)}>
+            <button
+              key={item.id}
+              data-media-id={item.id}
+              style={rowStyle(item.id === selId)}
+              onClick={() => selectItem(item)}
+              onContextMenu={(e) => contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeItem(item) }])}
+            >
               <div style={thumbBoxStyle}>
                 <SlideCanvas slide={slidesOf(item)[0]} fill />
               </div>
@@ -442,6 +490,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
             </button>
           ))}
         </div>
+        {undo.pending && (
+          <UndoToast label={undo.pending.title} onUndo={undoRemove} />
+        )}
       </div>
 
       <SermonCenter
@@ -557,6 +608,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
           </div>
         </div>
       )}
+
+      {contextMenu.menu}
     </div>
   );
 }

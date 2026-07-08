@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { SlidesTrack } from './SlidesTrack'
 import { ThemeCtx } from './ThemeCtx'
@@ -245,5 +245,44 @@ describe('SlidesTrack', () => {
     // The popover container carries an explicit top offset and no bottom offset.
     expect(menu.style.bottom).toBe('')
     expect(menu.style.top).not.toBe('')
+  })
+
+  it('right-click Delete drops the row locally and arms an Undo toast without an immediate IPC remove', async () => {
+    installHelmStub()
+    renderTrack()
+    const row = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
+    fireEvent.contextMenu(row)
+    fireEvent.click(await screen.findByText('Delete'))
+    // Optimistically gone from the list, undo offered, but nothing deleted on disk yet.
+    await waitFor(() => expect(screen.queryByText('▣ Welcome.jpg')).toBeNull())
+    expect(await screen.findByText(/Removed/)).toBeTruthy()
+    expect(window.helm.media.remove).not.toHaveBeenCalled()
+  })
+
+  it('Undo restores the row and never calls media.remove', async () => {
+    installHelmStub()
+    renderTrack()
+    const row = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
+    fireEvent.contextMenu(row)
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(await screen.findByText('Undo'))
+    expect(await screen.findByText('▣ Welcome.jpg')).toBeTruthy()
+    expect(window.helm.media.remove).not.toHaveBeenCalled()
+  })
+
+  it('after the undo window expires, the removal commits via media.remove', async () => {
+    vi.useFakeTimers()
+    try {
+      installHelmStub()
+      renderTrack()
+      // findByText uses real timers internally; query synchronously after flushing microtasks.
+      await vi.waitFor(() => expect(screen.getByText('▣ Welcome.jpg')).toBeTruthy())
+      fireEvent.contextMenu(screen.getByText('▣ Welcome.jpg').closest('button') as HTMLButtonElement)
+      fireEvent.click(screen.getByText('Delete'))
+      act(() => { vi.advanceTimersByTime(5200) }) // useTimedUndo default 5000ms
+      expect(window.helm.media.remove).toHaveBeenCalledWith('img1')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
