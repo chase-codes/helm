@@ -28,6 +28,7 @@
     "@fontsource/hanken-grotesk": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/newsreader": "^5.2.10",
+    "@napi-rs/canvas": "0.1.100",
     "better-sqlite3": "^12.11.1",
     "pdfjs-dist": "^5.7.284"
   },

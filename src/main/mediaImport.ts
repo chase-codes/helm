@@ -1,5 +1,6 @@
 import { dialog } from 'electron';
-import { existsSync, copyFileSync, mkdirSync } from 'fs';
+import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { basename, extname, join } from 'path';
 import type { MediaRepo, MediaItem } from './mediaRepo';
@@ -180,13 +181,65 @@ export function createMediaImport(
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function convertToPdfProd(_soffice: string, _src: string, _outDir: string): Promise<string> {
-  throw new Error('convertToPdfProd not yet implemented');
+function runExternal(cmd: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args);
+    let stderr = '';
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${cmd} ${args.join(' ')} exited with code ${String(code)}: ${stderr}`));
+    });
+  });
 }
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function rasterizeProd(_pdfPath: string, _outDir: string, _onPage?: (p: number, n: number) => void): Promise<string[]> {
-  throw new Error('rasterizeProd not yet implemented');
+
+/**
+ * Convert a .pptx/.ppt/.odp to a PDF in `outDir` via headless LibreOffice, returning
+ * the produced PDF's absolute path. soffice names the output `<basename>.pdf`.
+ */
+async function convertToPdfProd(soffice: string, src: string, outDir: string): Promise<string> {
+  await runExternal(soffice, ['--headless', '--convert-to', 'pdf', '--outdir', outDir, src]);
+  return join(outDir, `${basename(src, extname(src))}.pdf`);
+}
+
+/**
+ * Rasterize every page of `pdfPath` to a zero-padded PNG in `outDir` (`slide-0001.png`…)
+ * using pdfjs-dist + @napi-rs/canvas. Page count drives slide count — no first-slide-only
+ * truncation. Returns the PNG basenames in page order; calls `onPage(n, total)` per page.
+ */
+async function rasterizeProd(
+  pdfPath: string,
+  outDir: string,
+  onPage?: (page: number, pageCount: number) => void
+): Promise<string[]> {
+  const { createCanvas } = await import('@napi-rs/canvas');
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const data = new Uint8Array(readFileSync(pdfPath));
+  const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise;
+  const names: string[] = [];
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 2 }); // 2x for crisp projection
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d');
+      await page.render({
+        canvasContext: ctx as unknown as CanvasRenderingContext2D,
+        canvas: canvas as unknown as HTMLCanvasElement,
+        viewport
+      }).promise;
+      const name = `slide-${String(n).padStart(4, '0')}.png`;
+      writeFileSync(join(outDir, name), canvas.toBuffer('image/png'));
+      names.push(name);
+      onPage?.(n, doc.numPages);
+    }
+  } finally {
+    await doc.destroy();
+  }
+  return names;
 }
 function deleteFilesProd(_absPaths: string[]): void {
   throw new Error('deleteFilesProd not yet implemented');
