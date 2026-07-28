@@ -352,11 +352,10 @@ Append to `src/renderer/shared/SlideCanvas.test.tsx`:
 
 ```tsx
 test('lyric lines size from the fit property, falling back to a clamp', () => {
-  const { container } = render(<SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} />);
+  render(<SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} />);
   const line = screen.getByText('Amazing grace!') as HTMLElement;
   expect(line.style.fontSize).toContain('var(--helm-fit-size');
   expect(line.style.fontSize).toContain('clamp(');
-  expect(container).toBeTruthy();
 });
 
 test('scripture text sizes from the fit property, falling back to a clamp', () => {
