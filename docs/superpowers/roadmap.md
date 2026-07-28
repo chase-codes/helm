@@ -60,9 +60,10 @@ Several items below share these foundations — worth building once as reusable 
 
 ## Pre-service
 
-- **Pre-live selection marker.** When the operator selects a card **before anything is live**,
-  highlight it as a marker indicating **it will go live if engaged** — an "armed / will-cue"
-  state visually distinct from the current "● ON SCREEN" (actually live) highlight.
+- ~~**Pre-live selection marker.**~~ ✅ **Shipped** (`c59565d`) — a selected-but-not-live card
+  now carries `● ARMED` (accent ring, no fill), visually distinct from `● ON SCREEN` (filled,
+  live). Landed alongside the BUG-008 fix, which also added **Show this card** as the
+  deliberate single-card takeover. See `bugs.md` BUG-008.
 - **Dedicated scripture-search item.** A first-class pre-service item that matches the full
   sermon scripture-search experience (browse/search, not just type-a-reference). Depends on
   the *reusable scripture-search component* enabler above (break the capability out of

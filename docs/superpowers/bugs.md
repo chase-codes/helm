@@ -67,20 +67,39 @@ Entry template:
 **Actual:** Text renders noticeably small on the projector; there's no setting/control to increase it.
 **Notes:** Related roadmap ask — songs wants auto min/max sizing based on verse length (see `roadmap.md` Songs section); scripture may want a simpler manual size control first.
 
-### BUG-008 — Live notification still shows the pre-existing song/scripture after the pre-service loop starts
-**Status:** Open · **Area:** Header live status (`Header.tsx`) / pre-service loop (`preserviceEngine.ts`)
-**Repro:**
-1. Go live with a song or scripture reading.
-2. Engage the pre-service loop.
-
-**Expected:** The live status/notification updates to reflect the pre-service loop as the actual live output.
-**Actual:** It keeps showing the previously-live song/scripture, not the pre-service loop.
-**Suspected cause (unverified):** `Header.tsx` derives its label from `usePresentationState()`'s `liveSnap` (`Header.tsx:22,27`); the pre-service engine likely drives output without updating `liveSnap`, leaving the stale song/scripture label in place.
-**Notes:** Found during Windows rehearsal testing, 2026-07-09.
-
 ---
 
 ## Fixed
+
+### BUG-008 — Pre-service card tap silently did nothing while a song was live
+**Status:** Fixed (`c59565d`) · **Area:** Pre-service (`preserviceEngine.ts`, `PreServiceMode.tsx`)
+
+**Reported as:** "live notification still shows the pre-existing song/scripture after the
+pre-service loop starts," suspected to be `Header.tsx` reading a stale `liveSnap`.
+
+**Root cause (measured — the report's hypothesis was wrong):** `liveSnap` updates
+correctly; the header was telling the truth. Measured against the real engine + real
+`shared/presentation/core` reducer, the **"Start loop" button path works** (`liveKey` →
+`pre:…`, header → `LIVE — WELCOME`). The actual hole was `showCard`/`step`
+(`preserviceEngine.ts:69-70`), both gated on `if (engaged) pushLive()`. With a song live
+and the loop not started, tapping a card moved only `idx` — the preview updated, the
+audience screen and header kept the song. The view's own hint text promised the
+opposite: *"Tap any card to show it immediately."* Two further UI elements
+(`● ON SCREEN`, `PROJECTING`) derived from the engine's `engaged` flag rather than
+presentation state, so they claimed a screen the app didn't own.
+
+**Fix:** `ownsScreen()` gates selection — `showCard`/`step` take the screen when it's
+down or pre-service already holds it, and never interrupt a live song or scripture.
+Takeover from another flow is deliberate only: **Start loop** (`engage()`, unchanged) or
+the new **Show this card** (`showNow()` — one card, no rotation, `engaged` stays false).
+Badges now read `output`/`liveKey`; a queued-but-not-live card shows `● ARMED`, which
+also satisfies the roadmap's *pre-live selection marker*.
+
+**Proof:** 8 new engine cases + 5 renderer cases (`npm test`, 371 passing). Verified in
+the running app end-to-end (`scratch/verify-bug008.mjs`, 12/12) across the full
+renderer → preload → main → engine → presentation path: tap with a song live leaves
+`liveKey=song:abc:0` and arms the card; Show this card takes it without engaging the
+loop; tap with nothing live shows immediately.
 
 ### BUG-002 — `Enter` cues by DB insertion order, not relevance (score-tie plateaus) · **SEV 1**
 **Status:** Fixed (`00340da`) · **Area:** Songs search ranking (`songScore.ts`, consumed by `SongsMode.tsx` Enter path)
