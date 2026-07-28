@@ -18,6 +18,7 @@ function harness(): {
   presentation: () => PresentationState;
   setLive: (k: string | null) => void;
   takeDown: () => void;
+  songGoesLive: () => void;
 } {
   const db = openTestDb();
   const repo = createPreCardsRepo(db);
@@ -27,7 +28,8 @@ function harness(): {
     cue: (key, slide) => { calls.push({ m: 'cue', key, slide }); pres = applyCue(pres, key, slide); },
     goLive: (key, slide) => { calls.push({ m: 'goLive', key, slide }); pres = goLive(pres, key, slide); },
     liveKey: () => pres.liveKey,
-    isLive: (key) => pres.output === 'live' && pres.liveKey === key
+    isLive: (key) => pres.output === 'live' && pres.liveKey === key,
+    outputMode: () => pres.output
   };
   const engine = createPreserviceEngine(repo, sink);
   return {
@@ -38,7 +40,10 @@ function harness(): {
     setLive: (k: string | null) => { pres = { ...pres, liveKey: k }; },
     // Simulates the operator's ✕ TAKE DOWN control (Header.tsx → setOutput('black')):
     // the screen goes black but liveKey stays on the pre card.
-    takeDown: () => { pres = setOutput(pres, 'black'); }
+    takeDown: () => { pres = setOutput(pres, 'black'); },
+    // Simulates a song genuinely owning the audience screen (output live + a song key),
+    // which is what makes an implicit pre-service takeover an interruption.
+    songGoesLive: () => { pres = goLive(pres, 'song:abc:0', { kind: 'lyrics', label: 'Amazing Grace', lines: ['x'] }); }
   };
 }
 
@@ -132,6 +137,89 @@ describe('preserviceEngine', () => {
       expect(presentation().output).toBe('live');
       engine.step(1); // only one enabled card: nextEnabledIdx returns the same idx
       expect(presentation().output).toBe('live');
+    });
+  });
+
+  // BUG-008. Tapping a card / stepping used to be gated on `engaged`, so with a song
+  // live the tap silently did nothing to the audience screen while the view's own hint
+  // text promised "Tap any card to show it immediately". Selection now takes the screen
+  // whenever nothing else owns it, and `showNow()` is the explicit, deliberate takeover.
+  describe('taking the audience screen', () => {
+    it('showCard puts the card up immediately when nothing is live', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showCard(2);
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
+      expect(presentation().liveSnap?.title).toBe('Announcements');
+    });
+
+    it('step puts the card up immediately when nothing is live', () => {
+      const { engine, presentation } = harness();
+      engine.step(1);
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).toMatch(/^pre:/);
+    });
+
+    it('showCard does NOT interrupt a live song — it only selects', () => {
+      const { engine, presentation, songGoesLive } = harness();
+      songGoesLive();
+      engine.showCard(2);
+      expect(presentation().liveKey).toBe('song:abc:0');       // song keeps the screen
+      expect(presentation().liveSnap?.label).toBe('Amazing Grace');
+      expect(engine.getState().idx).toBe(2);                    // but the selection moved
+    });
+
+    it('step does NOT interrupt a live song', () => {
+      const { engine, presentation, songGoesLive } = harness();
+      songGoesLive();
+      engine.step(1);
+      expect(presentation().liveKey).toBe('song:abc:0');
+    });
+
+    it('showNow takes the screen from a live song', () => {
+      const { engine, presentation, songGoesLive, repo } = harness();
+      songGoesLive();
+      engine.showCard(2);
+      engine.showNow();
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
+      expect(presentation().liveSnap?.title).toBe('Announcements');
+    });
+
+    it('showNow shows a single card without starting the rotation', () => {
+      const { engine, presentation } = harness();
+      engine.setDwell(-100); // clamp to min dwell
+      engine.showNow();
+      expect(engine.getState().engaged).toBe(false);
+      const keyBefore = presentation().liveKey;
+      const dwell = engine.getState().dwellS;
+      for (let t = 1; t <= dwell + 1; t++) engine.tick();
+      expect(presentation().liveKey).toBe(keyBefore); // never rotated
+    });
+
+    it('showNow on the already-live card keeps the output live, not black', () => {
+      const { engine, presentation } = harness();
+      engine.showNow();
+      expect(presentation().output).toBe('live');
+      engine.showNow(); // same key again — must not hit goLive's toggle-to-black
+      expect(presentation().output).toBe('live');
+    });
+
+    it('showCard still updates the screen once pre-service owns it', () => {
+      const { engine, presentation, repo } = harness();
+      engine.engage();
+      engine.showCard(2);
+      expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
+    });
+
+    it('a taken-down screen counts as unowned — tapping brings the card back up', () => {
+      const { engine, presentation, takeDown, repo } = harness();
+      engine.engage();
+      takeDown();
+      expect(presentation().output).toBe('black');
+      engine.showCard(2);
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
     });
   });
 });

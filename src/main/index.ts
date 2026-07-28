@@ -157,7 +157,8 @@ app.whenReady().then(() => {
     cue: (k, s) => presentation.cue(k, s),
     goLive: (k, s) => presentation.goLive(k, s),
     liveKey: () => presentation.get().liveKey,
-    isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k }
+    isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k },
+    outputMode: () => presentation.get().output
   })
   preserviceEngine.onChange((s) => {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)

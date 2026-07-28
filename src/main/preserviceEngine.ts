@@ -1,4 +1,4 @@
-import type { PreCard, PreState, Slide } from '../shared/types';
+import type { OutputMode, PreCard, PreState, Slide } from '../shared/types';
 import type { PreCardsRepo } from './preCardsRepo';
 import { preSlideFor, nextEnabledIdx } from '../shared/preservice/cards';
 
@@ -7,6 +7,7 @@ export interface PresentationSink {
   goLive(key: string, slide: Slide): void;
   liveKey(): string | null;
   isLive(key: string): boolean;
+  outputMode(): OutputMode;
 }
 export type { PreState };
 export interface PreserviceEngine {
@@ -14,6 +15,7 @@ export interface PreserviceEngine {
   onChange(cb: (s: PreState) => void): () => void;
   engage(): void; disengage(): void;
   showCard(idx: number): void; step(dir: 1 | -1): void;
+  showNow(): void;
   toggleLoop(): void; setDwell(delta: number): void;
   toggleEnabled(cardId: string): void;
   saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void; removeCard(id: string): void;
@@ -43,6 +45,18 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     else sink.goLive(key, slideFor(idx));
   };
 
+  // True when putting a card up would interrupt nobody: the screen is down (black/logo)
+  // or pre-service already owns it. Selection (showCard/step) may take the screen freely
+  // in that case — matching the view's "tap any card to show it immediately" promise —
+  // but must never yank the audience off a live song or scripture. Taking over from
+  // another flow is deliberate only: `engage()` (Start loop) or `showNow()` (Show this
+  // card). See BUG-008.
+  const ownsScreen = (): boolean => {
+    if (sink.outputMode() !== 'live') return true;
+    const k = sink.liveKey();
+    return k !== null && k.startsWith('pre:');
+  };
+
   const startTimer = (): void => { if (!timer) timer = setInterval(() => tick(), 1000); };
   const stopTimer = (): void => { if (timer) { clearInterval(timer); timer = null; } };
 
@@ -66,8 +80,10 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     onChange(cb) { subs.add(cb); return () => subs.delete(cb); },
     engage() { engaged = true; loopT = 0; clampIdx(); pushLive(); startTimer(); emit(); },
     disengage() { engaged = false; loopT = 0; stopTimer(); emit(); },
-    showCard(i) { if (i >= 0 && i < cards.length) { idx = i; loopT = 0; if (engaged) pushLive(); emit(); } },
-    step(dir) { idx = nextEnabledIdx(cards, idx, dir); loopT = 0; if (engaged) pushLive(); emit(); },
+    showCard(i) { if (i >= 0 && i < cards.length) { idx = i; loopT = 0; if (ownsScreen()) pushLive(); emit(); } },
+    step(dir) { idx = nextEnabledIdx(cards, idx, dir); loopT = 0; if (ownsScreen()) pushLive(); emit(); },
+    // Deliberate takeover for a single card — no rotation, so `engaged` stays false.
+    showNow() { pushLive(); emit(); },
     toggleLoop() { loopOn = !loopOn; loopT = 0; emit(); },
     setDwell(delta) { dwellS = Math.max(DWELL_MIN, Math.min(DWELL_MAX, dwellS + delta)); loopT = 0; emit(); },
     toggleEnabled(cardId) { const c = cards.find((x) => x.id === cardId); if (c) cards = repo.setEnabled(cardId, !c.enabled); clampIdx(); emit(); },
