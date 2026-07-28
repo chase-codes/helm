@@ -72,7 +72,7 @@ Entry template:
 ## Fixed
 
 ### BUG-008 — Pre-service card tap silently did nothing while a song was live
-**Status:** Fixed (`c59565d`) · **Area:** Pre-service (`preserviceEngine.ts`, `PreServiceMode.tsx`)
+**Status:** Fixed (`c59565d`, `56c67e7`, `31870e6`) · **Area:** Pre-service (`preserviceEngine.ts`, `PreServiceMode.tsx`)
 
 **Reported as:** "live notification still shows the pre-existing song/scripture after the
 pre-service loop starts," suspected to be `Header.tsx` reading a stale `liveSnap`.
@@ -88,18 +88,30 @@ opposite: *"Tap any card to show it immediately."* Two further UI elements
 (`● ON SCREEN`, `PROJECTING`) derived from the engine's `engaged` flag rather than
 presentation state, so they claimed a screen the app didn't own.
 
-**Fix:** `ownsScreen()` gates selection — `showCard`/`step` take the screen when it's
-down or pre-service already holds it, and never interrupt a live song or scripture.
-Takeover from another flow is deliberate only: **Start loop** (`engage()`, unchanged) or
-the new **Show this card** (`showNow()` — one card, no rotation, `engaged` stays false).
-Badges now read `output`/`liveKey`; a queued-but-not-live card shows `● ARMED`, which
-also satisfies the roadmap's *pre-live selection marker*.
+**Fix:** `ownsScreen()` gates selection — `showCard`/`step` take the screen only when
+nothing has been up (`liveKey === null`) or pre-service is what put the current content
+there, and never interrupt another flow. Takeover is deliberate only: **Start loop**
+(`engage()`, unchanged) or the new **Show this card** (`showNow()` — one card, no
+rotation). Badges now read `output`/`liveKey`; a queued-but-not-live card shows
+`● ARMED`, which also satisfies the roadmap's *pre-live selection marker*.
 
-**Proof:** 8 new engine cases + 5 renderer cases (`npm test`, 371 passing). Verified in
-the running app end-to-end (`scratch/verify-bug008.mjs`, 12/12) across the full
+Keyed on `liveKey` rather than output mode (`31870e6`, from code review): a blacked-out
+screen is **not** free real estate. Mid-sermon the operator blanks the screen and browses
+pre-service, where a row click is the only way to select a card — under an output-mode
+test that click projected it to the congregation.
+
+Three further defects surfaced by the new "live with no rotation behind it" state, each
+reproduced before fixing (`56c67e7`): `showNow` left a still-engaged loop running so the
+held card rotated away; editing the live card never re-pushed it; and `removeCard` was
+gated on `engaged`, leaving a deleted card projected and able to yank the audience off a
+live song during the yield window.
+
+**Proof:** 18 engine cases + 5 renderer cases (`npm test`, 378 passing). Verified in the
+running app end-to-end (`scratch/verify-bug008.mjs`, 14/14) across the full
 renderer → preload → main → engine → presentation path: tap with a song live leaves
 `liveKey=song:abc:0` and arms the card; Show this card takes it without engaging the
-loop; tap with nothing live shows immediately.
+loop; tap with nothing live shows immediately; a blackout from a song keeps taps in
+arm-only mode.
 
 ### BUG-002 — `Enter` cues by DB insertion order, not relevance (score-tie plateaus) · **SEV 1**
 **Status:** Fixed (`00340da`) · **Area:** Songs search ranking (`songScore.ts`, consumed by `SongsMode.tsx` Enter path)
