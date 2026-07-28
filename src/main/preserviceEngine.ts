@@ -1,4 +1,4 @@
-import type { OutputMode, PreCard, PreState, Slide } from '../shared/types';
+import type { PreCard, PreState, Slide } from '../shared/types';
 import type { PreCardsRepo } from './preCardsRepo';
 import { preSlideFor, nextEnabledIdx } from '../shared/preservice/cards';
 
@@ -7,7 +7,6 @@ export interface PresentationSink {
   goLive(key: string, slide: Slide): void;
   liveKey(): string | null;
   isLive(key: string): boolean;
-  outputMode(): OutputMode;
 }
 export type { PreState };
 export interface PreserviceEngine {
@@ -45,16 +44,21 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     else sink.goLive(key, slideFor(idx));
   };
 
-  // True when putting a card up would interrupt nobody: the screen is down (black/logo)
-  // or pre-service already owns it. Selection (showCard/step) may take the screen freely
-  // in that case — matching the view's "tap any card to show it immediately" promise —
-  // but must never yank the audience off a live song or scripture. Taking over from
-  // another flow is deliberate only: `engage()` (Start loop) or `showNow()` (Show this
-  // card). See BUG-008.
+  // True when putting a card up would interrupt nobody: nothing has been on screen at all,
+  // or pre-service is what put the current content there. Selection (showCard/step) may
+  // take the screen freely in that case — matching the view's "tap a card to show it now"
+  // promise — but must never interrupt another flow.
+  //
+  // Deliberately keyed on `liveKey` rather than output mode: a blacked-out screen is NOT
+  // free real estate. Mid-sermon the operator blanks the screen and browses pre-service to
+  // check a card; a row click is the only way to select one, and under an output-mode test
+  // that click would project it to the congregation. `liveKey` still names the flow that
+  // parked the screen, so a blackout keeps taps in arm-only mode until the song or reading
+  // is genuinely done with it. Taking over is deliberate only: `engage()` (Start loop) or
+  // `showNow()` (Show this card). See BUG-008.
   const ownsScreen = (): boolean => {
-    if (sink.outputMode() !== 'live') return true;
     const k = sink.liveKey();
-    return k !== null && k.startsWith('pre:');
+    return k === null || k.startsWith('pre:');
   };
 
   const startTimer = (): void => { if (!timer) timer = setInterval(() => tick(), 1000); };

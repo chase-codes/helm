@@ -28,8 +28,7 @@ function harness(): {
     cue: (key, slide) => { calls.push({ m: 'cue', key, slide }); pres = applyCue(pres, key, slide); },
     goLive: (key, slide) => { calls.push({ m: 'goLive', key, slide }); pres = goLive(pres, key, slide); },
     liveKey: () => pres.liveKey,
-    isLive: (key) => pres.output === 'live' && pres.liveKey === key,
-    outputMode: () => pres.output
+    isLive: (key) => pres.output === 'live' && pres.liveKey === key
   };
   const engine = createPreserviceEngine(repo, sink);
   return {
@@ -258,12 +257,35 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe('song:abc:0');
     });
 
-    it('a taken-down screen counts as unowned — tapping brings the card back up', () => {
+    it('a screen pre-service took down counts as unowned — tapping brings the card back up', () => {
       const { engine, presentation, takeDown, repo } = harness();
       engine.engage();
       takeDown();
       expect(presentation().output).toBe('black');
       engine.showCard(2);
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
+    });
+
+    // A blackout is not free real estate: mid-sermon the operator blanks the screen and
+    // browses pre-service, and a row click is the only way to select a card.
+    it('a screen blacked out from a song stays owned — tapping only arms', () => {
+      const { engine, presentation, takeDown, songGoesLive } = harness();
+      songGoesLive();
+      takeDown();
+      expect(presentation().output).toBe('black');
+      engine.showCard(2);
+      expect(presentation().output).toBe('black');       // congregation sees nothing new
+      expect(presentation().liveKey).toBe('song:abc:0'); // the song still holds the screen
+      expect(engine.getState().idx).toBe(2);             // selection moved, as the preview shows
+    });
+
+    it('Show this card is still the way out of that state', () => {
+      const { engine, presentation, takeDown, songGoesLive, repo } = harness();
+      songGoesLive();
+      takeDown();
+      engine.showCard(2);
+      engine.showNow();
       expect(presentation().output).toBe('live');
       expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
     });
