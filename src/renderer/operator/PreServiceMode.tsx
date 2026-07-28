@@ -59,9 +59,11 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
 
   const isCardLive = (c: PreCard): boolean => output === 'live' && liveKey === `pre:${c.id}`;
   const preOwnsScreen = output === 'live' && (liveKey?.startsWith('pre:') ?? false);
-  // The selected card is "armed" when it's queued up in the preview but something else
-  // still owns the audience screen — the operator has to press Show this card (or Start
-  // loop) to take it. Visually distinct from ● ON SCREEN, which means actually live.
+  // "Armed" = selected and in the preview, but NOT on the audience screen — whether that's
+  // because a song owns it or because nothing is up yet. Deliberately broader than "another
+  // flow is live": the roadmap's pre-live selection marker asks for this state before
+  // anything is live, so the operator can see which card Start loop would put up.
+  // Visually distinct from ● ON SCREEN, which means actually live.
   const selectedIsLive = current ? isCardLive(current) : false;
   const armed = current !== undefined && !selectedIsLive;
 

@@ -82,13 +82,27 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     disengage() { engaged = false; loopT = 0; stopTimer(); emit(); },
     showCard(i) { if (i >= 0 && i < cards.length) { idx = i; loopT = 0; if (ownsScreen()) pushLive(); emit(); } },
     step(dir) { idx = nextEnabledIdx(cards, idx, dir); loopT = 0; if (ownsScreen()) pushLive(); emit(); },
-    // Deliberate takeover for a single card — no rotation, so `engaged` stays false.
-    showNow() { pushLive(); emit(); },
+    // Deliberate takeover for a single card. Stops the loop rather than merely leaving it
+    // alone: the button is reachable while `engaged` is still true (take down the screen and
+    // the engine stays engaged until the next tick yields), and without this the card the
+    // operator asked to hold would rotate away at the next dwell boundary.
+    showNow() { engaged = false; loopT = 0; stopTimer(); pushLive(); emit(); },
     toggleLoop() { loopOn = !loopOn; loopT = 0; emit(); },
     setDwell(delta) { dwellS = Math.max(DWELL_MIN, Math.min(DWELL_MAX, dwellS + delta)); loopT = 0; emit(); },
     toggleEnabled(cardId) { const c = cards.find((x) => x.id === cardId); if (c) cards = repo.setEnabled(cardId, !c.enabled); clampIdx(); emit(); },
-    saveCard(c) { cards = repo.save(c); emit(); },
-    removeCard(id) { cards = repo.remove(id); clampIdx(); if (engaged) pushLive(); emit(); },
+    saveCard(c) {
+      cards = repo.save(c);
+      // A card can now be live with no rotation behind it (showNow, or disengage while
+      // still projecting), so nothing else would ever re-push it: editing the card the
+      // congregation is reading has to refresh the screen itself.
+      const i = c.id === undefined ? -1 : cards.findIndex((x) => x.id === c.id);
+      if (i >= 0 && sink.isLive(preKey(cards[i].id))) { idx = i; pushLive(); }
+      emit();
+    },
+    // Gated on ownsScreen(), not `engaged`: a card put up by showNow() must not stay
+    // projected after it's deleted, and a delete during the engaged-but-yielded window
+    // must not yank the audience off whatever actually holds the screen.
+    removeCard(id) { cards = repo.remove(id); clampIdx(); if (ownsScreen()) pushLive(); emit(); },
     tick, dispose() { stopTimer(); subs.clear(); }
   };
 }

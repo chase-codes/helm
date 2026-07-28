@@ -212,6 +212,52 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
     });
 
+    it('showNow stops a still-engaged loop so the held card cannot rotate away', () => {
+      const { engine, presentation, takeDown } = harness();
+      engine.setDwell(-100); // clamp to min dwell
+      engine.engage();
+      takeDown();          // engine stays engaged until the next tick yields
+      engine.showNow();    // reachable in exactly that window
+      expect(engine.getState().engaged).toBe(false);
+      const held = presentation().liveKey;
+      const dwell = engine.getState().dwellS;
+      for (let t = 1; t <= dwell + 1; t++) engine.tick();
+      expect(presentation().liveKey).toBe(held); // never rotated
+    });
+
+    it('editing the card on the audience screen refreshes it', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showNow();
+      const live = repo.list()[0];
+      engine.saveCard({ ...live, headline: 'CHANGED' });
+      expect(presentation().liveSnap?.title).toBe('CHANGED');
+    });
+
+    it('editing a card that is not on screen leaves the screen alone', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showNow();
+      const other = repo.list()[2];
+      engine.saveCard({ ...other, title: 'CHANGED' });
+      expect(presentation().liveSnap?.title).toBe('Welcome'); // still the live card
+    });
+
+    it('deleting the card that is on screen replaces it', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showNow();
+      const live = repo.list()[0];
+      engine.removeCard(live.id);
+      expect(presentation().liveKey).not.toBe('pre:' + live.id);
+      expect(presentation().liveKey).toMatch(/^pre:/);
+    });
+
+    it('deleting a card never yanks the audience off a live song', () => {
+      const { engine, presentation, repo, songGoesLive } = harness();
+      engine.engage();
+      songGoesLive();  // song takes the screen; tick has not yielded yet
+      engine.removeCard(repo.list()[3].id);
+      expect(presentation().liveKey).toBe('song:abc:0');
+    });
+
     it('a taken-down screen counts as unowned — tapping brings the card back up', () => {
       const { engine, presentation, takeDown, repo } = harness();
       engine.engage();
