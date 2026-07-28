@@ -60,6 +60,24 @@ Entry template:
 **Status:** Open · **Area:** Songs search (`songsRepo.ts` fallback scan, `SongsMode.tsx:104` parallel lyric pass)
 **Repro:** measure ms/search vs library size. Harness: **3.9 ms @200, 18.3 ms @1000, 56.5 ms @3000** songs. **Notes:** per keystroke; **Title mode doubles it** (parallel lyric search, `SongsMode.tsx:104`); the sparse-FTS fallback runs full-library Levenshtein, so a single-token typo — the hurried operator's likely input — triggers the most expensive path. Fine today; watch if libraries reach thousands. Fix candidates: debounce, drop/relax the double search, cap the fuzzy scan.
 
+### BUG-007 — Scripture text too small on the audience (projector) view, no way to adjust
+**Status:** Open · **Area:** Sermon/Scripture — audience output display
+**Repro:** Found during the Windows/projector rehearsal. Schedule and go live with a scripture reading; view the audience output on the projector.
+**Expected:** Text sized for legibility at projector distance, with some operator control over size.
+**Actual:** Text renders noticeably small on the projector; there's no setting/control to increase it.
+**Notes:** Related roadmap ask — songs wants auto min/max sizing based on verse length (see `roadmap.md` Songs section); scripture may want a simpler manual size control first.
+
+### BUG-008 — Live notification still shows the pre-existing song/scripture after the pre-service loop starts
+**Status:** Open · **Area:** Header live status (`Header.tsx`) / pre-service loop (`preserviceEngine.ts`)
+**Repro:**
+1. Go live with a song or scripture reading.
+2. Engage the pre-service loop.
+
+**Expected:** The live status/notification updates to reflect the pre-service loop as the actual live output.
+**Actual:** It keeps showing the previously-live song/scripture, not the pre-service loop.
+**Suspected cause (unverified):** `Header.tsx` derives its label from `usePresentationState()`'s `liveSnap` (`Header.tsx:22,27`); the pre-service engine likely drives output without updating `liveSnap`, leaving the stale song/scripture label in place.
+**Notes:** Found during Windows rehearsal testing, 2026-07-09.
+
 ---
 
 ## Fixed

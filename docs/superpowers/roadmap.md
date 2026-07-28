@@ -42,11 +42,19 @@ Several items below share these foundations — worth building once as reusable 
   matching the Section Rail row count. See `docs/superpowers/specs/2026-07-06-songs-quick-wins-design.md`.
 - ~~**Secondary lyric matches under a title search.**~~ ✅ **Shipped** (`10f1509`) — a subordinate
   "Also in lyrics" group (top 3, deduped) shown only when title results are thin (fewer than 3).
+- **Song library import.** A way to bring in an existing song library rather than entering
+  songs one at a time. Multiple source formats eventually, but the immediate need is
+  **importing from EasyWorship 8's format**. (Found during Windows rehearsal testing,
+  2026-07-09.)
 - **Assignable navigation/action hotkeys** (part of the hotkey system above). Concrete asks:
   - **Home** → jump back to the chorus quickly.
   - **Ctrl+X then a number** → jump to that verse.
   - Bindings for **go live** and **take down**.
   - All of the above **operator-assignable** via the hotkey recorder.
+- **Min/max audience-view font size based on verse length.** Auto-scale lyric text on the
+  audience output between a minimum and maximum size so long verses stay readable and short
+  verses aren't needlessly small — tuned for projector legibility rather than a fixed size.
+  (Found during Windows rehearsal testing, 2026-07-08.)
 
 ---
 
@@ -86,3 +94,14 @@ Several items below share these foundations — worth building once as reusable 
   operator and the on-screen speaker. Likely a `scrollIntoView` on the cued/selected first
   verse card in `ChapterRail`, triggered on schedule-row select. Consider the same courtesy
   wherever a list drives a scrollable preview.
+
+- **Direct preview → live/cue for scripture, without scheduling first.** Today, cuing a
+  scripture reading requires adding it to the schedule and then clicking to it — there's no
+  way to select a passage in the preview pane and immediately cue/go-live with it directly.
+  Want a fast path: select a scripture in the preview, and if the sermon view is already
+  live, switch straight to it (skip the add-to-schedule detour). (Found during Windows
+  rehearsal testing, 2026-07-08.)
+
+- **Background choices for scripture (and similar) audience output.** A settings flow
+  letting operators choose the background shown behind scripture text on the audience
+  view, rather than a fixed look. (Found during Windows rehearsal testing, 2026-07-09.)
