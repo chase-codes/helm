@@ -3,6 +3,19 @@ import type { Slide, OutputVariant } from '../../shared/types';
 import { bandCandidates } from '../../shared/slides/fitText';
 import { fitSizeValue, useFitText } from './useFitText';
 
+// Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
+// and usually longer. Both lost the px ceilings that made scripture render at 55% of
+// lyrics on a 1080p projector (BUG-007).
+//
+// Hoisted to module scope so their array identity is stable across renders. `fitBand`
+// (one of these, or null) sits in useFitText's deps array, compared with Object.is — a
+// fresh array from calling bandCandidates() inside the component body would make every
+// render look "changed" and re-run the effect (tear down/recreate the ResizeObserver,
+// force a synchronous re-measure) even when nothing fit-relevant changed, e.g. once a
+// second from the stage variant's ticking clock prop.
+const LYRICS_BAND = bandCandidates(8, 3.5);
+const SCRIPTURE_BAND = bandCandidates(6.5, 3);
+
 export interface SlideCanvasProps {
   slide: Slide;
   variant?: OutputVariant;
@@ -25,12 +38,6 @@ export function SlideCanvas({
   const isStage = variant === 'stage';
   const isMain = variant === 'main';
   const accent = s.accent || '#f0b24a';
-
-  // Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
-  // and usually longer. Both lost the px ceilings that made scripture render at 55% of
-  // lyrics on a 1080p projector (BUG-007).
-  const LYRICS_BAND = bandCandidates(8, 3.5);
-  const SCRIPTURE_BAND = bandCandidates(6.5, 3);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
