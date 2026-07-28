@@ -1,5 +1,7 @@
-import type { CSSProperties, JSX } from 'react';
+import { useRef, type CSSProperties, type JSX } from 'react';
 import type { Slide, OutputVariant } from '../../shared/types';
+import { bandCandidates } from '../../shared/slides/fitText';
+import { fitSizeValue, useFitText } from './useFitText';
 
 export interface SlideCanvasProps {
   slide: Slide;
@@ -23,6 +25,15 @@ export function SlideCanvas({
   const isStage = variant === 'stage';
   const isMain = variant === 'main';
   const accent = s.accent || '#f0b24a';
+
+  // Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
+  // and usually longer. Both lost the px ceilings that made scripture render at 55% of
+  // lyrics on a 1080p projector (BUG-007).
+  const LYRICS_BAND = bandCandidates(8, 3.5);
+  const SCRIPTURE_BAND = bandCandidates(6.5, 3);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef<HTMLDivElement>(null);
 
   let bg = s.bg;
   if (!bg) {
@@ -61,7 +72,7 @@ export function SlideCanvas({
   };
   const lineStyle: CSSProperties = {
     fontWeight: 700,
-    fontSize: 'clamp(11px, 7.4cqmin, 72px)',
+    fontSize: fitSizeValue('clamp(11px, 7.4cqmin, 7.4cqmin)'),
     lineHeight: 1.16,
     letterSpacing: '-0.015em',
     color: '#fff',
@@ -112,7 +123,7 @@ export function SlideCanvas({
   };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
-    fontSize: 'clamp(10px,4.7cqmin,40px)',
+    fontSize: fitSizeValue('clamp(10px, 4.7cqmin, 4.7cqmin)'),
     lineHeight: 1.36,
     color: '#f3efe6',
     fontWeight: 400
@@ -330,12 +341,22 @@ export function SlideCanvas({
   const columns = s.columns || [];
   const points = s.points || [];
 
+  // Only lyrics and scripture auto-fit; every other kind passes null and keeps its clamp.
+  const fitBand = isLyrics ? LYRICS_BAND : isScripture ? SCRIPTURE_BAND : null;
+  useFitText(rootRef, fitRef, fitBand, [
+    kind,
+    fitBand,
+    lines.join('\n'),
+    columns.map((c) => c.text).join('\n'),
+    variant
+  ]);
+
   return (
-    <div style={rootStyle}>
+    <div ref={rootRef} style={rootStyle}>
       {showBackPlate && <div style={backPlateStyle} />}
 
       {isLyrics && (
-        <div style={contentStyle}>
+        <div ref={fitRef} style={contentStyle}>
           {lines.map((ln, i) => (
             <div key={i} style={lineStyle}>
               {ln}
@@ -345,7 +366,7 @@ export function SlideCanvas({
       )}
 
       {isScripture && (
-        <div style={scriptureWrap}>
+        <div ref={fitRef} style={scriptureWrap}>
           <div style={refStyle}>{s.ref || ''}</div>
           <div style={colsStyle}>
             {columns.map((col, i) => (
