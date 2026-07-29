@@ -51,10 +51,12 @@ Several items below share these foundations — worth building once as reusable 
   - **Ctrl+X then a number** → jump to that verse.
   - Bindings for **go live** and **take down**.
   - All of the above **operator-assignable** via the hotkey recorder.
-- **Min/max audience-view font size based on verse length.** Auto-scale lyric text on the
-  audience output between a minimum and maximum size so long verses stay readable and short
-  verses aren't needlessly small — tuned for projector legibility rather than a fixed size.
-  (Found during Windows rehearsal testing, 2026-07-08.)
+- ~~**Min/max audience-view font size based on verse length.**~~ ✅ **Shipped** (`de0d393`) —
+  content length now determines the fit (a shorter verse/stanza renders larger, a longer one
+  shrinks to stay readable); the band (`bandCandidates` in `SlideCanvas.tsx`) supplies the
+  min and max, tuned for projector legibility rather than a fixed size. Also closed
+  **BUG-007** (`docs/superpowers/bugs.md`). (Found during Windows rehearsal testing,
+  2026-07-08.)
 
 ---
 

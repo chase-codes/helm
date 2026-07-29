@@ -60,13 +60,6 @@ Entry template:
 **Status:** Open · **Area:** Songs search (`songsRepo.ts` fallback scan, `SongsMode.tsx:104` parallel lyric pass)
 **Repro:** measure ms/search vs library size. Harness: **3.9 ms @200, 18.3 ms @1000, 56.5 ms @3000** songs. **Notes:** per keystroke; **Title mode doubles it** (parallel lyric search, `SongsMode.tsx:104`); the sparse-FTS fallback runs full-library Levenshtein, so a single-token typo — the hurried operator's likely input — triggers the most expensive path. Fine today; watch if libraries reach thousands. Fix candidates: debounce, drop/relax the double search, cap the fuzzy scan.
 
-### BUG-007 — Scripture text too small on the audience (projector) view, no way to adjust
-**Status:** Open · **Area:** Sermon/Scripture — audience output display
-**Repro:** Found during the Windows/projector rehearsal. Schedule and go live with a scripture reading; view the audience output on the projector.
-**Expected:** Text sized for legibility at projector distance, with some operator control over size.
-**Actual:** Text renders noticeably small on the projector; there's no setting/control to increase it.
-**Notes:** Related roadmap ask — songs wants auto min/max sizing based on verse length (see `roadmap.md` Songs section); scripture may want a simpler manual size control first.
-
 ### BUG-008 — Live notification still shows the pre-existing song/scripture after the pre-service loop starts
 **Status:** Open · **Area:** Header live status (`Header.tsx`) / pre-service loop (`preserviceEngine.ts`)
 **Repro:**
@@ -81,6 +74,37 @@ Entry template:
 ---
 
 ## Fixed
+
+### BUG-007 — Scripture text too small on the audience (projector) view, no way to adjust
+**Status:** Fixed (`de0d393`) · **Area:** Sermon/Scripture — audience output display
+
+**Root cause (measured):** the audience text styles used `clamp(min, N cqmin, MAXpx)` — a
+fixed pixel ceiling. That ceiling only binds once the container's shorter side exceeds
+~850px, so it did nothing in the operator's small preview panes (where the bug looked
+absent) and only throttled the text on the real projector, where the container is
+1920×1080. Measured on a 1080p output: scripture pinned at 40px next to lyrics at 72px on
+the same screen — visibly mismatched, and both far below what the box had room for.
+
+**Fix:** replaced the fixed-px clamp for scripture and lyrics with a content-driven
+auto-fit — `src/shared/slides/fitText.ts` (`bandCandidates`/`fitFontSize`, pure and
+unit-tested) tries a descending band of `cqmin` sizes and keeps the largest that fits;
+`src/renderer/shared/useFitText.ts` runs that search against the real DOM box in a layout
+effect (and on resize) and writes the result to a `--helm-fit-size` custom property that
+the text styles read via `fitSizeValue()`. `SlideCanvas.tsx` supplies the two bands: scripture
+`bandCandidates(10, 3)`, lyrics `bandCandidates(10.5, 3.5)` (an earlier tuning pass had them
+at 6.5–3 and 8–3.5; both ceilings were raised after real-projector verification showed
+every case — short and long content alike — pinned at those lower ceilings, meaning the
+shrink path never engaged and a two-word verse looked no bigger than a forty-word one).
+
+**Proof:** `fitText.test.ts`, `useFitText.test.tsx`, and `SlideCanvas.test.tsx`/
+`SlideCanvas.sanity.test.tsx` cover the band search and the DOM wiring (shape of the
+fitted value, not the specific band numbers, so retuning doesn't churn these tests); full
+suite `npm test` — 378/378 passing, `npm run typecheck` clean. Real-app proof at 1920×1080
+via `scratch/verify-autofit.mjs` (Electron + `playwright-core`, a genuine output window,
+not jsdom): short-verse 108.0px, long-verse 97.2px, short-stanza 113.4px, long-stanza
+99.9px, two-column 94.5px — all comfortably above the old 40px ceiling, short content
+measurably larger than long content (the shrink path now visibly engages), and nothing
+clipped in any case.
 
 ### BUG-002 — `Enter` cues by DB insertion order, not relevance (score-tie plateaus) · **SEV 1**
 **Status:** Fixed (`00340da`) · **Area:** Songs search ranking (`songScore.ts`, consumed by `SongsMode.tsx` Enter path)
