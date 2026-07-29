@@ -60,6 +60,48 @@ Entry template:
 **Status:** Open · **Area:** Songs search (`songsRepo.ts` fallback scan, `SongsMode.tsx:104` parallel lyric pass)
 **Repro:** measure ms/search vs library size. Harness: **3.9 ms @200, 18.3 ms @1000, 56.5 ms @3000** songs. **Notes:** per keystroke; **Title mode doubles it** (parallel lyric search, `SongsMode.tsx:104`); the sparse-FTS fallback runs full-library Levenshtein, so a single-token typo — the hurried operator's likely input — triggers the most expensive path. Fine today; watch if libraries reach thousands. Fix candidates: debounce, drop/relax the double search, cap the fuzzy scan.
 
+### BUG-009 — No error boundary: any renderer exception blanks the projector mid-service · **SEV 2**
+**Status:** Open · **Area:** app-wide (renderer) — worst at the audience output (`src/renderer/output/main.tsx`, `OutputApp.tsx`)
+
+**Repro:** any uncaught exception thrown during render or in a layout/effect
+callback in the output window. No deliberate repro exists today — this is a
+structural gap, not a triggered defect (see *Reachability*).
+
+**Expected:** a renderer fault degrades to something the congregation can look at —
+the last good slide, a black screen, anything — and the operator is told.
+**Actual:** React unmounts the whole root. The audience screen goes blank and stays
+blank; there is no recovery path short of restarting the app mid-service.
+
+**Root cause (verified):** there is no error boundary anywhere in the renderer —
+`grep -rn "ErrorBoundary|componentDidCatch|getDerivedStateFromError" src/` returns
+**zero hits**. `src/renderer/output/main.tsx` renders `<OutputApp />` directly into
+the root with nothing between it and `createRoot`, and `OutputApp.tsx:14-24`
+dispatches straight to `SlideCanvas` / `ReadingCanvas` / `VideoCanvas`. React's
+default behaviour on an uncaught render error is to unmount the entire tree.
+
+**Why it matters more here than in most apps:** the operator window failing is
+recoverable — a human is sitting in front of it and can restart. The *output* window
+is on a projector in front of a congregation, unattended, mid-service. The blast
+radius of any renderer bug is therefore "the screen goes black and stays black,"
+which is the one outcome this software exists to prevent.
+
+**Reachability:** no known trigger today. It surfaced while reviewing the BUG-007
+auto-fit work: a fix wave made `useFitText` throw on an empty candidate band, which
+would have put a `throw` directly in the output window's layout-effect path. That
+was reverted (`f4aba98` — the hook now fails safe and `console.error`s; only the
+pure `fitFontSize` still throws). The episode is the point: one plausible-looking
+"fail loud" decision in a shared renderer module is all it takes, and nothing in the
+codebase would have stopped it reaching the projector.
+
+**Fix candidates:** an error boundary around `OutputApp` that holds the last good
+payload rather than unmounting; the same around the operator's mode surfaces so one
+broken mode doesn't take the app down; a `window.onerror` hook reporting renderer
+faults to main so the operator sees something. Worth pairing with a decision about
+what the audience screen *should* show when the renderer is broken — last good
+slide, or clean black.
+
+**Notes:** Found 2026-07-29 during the BUG-007 final review. Pre-existing and
+unrelated to that branch.
 
 ---
 
