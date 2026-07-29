@@ -79,7 +79,7 @@ export function SlideCanvas({
   };
   const lineStyle: CSSProperties = {
     fontWeight: 700,
-    fontSize: fitSizeValue('clamp(11px, 7.4cqmin, 7.4cqmin)'),
+    fontSize: `max(11px, ${fitSizeValue('7.4cqmin')})`,
     lineHeight: 1.16,
     letterSpacing: '-0.015em',
     color: '#fff',
@@ -130,7 +130,7 @@ export function SlideCanvas({
   };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
-    fontSize: fitSizeValue('clamp(10px, 4.7cqmin, 4.7cqmin)'),
+    fontSize: `max(10px, ${fitSizeValue('4.7cqmin')})`,
     lineHeight: 1.36,
     color: '#f3efe6',
     fontWeight: 400

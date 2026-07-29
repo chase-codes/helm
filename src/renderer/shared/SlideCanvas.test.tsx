@@ -23,18 +23,16 @@ test('scripture renders ref and columns', () => {
   expect(screen.getByText('KJV')).toBeTruthy();
 });
 
-test('lyric lines size from the fit property, falling back to a clamp', () => {
+test('lyric lines size from the fit property, floored, falling back to an uncapped cqmin', () => {
   render(<SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} />);
   const line = screen.getByText('Amazing grace!') as HTMLElement;
-  expect(line.style.fontSize).toContain('var(--helm-fit-size');
-  expect(line.style.fontSize).toContain('clamp(');
+  expect(line.style.fontSize).toBe('max(11px, var(--helm-fit-size, 7.4cqmin))');
 });
 
-test('scripture text sizes from the fit property, falling back to a clamp', () => {
+test('scripture text sizes from the fit property, floored, falling back to an uncapped cqmin', () => {
   render(<SlideCanvas slide={{ kind: 'scripture', ref: 'John 3:16', columns: [{ version: 'KJV', text: 'For God so loved…' }] }} />);
   const verse = screen.getByText('For God so loved…') as HTMLElement;
-  expect(verse.style.fontSize).toContain('var(--helm-fit-size');
-  expect(verse.style.fontSize).toContain('clamp(');
+  expect(verse.style.fontSize).toBe('max(10px, var(--helm-fit-size, 4.7cqmin))');
 });
 
 test('both parallel versions render at one size', () => {
@@ -66,4 +64,28 @@ test('non-fitted slide kinds keep their own sizing', () => {
   render(<SlideCanvas slide={{ kind: 'quote', text: 'A quote', source: 'Someone' }} />);
   const quote = screen.getByText('A quote') as HTMLElement;
   expect(quote.style.fontSize).not.toContain('var(--helm-fit-size');
+});
+
+test('lyric auto-fit does not re-measure when a re-render changes only an unrelated prop', () => {
+  // Guards the module-scope band hoist in SlideCanvas.tsx: the fit bands must keep a
+  // stable array identity across renders, or useFitText's deps array looks "changed"
+  // every render and the layout effect (tear down/recreate ResizeObserver, synchronous
+  // re-measure) fires on every tick of e.g. the stage clock. If the bands were recreated
+  // inside the component body instead, this test fails.
+  let clientHeightReads = 0;
+  const { container, rerender } = render(
+    <SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} variant="stage" clock="12:00" />
+  );
+  const root = container.firstElementChild as HTMLElement;
+  Object.defineProperty(root, 'clientHeight', {
+    configurable: true,
+    get: () => {
+      clientHeightReads++;
+      return 0;
+    }
+  });
+  const readsAfterMount = clientHeightReads; // stub attached post-mount: 0
+
+  rerender(<SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} variant="stage" clock="12:01" />);
+  expect(clientHeightReads).toBe(readsAfterMount);
 });
