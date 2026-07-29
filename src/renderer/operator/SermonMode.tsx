@@ -9,11 +9,10 @@ import {
   renderBuilder,
   toParsedRef,
   fromParsedRef,
-  setStart,
-  setEnd,
   EMPTY_EXTENT,
   type RefBuilderState
 } from '../../shared/scripture/refBuilder';
+import { railSelect, addTarget, type Cursor } from '../../shared/scripture/selection';
 import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import type { BibleManifestEntry, BookExtent, ChapterData, ScriptureReading } from '../../shared/types';
@@ -419,27 +418,29 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     if (p) setBuilder(fromParsedRef(p));
   };
 
-  const parsed = toParsedRef(builder);
-  const canAdd = parsed !== null;
-  const addLabel = parsed ? `+ Add ${formatRef(parsed)}` : '';
+  // The cursor, as the pure selection helpers want it.
+  const cursor: Cursor = { book: scrBook, ch: scrCh, v: scrV };
+  // What `+ Add` and Enter would file: the typed ref when the entry holds one, else the
+  // cursor's verse. Always something, so the button is always offered — a mouse-only
+  // operator never has to know the keyboard flow to schedule what they're looking at.
+  const addRef = addTarget(builder, cursor);
+  const addLabel = `+ Add ${formatRef(addRef)}`;
 
-  // Click-select in the rail writes the same RefBuilderState as typing. If the builder has
-  // no resolved book yet, seed it from the previewed (cued) chapter so a click there starts
-  // a fresh selection in that chapter.
+  // A click on a verse card. Plain tap moves the cursor — which reaches the projector via
+  // the show effect above when output is live, and is a quiet preview when it isn't.
+  // Shift-tap leaves the cursor and writes a range into the builder instead. The decision
+  // itself lives in `railSelect` so it can be tested without mounting this component.
   const onRailSelectVerse = (v: number, shift: boolean): void => {
-    setBuilder((b) => {
-      const seeded: RefBuilderState =
-        b.book === null || b.chapter === null
-          ? { ...initialBuilder(), stage: 'verse', book: previewBook, chapter: previewCh, startVerse: null, endVerse: null }
-          : b;
-      const ext = bookExtents[seeded.book ?? ''] ?? EMPTY_EXTENT;
-      if (shift) return setEnd(seeded, v, ext);
-      // No open selection (fresh or just-completed range) -> start; a start set with no end
-      // and a *different* verse -> end; same verse -> stay single.
-      if (seeded.startVerse === null || seeded.endVerse !== null) return setStart(seeded, v, ext);
-      if (v === seeded.startVerse) return seeded;
-      return setEnd(seeded, v, ext);
-    });
+    const next = railSelect(
+      builder,
+      cursor,
+      { book: previewBook, ch: previewCh },
+      v,
+      shift,
+      bookExtents[previewBook] ?? EMPTY_EXTENT
+    );
+    setBuilder(next.builder);
+    jumpTo(next.cursor.book, next.cursor.ch, next.cursor.v);
   };
 
   const scheduleRows: ScheduleRow[] = schedule.map((r) => {
@@ -562,7 +563,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             value={renderBuilder(builder)}
             onEntryChange={onEntryChange}
             onEntryKeyDown={onEntryKeyDown}
-            canAdd={canAdd}
+            canAdd
             addLabel={addLabel}
             onAdd={() => commitBuilder(false)}
             rows={scheduleRows}
