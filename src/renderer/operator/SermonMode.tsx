@@ -7,7 +7,6 @@ import {
   initialBuilder,
   applyKey,
   renderBuilder,
-  toParsedRef,
   fromParsedRef,
   EMPTY_EXTENT,
   type RefBuilderState
@@ -366,36 +365,61 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // a spurious CUED badge, or a misleading LIVE badge.
   const railIsCued = previewBook === scrBook && previewCh === scrCh;
 
-  // Mid-service headline flow: build a ref, Enter — it's on screen. Schedules it, resets
-  // the builder, and (Enter, not Shift+Enter) jumps + goes live immediately (reusing the
-  // cached chapter when it already matches, else fetching fresh so the live slide never
-  // shows stale text).
-  const commitBuilder = (goLiveToo: boolean): void => {
-    const p = toParsedRef(builder);
-    if (!p) return;
-    window.helm.schedule.add(p).then(setSchedule).catch(console.error);
+  // Paste / IME: if the whole field parses as a ref, load it structurally.
+  const onEntryChange = (v: string): void => {
+    const p = parseRef(v);
+    if (p) setBuilder(fromParsedRef(p));
+  };
+
+  // The cursor, as the pure selection helpers want it.
+  const cursor: Cursor = { book: scrBook, ch: scrCh, v: scrV };
+  // What `+ Add` and Enter would file: the typed ref when the entry holds one, else the
+  // cursor's verse. Always something, so the button is always offered — a mouse-only
+  // operator never has to know the keyboard flow to schedule what they're looking at.
+  const addRef = addTarget(builder, cursor);
+  const addLabel = `+ Add ${formatRef(addRef)}`;
+
+  // Two independent commits. The schedule is a plan; it is not a gate to the projector, and
+  // nothing that reaches the projector writes a row. Enter and `+ Add` file; Shift+Enter and
+  // the Go live button show. Both read `addRef`, so an empty entry commits the cursor's
+  // verse — Shift+Enter on an empty field is the keyboard twin of the Go live button.
+  const addToSchedule = (): void => {
+    window.helm.schedule.add(addRef).then(setSchedule).catch(console.error);
     setBuilder(initialBuilder());
     setTrack('scripture');
-    if (goLiveToo) {
-      jumpTo(p.book, p.ch, p.from);
-      if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
-        goLiveWithChapter(p, chapter);
-      } else {
-        window.helm.bibles
-          .getChapter(p.book, p.ch)
-          .then((c) => {
-            setChapter(c);
-            goLiveWithChapter(p, c);
-          })
-          .catch(console.error);
-      }
+  };
+
+  const goLiveFromBuilder = (): void => {
+    const p = addRef;
+    setBuilder(initialBuilder());
+    setTrack('scripture');
+    // `goLive` blacks the output when fired on the key already live (see
+    // shared/presentation/core.ts) — correct for the Go live / Take down button, wrong here.
+    // Shift+Enter names a reference, so blanking is never what was asked for; if it's
+    // already up, we're done.
+    const key = keyForScripture(p.book, p.ch, p.from);
+    if (output === 'live' && liveKey === key) return;
+    jumpTo(p.book, p.ch, p.from);
+    // Reuse the cached chapter when it already matches, else fetch fresh so the live slide
+    // never shows stale text from the previous book.
+    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
+      goLiveWithChapter(p, chapter);
+    } else {
+      window.helm.bibles
+        .getChapter(p.book, p.ch)
+        .then((c) => {
+          setChapter(c);
+          goLiveWithChapter(p, c);
+        })
+        .catch(console.error);
     }
   };
 
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      commitBuilder(e.shiftKey);
+      if (e.shiftKey) goLiveFromBuilder();
+      else addToSchedule();
       return;
     }
     if (e.key === 'Escape') {
@@ -411,20 +435,6 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     if (r.preventDefault) e.preventDefault();
     if (r.state !== builder) setBuilder(r.state);
   };
-
-  // Paste / IME: if the whole field parses as a ref, load it structurally.
-  const onEntryChange = (v: string): void => {
-    const p = parseRef(v);
-    if (p) setBuilder(fromParsedRef(p));
-  };
-
-  // The cursor, as the pure selection helpers want it.
-  const cursor: Cursor = { book: scrBook, ch: scrCh, v: scrV };
-  // What `+ Add` and Enter would file: the typed ref when the entry holds one, else the
-  // cursor's verse. Always something, so the button is always offered — a mouse-only
-  // operator never has to know the keyboard flow to schedule what they're looking at.
-  const addRef = addTarget(builder, cursor);
-  const addLabel = `+ Add ${formatRef(addRef)}`;
 
   // A click on a verse card. Plain tap moves the cursor — which reaches the projector via
   // the show effect above when output is live, and is a quiet preview when it isn't.
@@ -565,7 +575,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             onEntryKeyDown={onEntryKeyDown}
             canAdd
             addLabel={addLabel}
-            onAdd={() => commitBuilder(false)}
+            onAdd={addToSchedule}
             rows={scheduleRows}
             undo={undo.pending ? { label: formatRef(undo.pending), onUndo: undoRemove } : undefined}
           />
