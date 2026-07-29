@@ -79,18 +79,22 @@ Entry template:
 **Status:** Fixed (`de0d393`) · **Area:** Sermon/Scripture — audience output display
 
 **Root cause (measured):** the audience text styles used `clamp(min, N cqmin, MAXpx)` — a
-fixed pixel ceiling. That ceiling only binds once the container's shorter side exceeds
-~850px, so it did nothing in the operator's small preview panes (where the bug looked
-absent) and only throttled the text on the real projector, where the container is
-1920×1080. Measured on a 1080p output: scripture pinned at 40px next to lyrics at 72px on
-the same screen — visibly mismatched, and both far below what the box had room for.
+fixed pixel ceiling. That ceiling only binds once the container's shorter side passes
+`100 × MAXpx / N` — **~851px for scripture** (`4.7cqmin`/`40px`) and **~973px for lyrics**
+(`7.4cqmin`/`72px`). Both thresholds sit above the operator's small preview panes and below
+a 1080p projector, so the cap did nothing where the bug was looked for and throttled the
+text only where it mattered. Measured on a 1080p output: scripture pinned at 40px next to
+lyrics at 72px on the same screen — visibly mismatched, and both far below what the box had
+room for.
 
 **Fix:** replaced the fixed-px clamp for scripture and lyrics with a content-driven
 auto-fit — `src/shared/slides/fitText.ts` (`bandCandidates`/`fitFontSize`, pure and
 unit-tested) tries a descending band of `cqmin` sizes and keeps the largest that fits;
 `src/renderer/shared/useFitText.ts` runs that search against the real DOM box in a layout
 effect (and on resize) and writes the result to a `--helm-fit-size` custom property that
-the text styles read via `fitSizeValue()`. `SlideCanvas.tsx` supplies the two bands: scripture
+the text styles read via `fitSizeValue()`, wrapped in `max(11px, …)` / `max(10px, …)` so the
+original pixel **floors** survive in very small containers (the ceilings are what had to go,
+not the floors). `SlideCanvas.tsx` supplies the two bands: scripture
 `bandCandidates(10, 3)`, lyrics `bandCandidates(10.5, 3.5)` (an earlier tuning pass had them
 at 6.5–3 and 8–3.5; both ceilings were raised after real-projector verification showed
 every case — short and long content alike — pinned at those lower ceilings, meaning the
@@ -98,8 +102,13 @@ shrink path never engaged and a two-word verse looked no bigger than a forty-wor
 
 **Proof:** `fitText.test.ts`, `useFitText.test.tsx`, and `SlideCanvas.test.tsx`/
 `SlideCanvas.sanity.test.tsx` cover the band search and the DOM wiring (shape of the
-fitted value, not the specific band numbers, so retuning doesn't churn these tests); full
-suite `npm test` — 378/378 passing, `npm run typecheck` clean. Real-app proof at 1920×1080
+fitted value, not the specific band numbers, so retuning doesn't churn these tests). The
+measurement walk is covered by a jsdom test that stubs layout so `scrollHeight` responds to
+the probe — it fails if the walk is replaced with "take the largest candidate" or if the fit
+comparison is inverted; a sibling test pins the module-scope band hoisting by asserting the
+effect doesn't re-run when a re-render leaves the deps referentially stable (without it, the
+stage display's per-second `clock` tick would re-measure every second). Full suite `npm test`
+— **381/381 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
 via `scratch/verify-autofit.mjs` (Electron + `playwright-core`, a genuine output window,
 not jsdom): short-verse 108.0px, long-verse 97.2px, short-stanza 113.4px, long-stanza
 99.9px, two-column 94.5px — all comfortably above the old 40px ceiling, short content
