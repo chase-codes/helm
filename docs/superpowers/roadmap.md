@@ -103,6 +103,23 @@ Several items below share these foundations — worth building once as reusable 
   Want a fast path: select a scripture in the preview, and if the sermon view is already
   live, switch straight to it (skip the add-to-schedule detour). (Found during Windows
   rehearsal testing, 2026-07-08.)
+  - **Update (2026-07-29):** spec written — one cursor moved by tap/arrow/schedule-row
+    click, which goes to screen when output is live and previews when it isn't; `+ Add` and
+    `Go live` become independent paths so the schedule never gates the projector. See
+    `docs/superpowers/specs/2026-07-29-scripture-direct-live-design.md`.
+
+- **Book-name typeahead in the ref builder.** Typing `gen` and pressing space already
+  resolves to Genesis — `matchBook` (`refs.ts:11-17`) picks exact alias first, then first
+  prefix match, and the book stage commits it on space (`refBuilder.ts:86-88`). But the
+  entry renders the raw query (`renderBuilder:35`), so the operator can't see where space
+  will land until it lands. Show the completion inline with the untyped remainder marked,
+  driven by the same `matchBook` call space uses so the preview can't disagree with the
+  result. Design questions worth their own pass: numbered books are already special-cased
+  (for `1 jo`, space appends rather than commits until `matchBookExact` resolves —
+  `refBuilder.ts:89`), so the hint must distinguish "keep typing" from "accept"; what shows
+  on no match; whether Tab also accepts; whether an ambiguous prefix can be cycled (`jo` →
+  John before Jonah, Joshua, Joel); and whether chapter/verse stages get the same
+  treatment. Discoverability item — helps operators who don't know the keyboard flow.
 
 - **Background choices for scripture (and similar) audience output.** A settings flow
   letting operators choose the background shown behind scripture text on the audience
