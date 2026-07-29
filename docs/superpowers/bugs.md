@@ -118,10 +118,12 @@ the exact `fitSizeScaled()` output for the ref/version labels and assert neither
 px ceiling. Full suite `npm test`
 — **391/391 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
 via `scratch/verify-autofit.mjs` (Electron + `playwright-core`, a genuine output window,
-not jsdom): short-verse 108.0px, long-verse 97.2px, short-stanza 113.4px, long-stanza
-99.9px, two-column 94.5px — all comfortably above the old 40px ceiling, short content
+not jsdom): short-verse 108.0px, long-verse 91.8px, short-stanza 113.4px, long-stanza
+99.9px, two-column 91.8px — all comfortably above the old 40px ceiling, short content
 measurably larger than long content (the shrink path now visibly engages), and nothing
-clipped in any case.
+clipped in any case. (The scripture figures are a touch below the pre-label-scaling run —
+97.2/94.5 — because the ref and version labels now scale with the fit and take their share
+of the box. The block sizes as one unit, which is the point.)
 
 ### BUG-002 — `Enter` cues by DB insertion order, not relevance (score-tie plateaus) · **SEV 1**
 **Status:** Fixed (`00340da`) · **Area:** Songs search ranking (`songScore.ts`, consumed by `SongsMode.tsx` Enter path)
