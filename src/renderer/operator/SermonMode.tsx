@@ -224,15 +224,26 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // under the new ref. Only trust it once it actually matches where we're looking.
   const liveChapter = chapter && chapter.book === scrBook && chapter.chapter === scrCh ? chapter : null;
 
-  // Cue on every book/chapter/verse/version/chapter-data change (mirrors SongsMode).
+  // The cursor's route to the screen: `show` on every book/chapter/verse/version/
+  // chapter-data change. Unlike the `cue` this replaced, it follows across chapters and
+  // books — moving the cursor while live moves the projector, wherever you move it.
+  //
+  // Bail while `liveChapter` is null. It is null for a render or two after a cross-book/
+  // chapter jump (see its comment above), and `show` — having no sameFlow guard to make
+  // that an accidental no-op the way `cue` did — would otherwise push the INSTALL_HINT
+  // slide onto the projector mid-service. `liveChapter` is a dep, so this re-runs with the
+  // real text the moment the fetch resolves; the screen holds the previous verse for that
+  // tick rather than flashing a false "no bible installed". Same guard, same reason, as
+  // `goLive` below.
   useEffect(() => {
+    if (!liveChapter) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
-    const cols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
+    const cols = verseCols(liveChapter.verses[scrV] ?? {}, versions, abbrOf);
     const slide = buildScriptureSlide(
       formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
-    window.helm.presentation.cue(key, slide);
+    window.helm.presentation.show(key, slide);
   }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
