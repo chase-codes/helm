@@ -60,13 +60,6 @@ Entry template:
 **Status:** Open · **Area:** Songs search (`songsRepo.ts` fallback scan, `SongsMode.tsx:104` parallel lyric pass)
 **Repro:** measure ms/search vs library size. Harness: **3.9 ms @200, 18.3 ms @1000, 56.5 ms @3000** songs. **Notes:** per keystroke; **Title mode doubles it** (parallel lyric search, `SongsMode.tsx:104`); the sparse-FTS fallback runs full-library Levenshtein, so a single-token typo — the hurried operator's likely input — triggers the most expensive path. Fine today; watch if libraries reach thousands. Fix candidates: debounce, drop/relax the double search, cap the fuzzy scan.
 
-### BUG-007 — Scripture text too small on the audience (projector) view, no way to adjust
-**Status:** Open · **Area:** Sermon/Scripture — audience output display
-**Repro:** Found during the Windows/projector rehearsal. Schedule and go live with a scripture reading; view the audience output on the projector.
-**Expected:** Text sized for legibility at projector distance, with some operator control over size.
-**Actual:** Text renders noticeably small on the projector; there's no setting/control to increase it.
-**Notes:** Related roadmap ask — songs wants auto min/max sizing based on verse length (see `roadmap.md` Songs section); scripture may want a simpler manual size control first.
-
 ### BUG-008 — Live notification still shows the pre-existing song/scripture after the pre-service loop starts
 **Status:** Open · **Area:** Header live status (`Header.tsx`) / pre-service loop (`preserviceEngine.ts`)
 **Repro:**
@@ -81,6 +74,56 @@ Entry template:
 ---
 
 ## Fixed
+
+### BUG-007 — Scripture text too small on the audience (projector) view, no way to adjust
+**Status:** Fixed (`de0d393`) · **Area:** Sermon/Scripture — audience output display
+
+**Root cause (measured):** the audience text styles used `clamp(min, N cqmin, MAXpx)` — a
+fixed pixel ceiling. That ceiling only binds once the container's shorter side passes
+`100 × MAXpx / N` — **~851px for scripture** (`4.7cqmin`/`40px`) and **~973px for lyrics**
+(`7.4cqmin`/`72px`). Both thresholds sit above the operator's small preview panes and below
+a 1080p projector, so the cap did nothing where the bug was looked for and throttled the
+text only where it mattered. Measured on a 1080p output: scripture pinned at 40px next to
+lyrics at 72px on the same screen — visibly mismatched, and both far below what the box had
+room for.
+
+**Fix:** replaced the fixed-px clamp for scripture and lyrics with a content-driven
+auto-fit — `src/shared/slides/fitText.ts` (`bandCandidates`/`fitFontSize`, pure and
+unit-tested) tries a descending band of `cqmin` sizes and keeps the largest that fits;
+`src/renderer/shared/useFitText.ts` runs that search against the real DOM box in a layout
+effect (and on resize) and writes the result to a `--helm-fit-size` custom property that
+the text styles read via `fitSizeValue()`, wrapped in `max(11px, …)` / `max(10px, …)` so the
+original pixel **floors** survive in very small containers (the ceilings are what had to go,
+not the floors). `SlideCanvas.tsx` supplies the two bands: scripture
+`bandCandidates(10, 3)`, lyrics `bandCandidates(10.5, 3.5)` (an earlier tuning pass had them
+at 6.5–3 and 8–3.5; both ceilings were raised after real-projector verification showed
+every case — short and long content alike — pinned at those lower ceilings, meaning the
+shrink path never engaged and a two-word verse looked no bigger than a forty-word one). A
+post-review follow-up caught the same defect hiding in the scripture ref and version
+labels, which still carried their own fixed-px `clamp()` ceilings even though they sit
+*inside* the measured box — so the ref/version, projector, and preview could disagree on
+proportions. They now scale off the fitted verse size via `fitSizeScaled()`, at their
+original ratios to it (ref `0.62×`, version `0.47×`), floored at their original 8px/7px —
+so the whole scripture block scales, and fits, as one unit.
+
+**Proof:** `fitText.test.ts`, `useFitText.test.tsx`, and `SlideCanvas.test.tsx`/
+`SlideCanvas.sanity.test.tsx` cover the band search and the DOM wiring (shape of the
+fitted value, not the specific band numbers, so retuning doesn't churn these tests). The
+measurement walk is covered by a jsdom test that stubs layout so `scrollHeight` responds to
+the probe — it fails if the walk is replaced with "take the largest candidate" or if the fit
+comparison is inverted; a sibling test pins the module-scope band hoisting by asserting the
+effect doesn't re-run when a re-render leaves the deps referentially stable (without it, the
+stage display's per-second `clock` tick would re-measure every second); further tests pin
+the exact `fitSizeScaled()` output for the ref/version labels and assert neither carries a
+px ceiling. Full suite `npm test`
+— **391/391 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
+via `scratch/verify-autofit.mjs` (Electron + `playwright-core`, a genuine output window,
+not jsdom): short-verse 108.0px, long-verse 91.8px, short-stanza 113.4px, long-stanza
+99.9px, two-column 91.8px — all comfortably above the old 40px ceiling, short content
+measurably larger than long content (the shrink path now visibly engages), and nothing
+clipped in any case. (The scripture figures are a touch below the pre-label-scaling run —
+97.2/94.5 — because the ref and version labels now scale with the fit and take their share
+of the box. The block sizes as one unit, which is the point.)
 
 ### BUG-002 — `Enter` cues by DB insertion order, not relevance (score-tie plateaus) · **SEV 1**
 **Status:** Fixed (`00340da`) · **Area:** Songs search ranking (`songScore.ts`, consumed by `SongsMode.tsx` Enter path)

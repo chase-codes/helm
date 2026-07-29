@@ -1,5 +1,20 @@
-import type { CSSProperties, JSX } from 'react';
+import { useRef, type CSSProperties, type JSX } from 'react';
 import type { Slide, OutputVariant } from '../../shared/types';
+import { bandCandidates } from '../../shared/slides/fitText';
+import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
+
+// Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
+// and usually longer. Both lost the px ceilings that made scripture render at 55% of
+// lyrics on a 1080p projector (BUG-007).
+//
+// Hoisted to module scope so their array identity is stable across renders. `fitBand`
+// (one of these, or null) sits in useFitText's deps array, compared with Object.is — a
+// fresh array from calling bandCandidates() inside the component body would make every
+// render look "changed" and re-run the effect (tear down/recreate the ResizeObserver,
+// force a synchronous re-measure) even when nothing fit-relevant changed, e.g. once a
+// second from the stage variant's ticking clock prop.
+const LYRICS_BAND = bandCandidates(10.5, 3.5);
+const SCRIPTURE_BAND = bandCandidates(10, 3);
 
 export interface SlideCanvasProps {
   slide: Slide;
@@ -23,6 +38,9 @@ export function SlideCanvas({
   const isStage = variant === 'stage';
   const isMain = variant === 'main';
   const accent = s.accent || '#f0b24a';
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef<HTMLDivElement>(null);
 
   let bg = s.bg;
   if (!bg) {
@@ -61,7 +79,7 @@ export function SlideCanvas({
   };
   const lineStyle: CSSProperties = {
     fontWeight: 700,
-    fontSize: 'clamp(11px, 7.4cqmin, 72px)',
+    fontSize: `max(11px, ${fitSizeValue('7.4cqmin')})`,
     lineHeight: 1.16,
     letterSpacing: '-0.015em',
     color: '#fff',
@@ -83,7 +101,12 @@ export function SlideCanvas({
   };
   const refStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 'clamp(8px,2.9cqmin,22px)',
+    // Scales with the fitted verse size (0.62x, its original proportion when this was a
+    // fixed 2.9cqmin against a 4.7cqmin verse) rather than fitting independently: it sits
+    // inside the measured box, so an independent px ceiling here would let the projector
+    // and the operator's preview settle on different proportions of non-scaling content —
+    // exactly what BUG-007 was about. No ceiling; only the original 8px floor survives.
+    fontSize: fitSizeScaled(8, '4.7cqmin', 0.62),
     letterSpacing: '0.2em',
     textTransform: 'uppercase',
     color: accent,
@@ -106,13 +129,15 @@ export function SlideCanvas({
   };
   const versionStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 'clamp(7px,2.2cqmin,15px)',
+    // Same reasoning as refStyle above: scales with the fitted verse size (0.47x, its
+    // original proportion against the 4.7cqmin verse) instead of carrying its own ceiling.
+    fontSize: fitSizeScaled(7, '4.7cqmin', 0.47),
     letterSpacing: '0.16em',
     color: 'rgba(255,255,255,.4)'
   };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
-    fontSize: 'clamp(10px,4.7cqmin,40px)',
+    fontSize: `max(10px, ${fitSizeValue('4.7cqmin')})`,
     lineHeight: 1.36,
     color: '#f3efe6',
     fontWeight: 400
@@ -330,12 +355,22 @@ export function SlideCanvas({
   const columns = s.columns || [];
   const points = s.points || [];
 
+  // Only lyrics and scripture auto-fit; every other kind passes null and keeps its clamp.
+  const fitBand = isLyrics ? LYRICS_BAND : isScripture ? SCRIPTURE_BAND : null;
+  useFitText(rootRef, fitRef, fitBand, [
+    kind,
+    fitBand,
+    lines.join('\n'),
+    columns.map((c) => c.text).join('\n'),
+    variant
+  ]);
+
   return (
-    <div style={rootStyle}>
+    <div ref={rootRef} style={rootStyle}>
       {showBackPlate && <div style={backPlateStyle} />}
 
       {isLyrics && (
-        <div style={contentStyle}>
+        <div ref={fitRef} style={contentStyle}>
           {lines.map((ln, i) => (
             <div key={i} style={lineStyle}>
               {ln}
@@ -345,7 +380,7 @@ export function SlideCanvas({
       )}
 
       {isScripture && (
-        <div style={scriptureWrap}>
+        <div ref={fitRef} style={scriptureWrap}>
           <div style={refStyle}>{s.ref || ''}</div>
           <div style={colsStyle}>
             {columns.map((col, i) => (
