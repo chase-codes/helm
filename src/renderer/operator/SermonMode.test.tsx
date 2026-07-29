@@ -91,7 +91,9 @@ describe('SermonMode — direct preview to live', () => {
   it('does not touch the projector while the chapter fetch is unresolved', async () => {
     const { show, resolveChapter } = installHelmStub()
     render(<Harness />)
-    // Let every mount effect run and settle with the chapter still pending.
+    // The entry field is rendered by SchedulePanel unconditionally, synchronously on
+    // mount, regardless of the chapter fetch — so waiting for it is a cheap way to let
+    // mount effects run without depending on anything chapter-fetch-shaped.
     await waitFor(() => expect(screen.getByPlaceholderText('Add reading — John 3:16')).toBeTruthy())
     expect(show).not.toHaveBeenCalled()
 
@@ -122,6 +124,25 @@ describe('SermonMode — direct preview to live', () => {
     // Empty entry -> addRef is the cursor, Genesis 1:1, which is what's already live.
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
     await waitFor(() => expect(goLive).not.toHaveBeenCalled())
+  })
+
+  // Pins that Shift+Enter genuinely routes to goLiveFromBuilder — without this, the
+  // negative test above (goLive not called when the target is already live) can't tell
+  // "the guard suppressed it" from "the Shift+Enter path is dead."
+  it('Shift+Enter on a different verse than the one live reaches the projector', async () => {
+    const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Move the cursor off the live verse (1) via a rail tap on verse 3, same as test 2 —
+    // now addRef (the cursor) is Genesis 1:3, which is not the live key.
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(screen.getByPlaceholderText('Add reading — John 3:16')).toBeTruthy())
+
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(goLive).toHaveBeenCalled())
+    expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
   })
 
   it('Enter files a schedule row and never reaches the projector', async () => {
