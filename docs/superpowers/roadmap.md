@@ -11,13 +11,12 @@ brainstorm → spec → plan cycle; details here record **intent**, not final de
 
 Several items below share these foundations — worth building once as reusable primitives.
 
-- **Right-click context menus.** No `onContextMenu` handling exists in the renderer yet.
-  This is net-new and underpins: songs edit / quick-edit, and schedule-item actions
-  (delete). Build a small shared context-menu primitive rather than one-off menus.
-- **Selectable list rows + `Delete`-key handling.** A shared "select a row, act on it
-  (keyboard or context menu)" pattern used by the schedule lists (scripture, sermon,
-  and the other sermon-view tracks). One implementation, reused wherever a list of
-  scheduled/queued items appears.
+- ~~**Right-click context menus.**~~ ✅ **Shipped** — `ContextMenu.tsx` + `useContextMenu.tsx`,
+  consumed by `App`, `SermonMode`, `SongsMode`, `SlidesTrack`. Anything below that wanted a
+  context menu is now wiring, not net-new.
+- ~~**Selectable list rows + `Delete`-key handling.**~~ ✅ **Shipped** — `useListSelection.ts`
+  plus `useTimedUndo.ts` / `UndoToast.tsx` for the "Removed — Undo" affordance. See
+  `docs/superpowers/specs/2026-07-06-interaction-primitives-design.md`.
 - **Assignable hotkey system + hotkey recorder.** A bindings layer where navigation and
   actions map to operator-assignable keys, plus a recorder UI to capture a keystroke and
   assign it. Enables the songs hotkeys below and likely go-live / take-down bindings
