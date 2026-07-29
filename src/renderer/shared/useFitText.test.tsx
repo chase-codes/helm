@@ -51,6 +51,22 @@ describe('useFitText', () => {
     globalThis.ResizeObserver = saved;
   });
 
+  it('treats an empty candidates array as unfitted instead of throwing — no error boundary guards the live output', () => {
+    // fitFontSize([], ...) throws, and that's correct for it as a pure, directly-tested
+    // utility. But measure() runs synchronously in a layout effect, in the render path of
+    // the live projector output, and OutputApp.tsx has no error boundary — a propagated
+    // throw here would unmount the React root and blank the congregation's screen. This
+    // guards against that regressing if the empty-array special case is ever removed again.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let result: ReturnType<typeof render> | undefined;
+    expect(() => {
+      result = render(<Probe candidates={[]} />);
+    }).not.toThrow();
+    expect(result!.getByTestId('root').style.getPropertyValue(FIT_SIZE_VAR)).toBe('');
+    expect(errorSpy).toHaveBeenCalled(); // logged so the caller bug doesn't vanish silently
+    errorSpy.mockRestore();
+  });
+
   it('clears a stale fitted value when a slide-kind change reuses the root (band -> null)', () => {
     // React reuses the same root element across slide-kind changes. Simulate a prior
     // measurement having actually landed (jsdom's own zero-size early return would clear

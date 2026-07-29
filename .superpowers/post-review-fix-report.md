@@ -154,4 +154,42 @@ the same files carry the identical warning pattern).
 
 ## Commit
 
-Commit SHA: `<filled in after commit — see below>`
+Commit SHA: `d4cf6bc` (superseded — see Guard restoration below)
+
+## Guard restoration (post-review follow-up)
+
+The coordinator's re-review flagged the FIX E contract decision above as wrong for this
+specific call site (the general-utility reasoning for `fitFontSize` still stands and is
+unchanged). Reason: `OutputApp.tsx` mounts with no error boundary anywhere in the app (a
+grep for `ErrorBoundary`/`componentDidCatch`/`getDerivedStateFromError` across `src/`
+returns zero hits), and `measure()` runs synchronously inside `useLayoutEffect` — directly
+in the live projector's render path. Letting `fitFontSize([], ...)`'s throw propagate out of
+`useFitText` would unmount the React root and blank the congregation's screen mid-service,
+turning an unreachable-today edge case into a worst-possible failure mode for any future
+change that parameterizes bands (settings-driven bands, a refactor producing `max < min`,
+etc).
+
+**Change:** restored the `candidates.length === 0` guard in `useFitText`
+(`src/renderer/shared/useFitText.ts`), now handled identically to `candidates === null` —
+clears `--helm-fit-size` and returns, no throw — with a `console.error` so the caller bug
+doesn't vanish silently in development. `fitFontSize`'s throw is untouched; it remains the
+loud, correct failure mode for the pure, directly-tested utility itself. Updated the
+`useFitText` doc comment to explain why the hook diverges from `fitFontSize`'s contract
+instead of matching it.
+
+**Test added:** `src/renderer/shared/useFitText.test.tsx` — "treats an empty candidates
+array as unfitted instead of throwing — no error boundary guards the live output". Spies on
+`console.error`, renders `<Probe candidates={[]} />`, asserts it does not throw, asserts
+`--helm-fit-size` is cleared, and asserts `console.error` was called. Fails if the guard is
+removed again.
+
+**Re-verification:**
+- `npm test` — **391/391 passing** (390 + this 1 new test).
+- `npm run typecheck` — clean.
+- `npx eslint --no-cache` on all six touched files — **0 errors**, 429 warnings, all
+  pre-existing `prettier/prettier` semicolon-style warnings (same pattern as before, count
+  grew only because the file grew).
+
+`docs/superpowers/bugs.md` BUG-007 test count updated from **390/390** to **391/391**.
+
+Final commit SHA: `<filled in after commit>`

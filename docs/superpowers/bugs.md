@@ -116,7 +116,7 @@ effect doesn't re-run when a re-render leaves the deps referentially stable (wit
 stage display's per-second `clock` tick would re-measure every second); further tests pin
 the exact `fitSizeScaled()` output for the ref/version labels and assert neither carries a
 px ceiling. Full suite `npm test`
-— **390/390 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
+— **391/391 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
 via `scratch/verify-autofit.mjs` (Electron + `playwright-core`, a genuine output window,
 not jsdom): short-verse 108.0px, long-verse 97.2px, short-stanza 113.4px, long-stanza
 99.9px, two-column 94.5px — all comfortably above the old 40px ceiling, short content

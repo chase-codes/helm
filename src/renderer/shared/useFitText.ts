@@ -31,9 +31,9 @@ export function fitSizeScaled(floorPx: number, fallback: string, ratio: number):
  * Sizes `contentRef`'s text to fit inside `rootRef` by trying `candidates` largest-first.
  *
  * Pass `candidates: null` for slide kinds that are not auto-fitted — the property is left
- * unset and their styles keep their own `clamp()`. Pass a non-empty array for kinds that
- * are; an empty array is a caller bug, not a valid "don't fit" signal — `null` says that —
- * so it is left to `fitFontSize` to reject it loudly rather than silently doing nothing.
+ * unset and their styles keep their own `clamp()`. An empty array is a caller bug (see the
+ * guard inside for why it's handled the same as `null` here rather than left to throw), not
+ * a value any current caller produces.
  *
  * Runs in a layout effect so the fitted size is applied before the browser paints; the
  * operator never sees a frame at the wrong size.
@@ -54,6 +54,21 @@ export function useFitText(
       // styles read the var — but it's a trap for any future style that adopts
       // fitSizeValue()/fitSizeScaled(), and it's inconsistent with the zero-size path
       // below, which already clears the property rather than leaving stale evidence.
+      root.style.removeProperty(FIT_SIZE_VAR);
+      return;
+    }
+    if (candidates.length === 0) {
+      // fitFontSize() throws on an empty array, and that's the right contract for it — a
+      // pure, directly-tested utility should fail loudly on a caller bug. But measure()
+      // below runs synchronously inside a layout effect, directly in the render path of
+      // the live projector output, and this app has no error boundary anywhere
+      // (OutputApp.tsx mounts unprotected). Letting that throw propagate here would unmount
+      // the React root and blank the congregation's screen mid-service over what is, today,
+      // an unreachable case (SlideCanvas only ever passes `null` or a non-empty
+      // bandCandidates() result). Fail safe instead: behave like `candidates: null` — clear
+      // the property so the style's own clamp() renders, same as the zero-size path below.
+      // Logged so the bug doesn't vanish in development.
+      console.error('useFitText: candidates must not be an empty array; treating as unfitted');
       root.style.removeProperty(FIT_SIZE_VAR);
       return;
     }
