@@ -387,7 +387,7 @@ git commit -m "feat(scripture): extract railSelect and addTarget selection helpe
 
 Why the guard is not optional: `chapter` is fetched async and keyed by `[scrBook, scrCh]`, so `liveChapter` (`:225`) is null for a render or two after a cross-book or cross-chapter jump. Today that costs nothing, because a cross-chapter key fails `sameFlow` and `applyCue` no-ops. `showLive` has no such check, so without the guard this effect would push the `INSTALL_HINT` slide — the "no bible installed" text — onto the projector during the fetch. `liveChapter` is already in the dependency array, so the effect re-runs with real verse text the moment the fetch resolves. Identical reasoning to `goLive`'s guard at `:247-257`.
 
-No unit test: this is a `useEffect` inside a 598-line container with no test file, and its two decisions are already covered — `showLive`'s semantics by Task 1, the guard by Task 8's real-app driver. Do not add a `SermonMode.test.tsx` for it.
+Do not add a test in this task — the guard gets a proper CI test in Task 8, once the rail and builder wiring it shares a harness with are also in place. `showLive`'s own semantics are already covered by Task 1.
 
 - [ ] **Step 1: Replace the cue effect**
 
@@ -723,7 +723,195 @@ git commit -m "docs(scripture): correct ChapterRail's tap contract and hint"
 
 ---
 
-### Task 8: Real-app verification driver
+### Task 8: `SermonMode` integration tests
+
+**Files:**
+- Create: `src/renderer/operator/SermonMode.test.tsx`
+
+**Interfaces:**
+- Consumes: everything from Tasks 1-7. Asserts against `window.helm` call sites, not internals.
+- Produces: nothing.
+
+This is the first test of `SermonMode`, and it exists because the four behaviours below are the ones that fail *in front of a congregation* if a later edit breaks them. A gitignored driver is not CI. The pattern is established — `PreServiceMode.test.tsx:39-73` mounts a whole mode component against a stubbed `window.helm` inside a `ThemeCtx.Provider`; follow its shape, including the `afterEach(cleanup)` comment about this project's vitest config not setting `globals: true`.
+
+The stub must cover every `window.helm` surface `SermonMode` touches on mount, or effects reject and the render is useless: `settings.get` / `settings.set` (`:110`, `:170`), `schedule.list` / `schedule.add` / `schedule.remove` (`:118`, `:295`), `bibles.manifest` / `bibles.getChapter` / `bibles.bookExtent` / `bibles.onProgress` (`:124`, `:178`, `:196-208`, `:140`), and `presentation.get` / `presentation.onState` / `presentation.show` / `presentation.goLive` / `presentation.setOutput`.
+
+`getChapter` is deliberately deferred so the guard is testable: `SermonMode` calls it twice on mount — once for the live chapter (`:178`) and once for the preview chapter (`:331`) — and both share the one pending promise, so a single `resolve` releases both.
+
+Note the layering the first test depends on: the renderer's effect calls `window.helm.presentation.show` unconditionally once `liveChapter` resolves; the "only when output is live" decision lives in `showLive` in the main process (Task 1, already tested there). So this file asserts *whether the IPC is called*, which is exactly what the guard controls.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `src/renderer/operator/SermonMode.test.tsx`:
+
+```tsx
+// @vitest-environment jsdom
+import { useRef } from 'react'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SermonMode } from './SermonMode'
+import { ThemeCtx } from './ThemeCtx'
+import { themeFor } from '../../shared/theme'
+import type { ChapterData, PresentationState } from '../../shared/types'
+
+// This project's vitest config does not set `globals: true`, so
+// @testing-library/react's auto afterEach(cleanup) never registers; without
+// this, DOM from one test leaks into the next.
+afterEach(cleanup)
+
+const GENESIS_1: ChapterData = {
+  book: 'Genesis',
+  chapter: 1,
+  verseCount: 5,
+  verses: {
+    1: { kjv: 'In the beginning' },
+    2: { kjv: 'And the earth was without form' },
+    3: { kjv: 'And God said, Let there be light' },
+    4: { kjv: 'And God saw the light' },
+    5: { kjv: 'And God called the light Day' }
+  }
+}
+
+const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
+const GEN_1_1_LIVE: PresentationState = {
+  output: 'live',
+  liveKey: 'scr:Genesis:1:1',
+  liveSnap: { kind: 'scripture', ref: 'Genesis 1:1', columns: [] }
+}
+
+function installHelmStub(pres: PresentationState = NOTHING_LIVE): {
+  show: ReturnType<typeof vi.fn>
+  goLive: ReturnType<typeof vi.fn>
+  add: ReturnType<typeof vi.fn>
+  resolveChapter: () => void
+} {
+  const show = vi.fn()
+  const goLive = vi.fn()
+  const add = vi.fn(() => Promise.resolve([]))
+  let release: () => void = () => {}
+  // One pending promise shared by both getChapter call sites (live + preview), so the
+  // chapter stays unresolved until the test releases it.
+  const pending = new Promise<ChapterData>((res) => {
+    release = () => res(GENESIS_1)
+  })
+  ;(window as unknown as { helm: unknown }).helm = {
+    settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
+    schedule: { list: () => Promise.resolve([]), add, remove: vi.fn(() => Promise.resolve([])) },
+    bibles: {
+      manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
+      getChapter: () => pending,
+      bookExtent: () => Promise.resolve({ chapters: 50, verseCounts: Array(50).fill(31) }),
+      onProgress: () => () => {}
+    },
+    presentation: {
+      get: () => Promise.resolve(pres),
+      onState: () => () => {},
+      show,
+      goLive,
+      setOutput: vi.fn(),
+      cue: vi.fn()
+    }
+  }
+  return { show, goLive, add, resolveChapter: release }
+}
+
+function Harness(): JSX.Element {
+  const keyHandlerRef = useRef(null)
+  return (
+    <ThemeCtx.Provider value={themeFor('dark')}>
+      <SermonMode
+        themeMode="dark"
+        keyHandlerRef={keyHandlerRef}
+        active
+        onOpenSettings={() => {}}
+        biblesRevision={0}
+      />
+    </ThemeCtx.Provider>
+  )
+}
+
+const entry = (): HTMLElement => screen.getByPlaceholderText('Add reading — John 3:16')
+const verseCard = (n: number): HTMLElement =>
+  screen.getByText(`Verse ${n}`).closest('button') as HTMLElement
+
+describe('SermonMode — direct preview to live', () => {
+  it('does not touch the projector while the chapter fetch is unresolved', async () => {
+    const { show, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    // Let every mount effect run and settle with the chapter still pending.
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy().valueOf()).catch(() => {})
+    expect(show).not.toHaveBeenCalled()
+
+    resolveChapter()
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    expect(show.mock.calls[0][0]).toBe('scr:Genesis:1:1')
+  })
+
+  it('a rail tap shows the tapped verse and writes no schedule row', async () => {
+    const { show, add, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    show.mockClear()
+
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    expect(show.mock.calls[0][0]).toBe('scr:Genesis:1:3')
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Enter on the reference already live does not blank the projector', async () => {
+    const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Empty entry -> addRef is the cursor, Genesis 1:1, which is what's already live.
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(goLive).not.toHaveBeenCalled())
+  })
+
+  it('Enter files a schedule row and never reaches the projector', async () => {
+    const { goLive, show, add, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    show.mockClear()
+
+    fireEvent.keyDown(entry(), { key: 'Enter' })
+    await waitFor(() => expect(add).toHaveBeenCalled())
+    expect(add.mock.calls[0][0]).toEqual({ book: 'Genesis', ch: 1, from: 1, to: 1 })
+    expect(goLive).not.toHaveBeenCalled()
+    expect(show).not.toHaveBeenCalled()
+  })
+})
+```
+
+- [ ] **Step 2: Run and fix the harness, not the app**
+
+Run: `npx vitest run src/renderer/operator/SermonMode.test.tsx`
+
+Expect the first run to need harness adjustments — this is the first mount of this component under test. Legitimate fixes: a missing `window.helm` method the stub does not provide (add it), a `JSX.Element` import needed from `react`, a `waitFor` that needs a different settle condition, or the `GEN_1_1_LIVE` `liveSnap` shape needing to match the real `Slide` union for `scripture` (check `src/shared/scripture/slides.ts:17` and `src/shared/types.ts` and correct it).
+
+The first test's `waitFor(...).catch(...)` line is a deliberate settle-and-ignore; if it reads awkwardly, replace it with an explicit settle (`await act(async () => {})`) — but the assertion that follows it, `expect(show).not.toHaveBeenCalled()`, must stay exactly as written. It is the guard.
+
+**Not** legitimate: changing `SermonMode` to make a test pass. If a test fails on real behaviour, stop and report it — that is a genuine defect from Tasks 4-6, not a harness problem.
+
+- [ ] **Step 3: Run the full suite**
+
+Run: `npm run typecheck && npm test`
+Expected: typecheck clean, all tests pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/renderer/operator/SermonMode.test.tsx
+git commit -m "test(scripture): cover the guard, rail tap, and the two no-blank paths"
+```
+
+---
+
+### Task 9: Real-app verification driver
 
 **Files:**
 - Create: `scratch/verify-direct-live.mjs` (untracked — `scratch/` is gitignored; nothing to commit)
@@ -732,7 +920,7 @@ git commit -m "docs(scripture): correct ChapterRail's tap contract and hint"
 - Consumes: the whole stack — `window.helm.presentation.show` (Task 2) through the rail wiring (Tasks 5-6).
 - Produces: a PASS/FAIL report.
 
-This exercises what unit tests cannot: the renderer → preload → main → stateStore → output-window path, and the async chapter fetch that Task 4's guard exists for. Run it from the repo root so `playwright-core` resolves.
+This exercises what Task 8's jsdom tests cannot: the renderer → preload → main → stateStore → output-window path, with a real `showLive` deciding against real output state. Task 8 proves the renderer calls the right IPC; this proves the IPC does the right thing to the projector. Run it from the repo root so `playwright-core` resolves.
 
 - [ ] **Step 1: Read the existing driver for the launch pattern**
 
@@ -865,6 +1053,6 @@ There is nothing to commit — `scratch/` is gitignored (`3730374`). Report the 
 
 ## Post-implementation
 
-- [ ] Run the full gate: `npm run typecheck && npm test`. Expected: clean, 412 + 15 new tests.
+- [ ] Run the full gate: `npm run typecheck && npm test`. Expected: clean, 412 + 19 new tests (5 from Task 1, 10 from Task 3, 4 from Task 8).
 - [ ] Update `docs/superpowers/roadmap.md`: the *Direct preview → live/cue for scripture* item's 2026-07-29 update line says "spec written" — change it to record that it shipped, matching the style of the *Selectable schedule items* update at `:82-87`.
 - [ ] Commit the roadmap change: `git commit -m "docs(roadmap): mark direct preview → live for scripture shipped"`.
