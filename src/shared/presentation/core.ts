@@ -21,6 +21,15 @@ export function goLive(st: PresentationState, key: string, slide: Slide): Presen
   if (st.output === 'live' && st.liveKey === key) return { ...st, output: 'black' };
   return { output: 'live', liveKey: key, liveSnap: slide };
 }
+/** Navigation's route to the screen: updates what's live when output is already live,
+ * across ANY flow, and never toggles. Distinct from both neighbours on purpose —
+ * `applyCue` refuses a cross-flow update (Songs needs that: cueing another song must not
+ * jump the screen), and `goLive` blacks the output when fired on the key already live
+ * (right for a Go live / Take down button, wrong for a tap or an arrow). */
+export function showLive(st: PresentationState, key: string, slide: Slide): PresentationState {
+  if (st.output !== 'live') return st;
+  return { ...st, liveKey: key, liveSnap: slide };
+}
 export function setOutput(st: PresentationState, mode: OutputMode): PresentationState {
   return { ...st, output: mode };
 }

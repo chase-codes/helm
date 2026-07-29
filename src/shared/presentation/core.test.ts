@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { applyCue, goLive, initialPresentation, keyForSong, outputPayload, sameFlow, setOutput } from './core';
+import { applyCue, goLive, initialPresentation, keyForSong, outputPayload, sameFlow, setOutput, showLive } from './core';
 import type { Slide } from '../types';
 
 const slide = (label: string): Slide => ({ kind: 'lyrics', label, lines: ['x'] });
@@ -47,4 +47,33 @@ test('outputPayload passes through the requested variant', () => {
   expect(outputPayload(initialPresentation(), 'livestream').variant).toBe('livestream');
   // variant does not change slide derivation
   expect(outputPayload(setOutput(initialPresentation(), 'logo'), 'stage').slide).toEqual({ kind: 'logo', title: 'HELM' });
+});
+test('showLive while live hot-updates the screen, even across flows', () => {
+  let st = goLive(initialPresentation(), 'scr:Genesis:1:1', slide('Gen 1:1'));
+  st = showLive(st, 'scr:Romans:8:1', slide('Rom 8:1'));
+  expect(st.output).toBe('live');
+  expect(st.liveKey).toBe('scr:Romans:8:1');
+  expect(st.liveSnap?.label).toBe('Rom 8:1');
+});
+test('showLive while black leaves the screen down', () => {
+  const st = showLive(initialPresentation(), 'scr:Genesis:1:1', slide('Gen 1:1'));
+  expect(st.output).toBe('black');
+  expect(st.liveKey).toBeNull();
+  expect(st.liveSnap).toBeNull();
+});
+test('showLive while on the logo leaves the logo up', () => {
+  const st = showLive(setOutput(initialPresentation(), 'logo'), 'scr:Genesis:1:1', slide('Gen 1:1'));
+  expect(st.output).toBe('logo');
+  expect(st.liveSnap).toBeNull();
+});
+test('showLive on the already-live key does NOT take the screen down', () => {
+  let st = goLive(initialPresentation(), 'scr:Genesis:1:1', slide('Gen 1:1'));
+  st = showLive(st, 'scr:Genesis:1:1', slide('Gen 1:1'));
+  expect(st.output).toBe('live');
+  expect(st.liveKey).toBe('scr:Genesis:1:1');
+});
+test('applyCue still refuses a cross-flow cue (Songs depends on this)', () => {
+  let st = goLive(initialPresentation(), 'song:a:0', slide('V1'));
+  st = applyCue(st, 'song:b:0', slide('OTHER'));
+  expect(st.liveKey).toBe('song:a:0');
 });
