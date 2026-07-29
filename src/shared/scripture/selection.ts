@@ -1,6 +1,6 @@
 import type { BookExtent } from '../types'
 import type { ParsedRef } from './refs'
-import { initialBuilder, setEnd, toParsedRef, type RefBuilderState } from './refBuilder'
+import { initialBuilder, toParsedRef, type RefBuilderState } from './refBuilder'
 
 /** Where the operator is: the verse the hero shows, the arrows step, and — when output is
  * live — the projector displays. One cursor, moved identically by a rail tap, an arrow key,
@@ -33,7 +33,7 @@ export function railSelect(
   preview: { book: string; ch: number },
   v: number,
   shift: boolean,
-  extent: BookExtent
+  _extent: BookExtent
 ): RailSelection {
   if (!shift) {
     return { cursor: { book: preview.book, ch: preview.ch, v }, builder: initialBuilder() }
@@ -46,7 +46,18 @@ export function railSelect(
     chapter: preview.ch,
     startVerse: anchored ? cursor.v : v
   }
-  return { cursor, builder: anchored ? setEnd(base, v, extent) : base }
+  if (anchored) {
+    return {
+      cursor,
+      builder: {
+        ...base,
+        startVerse: Math.min(cursor.v, v),
+        endVerse: Math.max(cursor.v, v),
+        stage: 'endVerse'
+      }
+    }
+  }
+  return { cursor, builder: base }
 }
 
 /** What `+ Add` and Enter would file: the typed reference when the entry holds one, else

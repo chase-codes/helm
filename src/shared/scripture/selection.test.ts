@@ -76,3 +76,9 @@ test('addTarget returns a shift-tapped range', () => {
   const range = built({ startVerse: 5, endVerse: 9, stage: 'endVerse' })
   expect(addTarget(range, cursor)).toEqual({ book: 'Genesis', ch: 1, from: 5, to: 9 })
 })
+
+test('shift-tap forms the range even when the book extent has not loaded', () => {
+  const r = railSelect(initialBuilder(), cursor, here, 9, true, { chapters: 0, verseCounts: [] })
+  expect(r.builder.startVerse).toBe(5)
+  expect(r.builder.endVerse).toBe(9)
+})
