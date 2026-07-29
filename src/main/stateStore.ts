@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { CH, type OutputMode, type OutputVariant, type PresentationState, type Slide } from '../shared/types';
-import { applyCue, goLive, initialPresentation, outputPayload, setOutput } from '../shared/presentation/core';
+import { applyCue, goLive, initialPresentation, outputPayload, setOutput, showLive } from '../shared/presentation/core';
 
 let state: PresentationState = initialPresentation();
 const outputWindows = new Map<BrowserWindow, OutputVariant>();
@@ -13,6 +13,7 @@ export const presentation = {
   get: () => state,
   cue: (key: string, slide: Slide) => { state = applyCue(state, key, slide); broadcast(); },
   goLive: (key: string, slide: Slide) => { state = goLive(state, key, slide); broadcast(); },
+  show: (key: string, slide: Slide) => { state = showLive(state, key, slide); broadcast(); },
   setOutput: (mode: OutputMode) => { state = setOutput(state, mode); broadcast(); },
   registerOutput(w: BrowserWindow, variant: OutputVariant) {
     outputWindows.set(w, variant);

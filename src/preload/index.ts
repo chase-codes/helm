@@ -17,6 +17,7 @@ const api: HelmApi = {
     get: () => ipcRenderer.invoke(CH.presGet),
     cue: (key, slide) => ipcRenderer.send(CH.presCue, key, slide),
     goLive: (key, slide) => ipcRenderer.send(CH.presGoLive, key, slide),
+    show: (key, slide) => ipcRenderer.send(CH.presShow, key, slide),
     setOutput: (mode) => ipcRenderer.send(CH.presSetOutput, mode),
     onState: sub(CH.presState),
   },
