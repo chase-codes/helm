@@ -16,14 +16,15 @@ export interface ChapterRailProps {
   onSelectVerse: (v: number, shift: boolean) => void
 }
 
-const HINT = 'Planned verses are highlighted. Tap any verse — and keep reading right past the plan.'
+const HINT = 'Tap a verse to go there — on screen when you\'re live. Shift-tap to build a range.'
 
 /** Right rail for the Scripture track: one card per verse in the current chapter,
- * tinted by planned/cued/live tier. Tapping a card (or shift-tapping to extend) writes a
- * range select into the caller's `RefBuilderState` via `onSelectVerse`, rather than jumping
- * the live/cued verse directly — the builder is the single source of truth for what's
- * selected, and the caller decides when/whether that turns into a live preview. Mirrors
- * SectionRail's tap-to-navigate shape. */
+ * tinted by planned/cued/live tier. Tapping reports `(verse, shiftKey)` and leaves the
+ * meaning to the caller — SermonMode reads a plain tap as "move the cursor here" (which
+ * reaches the projector when output is live) and a shift-tap as "extend a range into the
+ * ref builder", via `railSelect` in shared/scripture/selection.ts. The rail itself stays
+ * presentational: `cuedV` marks the cursor, `selectedRange` marks a pending range, and it
+ * decides neither. Mirrors SectionRail's tap-to-navigate shape. */
 export function ChapterRail({
   theme: T,
   dark,
