@@ -13,8 +13,8 @@ import { fitSizeValue, useFitText } from './useFitText';
 // render look "changed" and re-run the effect (tear down/recreate the ResizeObserver,
 // force a synchronous re-measure) even when nothing fit-relevant changed, e.g. once a
 // second from the stage variant's ticking clock prop.
-const LYRICS_BAND = bandCandidates(8, 3.5);
-const SCRIPTURE_BAND = bandCandidates(6.5, 3);
+const LYRICS_BAND = bandCandidates(10.5, 3.5);
+const SCRIPTURE_BAND = bandCandidates(10, 3);
 
 export interface SlideCanvasProps {
   slide: Slide;
