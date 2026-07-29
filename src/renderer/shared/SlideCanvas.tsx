@@ -1,7 +1,7 @@
 import { useRef, type CSSProperties, type JSX } from 'react';
 import type { Slide, OutputVariant } from '../../shared/types';
 import { bandCandidates } from '../../shared/slides/fitText';
-import { fitSizeValue, useFitText } from './useFitText';
+import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
 
 // Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
 // and usually longer. Both lost the px ceilings that made scripture render at 55% of
@@ -101,7 +101,12 @@ export function SlideCanvas({
   };
   const refStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 'clamp(8px,2.9cqmin,22px)',
+    // Scales with the fitted verse size (0.62x, its original proportion when this was a
+    // fixed 2.9cqmin against a 4.7cqmin verse) rather than fitting independently: it sits
+    // inside the measured box, so an independent px ceiling here would let the projector
+    // and the operator's preview settle on different proportions of non-scaling content —
+    // exactly what BUG-007 was about. No ceiling; only the original 8px floor survives.
+    fontSize: fitSizeScaled(8, '4.7cqmin', 0.62),
     letterSpacing: '0.2em',
     textTransform: 'uppercase',
     color: accent,
@@ -124,7 +129,9 @@ export function SlideCanvas({
   };
   const versionStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 'clamp(7px,2.2cqmin,15px)',
+    // Same reasoning as refStyle above: scales with the fitted verse size (0.47x, its
+    // original proportion against the 4.7cqmin verse) instead of carrying its own ceiling.
+    fontSize: fitSizeScaled(7, '4.7cqmin', 0.47),
     letterSpacing: '0.16em',
     color: 'rgba(255,255,255,.4)'
   };

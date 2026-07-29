@@ -98,7 +98,13 @@ not the floors). `SlideCanvas.tsx` supplies the two bands: scripture
 `bandCandidates(10, 3)`, lyrics `bandCandidates(10.5, 3.5)` (an earlier tuning pass had them
 at 6.5–3 and 8–3.5; both ceilings were raised after real-projector verification showed
 every case — short and long content alike — pinned at those lower ceilings, meaning the
-shrink path never engaged and a two-word verse looked no bigger than a forty-word one).
+shrink path never engaged and a two-word verse looked no bigger than a forty-word one). A
+post-review follow-up caught the same defect hiding in the scripture ref and version
+labels, which still carried their own fixed-px `clamp()` ceilings even though they sit
+*inside* the measured box — so the ref/version, projector, and preview could disagree on
+proportions. They now scale off the fitted verse size via `fitSizeScaled()`, at their
+original ratios to it (ref `0.62×`, version `0.47×`), floored at their original 8px/7px —
+so the whole scripture block scales, and fits, as one unit.
 
 **Proof:** `fitText.test.ts`, `useFitText.test.tsx`, and `SlideCanvas.test.tsx`/
 `SlideCanvas.sanity.test.tsx` cover the band search and the DOM wiring (shape of the
@@ -107,8 +113,10 @@ measurement walk is covered by a jsdom test that stubs layout so `scrollHeight` 
 the probe — it fails if the walk is replaced with "take the largest candidate" or if the fit
 comparison is inverted; a sibling test pins the module-scope band hoisting by asserting the
 effect doesn't re-run when a re-render leaves the deps referentially stable (without it, the
-stage display's per-second `clock` tick would re-measure every second). Full suite `npm test`
-— **381/381 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
+stage display's per-second `clock` tick would re-measure every second); further tests pin
+the exact `fitSizeScaled()` output for the ref/version labels and assert neither carries a
+px ceiling. Full suite `npm test`
+— **390/390 passing**, `npm run typecheck` clean. Real-app proof at 1920×1080
 via `scratch/verify-autofit.mjs` (Electron + `playwright-core`, a genuine output window,
 not jsdom): short-verse 108.0px, long-verse 97.2px, short-stanza 113.4px, long-stanza
 99.9px, two-column 94.5px — all comfortably above the old 40px ceiling, short content

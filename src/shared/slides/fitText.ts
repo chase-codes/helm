@@ -7,7 +7,12 @@
 
 /** Descending candidate sizes from `max` down to `min`, inclusive, stepping by `step`. */
 export function bandCandidates(max: number, min: number, step = 0.25): number[] {
-  const steps = Math.floor((max - min) / step);
+  // Add a small epsilon before flooring: division can land a hair under the true integer
+  // boundary — (0.3 - 0.1) / 0.1 is 1.9999999999999998, not 2 — which silently drops the
+  // documented minimum candidate. 1e-9 is many orders of magnitude larger than the float
+  // error this compensates for, but far smaller than one step, so it can only push a
+  // boundary case up to the correct integer — it can never invent an extra candidate.
+  const steps = Math.floor((max - min) / step + 1e-9);
   const out: number[] = [];
   // Multiply rather than subtract repeatedly: 8 - 0.25*3 is exact, but 8-0.25-0.25-0.25
   // accumulates binary drift and yields sizes like 7.249999999999999.

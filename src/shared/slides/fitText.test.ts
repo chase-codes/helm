@@ -20,6 +20,11 @@ describe('bandCandidates', () => {
   it('returns a single value when max equals min', () => {
     expect(bandCandidates(5, 5, 0.25)).toEqual([5]);
   });
+  it('emits the documented minimum even when the division lands just under the integer boundary', () => {
+    // (0.3 - 0.1) / 0.1 === 1.9999999999999998 in IEEE 754 — Math.floor of that is 1, not
+    // 2, which silently drops 0.1 from the band without the epsilon fix.
+    expect(bandCandidates(0.3, 0.1, 0.1)).toContain(0.1);
+  });
 });
 
 describe('fitFontSize', () => {

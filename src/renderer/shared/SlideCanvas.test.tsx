@@ -35,6 +35,20 @@ test('scripture text sizes from the fit property, floored, falling back to an un
   expect(verse.style.fontSize).toBe('max(10px, var(--helm-fit-size, 4.7cqmin))');
 });
 
+test('scripture ref scales with the fitted size (0.62x the verse), floored at 8px, with no px ceiling', () => {
+  render(<SlideCanvas slide={{ kind: 'scripture', ref: 'John 3:16', columns: [{ version: 'KJV', text: 'For God so loved…' }] }} />);
+  const ref = screen.getByText('John 3:16') as HTMLElement;
+  expect(ref.style.fontSize).toBe('max(8px, calc(var(--helm-fit-size, 4.7cqmin) * 0.62))');
+  expect(ref.style.fontSize).not.toContain('clamp');
+});
+
+test('scripture version label scales with the fitted size (0.47x the verse), floored at 7px, with no px ceiling', () => {
+  render(<SlideCanvas slide={{ kind: 'scripture', ref: 'John 3:16', columns: [{ version: 'KJV', text: 'For God so loved…' }] }} />);
+  const version = screen.getByText('KJV') as HTMLElement;
+  expect(version.style.fontSize).toBe('max(7px, calc(var(--helm-fit-size, 4.7cqmin) * 0.47))');
+  expect(version.style.fontSize).not.toContain('clamp');
+});
+
 test('both parallel versions render at one size', () => {
   render(
     <SlideCanvas
