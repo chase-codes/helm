@@ -150,7 +150,12 @@ describe('SermonMode — direct preview to live', () => {
 
     // Empty entry -> addRef is the cursor, Genesis 1:1, which is what's already live.
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
-    await waitFor(() => expect(goLive).not.toHaveBeenCalled())
+    // Assert synchronously, after flushing pending microtasks. A negative assertion inside
+    // waitFor returns on its first successful pass and so waits for nothing — it would miss
+    // a regression on goLiveFromBuilder's async `getChapter().then(...)` branch, which only
+    // fires a tick later. The flush gives that branch its chance before we check.
+    await act(async () => {})
+    expect(goLive).not.toHaveBeenCalled()
   })
 
   it('Shift+Enter on the reference already live still moves the cursor to it', async () => {
