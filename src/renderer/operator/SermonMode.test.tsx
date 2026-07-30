@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SermonMode } from './SermonMode'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
-import type { ChapterData, PresentationState } from '../../shared/types'
+import type { ChapterData, PresentationState, ScriptureReading } from '../../shared/types'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -32,14 +32,19 @@ const GEN_1_1_LIVE: PresentationState = {
   liveSnap: { kind: 'scripture', accent: '#6f9cf0', ref: 'Genesis 1:1', label: 'Genesis 1:1', columns: [] }
 }
 
-function installHelmStub(pres: PresentationState = NOTHING_LIVE): {
+function installHelmStub(
+  pres: PresentationState = NOTHING_LIVE,
+  schedule: ScriptureReading[] = []
+): {
   show: ReturnType<typeof vi.fn>
   goLive: ReturnType<typeof vi.fn>
+  setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
   resolveChapter: () => void
 } {
   const show = vi.fn()
   const goLive = vi.fn()
+  const setOutput = vi.fn()
   const add = vi.fn(() => Promise.resolve([]))
   let release: () => void = () => {}
   // One pending promise shared by both getChapter call sites (live + preview), so the
@@ -49,7 +54,7 @@ function installHelmStub(pres: PresentationState = NOTHING_LIVE): {
   })
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
-    schedule: { list: () => Promise.resolve([]), add, remove: vi.fn(() => Promise.resolve([])) },
+    schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])) },
     bibles: {
       manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
       getChapter: () => pending,
@@ -61,11 +66,11 @@ function installHelmStub(pres: PresentationState = NOTHING_LIVE): {
       onState: () => () => {},
       show,
       goLive,
-      setOutput: vi.fn(),
+      setOutput,
       cue: vi.fn()
     }
   }
-  return { show, goLive, add, resolveChapter: release }
+  return { show, goLive, setOutput, add, resolveChapter: release }
 }
 
 function Harness(): JSX.Element {
@@ -84,8 +89,14 @@ function Harness(): JSX.Element {
 }
 
 const entry = (): HTMLElement => screen.getByPlaceholderText('Add reading — John 3:16')
+const entryValue = (): string => (entry() as HTMLInputElement).value
 const verseCard = (n: number): HTMLElement =>
   screen.getByText(`Verse ${n}`).closest('button') as HTMLElement
+// The entry is driven by the structural builder, not by input events — every printable
+// keystroke goes through onEntryKeyDown/applyKey — so type it a character at a time.
+const typeInEntry = (text: string): void => {
+  for (const ch of text) fireEvent.keyDown(entry(), { key: ch })
+}
 
 describe('SermonMode — direct preview to live', () => {
   it('does not touch the projector while the chapter fetch is unresolved', async () => {
@@ -126,6 +137,25 @@ describe('SermonMode — direct preview to live', () => {
     await waitFor(() => expect(goLive).not.toHaveBeenCalled())
   })
 
+  it('Shift+Enter on the reference already live still moves the cursor to it', async () => {
+    const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+
+    // Cursor to verse 3, so the hero and the projector (Genesis 1:1) disagree.
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+
+    // Name the reference that is already live. The early return must not skip the jump,
+    // or the hero would keep reading Genesis 1:3 while Genesis 1:1 is on the projector.
+    typeInEntry('Genesis 1:1')
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
+    expect(screen.queryByText('Genesis 1:3')).toBeNull()
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
   // Pins that Shift+Enter genuinely routes to goLiveFromBuilder — without this, the
   // negative test above (goLive not called when the target is already live) can't tell
   // "the guard suppressed it" from "the Shift+Enter path is dead."
@@ -161,5 +191,130 @@ describe('SermonMode — direct preview to live', () => {
     expect(add.mock.calls[0][0]).toEqual({ book: 'Genesis', ch: 1, from: 1, to: 1 })
     expect(goLive).not.toHaveBeenCalled()
     expect(show).not.toHaveBeenCalled()
+  })
+})
+
+describe('SermonMode — a half-typed reference is not a commit', () => {
+  it('Shift+Enter on an unresolved book neither goes live nor clears the typing', async () => {
+    const { goLive, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // "Rom" has not resolved to a book yet — no space typed, so builder.book is still null.
+    typeInEntry('Rom')
+    expect(entryValue()).toBe('Rom')
+
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    // Nothing on screen, and the half-typed reference survives so it can be finished.
+    expect(goLive).not.toHaveBeenCalled()
+    expect(entryValue()).toBe('Rom')
+  })
+
+  it('Enter on an unresolved book files nothing and keeps the typing', async () => {
+    const { add, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    typeInEntry('Rom')
+    fireEvent.keyDown(entry(), { key: 'Enter' })
+    expect(add).not.toHaveBeenCalled()
+    expect(entryValue()).toBe('Rom')
+  })
+
+  // A resolved book with no chapter yet ("Romans") substitutes the cursor exactly the way
+  // "Rom" does — the entry reads Romans, the commit would file Genesis. Same refusal.
+  it('Enter on a book with no chapter yet files nothing and keeps the typing', async () => {
+    const { add, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    typeInEntry('Romans ')
+    await waitFor(() => expect(entryValue()).toBe('Romans'))
+
+    fireEvent.keyDown(entry(), { key: 'Enter' })
+    expect(add).not.toHaveBeenCalled()
+    expect(entryValue()).toBe('Romans')
+  })
+
+  it('hides + Add while the entry holds an unparseable reference', async () => {
+    const { resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('+ Add Genesis 1:1')).toBeTruthy())
+
+    typeInEntry('Rom')
+    expect(screen.queryByText('+ Add Genesis 1:1')).toBeNull()
+  })
+
+  it('a resolved reference still commits (the guard is about half-typed, not typed)', async () => {
+    const { add, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Space resolves the book; the chapter/verse digits then clamp against that book's
+    // extent, so let the extent fetch land before typing them (see the prefetch effect's
+    // comment in SermonMode.tsx — digits typed against an absent extent are swallowed).
+    typeInEntry('Romans ')
+    await waitFor(() => expect(entryValue()).toBe('Romans'))
+    typeInEntry('8:2')
+    await waitFor(() => expect(entryValue()).toBe('Romans 8:2'))
+
+    fireEvent.keyDown(entry(), { key: 'Enter' })
+    await waitFor(() => expect(add).toHaveBeenCalled())
+    expect(add.mock.calls[0][0]).toEqual({ book: 'Romans', ch: 8, from: 2, to: 2 })
+    expect(entryValue()).toBe('')
+  })
+})
+
+describe('SermonMode — the Go live button does what its label says', () => {
+  it('takes the screen down, and does not toggle via goLive, when the cursor is live', async () => {
+    const { goLive, setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('■ Take down')).toBeTruthy())
+
+    fireEvent.click(screen.getByText('■ Take down'))
+    expect(setOutput).toHaveBeenCalledWith('black')
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  it('sends the cursor when the cursor is not what is live', async () => {
+    const { goLive, setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+
+    // Move the cursor off the live verse; the label flips back to "● Go live".
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(screen.getByText('● Go live')).toBeTruthy())
+
+    fireEvent.click(screen.getByText('● Go live'))
+    expect(goLive).toHaveBeenCalled()
+    expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+})
+
+describe('SermonMode — arrows during the stale-chapter tick', () => {
+  it('ignores Next verse rather than collapsing the cursor to verse 1', async () => {
+    // Chapter deliberately left unresolved for the whole interaction: liveChapter is null,
+    // so verseCount falls back to 1 and an unguarded step would clamp the cursor to 1.
+    const { show, resolveChapter } = installHelmStub(NOTHING_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 5, to: 5 }
+    ])
+    render(<Harness />)
+
+    const row = await screen.findByText('Genesis 1:5')
+    fireEvent.click(row.closest('button') as HTMLElement)
+    fireEvent.click(screen.getByText('Next verse ›'))
+    expect(show).not.toHaveBeenCalled()
+
+    resolveChapter()
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    expect(show.mock.calls[0][0]).toBe('scr:Genesis:1:5')
   })
 })

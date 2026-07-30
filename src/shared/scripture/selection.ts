@@ -1,4 +1,3 @@
-import type { BookExtent } from '../types'
 import type { ParsedRef } from './refs'
 import { initialBuilder, toParsedRef, type RefBuilderState } from './refBuilder'
 
@@ -26,14 +25,17 @@ export interface RailSelection {
  * `preview` is the book/chapter the rail is currently showing, which diverges from the
  * cursor only while a typed reference is resolving in the builder. A shift-tap there has no
  * sensible anchor (the cursor is in a different chapter), so it starts a fresh one on the
- * tapped verse rather than inventing a cross-chapter range. */
+ * tapped verse rather than inventing a cross-chapter range.
+ *
+ * Deliberately takes neither the current builder nor a BookExtent: shift-tap always anchors
+ * at the cursor, so a pending builder range is never consulted, and the tapped verse comes
+ * from a rail card that only exists for verses the chapter has, so there is nothing to
+ * clamp. */
 export function railSelect(
-  _builder: RefBuilderState,
   cursor: Cursor,
   preview: { book: string; ch: number },
   v: number,
-  shift: boolean,
-  _extent: BookExtent
+  shift: boolean
 ): RailSelection {
   if (!shift) {
     return { cursor: { book: preview.book, ch: preview.ch, v }, builder: initialBuilder() }
