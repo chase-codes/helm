@@ -79,7 +79,8 @@ export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
   songsGet: 'songs:get', songsAdd: 'songs:add',
   presGet: 'presentation:get', presCue: 'presentation:cue',
-  presGoLive: 'presentation:goLive', presSetOutput: 'presentation:setOutput',
+  presGoLive: 'presentation:goLive', presShow: 'presentation:show',
+  presSetOutput: 'presentation:setOutput',
   presState: 'presentation:state',           // main → all windows
   outputSlide: 'output:slide',               // main → output windows
   displaysGet: 'displays:get', displaysStatus: 'displays:status',
@@ -171,6 +172,7 @@ export interface HelmApi {
     get(): Promise<PresentationState>;
     cue(key: string, slide: Slide): void;
     goLive(key: string, slide: Slide): void;
+    show(key: string, slide: Slide): void;
     setOutput(mode: OutputMode): void;
     onState(cb: (s: PresentationState) => void): () => void;
   };

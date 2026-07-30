@@ -7,13 +7,12 @@ import {
   initialBuilder,
   applyKey,
   renderBuilder,
-  toParsedRef,
   fromParsedRef,
-  setStart,
-  setEnd,
+  toParsedRef,
   EMPTY_EXTENT,
   type RefBuilderState
 } from '../../shared/scripture/refBuilder';
+import { railSelect, addTarget, type Cursor } from '../../shared/scripture/selection';
 import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import type { BibleManifestEntry, BookExtent, ChapterData, ScriptureReading } from '../../shared/types';
@@ -187,10 +186,16 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
 
   // Fetch (once, cached) the BookExtent for the builder's resolved book, falling back to
   // the previewed (cued) book when the builder hasn't resolved one yet (`builder.book ??
-  // scrBook`, same fallback `previewBook` uses below) — otherwise a fresh session never
-  // fetches the cued book's extent, and the first click on a cued-chapter verse rail card
-  // seeds `book: previewBook` with no extent cached, clamping to EMPTY_EXTENT and dropping
-  // the click. Version-agnostic — main resolves the installed version.
+  // scrBook`, same fallback `previewBook` uses below).
+  //
+  // The extent is what `applyKey` clamps typed digits against (clampChapter/clampVerse in
+  // refBuilder.ts), and an absent one is EMPTY_EXTENT — which clamps every digit to 0, i.e.
+  // back to null, so keystrokes are silently swallowed. Fetching on `builder.book` alone
+  // would always lose that race: the book resolves the instant the operator hits space, and
+  // the chapter digits follow in the same breath, well before an IPC round trip lands. The
+  // `?? scrBook` fallback prefetches the cued book's extent up front, so continuing in the
+  // book already on screen — the common case — types cleanly from the first digit.
+  // Version-agnostic — main resolves the installed version.
   useEffect(() => {
     const b = builder.book ?? scrBook;
     if (!b || bookExtents[b]) return;
@@ -224,16 +229,44 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // under the new ref. Only trust it once it actually matches where we're looking.
   const liveChapter = chapter && chapter.book === scrBook && chapter.chapter === scrCh ? chapter : null;
 
-  // Cue on every book/chapter/verse/version/chapter-data change (mirrors SongsMode).
+  // The cursor's route to the screen: `show` on every book/chapter/verse/version/
+  // chapter-data change. Unlike the `cue` this replaced, it follows across chapters and
+  // books — moving the cursor while live moves the projector, wherever you move it.
+  //
+  // Bail while `liveChapter` is null. It is null for a render or two after a cross-book/
+  // chapter jump (see its comment above), and `show` — having no sameFlow guard to make
+  // that an accidental no-op the way `cue` did — would otherwise push the INSTALL_HINT
+  // slide onto the projector mid-service. `liveChapter` is a dep, so this re-runs with the
+  // real text the moment the fetch resolves; the screen holds the previous verse for that
+  // tick rather than flashing a false "no bible installed". Same guard, same reason, as
+  // `goLive` below.
+  //
+  // `output` is a REAL dependency even though the effect body never reads it — do not prune
+  // it. Main's `showLive` no-ops unless output is live, so every cursor move made while the
+  // logo is up is dropped; flipping back to live restores the OLD liveSnap, leaving the
+  // projector on a verse the hero stopped showing. Re-firing on `output` re-sends the
+  // cursor at that moment, and the effect is idempotent, so the extra runs cost nothing.
+  //
+  // `active && track === 'scripture'` gates this to SermonMode actually being the surface
+  // the operator is driving. SermonMode stays mounted for the app's whole life (keep-alive,
+  // App.tsx renders it `display:none` when inactive), and it owns `track` on top of that —
+  // so without this gate, a cursor that is merely sitting in a background mode/track can
+  // still reach the projector. That's not hypothetical: main's `showLive` allows an update
+  // when nothing is live yet (`liveKey === null`, so a fresh rail can fill an empty screen),
+  // and `output` is a dep above — so an unrelated output flip (e.g. Logo on/off in Songs
+  // mode, on a fresh session) re-fires this effect and, with no gate, would push this
+  // inactive mode's scripture cursor onto the projector.
   useEffect(() => {
+    if (!active || track !== 'scripture') return;
+    if (!liveChapter) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
-    const cols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
+    const cols = verseCols(liveChapter.verses[scrV] ?? {}, versions, abbrOf);
     const slide = buildScriptureSlide(
       formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
-    window.helm.presentation.cue(key, slide);
-  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf]);
+    window.helm.presentation.show(key, slide);
+  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf, output, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
   const cuedIsLive = output === 'live' && liveKey === curKey;
@@ -241,6 +274,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   const liveCols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
 
   const stepVerse = (dir: 1 | -1): void => {
+    // Same stale-chapter guard as `goLive` and the show effect. While `liveChapter` is
+    // null, `verseCount` falls back to 1, so `Math.min(verseCount, v + dir)` would
+    // collapse the cursor to verse 1 — and the show effect would then put verse 1 on the
+    // projector. Ignore the arrow for that tick; the operator can press again.
+    if (!liveChapter) return;
     setScrV((v) => Math.max(1, Math.min(verseCount, v + dir)));
   };
 
@@ -255,6 +293,16 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     // so liveChapter is non-null, this guard passes, liveCols is legitimately empty,
     // and the install-hint slide goes live, which is then the correct thing to show.
     if (!liveChapter) return;
+    // Do exactly what the button says, rather than re-deriving the decision inside the
+    // main-process `goLive` verb (which blacks when fired on the key already live). The
+    // cursor now commits to the screen as it moves, so by the time the operator reaches
+    // for the button the verse is usually ALREADY live — under the old toggle, the
+    // trained "tap the verse, then press Go live" two-step took the screen down. The
+    // label reads "■ Take down" exactly when `cuedIsLive`, so branch on the same flag.
+    if (cuedIsLive) {
+      window.helm.presentation.setOutput('black');
+      return;
+    }
     const slide = buildScriptureSlide(
       formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
       liveCols.length ? liveCols : [{ version: '', text: INSTALL_HINT }]
@@ -356,36 +404,87 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // a spurious CUED badge, or a misleading LIVE badge.
   const railIsCued = previewBook === scrBook && previewCh === scrCh;
 
-  // Mid-service headline flow: build a ref, Enter — it's on screen. Schedules it, resets
-  // the builder, and (Enter, not Shift+Enter) jumps + goes live immediately (reusing the
-  // cached chapter when it already matches, else fetching fresh so the live slide never
-  // shows stale text).
-  const commitBuilder = (goLiveToo: boolean): void => {
-    const p = toParsedRef(builder);
-    if (!p) return;
-    window.helm.schedule.add(p).then(setSchedule).catch(console.error);
+  // Paste / IME: if the whole field parses as a ref, load it structurally.
+  const onEntryChange = (v: string): void => {
+    const p = parseRef(v);
+    if (p) setBuilder(fromParsedRef(p));
+  };
+
+  // The cursor, as the pure selection helpers want it.
+  const cursor: Cursor = { book: scrBook, ch: scrCh, v: scrV };
+  // What `+ Add` and Enter would file: the typed ref when the entry holds one, else the
+  // cursor's verse. Always something, so the button is always offered — a mouse-only
+  // operator never has to know the keyboard flow to schedule what they're looking at.
+  const addRef = addTarget(builder, cursor);
+  const addLabel = `+ Add ${formatRef(addRef)}`;
+
+  // The operator has typed something that is not yet a reference — "Rom" (no book match
+  // yet), or "Romans" (book matched, no chapter). `addTarget` falls back to the cursor in
+  // both cases, so an UNLABELLED commit here would file — or worse, put on screen — a verse
+  // nobody named. An EMPTY entry is deliberately NOT this case: it must still commit the
+  // cursor, which is the keyboard twin of the Go live button. Written against renderBuilder
+  // / toParsedRef rather than a stage check so it means exactly "the entry shows text that
+  // doesn't parse", however the builder got there.
+  //
+  // Deliberately NOT applied inside `addToSchedule`, only to the blind Enter keystroke below
+  // (and unconditionally to `goLiveFromBuilder`, which forces output live and must never
+  // guess). The `+ Add` button is labelled `+ Add ${formatRef(addRef)}` — it names the exact
+  // verse it will file — so a click is never a surprise even while the entry shows something
+  // different, it only ever writes a schedule row, and a wrong row is right-click Delete
+  // with an Undo affordance. Refusing the click instead would strand a mouse-only operator:
+  // the entry has no clearable affordance, Delete is inert there, and the only rail tap that
+  // clears the builder also moves the projector.
+  const builderUnresolved = renderBuilder(builder) !== '' && toParsedRef(builder) === null;
+
+  // Two independent commits. The schedule is a plan; it is not a gate to the projector, and
+  // nothing that reaches the projector writes a row. Enter and `+ Add` file; Shift+Enter and
+  // the Go live button show. Both read `addRef`, so an empty entry commits the cursor's
+  // verse — Shift+Enter on an empty field is the keyboard twin of the Go live button.
+  const addToSchedule = (): void => {
+    window.helm.schedule.add(addRef).then(setSchedule).catch(console.error);
     setBuilder(initialBuilder());
     setTrack('scripture');
-    if (goLiveToo) {
-      jumpTo(p.book, p.ch, p.from);
-      if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
-        goLiveWithChapter(p, chapter);
-      } else {
-        window.helm.bibles
-          .getChapter(p.book, p.ch)
-          .then((c) => {
-            setChapter(c);
-            goLiveWithChapter(p, c);
-          })
-          .catch(console.error);
-      }
+  };
+
+  const goLiveFromBuilder = (): void => {
+    if (builderUnresolved) return;
+    const p = addRef;
+    setBuilder(initialBuilder());
+    setTrack('scripture');
+    // Move the cursor first, unconditionally: the already-live guard below returns early,
+    // and if it did so before this the hero would keep showing a different reference than
+    // the projector. Safe to do ahead of the guard — the show effect this triggers is a
+    // same-key no-op when the guard is about to fire.
+    jumpTo(p.book, p.ch, p.from);
+    // `goLive` blacks the output when fired on the key already live (see
+    // shared/presentation/core.ts) — correct for the Go live / Take down button, wrong here.
+    // Shift+Enter names a reference, so blanking is never what was asked for; if it's
+    // already up, we're done.
+    const key = keyForScripture(p.book, p.ch, p.from);
+    if (output === 'live' && liveKey === key) return;
+    // Reuse the cached chapter when it already matches, else fetch fresh so the live slide
+    // never shows stale text from the previous book.
+    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
+      goLiveWithChapter(p, chapter);
+    } else {
+      window.helm.bibles
+        .getChapter(p.book, p.ch)
+        .then((c) => {
+          setChapter(c);
+          goLiveWithChapter(p, c);
+        })
+        .catch(console.error);
     }
   };
 
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      commitBuilder(e.shiftKey);
+      // Enter is blind — no label naming what it will file — so it refuses a half-typed
+      // reference rather than silently substituting the cursor, and leaves the typing in
+      // place to be finished. The `+ Add` button, which says what it files, does not.
+      if (e.shiftKey) goLiveFromBuilder();
+      else if (!builderUnresolved) addToSchedule();
       return;
     }
     if (e.key === 'Escape') {
@@ -402,33 +501,16 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
     if (r.state !== builder) setBuilder(r.state);
   };
 
-  // Paste / IME: if the whole field parses as a ref, load it structurally.
-  const onEntryChange = (v: string): void => {
-    const p = parseRef(v);
-    if (p) setBuilder(fromParsedRef(p));
-  };
-
-  const parsed = toParsedRef(builder);
-  const canAdd = parsed !== null;
-  const addLabel = parsed ? `+ Add ${formatRef(parsed)}` : '';
-
-  // Click-select in the rail writes the same RefBuilderState as typing. If the builder has
-  // no resolved book yet, seed it from the previewed (cued) chapter so a click there starts
-  // a fresh selection in that chapter.
+  // A click on a verse card. Plain tap moves the cursor — which reaches the projector via
+  // the show effect above when output is live, and is a quiet preview when it isn't.
+  // Shift-tap leaves the cursor and writes a range into the builder instead, anchored at the
+  // start verse already typed into the entry when it names this previewed book/chapter (the
+  // one `selectedRange` highlights on the rail), else at the cursor. The decision itself
+  // lives in `railSelect` so it can be tested without mounting this component.
   const onRailSelectVerse = (v: number, shift: boolean): void => {
-    setBuilder((b) => {
-      const seeded: RefBuilderState =
-        b.book === null || b.chapter === null
-          ? { ...initialBuilder(), stage: 'verse', book: previewBook, chapter: previewCh, startVerse: null, endVerse: null }
-          : b;
-      const ext = bookExtents[seeded.book ?? ''] ?? EMPTY_EXTENT;
-      if (shift) return setEnd(seeded, v, ext);
-      // No open selection (fresh or just-completed range) -> start; a start set with no end
-      // and a *different* verse -> end; same verse -> stay single.
-      if (seeded.startVerse === null || seeded.endVerse !== null) return setStart(seeded, v, ext);
-      if (v === seeded.startVerse) return seeded;
-      return setEnd(seeded, v, ext);
-    });
+    const next = railSelect(builder, cursor, { book: previewBook, ch: previewCh }, v, shift);
+    setBuilder(next.builder);
+    jumpTo(next.cursor.book, next.cursor.ch, next.cursor.v);
   };
 
   const scheduleRows: ScheduleRow[] = schedule.map((r) => {
@@ -551,9 +633,12 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             value={renderBuilder(builder)}
             onEntryChange={onEntryChange}
             onEntryKeyDown={onEntryKeyDown}
-            canAdd={canAdd}
+            // Unconditional on purpose: `+ Add` is always there for an operator who only
+            // uses the GUI. Its label names the verse it will file, so it stays honest even
+            // while the entry holds a half-typed reference (see `builderUnresolved`).
+            canAdd
             addLabel={addLabel}
-            onAdd={() => commitBuilder(false)}
+            onAdd={addToSchedule}
             rows={scheduleRows}
             undo={undo.pending ? { label: formatRef(undo.pending), onUndo: undoRemove } : undefined}
           />

@@ -46,6 +46,7 @@ export function registerIpc(
   ipcMain.handle(CH.presGet, () => presentation.get());
   ipcMain.on(CH.presCue, (_e, key: string, slide: Slide) => presentation.cue(key, slide));
   ipcMain.on(CH.presGoLive, (_e, key: string, slide: Slide) => presentation.goLive(key, slide));
+  ipcMain.on(CH.presShow, (_e, key: string, slide: Slide) => presentation.show(key, slide));
   ipcMain.on(CH.presSetOutput, (_e, mode: OutputMode) => presentation.setOutput(mode));
   ipcMain.handle(CH.displaysGet, () => displayStatus());
   ipcMain.on(CH.displaysOpenTest, () => openTestOutput());
