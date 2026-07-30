@@ -239,14 +239,23 @@ describe('SermonMode — a half-typed reference is not a commit', () => {
     expect(entryValue()).toBe('Romans')
   })
 
-  it('hides + Add while the entry holds an unparseable reference', async () => {
-    const { resolveChapter } = installHelmStub()
+  // The refusal is on the blind Enter keystroke, NOT on the labelled button. `+ Add` is
+  // always rendered — a GUI-only operator must never lose it — and it says which verse it
+  // files, so clicking it while a partial reference is typed is honest, not a surprise.
+  it('keeps + Add clickable with a partial reference typed, filing the cursor it names', async () => {
+    const { add, resolveChapter } = installHelmStub()
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('+ Add Genesis 1:1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
     typeInEntry('Rom')
-    expect(screen.queryByText('+ Add Genesis 1:1')).toBeNull()
+    expect(entryValue()).toBe('Rom')
+
+    // Label still names the cursor's verse, and the click files exactly that.
+    const addButton = screen.getByText('+ Add Genesis 1:1')
+    fireEvent.click(addButton)
+    await waitFor(() => expect(add).toHaveBeenCalled())
+    expect(add.mock.calls[0][0]).toEqual({ book: 'Genesis', ch: 1, from: 1, to: 1 })
   })
 
   it('a resolved reference still commits (the guard is about half-typed, not typed)', async () => {

@@ -403,11 +403,20 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
 
   // The operator has typed something that is not yet a reference — "Rom" (no book match
   // yet), or "Romans" (book matched, no chapter). `addTarget` falls back to the cursor in
-  // both cases, so committing now would file — or worse, put on screen — a verse nobody
-  // named. An EMPTY entry is deliberately NOT this case: it must still commit the cursor,
-  // which is the keyboard twin of the Go live button. Written against renderBuilder /
-  // toParsedRef rather than a stage check so it means exactly "the entry shows text that
+  // both cases, so an UNLABELLED commit here would file — or worse, put on screen — a verse
+  // nobody named. An EMPTY entry is deliberately NOT this case: it must still commit the
+  // cursor, which is the keyboard twin of the Go live button. Written against renderBuilder
+  // / toParsedRef rather than a stage check so it means exactly "the entry shows text that
   // doesn't parse", however the builder got there.
+  //
+  // Deliberately NOT applied inside `addToSchedule`, only to the blind Enter keystroke below
+  // (and unconditionally to `goLiveFromBuilder`, which forces output live and must never
+  // guess). The `+ Add` button is labelled `+ Add ${formatRef(addRef)}` — it names the exact
+  // verse it will file — so a click is never a surprise even while the entry shows something
+  // different, it only ever writes a schedule row, and a wrong row is right-click Delete
+  // with an Undo affordance. Refusing the click instead would strand a mouse-only operator:
+  // the entry has no clearable affordance, Delete is inert there, and the only rail tap that
+  // clears the builder also moves the projector.
   const builderUnresolved = renderBuilder(builder) !== '' && toParsedRef(builder) === null;
 
   // Two independent commits. The schedule is a plan; it is not a gate to the projector, and
@@ -415,7 +424,6 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // the Go live button show. Both read `addRef`, so an empty entry commits the cursor's
   // verse — Shift+Enter on an empty field is the keyboard twin of the Go live button.
   const addToSchedule = (): void => {
-    if (builderUnresolved) return;
     window.helm.schedule.add(addRef).then(setSchedule).catch(console.error);
     setBuilder(initialBuilder());
     setTrack('scripture');
@@ -455,8 +463,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      // Enter is blind — no label naming what it will file — so it refuses a half-typed
+      // reference rather than silently substituting the cursor, and leaves the typing in
+      // place to be finished. The `+ Add` button, which says what it files, does not.
       if (e.shiftKey) goLiveFromBuilder();
-      else addToSchedule();
+      else if (!builderUnresolved) addToSchedule();
       return;
     }
     if (e.key === 'Escape') {
@@ -603,12 +614,10 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             value={renderBuilder(builder)}
             onEntryChange={onEntryChange}
             onEntryKeyDown={onEntryKeyDown}
-            // Hide `+ Add` while the entry holds an unparseable reference: `addLabel` reads
-            // off `addRef`, which has fallen back to the cursor, so the button would offer
-            // to add a verse unrelated to what's on screen in the field — and clicking it
-            // now does nothing anyway (see `builderUnresolved`). It reappears the moment
-            // the reference parses, or the entry is cleared.
-            canAdd={!builderUnresolved}
+            // Unconditional on purpose: `+ Add` is always there for an operator who only
+            // uses the GUI. Its label names the verse it will file, so it stays honest even
+            // while the entry holds a half-typed reference (see `builderUnresolved`).
+            canAdd
             addLabel={addLabel}
             onAdd={addToSchedule}
             rows={scheduleRows}
