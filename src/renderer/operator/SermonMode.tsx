@@ -240,6 +240,12 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // real text the moment the fetch resolves; the screen holds the previous verse for that
   // tick rather than flashing a false "no bible installed". Same guard, same reason, as
   // `goLive` below.
+  //
+  // `output` is a REAL dependency even though the effect body never reads it — do not prune
+  // it. Main's `showLive` no-ops unless output is live, so every cursor move made while the
+  // logo is up is dropped; flipping back to live restores the OLD liveSnap, leaving the
+  // projector on a verse the hero stopped showing. Re-firing on `output` re-sends the
+  // cursor at that moment, and the effect is idempotent, so the extra runs cost nothing.
   useEffect(() => {
     if (!liveChapter) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
@@ -249,7 +255,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
     window.helm.presentation.show(key, slide);
-  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf]);
+  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf, output]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
   const cuedIsLive = output === 'live' && liveKey === curKey;

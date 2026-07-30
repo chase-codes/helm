@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useRef, type JSX } from 'react'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SermonMode } from './SermonMode'
 import { ThemeCtx } from './ThemeCtx'
@@ -41,11 +41,15 @@ function installHelmStub(
   setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
   resolveChapter: () => void
+  pushState: (next: PresentationState) => void
 } {
   const show = vi.fn()
   const goLive = vi.fn()
   const setOutput = vi.fn()
   const add = vi.fn(() => Promise.resolve([]))
+  // Main broadcasts presentation state; usePresentationState subscribes via onState. Keep
+  // the subscriber so a test can push a later state (logo -> live) after mount.
+  let emit: (s: PresentationState) => void = () => {}
   let release: () => void = () => {}
   // One pending promise shared by both getChapter call sites (live + preview), so the
   // chapter stays unresolved until the test releases it.
@@ -63,14 +67,26 @@ function installHelmStub(
     },
     presentation: {
       get: () => Promise.resolve(pres),
-      onState: () => () => {},
+      onState: (cb: (s: PresentationState) => void) => {
+        emit = cb
+        return () => {
+          emit = () => {}
+        }
+      },
       show,
       goLive,
       setOutput,
       cue: vi.fn()
     }
   }
-  return { show, goLive, setOutput, add, resolveChapter: release }
+  return {
+    show,
+    goLive,
+    setOutput,
+    add,
+    resolveChapter: release,
+    pushState: (next) => act(() => emit(next))
+  }
 }
 
 function Harness(): JSX.Element {
@@ -305,6 +321,34 @@ describe('SermonMode — the Go live button does what its label says', () => {
     expect(goLive).toHaveBeenCalled()
     expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
     expect(setOutput).not.toHaveBeenCalled()
+  })
+})
+
+describe('SermonMode — cursor moves made under the logo', () => {
+  // Genesis 1:1 is live, then the operator presses Logo. Main keeps the liveSnap so Logo
+  // off can restore it; `showLive` no-ops while output isn't live.
+  const LOGO_OVER_GEN_1_1: PresentationState = { ...GEN_1_1_LIVE, output: 'logo' }
+
+  it('re-sends the navigated verse when the logo comes back down', async () => {
+    const { show, goLive, setOutput, resolveChapter, pushState } = installHelmStub(LOGO_OVER_GEN_1_1)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+
+    // Navigate the rail while the logo is up. Nothing may reach the screen from here —
+    // the renderer's `show` is a no-op in main while output isn't live, and neither the
+    // screen-reaching verbs fire.
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+    expect(goLive).not.toHaveBeenCalled()
+    expect(setOutput).not.toHaveBeenCalled()
+    show.mockClear()
+
+    // Logo off. Main restores the OLD liveSnap (Genesis 1:1), so unless the show effect
+    // re-fires, the projector reads Genesis 1:1 while the hero reads Genesis 1:3.
+    pushState({ ...LOGO_OVER_GEN_1_1, output: 'live' })
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    expect(show.mock.calls[show.mock.calls.length - 1][0]).toBe('scr:Genesis:1:3')
   })
 })
 
