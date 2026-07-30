@@ -246,7 +246,18 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // logo is up is dropped; flipping back to live restores the OLD liveSnap, leaving the
   // projector on a verse the hero stopped showing. Re-firing on `output` re-sends the
   // cursor at that moment, and the effect is idempotent, so the extra runs cost nothing.
+  //
+  // `active && track === 'scripture'` gates this to SermonMode actually being the surface
+  // the operator is driving. SermonMode stays mounted for the app's whole life (keep-alive,
+  // App.tsx renders it `display:none` when inactive), and it owns `track` on top of that —
+  // so without this gate, a cursor that is merely sitting in a background mode/track can
+  // still reach the projector. That's not hypothetical: main's `showLive` allows an update
+  // when nothing is live yet (`liveKey === null`, so a fresh rail can fill an empty screen),
+  // and `output` is a dep above — so an unrelated output flip (e.g. Logo on/off in Songs
+  // mode, on a fresh session) re-fires this effect and, with no gate, would push this
+  // inactive mode's scripture cursor onto the projector.
   useEffect(() => {
+    if (!active || track !== 'scripture') return;
     if (!liveChapter) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
     const cols = verseCols(liveChapter.verses[scrV] ?? {}, versions, abbrOf);
@@ -255,7 +266,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
     window.helm.presentation.show(key, slide);
-  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf, output]);
+  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf, output, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
   const cuedIsLive = output === 'live' && liveKey === curKey;

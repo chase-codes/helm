@@ -89,14 +89,14 @@ function installHelmStub(
   }
 }
 
-function Harness(): JSX.Element {
+function Harness({ active = true }: { active?: boolean } = {}): JSX.Element {
   const keyHandlerRef = useRef(null)
   return (
     <ThemeCtx.Provider value={themeFor('dark')}>
       <SermonMode
         themeMode="dark"
         keyHandlerRef={keyHandlerRef}
-        active
+        active={active}
         onOpenSettings={() => {}}
         biblesRevision={0}
       />
@@ -354,6 +354,40 @@ describe('SermonMode — cursor moves made under the logo', () => {
     pushState({ ...LOGO_OVER_GEN_1_1, output: 'live' })
     await waitFor(() => expect(show).toHaveBeenCalled())
     expect(show.mock.calls[show.mock.calls.length - 1][0]).toBe('scr:Genesis:1:3')
+  })
+})
+
+describe('SermonMode — inactive/off-track does not reach the projector', () => {
+  // Fresh session: nothing has ever been taken live, so liveKey is null. Main's showLive
+  // allows an update in that state (a fresh rail must be able to fill an empty screen) —
+  // which is exactly the hole this gate closes for a mode that isn't the one in use.
+  const LOGO_NOTHING_LIVE: PresentationState = { output: 'logo', liveKey: null, liveSnap: null }
+
+  it('an output flip to live does not push the cursor while SermonMode is inactive', async () => {
+    const { show, resolveChapter, pushState } = installHelmStub(LOGO_NOTHING_LIVE)
+    render(<Harness active={false} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    expect(show).not.toHaveBeenCalled()
+
+    // Songs mode flips output logo -> live while SermonMode merely sits mounted in the
+    // background. Without the active/track gate, this reaches the projector because
+    // liveKey is still null.
+    pushState({ ...LOGO_NOTHING_LIVE, output: 'live' })
+    await act(async () => {})
+    expect(show).not.toHaveBeenCalled()
+  })
+
+  it('the same output flip pushes the cursor when SermonMode is active on the scripture track', async () => {
+    const { show, resolveChapter, pushState } = installHelmStub(LOGO_NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    show.mockClear()
+
+    pushState({ ...LOGO_NOTHING_LIVE, output: 'live' })
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    expect(show.mock.calls[0][0]).toBe('scr:Genesis:1:1')
   })
 })
 
