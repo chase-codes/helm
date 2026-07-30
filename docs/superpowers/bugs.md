@@ -172,6 +172,71 @@ boundary; validate pasted refs against the book extent in `onEntryChange`.
 **Notes:** Found 2026-07-29 in the scripture direct-live final review. Both triggers
 are pre-existing; the branch made the second one reachable from the builder.
 
+### BUG-013 — Blank-the-projector guards read renderer-mirrored state, so a stale read can still black the screen · **SEV 3**
+**Status:** Open · **Area:** Sermon/Scripture (`SermonMode.tsx` `goLiveFromBuilder` guard, `cuedIsLive`) + `shared/presentation/core.ts` `goLive`
+
+**Repro:** no deterministic repro — a race with a window of a few milliseconds.
+Move the cursor (rail tap/arrow) and, within the same tick, trigger Shift+Enter or
+the `● Go live` button on that same verse.
+
+**Expected:** the verse stays on screen. **Actual:** the projector can go black.
+
+**Root cause (verified):** `output`/`liveKey` come from `usePresentationState()`, which
+mirrors main over an IPC broadcast, so it lags main by a round trip plus a React
+render. The show effect sends `presentation.show(...)` fire-and-forget, so main's
+`liveKey` can already equal the target key while the renderer still holds the old
+value. Both blank-guards then read false and fall through to `presentation.goLive`,
+whose core verb sees `output === 'live' && liveKey === key` and flips output to
+`'black'`. `cuedIsLive` has the mirror-image exposure: a stale-false read leaves the
+button labelled `● Go live` while main already has that key live, so a click blanks.
+
+**Fix candidates:** make the decision authoritative in main — a non-toggling
+`goLiveOrShow` verb — so the renderer never has to compare mirrored state. That also
+subsumes the label/behaviour coupling the `Go live`/`Take down` button relies on.
+
+**Notes:** Found 2026-07-29 in the scripture direct-live code review. The behavioural
+half of this (a trained two-step gesture reaching the toggle) was fixed on that branch
+by having the button act on its own label; this entry is the residual race.
+
+### BUG-014 — Arrow keys and Prev/Next are silently inert during a cross-chapter fetch · **SEV 4**
+**Status:** Open · **Area:** Sermon/Scripture (`SermonMode.tsx` `stepVerse`)
+
+**Repro:** click a schedule row for a different book, then immediately press
+`Next verse ›` or the right arrow.
+
+**Expected:** the cursor advances, or the control visibly can't be used.
+**Actual:** the keystroke is silently dropped.
+
+**Root cause (verified):** `stepVerse` returns early while `liveChapter` is null. That
+guard is correct — it prevents `verseCount` falling back to 1 and collapsing the cursor
+to verse 1 — but it gives no feedback, and the code comment's mitigation ("the operator
+can press again") assumes the operator notices.
+
+**Fix candidates:** queue the pending step and apply it when the chapter resolves, or
+disable the Prev/Next buttons while `liveChapter` is null so the state is visible.
+
+**Notes:** Found 2026-07-29 in the scripture direct-live code review. Window is one
+local SQLite read.
+
+### BUG-015 — A second shift-tap grows the range instead of pivoting · **SEV 4**
+**Status:** Open · **Area:** Sermon/Scripture (`shared/scripture/selection.ts` `railSelect`)
+
+**Repro:** cursor at verse 5. Shift-tap verse 2 (range reads `2-5`). Shift-tap verse 9.
+
+**Expected (conventional shift-click):** `5-9` — the anchor stays put and the range
+pivots. **Actual:** `2-9` — the range grows.
+
+**Root cause (verified):** an ordered range stores `min` as `startVerse`, and
+`railSelect` now prefers `builder.startVerse` as the anchor (correctly — that fix stopped
+a typed start verse being discarded). So after a backwards shift-tap the stored start is
+the *lower* verse, and the next shift-tap anchors there rather than at the original
+cursor. A true pivot needs the anchor tracked separately from the ordered range.
+
+**Notes:** Found 2026-07-29 in the re-review of the scripture direct-live code-review
+fixes. A direct consequence of the "prefer the typed start verse" rule and arguably more
+consistent with the rail's own highlight — but it is a behaviour change nobody pinned,
+and no test covers a second consecutive shift-tap.
+
 ---
 
 ## Fixed
