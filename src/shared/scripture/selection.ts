@@ -23,15 +23,19 @@ export interface RailSelection {
  * tap-then-shift-tap reads as "from here to there".
  *
  * `preview` is the book/chapter the rail is currently showing, which diverges from the
- * cursor only while a typed reference is resolving in the builder. A shift-tap there has no
- * sensible anchor (the cursor is in a different chapter), so it starts a fresh one on the
- * tapped verse rather than inventing a cross-chapter range.
+ * cursor only while a typed reference is resolving in the builder.
  *
- * Deliberately takes neither the current builder nor a BookExtent: shift-tap always anchors
- * at the cursor, so a pending builder range is never consulted, and the tapped verse comes
- * from a rail card that only exists for verses the chapter has, so there is nothing to
- * clamp. */
+ * The anchor for a shift-tap, in order: a start verse the operator has already TYPED into
+ * the builder for the very book and chapter on the rail (`Genesis 1:5` then shift-tap 9 is
+ * `Genesis 1:5-9`) — that number is what `selectedRange` highlights on the rail, so
+ * anchoring anywhere else would contradict what the operator can see; failing that, the
+ * cursor, when the rail is previewing the cursor's own chapter; failing that, the tapped
+ * verse itself, since a cross-chapter range is never what was meant.
+ *
+ * Takes the builder but deliberately no BookExtent: the tapped verse comes from a rail card
+ * that only exists for verses the chapter has, so there is nothing to clamp. */
 export function railSelect(
+  builder: RefBuilderState,
   cursor: Cursor,
   preview: { book: string; ch: number },
   v: number,
@@ -40,26 +44,29 @@ export function railSelect(
   if (!shift) {
     return { cursor: { book: preview.book, ch: preview.ch, v }, builder: initialBuilder() }
   }
-  const anchored = preview.book === cursor.book && preview.ch === cursor.ch
+  // A typed start verse only anchors when it names the previewed book AND chapter —
+  // otherwise it belongs to some other reference and would invent a cross-chapter range.
+  const typed =
+    builder.book === preview.book && builder.chapter === preview.ch ? builder.startVerse : null
+  const anchor =
+    typed ?? (preview.book === cursor.book && preview.ch === cursor.ch ? cursor.v : null)
   const base: RefBuilderState = {
     ...initialBuilder(),
     stage: 'verse',
     book: preview.book,
     chapter: preview.ch,
-    startVerse: anchored ? cursor.v : v
+    startVerse: anchor ?? v
   }
-  if (anchored) {
-    return {
-      cursor,
-      builder: {
-        ...base,
-        startVerse: Math.min(cursor.v, v),
-        endVerse: Math.max(cursor.v, v),
-        stage: 'endVerse'
-      }
+  if (anchor === null) return { cursor, builder: base }
+  return {
+    cursor,
+    builder: {
+      ...base,
+      startVerse: Math.min(anchor, v),
+      endVerse: Math.max(anchor, v),
+      stage: 'endVerse'
     }
   }
-  return { cursor, builder: base }
 }
 
 /** What `+ Add` and Enter would file: the typed reference when the entry holds one, else

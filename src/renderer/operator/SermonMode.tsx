@@ -486,10 +486,12 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
 
   // A click on a verse card. Plain tap moves the cursor — which reaches the projector via
   // the show effect above when output is live, and is a quiet preview when it isn't.
-  // Shift-tap leaves the cursor and writes a range into the builder instead. The decision
-  // itself lives in `railSelect` so it can be tested without mounting this component.
+  // Shift-tap leaves the cursor and writes a range into the builder instead, anchored at the
+  // start verse already typed into the entry when it names this previewed book/chapter (the
+  // one `selectedRange` highlights on the rail), else at the cursor. The decision itself
+  // lives in `railSelect` so it can be tested without mounting this component.
   const onRailSelectVerse = (v: number, shift: boolean): void => {
-    const next = railSelect(cursor, { book: previewBook, ch: previewCh }, v, shift);
+    const next = railSelect(builder, cursor, { book: previewBook, ch: previewCh }, v, shift);
     setBuilder(next.builder);
     jumpTo(next.cursor.book, next.cursor.ch, next.cursor.v);
   };
