@@ -103,10 +103,22 @@ Several items below share these foundations — worth building once as reusable 
   Want a fast path: select a scripture in the preview, and if the sermon view is already
   live, switch straight to it (skip the add-to-schedule detour). (Found during Windows
   rehearsal testing, 2026-07-08.)
-  - **Update (2026-07-29):** spec written — one cursor moved by tap/arrow/schedule-row
-    click, which goes to screen when output is live and previews when it isn't; `+ Add` and
-    `Go live` become independent paths so the schedule never gates the projector. See
-    `docs/superpowers/specs/2026-07-29-scripture-direct-live-design.md`.
+  - **Update (2026-07-29): shipped.** One cursor, moved identically by a rail tap, an arrow,
+    or a schedule-row click; it reaches the projector when output is live (any book, any
+    chapter) and is preview-only when it isn't. `+ Add`/Enter file a schedule row and never
+    reach the screen; `Go live`/Shift+Enter reach the screen and never write a row. Added a
+    third presentation verb, `showLive` — like `applyCue` but following across books and
+    chapters, like `goLive` but never toggling to black. Spec:
+    `docs/superpowers/specs/2026-07-29-scripture-direct-live-design.md`; plan:
+    `docs/superpowers/plans/2026-07-29-scripture-direct-live.md`.
+    Three hazards the final review caught and fixed, worth remembering when touching this
+    area: `showLive` needs its *kind*-level guard or scripture navigation overwrites a live
+    song; the builder must refuse a half-typed reference rather than substituting the cursor
+    and forcing output live; and the `Go live`/`Take down` button must act on its own label
+    rather than re-deriving the toggle, now that cursor moves commit immediately.
+    Follow-ups logged: BUG-010, BUG-011, BUG-012. Not covered by tests: an end-to-end
+    cross-mode assertion that scripture cannot seize the screen from Songs — the reducer is
+    unit-tested and the two known reproductions are blocked by construction.
 
 - **Book-name typeahead in the ref builder.** Typing `gen` and pressing space already
   resolves to Genesis — `matchBook` (`refs.ts:11-17`) picks exact alias first, then first

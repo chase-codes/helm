@@ -103,6 +103,75 @@ slide, or clean black.
 **Notes:** Found 2026-07-29 during the BUG-007 final review. Pre-existing and
 unrelated to that branch.
 
+### BUG-010 — Typing a reference at speed silently drops its digits · **SEV 2**
+**Status:** Open · **Area:** Sermon/Scripture ref builder (`SermonMode.tsx:199-215`, `refBuilder.ts:99-121`)
+
+**Repro:**
+1. Cursor is in Genesis (or any book other than the one you're about to type).
+2. Type `Romans 8:28` at normal speed into the schedule entry field.
+3. The field reads `Romans` — the chapter and verse digits are gone.
+
+**Expected:** the whole reference lands. **Actual:** every digit typed before the
+book's extent fetch resolves is swallowed.
+
+**Root cause (verified):** `applyKey`'s chapter/verse cases clamp each digit as it
+arrives — `clampChapter(n, extent)` with `EMPTY_EXTENT` (`{chapters: 0}`) computes
+`Math.min(Math.max(n,1), 0)` = `0`, and `printable` then stores `c || null`, so the
+digit is discarded. Extents are fetched per book by an effect, so any digit typed
+before that IPC resolves is lost. The effect prefetches the *cued* book, which is why
+this only bites when typing a reference in a different book.
+
+**Fix candidates:** buffer digits typed against an absent extent and re-apply on
+arrival, or clamp lazily at commit rather than per keystroke.
+
+**Notes:** Found 2026-07-29 in the scripture direct-live re-review. Pre-existing;
+the branch's extent prefetch mitigates but does not fix it. A test in that branch had
+to type the book, await, then the digits, to work around it.
+
+### BUG-011 — Entry field cannot be cleared with the mouse · **SEV 3**
+**Status:** Open · **Area:** Sermon/Scripture ref builder (`SchedulePanel.tsx:113-120`, `SermonMode.tsx` `onEntryChange`)
+
+**Repro:** type a partial reference, then try to clear the field without the keyboard —
+select-all-and-delete, cut, or paste-empty.
+
+**Expected:** the field clears. **Actual:** it snaps back to the previous value.
+
+**Root cause (verified):** the input is controlled by `renderBuilder(builder)`, and
+`onEntryChange` only writes state when `parseRef(v)` succeeds. `parseRef('')` returns
+null, so an emptying edit is discarded. `applyKey` handles `Backspace` but not
+`Delete`, so that key is inert too. Escape and Backspace are the only ways out.
+
+**Fix candidates:** a small × in the input; or have `onEntryChange` treat an empty
+string as `initialBuilder()`.
+
+**Notes:** Found 2026-07-29 in the scripture direct-live re-review.
+
+### BUG-012 — "Install a Bible" hint shown while bibles are installed · **SEV 3**
+**Status:** Open · **Area:** Sermon/Scripture (`SermonMode.tsx` show effect + `stepVerse`, `biblesRepo.getChapter`)
+
+**Repro:** either of —
+- **(a)** With no bible installed, click a schedule row for Genesis 1:5, then press
+  `Next verse ›`.
+- **(b)** With bibles installed, paste `Genesis 99:1` into the entry field and press
+  Shift+Enter.
+
+**Expected:** (a) navigates normally; (b) refuses an out-of-range chapter.
+**Actual:** both put the `INSTALL_HINT` slide — "Install a Bible in Settings" — on the
+projector; (a) additionally collapses the cursor to verse 1.
+
+**Root cause (verified):** `biblesRepo.getChapter` echoes `{book, chapter,
+verseCount: 0, verses: {}}` for data it doesn't have rather than returning null. So
+`liveChapter` is non-null, the show effect's stale-chapter guard passes, `cols` is
+empty, and the install-hint fallback fires. In (a) `verseCount` is 0, so
+`verseCount || 1` makes `stepVerse` clamp any cursor to verse 1. In (b) the paste path
+bypasses `clampChapter` — typed digits are clamped, pasted ones are not.
+
+**Fix candidates:** distinguish "chapter absent" from "no bible installed" at the repo
+boundary; validate pasted refs against the book extent in `onEntryChange`.
+
+**Notes:** Found 2026-07-29 in the scripture direct-live final review. Both triggers
+are pre-existing; the branch made the second one reachable from the builder.
+
 ---
 
 ## Fixed
