@@ -51,6 +51,14 @@ export interface MediaImportResult {
   error?: 'no-libreoffice';
 }
 
+export interface ScannedSong { title: string; author: string; text: string }
+export interface UnreadableSong { title: string; reason: string }
+export interface ScanOutcome { songs: ScannedSong[]; unreadable: UnreadableSong[] }
+export interface ImportSourceInfo { id: string; label: string }
+export type Located = { path: string };
+export type LocateFailure = { error: 'no-source-files' | 'canceled'; expected?: string };
+export type LocateResult = Located | LocateFailure;
+
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
