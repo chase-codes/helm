@@ -97,6 +97,39 @@ describe('SongImport', () => {
     expect(onImported).toHaveBeenCalled();
   });
 
+  it('does not close on overlay click while an import is in flight, but does once done', async () => {
+    const helm = installHelm({ token: 't', rows: ROWS });
+    let resolveCommit: (r: SongImportResult) => void = () => {};
+    helm.commit.mockImplementation(
+      () =>
+        new Promise<SongImportResult>((resolve) => {
+          resolveCommit = resolve;
+        })
+    );
+    const onClose = vi.fn();
+    const { container } = render(
+      <ThemeCtx.Provider value={themeFor('dark')}>
+        <SongImport open onClose={onClose} onImported={vi.fn()} />
+      </ThemeCtx.Provider>
+    );
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    fireEvent.click(await screen.findByText(/Import 1 song/));
+    await screen.findByText(/Importing…/);
+
+    // The overlay is the outer element; anything rendered inside the modal box already stops
+    // propagation before it gets there (see SongImport's `stop` handler), so the click has to
+    // land on container.firstChild directly to actually exercise the overlay's own handler.
+    fireEvent.click(container.firstChild as Element);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText(/Importing…/)).toBeTruthy();
+
+    resolveCommit({ imported: 1, skipped: 0, unreadable: [] });
+    await screen.findByText(/Imported 1 song/);
+
+    fireEvent.click(container.firstChild as Element);
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('renders nothing when closed', () => {
     installHelm({ token: 't', rows: ROWS });
     const { container } = render(

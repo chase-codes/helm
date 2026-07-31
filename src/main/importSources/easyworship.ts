@@ -4,10 +4,18 @@ import { join } from 'path';
 import type { Located, LocateResult, ScanOutcome, ScannedSong, UnreadableSong } from '../../shared/types';
 import { rtfToText } from '../../shared/songs/rtfToText';
 import { importTidy } from '../../shared/songs/importTidy';
+import { decodeCp1252 } from '../../shared/songs/cp1252';
 import type { ImportSource, SourceDb } from './types';
 
 const SONGS_DB = 'Songs.db';
 const WORDS_DB = 'SongWords.db';
+
+// SQLite's WAL and rollback-journal sidecars, in the order they're most likely to exist.
+// EasyWorship holds Songs.db/SongWords.db open, and if either is in WAL mode, recent writes
+// live only in the `-wal` file — a copy of the .db alone would silently miss them. A
+// rollback-journal-mode `-journal` is copied for the same reason (a mid-transaction hot
+// journal). Their absence is the common case and must not be an error.
+const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
 
 // A template literal cannot end in a single unescaped backslash right before the closing
 // backtick (the lexer reads `\`` as an escaped backtick and never finds the terminator), so
@@ -16,7 +24,7 @@ export const EW_DEFAULT_PATH =
   'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
 
 interface SongRow { rowid: number; title: string | null; author: string | null }
-interface WordRow { song_id: number; words: string | Uint8Array | null }
+interface WordRow { rowid: number; song_id: number; words: string | Uint8Array | null }
 
 export interface EasyWorshipDeps {
   openDb: (path: string) => SourceDb;
@@ -31,12 +39,17 @@ export interface EasyWorshipDeps {
 }
 
 // A BLOB-affinity column comes back as a Buffer (better-sqlite3) or Uint8Array (node:sqlite),
-// never a JS string — decode it as UTF-8 rather than dropping the row. RTF is frequently
-// stored as a blob, and the PHP reference tool this schema was derived from used PDO, which
-// coerces everything to string, so it could never have surfaced a blob column.
+// never a JS string — decode it rather than dropping the row. RTF is frequently stored as a
+// blob, and the PHP reference tool this schema was derived from used PDO, which coerces
+// everything to string, so it could never have surfaced a blob column.
+//
+// The bytes are an \ansi RTF stream, which EasyWorship writes as Windows-1252 — the same
+// encoding rtfToText's `\'xx` escape path already assumes (see cp1252.ts). Decoding as UTF-8
+// instead would turn any literal high byte (a curly apostrophe, an accented letter — both
+// legal directly in an \ansi stream, not just via \'xx) into a U+FFFD replacement character.
 function wordsToText(words: string | Uint8Array | null): string | undefined {
   if (typeof words === 'string') return words;
-  if (words instanceof Uint8Array) return Buffer.from(words).toString('utf8');
+  if (words instanceof Uint8Array) return decodeCp1252(words);
   return undefined;
 }
 
@@ -63,6 +76,20 @@ function defaultPickFolder(getParentWindow?: () => Electron.BrowserWindow | null
     const result = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
     return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
   };
+}
+
+// Copies `name` plus whichever WAL/SHM/journal sidecars exist beside it, so a copy taken
+// while EasyWorship is mid-write is as self-consistent as the live library. Missing sidecars
+// (the common case — a library that isn't mid-write, or is in the default rollback-journal
+// mode with no journal currently open) are silently skipped, not an error.
+function copyWithSidecars(deps: EasyWorshipDeps, srcDir: string, destDir: string, name: string): void {
+  deps.copy(join(srcDir, name), join(destDir, name));
+  for (const suffix of SIDECAR_SUFFIXES) {
+    const sidecar = `${name}${suffix}`;
+    if (deps.exists(join(srcDir, sidecar))) {
+      deps.copy(join(srcDir, sidecar), join(destDir, sidecar));
+    }
+  }
 }
 
 export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}): ImportSource {
@@ -92,19 +119,30 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
       // live library for writing.
       const temp = deps.mkdtemp();
       try {
-        deps.copy(join(located.path, SONGS_DB), join(temp, SONGS_DB));
-        deps.copy(join(located.path, WORDS_DB), join(temp, WORDS_DB));
+        copyWithSidecars(deps, located.path, temp, SONGS_DB);
+        copyWithSidecars(deps, located.path, temp, WORDS_DB);
 
         const songsDb = deps.openDb(join(temp, SONGS_DB));
         let wordsDb: SourceDb | null = null;
         try {
           wordsDb = deps.openDb(join(temp, WORDS_DB));
-          // No WHERE and no ORDER BY: EasyWorship declares COLLATE UTF8_U_CI on its text
-          // columns and better-sqlite3 cannot register it, so any comparison or sort throws
-          // "no such collation sequence". Sorting happens in JS below.
+          // No WHERE and no ORDER BY against a TEXT column: EasyWorship declares
+          // COLLATE UTF8_U_CI on its text columns (title, author, words) and better-sqlite3
+          // cannot register it, so any comparison or sort touching one of those throws
+          // "no such collation sequence". rowid carries plain INTEGER affinity, is unaffected
+          // by that collation, and is the only column either query orders on.
+          //
+          // `word` stores one row per stanza for a multi-stanza song (see the append loop
+          // below), so the order those rows arrive in is significant, not cosmetic: ORDER BY
+          // rowid asks SQLite for that order directly, and the .sort() below re-asserts it in
+          // JS so correctness doesn't depend on an unspecified engine scan order surviving
+          // between here and the loop.
           const rows = songsDb.all<SongRow>('SELECT rowid, title, author FROM song');
           const words = new Map<number, string>();
-          for (const w of wordsDb.all<WordRow>('SELECT song_id, words FROM word')) {
+          const wordRows = wordsDb
+            .all<WordRow>('SELECT rowid, song_id, words FROM word ORDER BY rowid')
+            .sort((a, b) => a.rowid - b.rowid);
+          for (const w of wordRows) {
             const text = wordsToText(w.words);
             if (text === undefined) continue;
             // If the real schema stores one row per slide/verse rather than one per song

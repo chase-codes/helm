@@ -6,6 +6,10 @@ export interface SongImportProps {
   open: boolean;
   onClose: () => void;
   onImported: () => void;
+  /** Told whenever a commit starts/stops being in flight, so the caller (SongsMode) can gate
+   *  its own Escape handling — the wizard's step lives here, not there. See the `dismissible`
+   *  guard below for the other half of the gate (the overlay/Cancel dismissal paths). */
+  onImportingChange?: (inFlight: boolean) => void;
 }
 
 type Step =
@@ -18,7 +22,7 @@ type Step =
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
-export function SongImport({ open, onClose, onImported }: SongImportProps): JSX.Element | null {
+export function SongImport({ open, onClose, onImported, onImportingChange }: SongImportProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
   const [sources, setSources] = useState<ImportSourceInfo[]>([]);
   const [step, setStep] = useState<Step>({ name: 'source' });
@@ -55,7 +59,19 @@ export function SongImport({ open, onClose, onImported }: SongImportProps): JSX.
     );
   }, [open]);
 
+  // Surface "a commit is running" upward: SongsMode owns the Escape key path (it lives
+  // outside this component, in the mode's keyHandlerRef) and has no other way to see this
+  // wizard's internal step.
+  useEffect(() => {
+    onImportingChange?.(step.name === 'importing');
+  }, [step.name, onImportingChange]);
+
   if (!open) return null;
+
+  // While a commit is actually running, losing this screen loses the only record of which
+  // songs failed to read — so neither the overlay nor the footer button may dismiss it until
+  // the import settles (done, or an error).
+  const dismissible = step.name !== 'importing';
 
   const chooseSource = (id: string): void => {
     setStep({ name: 'scanning' });
@@ -142,7 +158,7 @@ export function SongImport({ open, onClose, onImported }: SongImportProps): JSX.
   const newCount = step.name === 'review' ? step.rows.filter((r) => r.status === 'new').length : 0;
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
+    <div style={overlayStyle} onClick={dismissible ? onClose : undefined}>
       <div style={modalStyle} onClick={stop}>
         <div style={headerStyle}>
           <div style={{ fontWeight: 700, fontSize: '18px' }}>Import songs</div>
@@ -229,7 +245,7 @@ export function SongImport({ open, onClose, onImported }: SongImportProps): JSX.
         </div>
 
         <div style={footerStyle}>
-          <button style={cancelStyle} onClick={onClose}>
+          <button style={cancelStyle} onClick={dismissible ? onClose : undefined} disabled={!dismissible}>
             {step.name === 'done' ? 'Close' : 'Cancel'}
           </button>
           {step.name === 'review' && newCount > 0 && (

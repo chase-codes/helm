@@ -67,6 +67,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [section, setSection] = useState(0);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [importInFlight, setImportInFlight] = useState(false);
   const [listW, setListW] = useState(() => loadWidth('helmSongListW', LIST_W_DEFAULT));
   const [sectionW, setSectionW] = useState(() => loadWidth('helmSectionPanelW', SECTION_W_DEFAULT));
   const [dragging, setDragging] = useState<DragTarget>(null);
@@ -101,6 +102,24 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   useEffect(() => {
     void refreshLibrary(true);
   }, [refreshLibrary]);
+
+  // Runs after an import commits: refreshLibrary alone only updates `library`, but
+  // displayedRows reads `results` instead whenever a query is typed, and `results` is
+  // otherwise only repopulated by the [q, field] effect below on the next keystroke. Without
+  // re-running the active search here too, a query typed before the import finishes keeps
+  // showing the pre-import result set — none of the just-imported songs are findable until
+  // the operator types again.
+  const onImportCompleted = useCallback((): void => {
+    void refreshLibrary(false);
+    const query = q.trim();
+    if (!query) return;
+    void window.helm.songs
+      .search(query, field)
+      .then((r) => {
+        if (mountedRef.current) setResults(r);
+      })
+      .catch(console.error);
+  }, [refreshLibrary, q, field]);
 
   // Re-query on every keystroke / field change. Empty query shows the library instead
   // (displayedRows only reads `results` when the query is non-empty, so no reset needed).
@@ -231,6 +250,10 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
           return true;
         }
         if (importOpen) {
+          // Swallow Escape rather than falling through while a commit is running — losing
+          // the wizard mid-import loses the only record of which songs failed to read (see
+          // SongImport's own `dismissible` guard for the overlay/Cancel half of this gate).
+          if (importInFlight) return true;
           setImportOpen(false);
           return true;
         }
@@ -510,7 +533,8 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         <SongImport
           open={importOpen}
           onClose={() => setImportOpen(false)}
-          onImported={() => void refreshLibrary(false)}
+          onImported={onImportCompleted}
+          onImportingChange={setImportInFlight}
         />
       )}
     </div>

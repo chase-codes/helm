@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdtempSync, rmSync } from 'fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { createEasyWorshipSource } from './easyworship';
 import type { ImportSource, SourceDb } from './types';
 
 const FIXTURE = join(__dirname, '__fixtures__', 'ew');
+const SONGS_DB_NAME = 'Songs.db';
+const WORDS_DB_NAME = 'SongWords.db';
 
 // A minimal fake SourceDb pair, bypassing real sqlite entirely, for tests that only care
 // about how `word` rows are turned into ScannedSong.text (BLOB decoding, row collisions).
@@ -155,11 +157,35 @@ describe('easyworship source', () => {
     const rtf = String.raw`{\rtf1\ansi Verse 1\par Amazing grace\par}`;
     const s = fakeSource(
       [{ rowid: 1, title: 'Blob Song', author: 'A. Author' }],
-      [{ song_id: 1, words: Buffer.from(rtf, 'utf8') }]
+      [{ rowid: 1, song_id: 1, words: Buffer.from(rtf, 'utf8') }]
     );
     const outcome = await s.scan({ path: '/src' });
     expect(outcome.unreadable).toEqual([]);
     expect(outcome.songs).toEqual([{ title: 'Blob Song', author: 'A. Author', text: 'Verse 1\nAmazing grace' }]);
+  });
+
+  // IMPORTANT: the BLOB bytes are an \ansi RTF stream, which EasyWorship writes as
+  // Windows-1252, not UTF-8. A literal high byte is legal directly in an \ansi stream (not
+  // just via a \'xx escape), and decoding it as UTF-8 turns it into a lone invalid byte
+  // sequence — U+FFFD — which reaches the projector as a replacement-character glyph instead
+  // of the punctuation/letter the church actually typed.
+  it('decodes literal high bytes in a BLOB as cp1252, not UTF-8', async () => {
+    const rtf = Buffer.concat([
+      Buffer.from(String.raw`{\rtf1\ansi It`, 'ascii'),
+      Buffer.from([0x92]), // cp1252 curly apostrophe (U+2019)
+      Buffer.from('s caf', 'ascii'),
+      Buffer.from([0xe9]), // cp1252 e-acute (U+00E9)
+      Buffer.from(String.raw` song\par}`, 'ascii')
+    ]);
+    const s = fakeSource(
+      [{ rowid: 1, title: 'CP1252 Song', author: '' }],
+      [{ rowid: 1, song_id: 1, words: rtf }]
+    );
+    const outcome = await s.scan({ path: '/src' });
+    // importTidy normalises the curly apostrophe to a straight one (see importTidy.ts) — the
+    // point being proven here is the café/é byte, which only survives at all when 0xE9 is
+    // decoded as cp1252 rather than turned into a UTF-8 replacement character.
+    expect(outcome.songs).toEqual([{ title: 'CP1252 Song', author: '', text: "It's café song" }]);
   });
 
   // IMPORTANT: Map.set on collision silently keeps only the last `word` row for a song_id.
@@ -173,13 +199,88 @@ describe('easyworship source', () => {
     const s = fakeSource(
       [{ rowid: 1, title: 'Two Stanza Song', author: '' }],
       [
-        { song_id: 1, words: String.raw`Verse 1\par First stanza\par` },
-        { song_id: 1, words: String.raw`Verse 2\par Second stanza\par` }
+        { rowid: 1, song_id: 1, words: String.raw`Verse 1\par First stanza\par` },
+        { rowid: 2, song_id: 1, words: String.raw`Verse 2\par Second stanza\par` }
       ]
     );
     const outcome = await s.scan({ path: '/src' });
     expect(outcome.songs).toEqual([
       { title: 'Two Stanza Song', author: '', text: 'Verse 1\nFirst stanza\n\nVerse 2\nSecond stanza' }
     ]);
+  });
+
+  // IMPORTANT: a bare scan (no ORDER BY) gives SQLite no ordering guarantee, and the loop
+  // above concatenates whatever order `wordsDb.all()` hands back — so if the rows arrive in
+  // anything other than rowid order, a song's stanzas would silently shuffle. Feeding rows in
+  // reverse-of-rowid order here proves assembly is keyed on rowid, not on whatever order they
+  // happened to arrive in.
+  it('assembles multi-row stanzas in rowid order, even when rows arrive in a different order', async () => {
+    const s = fakeSource(
+      [{ rowid: 1, title: 'Reordered Song', author: '' }],
+      [
+        { rowid: 20, song_id: 1, words: String.raw`Verse 2\par Second stanza\par` },
+        { rowid: 7, song_id: 1, words: String.raw`Verse 1\par First stanza\par` }
+      ]
+    );
+    const outcome = await s.scan({ path: '/src' });
+    expect(outcome.songs).toEqual([
+      { title: 'Reordered Song', author: '', text: 'Verse 1\nFirst stanza\n\nVerse 2\nSecond stanza' }
+    ]);
+  });
+
+  // The reason the fixture declares COLLATE UTF8_U_CI on `word.words` too: this proves that
+  // ordering by rowid (INTEGER affinity, untouched by the collation) doesn't reintroduce the
+  // "no such collation sequence" crash that a naive ORDER BY on a text column would.
+  it('orders word rows by rowid without tripping the words-table collation', async () => {
+    const outcome = await source(FIXTURE).scan({ path: FIXTURE });
+    expect(outcome.songs.map((s) => s.title)).toEqual(['Amazing Grace', 'Blessed Assurance']);
+  });
+
+  // EasyWorship holds its files open, and copying only the .db would silently miss anything
+  // still sitting in a WAL/journal sidecar if the live library is mid-write — an operator
+  // would just see "Couldn't read that library," or a migration missing recent songs.
+  it('copies WAL/SHM/journal sidecars alongside each source db when present', async () => {
+    const srcDir = mkdtempSync(join(tmpdir(), 'ew-wal-src-'));
+    copyFileSync(join(FIXTURE, SONGS_DB_NAME), join(srcDir, SONGS_DB_NAME));
+    copyFileSync(join(FIXTURE, WORDS_DB_NAME), join(srcDir, WORDS_DB_NAME));
+    writeFileSync(join(srcDir, `${SONGS_DB_NAME}-wal`), 'wal-bytes');
+    writeFileSync(join(srcDir, `${SONGS_DB_NAME}-shm`), 'shm-bytes');
+    writeFileSync(join(srcDir, `${WORDS_DB_NAME}-journal`), 'journal-bytes');
+
+    const copied: string[] = [];
+    const s = createEasyWorshipSource({
+      openDb: openTestSourceDb,
+      pickFolder: () => Promise.resolve(srcDir),
+      copy: (src, dest) => {
+        copied.push(basename(src));
+        copyFileSync(src, dest);
+      }
+    });
+
+    await s.scan({ path: srcDir });
+
+    expect(copied.sort()).toEqual(
+      [SONGS_DB_NAME, `${SONGS_DB_NAME}-shm`, `${SONGS_DB_NAME}-wal`, WORDS_DB_NAME, `${WORDS_DB_NAME}-journal`].sort()
+    );
+    rmSync(srcDir, { recursive: true, force: true });
+  });
+
+  // The common case: no sidecars sitting beside the source files. Their absence must not be
+  // an error, and only the two .db files should be copied.
+  it('still imports normally when no WAL/SHM/journal sidecars exist', async () => {
+    const copied: string[] = [];
+    const s = createEasyWorshipSource({
+      openDb: openTestSourceDb,
+      pickFolder: () => Promise.resolve(FIXTURE),
+      copy: (src, dest) => {
+        copied.push(basename(src));
+        copyFileSync(src, dest);
+      }
+    });
+
+    const outcome = await s.scan({ path: FIXTURE });
+
+    expect(outcome.songs.map((s) => s.title)).toEqual(['Amazing Grace', 'Blessed Assurance']);
+    expect(copied.sort()).toEqual([SONGS_DB_NAME, WORDS_DB_NAME].sort());
   });
 });
