@@ -45,6 +45,27 @@ Several items below share these foundations — worth building once as reusable 
   songs one at a time. Multiple source formats eventually, but the immediate need is
   **importing from EasyWorship 8's format**. (Found during Windows rehearsal testing,
   2026-07-09.)
+  - **Update (2026-07-31): shipped, pending verification against a real library.** An
+    **Import songs** wizard in Songs mode: pick the source program, pick the folder, review
+    every song found (new / already in Helm / unreadable, each with a reason), import, then a
+    summary that *names* what didn't come through. Songs land via `songsRepo.add()`, so they
+    are sectioned, indexed and searchable exactly like hand-entered ones.
+    Built behind an `ImportSource` seam (`src/main/importSources/`) so CSV or another program
+    is a new adapter plus a registry entry — no changes to the RTF stripper, tidy rules,
+    dedupe, orchestrator or wizard. Exactly one adapter ships.
+    Two facts worth keeping, both established before any code was written: EasyWorship 6.1+
+    stores its library as **plain SQLite** (`Songs.db`/`SongWords.db`, lyrics as RTF) — not
+    Firebird, not Paradox — so `better-sqlite3` reads it with no new dependency; and it
+    declares a custom collation (`UTF8_U_CI`) that no Node SQLite driver can register, so the
+    adapter's SQL must carry **no `WHERE` and no `ORDER BY`** against a text column. A
+    committed fixture declares that collation specifically so a test fails if anyone
+    reintroduces one.
+    Spec: `docs/superpowers/specs/2026-07-30-song-library-import-design.md`; plan:
+    `docs/superpowers/plans/2026-07-30-song-library-import.md`.
+    **Still owed:** the schema is corroborated by two independent open-source tools but no
+    real EasyWorship library has ever been opened. First task on the Windows machine is
+    `PRAGMA table_info(song)`/`(word)` plus one real `words` blob — see the handoff note
+    `docs/superpowers/notes/2026-07-31-song-import-windows-handoff.md`.
 - **Assignable navigation/action hotkeys** (part of the hotkey system above). Concrete asks:
   - **Home** → jump back to the chorus quickly.
   - **Ctrl+X then a number** → jump to that verse.
