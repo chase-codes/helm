@@ -83,8 +83,20 @@ export function rtfToText(rtf: string): string {
         continue;
       }
 
+      if (next === '~') {
+        emit(' '); // non-breaking space: plain ASCII, downstream tidying collapses whitespace
+        i++;
+        continue;
+      }
+
+      if (next === '_') {
+        emit('-'); // non-breaking hyphen: plain ASCII is fine here too
+        i++;
+        continue;
+      }
+
       if (!/[a-z]/i.test(next)) {
-        i++; // control symbols such as \~ \- \_ carry no lyric text
+        i++; // other control symbols such as \- carry no lyric text
         continue;
       }
 
@@ -106,7 +118,11 @@ export function rtfToText(rtf: string): string {
       if (SKIP_DESTINATIONS.has(word)) g.skip = true;
       else if (word === 'uc') g.uc = num ?? 1;
       else if (word === 'u' && num !== null) {
-        emit(String.fromCodePoint(num < 0 ? num + 0x10000 : num));
+        // A corrupted blob can carry a \u parameter outside the valid Unicode range. That must
+        // degrade to "no character emitted", not throw — the substitute character is still
+        // swallowed either way, so a malformed escape doesn't leave a stray '?' in the lyric.
+        const cp = num < 0 ? num + 0x10000 : num;
+        if (cp >= 0 && cp <= 0x10ffff) emit(String.fromCodePoint(cp));
         skipChars = g.uc;
       } else if (word === 'par' || word === 'line' || word === 'sect') emit('\n');
       else if (word === 'tab') emit('\t');
