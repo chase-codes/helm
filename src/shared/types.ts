@@ -68,7 +68,11 @@ export interface ImportReviewRow {
 }
 export interface SongImportScan { token: string; rows: ImportReviewRow[] }
 export type SongImportScanResult = SongImportScan | LocateFailure | { error: 'unknown-source' };
-export interface SongImportResult { imported: number; skipped: number; unreadable: number }
+export interface SongImportResult {
+  imported: number;
+  skipped: number;
+  unreadable: { title: string; reason: string }[];
+}
 export interface SongImportProgress { done: number; total: number }
 
 export type OutputMode = 'live' | 'logo' | 'black';

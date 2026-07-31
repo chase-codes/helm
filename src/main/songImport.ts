@@ -26,7 +26,7 @@ interface Pending {
   sourceId: string;
   songs: ScannedSong[]; // only the rows classified 'new'
   skipped: number;      // duplicates
-  unreadable: number;   // could not be read from the source
+  unreadable: { title: string; reason: string }[]; // could not be read from the source
 }
 
 // Source-agnostic: everything here operates on ScannedSong and never learns where the songs
@@ -77,12 +77,17 @@ export function createSongImport(
         rows.push({ title: u.title, author: '', stanzas: 0, status: 'unreadable', reason: u.reason });
       }
 
+      // At most one outstanding scan at a time: a fresh scan's dedupe classification can
+      // already be stale for an older, still-pending token, so that token must stop being
+      // committable rather than silently importing against an out-of-date picture.
+      pending.clear();
+
       const token = randomUUID();
       pending.set(token, {
         sourceId,
         songs: fresh,
         skipped,
-        unreadable: outcome.unreadable.length
+        unreadable: outcome.unreadable.map((u) => ({ title: u.title, reason: u.reason }))
       });
       return { token, rows };
     },
@@ -93,7 +98,7 @@ export function createSongImport(
       pending.delete(token);
 
       let imported = 0;
-      let unreadable = job.unreadable;
+      const unreadable = [...job.unreadable];
       const total = job.songs.length;
       for (let i = 0; i < total; i++) {
         const song = job.songs[i];
@@ -107,9 +112,10 @@ export function createSongImport(
             source: job.sourceId
           });
           imported++;
-        } catch {
-          // One bad song must never abort a library migration.
-          unreadable++;
+        } catch (err) {
+          // One bad song must never abort a library migration — but the operator still needs
+          // to know which song and why, not just a count.
+          unreadable.push({ title: song.title, reason: err instanceof Error ? err.message : String(err) });
         }
         emit({ done: i + 1, total });
       }

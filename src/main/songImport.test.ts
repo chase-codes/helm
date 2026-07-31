@@ -64,7 +64,7 @@ describe('songImport', () => {
     const result = await imp.scan('fake');
     if (!('rows' in result)) throw new Error('expected rows');
     expect(result.rows[0].status).toBe('duplicate');
-    expect(imp.commit(result.token)).toEqual({ imported: 0, skipped: 1, unreadable: 0 });
+    expect(imp.commit(result.token)).toEqual({ imported: 0, skipped: 1, unreadable: [] });
     expect(repo.count()).toBe(1);
   });
 
@@ -90,7 +90,7 @@ describe('songImport', () => {
     const result = await imp.scan('fake');
     if (!('rows' in result)) throw new Error('expected rows');
     expect(result.rows.map((r) => r.status)).toEqual(['new', 'duplicate']);
-    expect(imp.commit(result.token)).toEqual({ imported: 1, skipped: 1, unreadable: 0 });
+    expect(imp.commit(result.token)).toEqual({ imported: 1, skipped: 1, unreadable: [] });
   });
 
   it('carries unreadable songs into the review rows and never imports them', async () => {
@@ -102,7 +102,11 @@ describe('songImport', () => {
     expect(result.rows).toEqual([
       { title: 'Empty Song', author: '', stanzas: 0, status: 'unreadable', reason: 'no lyrics found' }
     ]);
-    expect(imp.commit(result.token)).toEqual({ imported: 0, skipped: 0, unreadable: 1 });
+    expect(imp.commit(result.token)).toEqual({
+      imported: 0,
+      skipped: 0,
+      unreadable: [{ title: 'Empty Song', reason: 'no lyrics found' }]
+    });
     expect(repo.count()).toBe(0);
   });
 
@@ -146,7 +150,11 @@ describe('songImport', () => {
     );
     const result = await imp.scan('fake');
     if (!('rows' in result)) throw new Error('expected rows');
-    expect(imp.commit(result.token)).toEqual({ imported: 2, skipped: 0, unreadable: 1 });
+    expect(imp.commit(result.token)).toEqual({
+      imported: 2,
+      skipped: 0,
+      unreadable: [{ title: 'Bad', reason: 'Song has no content' }]
+    });
     expect(repo.count()).toBe(2);
   });
 
@@ -167,7 +175,17 @@ describe('songImport', () => {
     imp.commit(first.token);
     const second = await imp.scan('fake');
     if (!('rows' in second)) throw new Error('expected rows');
-    expect(imp.commit(second.token)).toEqual({ imported: 0, skipped: 1, unreadable: 0 });
+    expect(imp.commit(second.token)).toEqual({ imported: 0, skipped: 1, unreadable: [] });
     expect(repo.count()).toBe(1);
+  });
+
+  it('discards an earlier scan\'s token when a new scan starts', async () => {
+    const imp = build(fakeSource(outcome([{ title: 'A', author: '', text: 'x' }])));
+    const first = await imp.scan('fake');
+    if (!('rows' in first)) throw new Error('expected rows');
+    const second = await imp.scan('fake');
+    if (!('rows' in second)) throw new Error('expected rows');
+    expect(() => imp.commit(first.token)).toThrow(/token/);
+    expect(imp.commit(second.token)).toEqual({ imported: 1, skipped: 0, unreadable: [] });
   });
 });
