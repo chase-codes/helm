@@ -59,6 +59,18 @@ export type Located = { path: string };
 export type LocateFailure = { error: 'no-source-files' | 'canceled'; expected?: string };
 export type LocateResult = Located | LocateFailure;
 
+export interface ImportReviewRow {
+  title: string;
+  author: string;
+  stanzas: number;
+  status: 'new' | 'duplicate' | 'unreadable';
+  reason?: string;
+}
+export interface SongImportScan { token: string; rows: ImportReviewRow[] }
+export type SongImportScanResult = SongImportScan | LocateFailure | { error: 'unknown-source' };
+export interface SongImportResult { imported: number; skipped: number; unreadable: number }
+export interface SongImportProgress { done: number; total: number }
+
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
