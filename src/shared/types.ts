@@ -137,6 +137,8 @@ export const CH = {
   videoLoad: 'video:load', videoPlay: 'video:play', videoPause: 'video:pause',
   videoSeek: 'video:seek', videoSetVolume: 'video:setVolume',
   videoSetMuted: 'video:setMuted', videoReportDuration: 'video:reportDuration',
+  songImportSources: 'songImport:sources', songImportScan: 'songImport:scan',
+  songImportCommit: 'songImport:commit', songImportProgress: 'songImport:progress',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -267,5 +269,11 @@ export interface HelmApi {
     seek(ms: number): void;
     setVolume(v: number): void; setMuted(m: boolean): void;
     reportDuration(ms: number): void;
+  };
+  songImport: {
+    sources(): Promise<ImportSourceInfo[]>;
+    scan(sourceId: string): Promise<SongImportScanResult>;
+    commit(token: string): Promise<SongImportResult>;
+    onProgress(cb: (p: SongImportProgress) => void): () => void;
   };
 }
