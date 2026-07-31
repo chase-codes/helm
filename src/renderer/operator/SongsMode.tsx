@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
@@ -9,6 +9,7 @@ import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/ty
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
+import { SongImport } from './SongImport';
 import { useContextMenu } from './useContextMenu';
 
 export interface SongsModeProps {
@@ -65,25 +66,28 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [section, setSection] = useState(0);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [listW, setListW] = useState(() => loadWidth('helmSongListW', LIST_W_DEFAULT));
   const [sectionW, setSectionW] = useState(() => loadWidth('helmSectionPanelW', SECTION_W_DEFAULT));
   const [dragging, setDragging] = useState<DragTarget>(null);
 
+  const refreshLibrary = useCallback((selectFirst: boolean): Promise<void> => {
+    return window.helm.songs
+      .list()
+      .then((songs) => {
+        setLibrary(songs);
+        if (selectFirst && songs.length) {
+          setActiveSongId(songs[0].id);
+          setSection(0);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
   // Initial load: fetch the library and select the first song (seed order = Amazing Grace).
   useEffect(() => {
-    let live = true;
-    void window.helm.songs.list().then((songs) => {
-      if (!live) return;
-      setLibrary(songs);
-      if (songs.length) {
-        setActiveSongId(songs[0].id);
-        setSection(0);
-      }
-    }).catch(console.error);
-    return () => {
-      live = false;
-    };
-  }, []);
+    void refreshLibrary(true);
+  }, [refreshLibrary]);
 
   // Re-query on every keystroke / field change. Empty query shows the library instead
   // (displayedRows only reads `results` when the query is non-empty, so no reset needed).
@@ -405,6 +409,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
         onAddSong={() => setQuickAddOpen(true)}
+        onImportSongs={() => setImportOpen(true)}
         onRowContextMenu={(id, e) =>
           contextMenu.open(e, [{ label: 'Edit', onSelect: () => onEditSong(id) }])
         }
@@ -480,6 +485,13 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
 
       {contextMenu.menu}
       {quickAddOpen && <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />}
+      {importOpen && (
+        <SongImport
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onImported={() => void refreshLibrary(false)}
+        />
+      )}
     </div>
   );
 }

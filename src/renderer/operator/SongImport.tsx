@@ -1,0 +1,244 @@
+import { useContext, useEffect, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import { ThemeCtx } from './ThemeCtx';
+import type { ImportReviewRow, ImportSourceInfo, SongImportProgress, SongImportResult } from '../../shared/types';
+
+export interface SongImportProps {
+  open: boolean;
+  onClose: () => void;
+  onImported: () => void;
+}
+
+type Step =
+  | { name: 'source' }
+  | { name: 'scanning' }
+  | { name: 'error'; message: string; expected?: string }
+  | { name: 'review'; token: string; rows: ImportReviewRow[] }
+  | { name: 'importing'; done: number; total: number }
+  | { name: 'done'; result: SongImportResult };
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+export function SongImport({ open, onClose, onImported }: SongImportProps): JSX.Element | null {
+  const T = useContext(ThemeCtx);
+  const [sources, setSources] = useState<ImportSourceInfo[]>([]);
+  const [step, setStep] = useState<Step>({ name: 'source' });
+
+  // Reset to the source step whenever the modal transitions to open. This is React's
+  // sanctioned "adjust state when a prop changes" pattern (setState during render,
+  // guarded by comparing against a mirrored-in-state previous value) rather than an
+  // effect — react-hooks/set-state-in-effect flags unconditional setState calls at the
+  // top of a useEffect body (see MessageMode.tsx for the same pattern).
+  const [openFor, setOpenFor] = useState(open);
+  if (open !== openFor) {
+    setOpenFor(open);
+    if (open) setStep({ name: 'source' });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    void window.helm.songImport
+      .sources()
+      .then((s) => {
+        if (live) setSources(s);
+      })
+      .catch(console.error);
+    return () => {
+      live = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    return window.helm.songImport.onProgress((p: SongImportProgress) =>
+      setStep((s) => (s.name === 'importing' ? { name: 'importing', ...p } : s))
+    );
+  }, [open]);
+
+  if (!open) return null;
+
+  const chooseSource = (id: string): void => {
+    setStep({ name: 'scanning' });
+    void window.helm.songImport
+      .scan(id)
+      .then((result) => {
+        if ('rows' in result) {
+          setStep({ name: 'review', token: result.token, rows: result.rows });
+          return;
+        }
+        if (result.error === 'canceled') {
+          setStep({ name: 'source' }); // the operator backed out; not an error
+          return;
+        }
+        setStep({
+          name: 'error',
+          message:
+            result.error === 'no-source-files'
+              ? "Couldn't find Songs.db and SongWords.db in that folder."
+              : 'That import source is not available.',
+          expected: 'expected' in result ? result.expected : undefined
+        });
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        setStep({ name: 'error', message: "Couldn't read that library." });
+      });
+  };
+
+  const runImport = (token: string, total: number): void => {
+    setStep({ name: 'importing', done: 0, total });
+    void window.helm.songImport
+      .commit(token)
+      .then((result) => {
+        setStep({ name: 'done', result });
+        onImported();
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        setStep({ name: 'error', message: "Couldn't finish the import." });
+      });
+  };
+
+  const stop = (e: ReactMouseEvent): void => e.stopPropagation();
+
+  const overlayStyle: CSSProperties = {
+    position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(8,9,12,.6)',
+    backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', padding: '4vh 4vw'
+  };
+  const modalStyle: CSSProperties = {
+    width: '760px', maxWidth: '96vw', height: '88vh', background: T.panel,
+    borderRadius: '16px', boxShadow: '0 30px 80px rgba(0,0,0,.5)', display: 'flex',
+    flexDirection: 'column', overflow: 'hidden', border: `1px solid ${T.border}`
+  };
+  const headerStyle: CSSProperties = { padding: '16px 22px', borderBottom: `1px solid ${T.hairline}` };
+  const bodyStyle: CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 22px' };
+  const footerStyle: CSSProperties = {
+    display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px',
+    padding: '15px 22px', borderTop: `1px solid ${T.hairline}`
+  };
+  const sourceBtnStyle: CSSProperties = {
+    display: 'block', width: '100%', textAlign: 'left', padding: '14px 16px', marginBottom: '8px',
+    borderRadius: '10px', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.border}`,
+    fontSize: '14px', fontWeight: 600, color: T.text
+  };
+  const rowStyle: CSSProperties = {
+    display: 'flex', alignItems: 'baseline', gap: '10px', padding: '8px 12px',
+    borderRadius: '8px', background: T.panel2, marginBottom: '5px'
+  };
+  const badgeStyle = (color: string): CSSProperties => ({
+    fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', letterSpacing: '0.06em',
+    color, flexShrink: 0
+  });
+  const cancelStyle: CSSProperties = {
+    height: '38px', padding: '0 18px', borderRadius: '10px', background: T.panel2,
+    boxShadow: `inset 0 0 0 1px ${T.border}`, fontSize: '13.5px', color: T.dim
+  };
+  const primaryStyle: CSSProperties = {
+    height: '38px', padding: '0 20px', borderRadius: '10px', background: T.accent,
+    color: T.accentInk, fontWeight: 700, fontSize: '13.5px'
+  };
+
+  const newCount = step.name === 'review' ? step.rows.filter((r) => r.status === 'new').length : 0;
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={stop}>
+        <div style={headerStyle}>
+          <div style={{ fontWeight: 700, fontSize: '18px' }}>Import songs</div>
+          <div style={{ fontSize: '13px', color: T.dim, marginTop: '4px', lineHeight: 1.4 }}>
+            Bring an existing song library into Helm. Nothing is saved until you confirm.
+          </div>
+        </div>
+
+        <div style={bodyStyle}>
+          {step.name === 'source' && (
+            <>
+              <div style={{ fontSize: '12px', color: T.faint, marginBottom: '10px' }}>
+                WHICH PROGRAM ARE YOU COMING FROM?
+              </div>
+              {sources.map((s) => (
+                <button key={s.id} style={sourceBtnStyle} onClick={() => chooseSource(s.id)}>
+                  {s.label}
+                </button>
+              ))}
+            </>
+          )}
+
+          {step.name === 'scanning' && <div style={{ color: T.dim, fontSize: '13px' }}>Reading the library…</div>}
+
+          {step.name === 'error' && (
+            <div style={{ fontSize: '13.5px', color: T.live, lineHeight: 1.6 }}>
+              <div>{step.message}</div>
+              {step.expected && (
+                <div style={{ color: T.dim, marginTop: '8px' }}>
+                  It is usually at <code>{step.expected}</code>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step.name === 'review' && (
+            <>
+              <div style={{ fontSize: '12px', color: T.faint, marginBottom: '10px' }}>
+                FOUND {plural(step.rows.length, 'SONG', 'SONGS').toUpperCase()}
+              </div>
+              {step.rows.map((r, i) => (
+                <div key={`${r.title}-${i}`} style={rowStyle}>
+                  <span style={badgeStyle(r.status === 'new' ? T.accent : r.status === 'duplicate' ? T.faint : T.live)}>
+                    {r.status === 'new' ? 'NEW' : r.status === 'duplicate' ? 'IN HELM' : 'UNREADABLE'}
+                  </span>
+                  <span style={{ fontSize: '13.5px', color: T.text, flex: 1, minWidth: 0 }}>{r.title}</span>
+                  <span style={{ fontSize: '12px', color: T.dim }}>
+                    {r.status === 'unreadable' ? r.reason : `${plural(r.stanzas, 'stanza', 'stanzas')}`}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {step.name === 'importing' && (
+            <div style={{ color: T.dim, fontSize: '13px' }}>
+              Importing… {step.done} of {step.total}
+            </div>
+          )}
+
+          {step.name === 'done' && (
+            <div style={{ fontSize: '14px', color: T.text, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 700 }}>Imported {plural(step.result.imported, 'song', 'songs')}.</div>
+              {step.result.skipped > 0 && (
+                <div style={{ color: T.dim }}>{plural(step.result.skipped, 'song', 'songs')} already in Helm.</div>
+              )}
+              {step.result.unreadable.length > 0 && (
+                <>
+                  <div style={{ color: T.dim }}>
+                    {plural(step.result.unreadable.length, "song couldn't", "songs couldn't")} be read.
+                  </div>
+                  <div style={{ marginTop: '10px' }}>
+                    {step.result.unreadable.map((u, i) => (
+                      <div key={`${u.title}-${i}`} style={rowStyle}>
+                        <span style={{ fontSize: '13.5px', color: T.text, flex: 1, minWidth: 0 }}>{u.title}</span>
+                        <span style={{ fontSize: '12px', color: T.dim }}>{u.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={footerStyle}>
+          <button style={cancelStyle} onClick={onClose}>
+            {step.name === 'done' ? 'Close' : 'Cancel'}
+          </button>
+          {step.name === 'review' && newCount > 0 && (
+            <button style={primaryStyle} onClick={() => runImport(step.token, newCount)}>
+              Import {plural(newCount, 'song', 'songs')}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
