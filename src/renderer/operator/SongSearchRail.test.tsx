@@ -23,7 +23,8 @@ const baseProps = {
   emptyText: '',
   onKeyDown: vi.fn(),
   onSelect: vi.fn(),
-  onAddSong: vi.fn()
+  onAddSong: vi.fn(),
+  onImportSongs: vi.fn()
 }
 
 describe('SongSearchRail', () => {

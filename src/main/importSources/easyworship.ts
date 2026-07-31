@@ -1,0 +1,189 @@
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import type { Located, LocateResult, ScanOutcome, ScannedSong, UnreadableSong } from '../../shared/types';
+import { rtfToText } from '../../shared/songs/rtfToText';
+import { importTidy } from '../../shared/songs/importTidy';
+import { decodeCp1252 } from '../../shared/songs/cp1252';
+import type { ImportSource, SourceDb } from './types';
+
+const SONGS_DB = 'Songs.db';
+const WORDS_DB = 'SongWords.db';
+
+// SQLite's WAL and rollback-journal sidecars, in the order they're most likely to exist.
+// EasyWorship holds Songs.db/SongWords.db open, and if either is in WAL mode, recent writes
+// live only in the `-wal` file — a copy of the .db alone would silently miss them. A
+// rollback-journal-mode `-journal` is copied for the same reason (a mid-transaction hot
+// journal). Their absence is the common case and must not be an error.
+const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
+
+// A template literal cannot end in a single unescaped backslash right before the closing
+// backtick (the lexer reads `\`` as an escaped backtick and never finds the terminator), so
+// the trailing separator is expressed as an escaped string literal instead of String.raw.
+export const EW_DEFAULT_PATH =
+  'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
+
+interface SongRow { rowid: number; title: string | null; author: string | null }
+interface WordRow { rowid: number; song_id: number; words: string | Uint8Array | null }
+
+export interface EasyWorshipDeps {
+  openDb: (path: string) => SourceDb;
+  pickFolder: () => Promise<string | null>;
+  mkdtemp: () => string;
+  rmTemp: (dir: string) => void;
+  exists: (path: string) => boolean;
+  copy: (src: string, dest: string) => void;
+  /** Parent for the folder-picker dialog, so it's modal to the operator window instead of
+   *  able to surface behind it (which reads as a hang). Mirrors mediaImport's seam. */
+  getParentWindow?: () => Electron.BrowserWindow | null;
+}
+
+// A BLOB-affinity column comes back as a Buffer (better-sqlite3) or Uint8Array (node:sqlite),
+// never a JS string — decode it rather than dropping the row. RTF is frequently stored as a
+// blob, and the PHP reference tool this schema was derived from used PDO, which coerces
+// everything to string, so it could never have surfaced a blob column.
+//
+// The bytes are an \ansi RTF stream, which EasyWorship writes as Windows-1252 — the same
+// encoding rtfToText's `\'xx` escape path already assumes (see cp1252.ts). Decoding as UTF-8
+// instead would turn any literal high byte (a curly apostrophe, an accented letter — both
+// legal directly in an \ansi stream, not just via \'xx) into a U+FFFD replacement character.
+function wordsToText(words: string | Uint8Array | null): string | undefined {
+  if (typeof words === 'string') return words;
+  if (words instanceof Uint8Array) return decodeCp1252(words);
+  return undefined;
+}
+
+// better-sqlite3 is required lazily: importing it at module scope would load the native
+// binary during `npm test`, where it is compiled for the wrong ABI (see testDb.ts).
+function defaultOpenDb(path: string): SourceDb {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Database = require('better-sqlite3') as typeof import('better-sqlite3');
+  const db = new Database(path, { readonly: true, fileMustExist: true });
+  return {
+    all: <T,>(sql: string) => db.prepare(sql).all() as T[],
+    close: () => db.close()
+  };
+}
+
+function defaultPickFolder(getParentWindow?: () => Electron.BrowserWindow | null): () => Promise<string | null> {
+  return async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { dialog } = require('electron') as typeof import('electron');
+    const opts = { properties: ['openDirectory'] } as Electron.OpenDialogOptions;
+    const parent = getParentWindow?.() ?? null;
+    // Without a parent, the dialog isn't modal to the operator window on Windows — the
+    // target platform for this migration — and can surface behind it, which reads as a hang.
+    const result = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
+    return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+  };
+}
+
+// Copies `name` plus whichever WAL/SHM/journal sidecars exist beside it, so a copy taken
+// while EasyWorship is mid-write is as self-consistent as the live library. Missing sidecars
+// (the common case — a library that isn't mid-write, or is in the default rollback-journal
+// mode with no journal currently open) are silently skipped, not an error.
+function copyWithSidecars(deps: EasyWorshipDeps, srcDir: string, destDir: string, name: string): void {
+  deps.copy(join(srcDir, name), join(destDir, name));
+  for (const suffix of SIDECAR_SUFFIXES) {
+    const sidecar = `${name}${suffix}`;
+    if (deps.exists(join(srcDir, sidecar))) {
+      deps.copy(join(srcDir, sidecar), join(destDir, sidecar));
+    }
+  }
+}
+
+export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}): ImportSource {
+  const deps: EasyWorshipDeps = {
+    openDb: defaultOpenDb,
+    pickFolder: defaultPickFolder(overrides.getParentWindow),
+    mkdtemp: () => mkdtempSync(join(tmpdir(), 'helm-ew-')),
+    rmTemp: (dir) => rmSync(dir, { recursive: true, force: true }),
+    exists: existsSync,
+    copy: copyFileSync,
+    ...overrides
+  };
+
+  return {
+    id: 'easyworship',
+    label: 'EasyWorship',
+
+    async locate(): Promise<LocateResult> {
+      const path = await deps.pickFolder();
+      if (!path) return { error: 'canceled' };
+      const hasBoth = deps.exists(join(path, SONGS_DB)) && deps.exists(join(path, WORDS_DB));
+      return hasBoth ? { path } : { error: 'no-source-files', expected: EW_DEFAULT_PATH };
+    },
+
+    async scan(located: Located): Promise<ScanOutcome> {
+      // EasyWorship holds its files open, so we work on copies and never open the church's
+      // live library for writing.
+      const temp = deps.mkdtemp();
+      try {
+        copyWithSidecars(deps, located.path, temp, SONGS_DB);
+        copyWithSidecars(deps, located.path, temp, WORDS_DB);
+
+        const songsDb = deps.openDb(join(temp, SONGS_DB));
+        let wordsDb: SourceDb | null = null;
+        try {
+          wordsDb = deps.openDb(join(temp, WORDS_DB));
+          // No WHERE and no ORDER BY against a TEXT column: EasyWorship declares
+          // COLLATE UTF8_U_CI on its text columns (title, author, words) and better-sqlite3
+          // cannot register it, so any comparison or sort touching one of those throws
+          // "no such collation sequence". rowid carries plain INTEGER affinity, is unaffected
+          // by that collation, and is the only column either query orders on.
+          //
+          // `word` stores one row per stanza for a multi-stanza song (see the append loop
+          // below), so the order those rows arrive in is significant, not cosmetic: ORDER BY
+          // rowid asks SQLite for that order directly, and the .sort() below re-asserts it in
+          // JS so correctness doesn't depend on an unspecified engine scan order surviving
+          // between here and the loop.
+          const rows = songsDb.all<SongRow>('SELECT rowid, title, author FROM song');
+          const words = new Map<number, string>();
+          const wordRows = wordsDb
+            .all<WordRow>('SELECT rowid, song_id, words FROM word ORDER BY rowid')
+            .sort((a, b) => a.rowid - b.rowid);
+          for (const w of wordRows) {
+            const text = wordsToText(w.words);
+            if (text === undefined) continue;
+            // If the real schema stores one row per slide/verse rather than one per song
+            // (unverified in the spec), append rather than overwrite so every stanza
+            // survives. The join happens on the still-raw RTF, before rtfToText runs, so
+            // a plain "\n\n" would be swallowed as source-file line wrapping (rtfToText
+            // discards bare \r/\n); two RTF paragraph marks are what actually survive
+            // through to a blank-line slide break in the tidied output. The trailing space
+            // after the marks is a required RTF word delimiter, not stray content — without
+            // it, a control-word letter scan has no boundary and silently fuses the second
+            // \par with the next fragment's first word (e.g. "\par\parVerse" is read as one
+            // unrecognized control word, dropping "Verse" entirely).
+            const prev = words.get(w.song_id);
+            words.set(w.song_id, prev === undefined ? text : `${prev}\\par\\par ${text}`);
+          }
+
+          const songs: ScannedSong[] = [];
+          const unreadable: UnreadableSong[] = [];
+          for (const row of rows) {
+            const title = (row.title ?? '').trim() || 'Untitled Song';
+            const raw = words.get(row.rowid);
+            if (raw === undefined) {
+              unreadable.push({ title, reason: 'no lyrics found' });
+              continue;
+            }
+            const text = importTidy(rtfToText(raw));
+            if (!text) {
+              unreadable.push({ title, reason: 'no lyrics left after removing formatting' });
+              continue;
+            }
+            songs.push({ title, author: (row.author ?? '').trim(), text });
+          }
+          songs.sort((a, b) => a.title.localeCompare(b.title));
+          return { songs, unreadable };
+        } finally {
+          songsDb.close();
+          wordsDb?.close();
+        }
+      } finally {
+        deps.rmTemp(temp);
+      }
+    }
+  };
+}

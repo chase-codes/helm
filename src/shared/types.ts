@@ -51,6 +51,30 @@ export interface MediaImportResult {
   error?: 'no-libreoffice';
 }
 
+export interface ScannedSong { title: string; author: string; text: string }
+export interface UnreadableSong { title: string; reason: string }
+export interface ScanOutcome { songs: ScannedSong[]; unreadable: UnreadableSong[] }
+export interface ImportSourceInfo { id: string; label: string }
+export type Located = { path: string };
+export type LocateFailure = { error: 'no-source-files' | 'canceled'; expected?: string };
+export type LocateResult = Located | LocateFailure;
+
+export interface ImportReviewRow {
+  title: string;
+  author: string;
+  stanzas: number;
+  status: 'new' | 'duplicate' | 'unreadable';
+  reason?: string;
+}
+export interface SongImportScan { token: string; rows: ImportReviewRow[] }
+export type SongImportScanResult = SongImportScan | LocateFailure | { error: 'unknown-source' };
+export interface SongImportResult {
+  imported: number;
+  skipped: number;
+  unreadable: { title: string; reason: string }[];
+}
+export interface SongImportProgress { done: number; total: number }
+
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
@@ -113,6 +137,8 @@ export const CH = {
   videoLoad: 'video:load', videoPlay: 'video:play', videoPause: 'video:pause',
   videoSeek: 'video:seek', videoSetVolume: 'video:setVolume',
   videoSetMuted: 'video:setMuted', videoReportDuration: 'video:reportDuration',
+  songImportSources: 'songImport:sources', songImportScan: 'songImport:scan',
+  songImportCommit: 'songImport:commit', songImportProgress: 'songImport:progress',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -243,5 +269,11 @@ export interface HelmApi {
     seek(ms: number): void;
     setVolume(v: number): void; setMuted(m: boolean): void;
     reportDuration(ms: number): void;
+  };
+  songImport: {
+    sources(): Promise<ImportSourceInfo[]>;
+    scan(sourceId: string): Promise<SongImportScanResult>;
+    commit(token: string): Promise<SongImportResult>;
+    onProgress(cb: (p: SongImportProgress) => void): () => void;
   };
 }

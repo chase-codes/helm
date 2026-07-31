@@ -630,7 +630,7 @@ describe('easyworship source', () => {
     const located = await source(empty).locate();
     expect(located).toEqual({
       error: 'no-source-files',
-      expected: String.raw`C:\Users\Public\Documents\Softouch\EasyWorship\Default\Databases\Data\`
+      expected: 'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\'
     });
     rmSync(empty, { recursive: true, force: true });
   });
@@ -786,7 +786,7 @@ import type { ImportSource, SourceDb } from './types';
 const SONGS_DB = 'Songs.db';
 const WORDS_DB = 'SongWords.db';
 
-export const EW_DEFAULT_PATH = String.raw`C:\Users\Public\Documents\Softouch\EasyWorship\Default\Databases\Data\`;
+export const EW_DEFAULT_PATH = 'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
 
 interface SongRow { rowid: number; title: string | null; author: string | null }
 interface WordRow { song_id: number; words: string | null }

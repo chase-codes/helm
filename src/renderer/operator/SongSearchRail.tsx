@@ -32,6 +32,7 @@ export interface SongSearchRailProps {
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSelect: (id: string) => void;
   onAddSong: () => void;
+  onImportSongs: () => void;
   onRowContextMenu?: (id: string, e: ReactMouseEvent) => void;
 }
 
@@ -50,6 +51,7 @@ export function SongSearchRail({
   onKeyDown,
   onSelect,
   onAddSong,
+  onImportSongs,
   onRowContextMenu
 }: SongSearchRailProps): JSX.Element {
   const opRailStyle: CSSProperties = {
@@ -230,6 +232,9 @@ export function SongSearchRail({
         {noResults && <div style={{ padding: '14px 8px', color: T.faint, fontSize: '12.5px', lineHeight: 1.5 }}>{emptyText}</div>}
         <button style={pasteSongStyle} onClick={onAddSong}>
           + Add a song — search or paste
+        </button>
+        <button style={pasteSongStyle} onClick={onImportSongs}>
+          ↓ Import a song library
         </button>
       </div>
     </div>

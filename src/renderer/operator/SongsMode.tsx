@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
@@ -9,6 +9,7 @@ import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/ty
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
+import { SongImport } from './SongImport';
 import { useContextMenu } from './useContextMenu';
 
 export interface SongsModeProps {
@@ -65,25 +66,60 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [section, setSection] = useState(0);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importInFlight, setImportInFlight] = useState(false);
   const [listW, setListW] = useState(() => loadWidth('helmSongListW', LIST_W_DEFAULT));
   const [sectionW, setSectionW] = useState(() => loadWidth('helmSectionPanelW', SECTION_W_DEFAULT));
   const [dragging, setDragging] = useState<DragTarget>(null);
 
-  // Initial load: fetch the library and select the first song (seed order = Amazing Grace).
+  // Cancellation guard for refreshLibrary's setState calls: reused by both the initial-load
+  // effect below and SongImport's onImported callback, so it can't live as a per-call `let
+  // live = true` the way the search effects do — it has to survive across calls for the life
+  // of the component instead, guarding against a response landing after unmount.
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let live = true;
-    void window.helm.songs.list().then((songs) => {
-      if (!live) return;
-      setLibrary(songs);
-      if (songs.length) {
-        setActiveSongId(songs[0].id);
-        setSection(0);
-      }
-    }).catch(console.error);
+    mountedRef.current = true;
     return () => {
-      live = false;
+      mountedRef.current = false;
     };
   }, []);
+
+  const refreshLibrary = useCallback((selectFirst: boolean): Promise<void> => {
+    return window.helm.songs
+      .list()
+      .then((songs) => {
+        if (!mountedRef.current) return;
+        setLibrary(songs);
+        if (selectFirst && songs.length) {
+          setActiveSongId(songs[0].id);
+          setSection(0);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  // Initial load: fetch the library and select the first song (seed order = Amazing Grace).
+  useEffect(() => {
+    void refreshLibrary(true);
+  }, [refreshLibrary]);
+
+  // Runs after an import commits: refreshLibrary alone only updates `library`, but
+  // displayedRows reads `results` instead whenever a query is typed, and `results` is
+  // otherwise only repopulated by the [q, field] effect below on the next keystroke. Without
+  // re-running the active search here too, a query typed before the import finishes keeps
+  // showing the pre-import result set — none of the just-imported songs are findable until
+  // the operator types again.
+  const onImportCompleted = useCallback((): void => {
+    void refreshLibrary(false);
+    const query = q.trim();
+    if (!query) return;
+    void window.helm.songs
+      .search(query, field)
+      .then((r) => {
+        if (mountedRef.current) setResults(r);
+      })
+      .catch(console.error);
+  }, [refreshLibrary, q, field]);
 
   // Re-query on every keystroke / field change. Empty query shows the library instead
   // (displayedRows only reads `results` when the query is non-empty, so no reset needed).
@@ -207,13 +243,25 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     if (!active) return;
     keyHandlerRef.current = {
       onEscape: () => {
-        if (!quickAddOpen) return false;
-        setQuickAddOpen(false);
-        return true;
+        // QuickAdd takes precedence if somehow both are open — mirrors the fact that
+        // only one of these modals can be triggered at a time from the UI today.
+        if (quickAddOpen) {
+          setQuickAddOpen(false);
+          return true;
+        }
+        if (importOpen) {
+          // Swallow Escape rather than falling through while a commit is running — losing
+          // the wizard mid-import loses the only record of which songs failed to read (see
+          // SongImport's own `dismissible` guard for the overlay/Cancel half of this gate).
+          if (importInFlight) return true;
+          setImportOpen(false);
+          return true;
+        }
+        return false;
       },
       onArrow: step,
       onGoLive: goLive,
-      isModalOpen: () => quickAddOpen
+      isModalOpen: () => quickAddOpen || importOpen
     };
     return () => {
       keyHandlerRef.current = null;
@@ -405,6 +453,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
         onAddSong={() => setQuickAddOpen(true)}
+        onImportSongs={() => setImportOpen(true)}
         onRowContextMenu={(id, e) =>
           contextMenu.open(e, [{ label: 'Edit', onSelect: () => onEditSong(id) }])
         }
@@ -480,6 +529,14 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
 
       {contextMenu.menu}
       {quickAddOpen && <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />}
+      {importOpen && (
+        <SongImport
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onImported={onImportCompleted}
+          onImportingChange={setImportInFlight}
+        />
+      )}
     </div>
   );
 }

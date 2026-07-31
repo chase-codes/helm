@@ -7,7 +7,8 @@ import {
   type AudioDownloadProgress,
   type BibleInstallProgress,
   type MediaImportProgress,
-  type MessageInstallProgress
+  type MessageInstallProgress,
+  type SongImportProgress
 } from '../shared/types'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
@@ -23,6 +24,8 @@ import { createPreCardsRepo } from './preCardsRepo'
 import { createPreserviceEngine } from './preserviceEngine'
 import { createMediaRepo } from './mediaRepo'
 import { createMediaImport, findSoffice } from './mediaImport'
+import { createSongImport } from './songImport'
+import { createEasyWorshipSource } from './importSources/easyworship'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
 import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
@@ -173,6 +176,13 @@ app.whenReady().then(() => {
     getParentWindow: () => operatorWindow
   })
 
+  const broadcastSongImportProgress = (p: SongImportProgress): void => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.songImportProgress, p)
+  }
+  const songImport = createSongImport(repo, [createEasyWorshipSource({ getParentWindow: () => operatorWindow })], {
+    onProgress: broadcastSongImportProgress
+  })
+
   registerIpc(
     repo,
     biblesRepo,
@@ -184,7 +194,8 @@ app.whenReady().then(() => {
     messageInstaller,
     preserviceEngine,
     mediaRepo,
-    mediaImport
+    mediaImport,
+    songImport
   )
 
   buildMenu()

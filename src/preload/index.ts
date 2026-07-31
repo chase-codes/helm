@@ -94,5 +94,11 @@ const api: HelmApi = {
     setMuted: (m) => ipcRenderer.send(CH.videoSetMuted, m),
     reportDuration: (ms) => ipcRenderer.send(CH.videoReportDuration, ms)
   },
+  songImport: {
+    sources: () => ipcRenderer.invoke(CH.songImportSources),
+    scan: (sourceId) => ipcRenderer.invoke(CH.songImportScan, sourceId),
+    commit: (token) => ipcRenderer.invoke(CH.songImportCommit, token),
+    onProgress: sub(CH.songImportProgress),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);
