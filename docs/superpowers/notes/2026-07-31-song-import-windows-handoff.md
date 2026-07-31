@@ -28,6 +28,9 @@ by a real file. Before importing anything:
 4. Dump one real `words` value. Confirm it is RTF, note whether the column is **TEXT or BLOB**,
    and look at how slide breaks actually appear.
 5. Check whether a song ever has **more than one `word` row**.
+6. Confirm neither table is `WITHOUT ROWID` — both queries select `rowid`, and the lyric query
+   orders by it, so a `WITHOUT ROWID` table would fail the whole import with
+   *"no such column: rowid"*. The `PRAGMA table_info` output above answers this.
 
 Items 4 and 5 are the two the code guesses at. Both are already handled defensively — a BLOB
 is decoded as UTF-8, and multiple rows are concatenated as separate stanzas rather than

@@ -237,6 +237,48 @@ fixes. A direct consequence of the "prefer the typed start verse" rule and argua
 consistent with the rail's own highlight — but it is a behaviour change nobody pinned,
 and no test covers a second consecutive shift-tap.
 
+### BUG-016 — A large song import freezes live output control · **SEV 3**
+**Status:** Open · **Area:** Song import (`songImport.ts` commit loop, `songsRepo.add`)
+
+**Repro:**
+1. Import an EasyWorship library of a few thousand songs (Songs → Import a song library).
+2. While the import runs, try to cue, go live, blank the screen, or control video.
+
+**Expected:** the operator keeps control of the projector throughout.
+**Actual:** every presentation IPC (`presCue`, `presGoLive`, `presSetOutput`, video control)
+is unserviced until the import finishes.
+
+**Root cause (verified by review, not yet measured):** `commit` (`songImport.ts:103`) is a
+fully synchronous loop, and each `repo.add` opens its own `db.transaction` — therefore its own
+fsync — per song. The whole run occupies the main process's single thread, so nothing else is
+serviced. Progress events are emitted but the renderer cannot paint them either.
+
+**Fix candidates:** chunk the inserts into batched transactions and/or yield between chunks.
+⚠️ **Do not collapse the import into one transaction** — that is the obvious fix and it breaks
+a load-bearing property: one bad song must never abort a library migration
+(`songImport.ts:115-118`). Any batching has to preserve per-song failure isolation, or a
+single unparseable lyric rolls back the entire migration.
+
+**Notes:** Found 2026-07-31 in the code review of the song-import branch. Severity assumes an
+import is not run mid-service; it is SEV 2 if it ever is. No measurement yet of where the
+freeze becomes noticeable — worth timing against the real library during the Windows session.
+
+### BUG-017 — The import review list is unvirtualized · **SEV 4**
+**Status:** Open · **Area:** Song import (`SongImport.tsx` review step)
+
+**Repro:** import a library of a few thousand songs and look at the review step.
+
+**Expected:** the list scrolls smoothly. **Actual:** one flex row per scanned song is mounted
+at once — a 2000–4000 node list inside a modal.
+
+**Root cause (verified):** `step.rows.map(...)` (`SongImport.tsx:186`) renders every row with
+no windowing. Migrating an entire library is the feature's purpose, so the large list is the
+expected case rather than the edge case.
+
+**Notes:** Found 2026-07-31 in the same review. `SongSearchRail`'s no-query path has the same
+shape (`SongsMode.tsx:176`) — pre-existing, but this feature makes a very large `library`
+reachable for the first time, so the two are worth solving together.
+
 ---
 
 ## Fixed

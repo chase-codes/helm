@@ -74,10 +74,16 @@ before running `SELECT rowid FROM song WHERE title = ?`. Helm's `better-sqlite3@
 type definitions). Any `WHERE` or `ORDER BY` against those columns therefore throws
 *"no such collation sequence: UTF8_U_CI"*.
 
-Avoiding it is free, because a collation is only invoked by a comparison or a sort — never
-by a bare scan. We issue `SELECT rowid, title, author FROM song` with no `WHERE` and no
-`ORDER BY`, join lyrics on an **integer** key, and sort in JavaScript. A test pins this
-(see *Testing*).
+Avoiding it is free, because a collation is only invoked by a comparison or a sort — and only
+one declared on the column being compared. We issue `SELECT rowid, title, author FROM song`
+with no `WHERE` and no `ORDER BY` **against a text column**, join lyrics on an **integer**
+key, and sort titles in JavaScript.
+
+`rowid` is INTEGER and carries no collation, so ordering by it is safe and the lyric query
+uses it (`ORDER BY rowid`) — a song whose lyrics span several `word` rows must reassemble its
+stanzas in the stored order, and a bare scan guarantees no order at all. The distinction that
+matters: **ordering by `rowid` is fine, ordering by `title`/`author`/`words` throws.** A test
+pins both halves (see *Testing*).
 
 **2. EasyWorship holds its files open.** We copy `Songs.db` and `SongWords.db` to a temp
 directory and open the copies **read-only**. The church's live library is never opened for
@@ -158,10 +164,13 @@ SQLite.
 
 `scan()`:
 
-1. copies both files to a temp directory (`app.getPath('temp')` + a UUID)
+1. copies both files to a temp directory (`app.getPath('temp')` + a UUID), **each with its
+   `-wal` / `-shm` / `-journal` sidecars when present** — a WAL-mode copy that leaves its
+   `-wal` behind is missing every recent write, and a read-only open cannot replay one
 2. opens the copies read-only
 3. `SELECT rowid, title, author FROM song` — no `WHERE`, no `ORDER BY` (§hazard 1)
-4. `SELECT song_id, words FROM word` into a `Map<number, string>` keyed by integer
+4. `SELECT rowid, song_id, words FROM word ORDER BY rowid` into a `Map<number, string>` keyed
+   by integer, appending when a song has more than one row so its stanzas survive in order
 5. per song: `rtfToText` → `importTidy` → `{ title, author, text }`
 6. sorts by title in JavaScript
 7. deletes the temp copies in a `finally`
