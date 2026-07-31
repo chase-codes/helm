@@ -140,7 +140,7 @@ Applied to the stripped text before `splitToSlides`. **Exactly these six rules, 
 2. trim trailing whitespace on each line
 3. collapse three or more consecutive newlines to exactly two (one blank line = one slide
    break)
-4. straighten curly quotes (`'` `'` → `'`, `"` `"` → `"`)
+4. straighten curly quotes and the modifier-letter apostrophe (`'` `'` `ʼ` → `'`, `"` `"` → `"`)
 5. drop lines consisting only of RTF-stripping debris: `()`, `[]`, or a lone `.`
 6. trim leading and trailing blank lines from the whole song
 

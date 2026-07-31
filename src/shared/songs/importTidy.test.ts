@@ -22,6 +22,12 @@ describe('importTidy', () => {
     expect(importTidy('‘a’ “b”')).toBe("'a' \"b\"");
   });
 
+  // Pins MINOR-9: the modifier-letter apostrophe (U+02BC) is a fifth character straightened
+  // alongside the four curly quotes above — not in the spec's original rule 4 list, now added.
+  it('straightens the modifier-letter apostrophe (U+02BC)', () => {
+    expect(importTidy('itʼs')).toBe("it's");
+  });
+
   it('drops lines that are only RTF-stripping debris', () => {
     expect(importTidy('a\n()\nb\n[]\nc\n.\nd')).toBe('a\nb\nc\nd');
   });

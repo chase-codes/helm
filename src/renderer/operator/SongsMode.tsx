@@ -71,10 +71,23 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [sectionW, setSectionW] = useState(() => loadWidth('helmSectionPanelW', SECTION_W_DEFAULT));
   const [dragging, setDragging] = useState<DragTarget>(null);
 
+  // Cancellation guard for refreshLibrary's setState calls: reused by both the initial-load
+  // effect below and SongImport's onImported callback, so it can't live as a per-call `let
+  // live = true` the way the search effects do — it has to survive across calls for the life
+  // of the component instead, guarding against a response landing after unmount.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const refreshLibrary = useCallback((selectFirst: boolean): Promise<void> => {
     return window.helm.songs
       .list()
       .then((songs) => {
+        if (!mountedRef.current) return;
         setLibrary(songs);
         if (selectFirst && songs.length) {
           setActiveSongId(songs[0].id);
@@ -211,13 +224,21 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     if (!active) return;
     keyHandlerRef.current = {
       onEscape: () => {
-        if (!quickAddOpen) return false;
-        setQuickAddOpen(false);
-        return true;
+        // QuickAdd takes precedence if somehow both are open — mirrors the fact that
+        // only one of these modals can be triggered at a time from the UI today.
+        if (quickAddOpen) {
+          setQuickAddOpen(false);
+          return true;
+        }
+        if (importOpen) {
+          setImportOpen(false);
+          return true;
+        }
+        return false;
       },
       onArrow: step,
       onGoLive: goLive,
-      isModalOpen: () => quickAddOpen
+      isModalOpen: () => quickAddOpen || importOpen
     };
     return () => {
       keyHandlerRef.current = null;

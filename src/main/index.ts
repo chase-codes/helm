@@ -179,7 +179,7 @@ app.whenReady().then(() => {
   const broadcastSongImportProgress = (p: SongImportProgress): void => {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.songImportProgress, p)
   }
-  const songImport = createSongImport(repo, [createEasyWorshipSource()], {
+  const songImport = createSongImport(repo, [createEasyWorshipSource({ getParentWindow: () => operatorWindow })], {
     onProgress: broadcastSongImportProgress
   })
 

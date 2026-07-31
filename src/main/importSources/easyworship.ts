@@ -16,7 +16,7 @@ export const EW_DEFAULT_PATH =
   'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
 
 interface SongRow { rowid: number; title: string | null; author: string | null }
-interface WordRow { song_id: number; words: string | null }
+interface WordRow { song_id: number; words: string | Uint8Array | null }
 
 export interface EasyWorshipDeps {
   openDb: (path: string) => SourceDb;
@@ -25,6 +25,19 @@ export interface EasyWorshipDeps {
   rmTemp: (dir: string) => void;
   exists: (path: string) => boolean;
   copy: (src: string, dest: string) => void;
+  /** Parent for the folder-picker dialog, so it's modal to the operator window instead of
+   *  able to surface behind it (which reads as a hang). Mirrors mediaImport's seam. */
+  getParentWindow?: () => Electron.BrowserWindow | null;
+}
+
+// A BLOB-affinity column comes back as a Buffer (better-sqlite3) or Uint8Array (node:sqlite),
+// never a JS string — decode it as UTF-8 rather than dropping the row. RTF is frequently
+// stored as a blob, and the PHP reference tool this schema was derived from used PDO, which
+// coerces everything to string, so it could never have surfaced a blob column.
+function wordsToText(words: string | Uint8Array | null): string | undefined {
+  if (typeof words === 'string') return words;
+  if (words instanceof Uint8Array) return Buffer.from(words).toString('utf8');
+  return undefined;
 }
 
 // better-sqlite3 is required lazily: importing it at module scope would load the native
@@ -39,17 +52,23 @@ function defaultOpenDb(path: string): SourceDb {
   };
 }
 
-async function defaultPickFolder(): Promise<string | null> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { dialog } = require('electron') as typeof import('electron');
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+function defaultPickFolder(getParentWindow?: () => Electron.BrowserWindow | null): () => Promise<string | null> {
+  return async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { dialog } = require('electron') as typeof import('electron');
+    const opts = { properties: ['openDirectory'] } as Electron.OpenDialogOptions;
+    const parent = getParentWindow?.() ?? null;
+    // Without a parent, the dialog isn't modal to the operator window on Windows — the
+    // target platform for this migration — and can surface behind it, which reads as a hang.
+    const result = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
+    return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+  };
 }
 
 export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}): ImportSource {
   const deps: EasyWorshipDeps = {
     openDb: defaultOpenDb,
-    pickFolder: defaultPickFolder,
+    pickFolder: defaultPickFolder(overrides.getParentWindow),
     mkdtemp: () => mkdtempSync(join(tmpdir(), 'helm-ew-')),
     rmTemp: (dir) => rmSync(dir, { recursive: true, force: true }),
     exists: existsSync,
@@ -86,7 +105,20 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
           const rows = songsDb.all<SongRow>('SELECT rowid, title, author FROM song');
           const words = new Map<number, string>();
           for (const w of wordsDb.all<WordRow>('SELECT song_id, words FROM word')) {
-            if (typeof w.words === 'string') words.set(w.song_id, w.words);
+            const text = wordsToText(w.words);
+            if (text === undefined) continue;
+            // If the real schema stores one row per slide/verse rather than one per song
+            // (unverified in the spec), append rather than overwrite so every stanza
+            // survives. The join happens on the still-raw RTF, before rtfToText runs, so
+            // a plain "\n\n" would be swallowed as source-file line wrapping (rtfToText
+            // discards bare \r/\n); two RTF paragraph marks are what actually survive
+            // through to a blank-line slide break in the tidied output. The trailing space
+            // after the marks is a required RTF word delimiter, not stray content — without
+            // it, a control-word letter scan has no boundary and silently fuses the second
+            // \par with the next fragment's first word (e.g. "\par\parVerse" is read as one
+            // unrecognized control word, dropping "Verse" entirely).
+            const prev = words.get(w.song_id);
+            words.set(w.song_id, prev === undefined ? text : `${prev}\\par\\par ${text}`);
           }
 
           const songs: ScannedSong[] = [];

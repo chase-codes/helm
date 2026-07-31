@@ -8,6 +8,21 @@ import type { ImportSource, SourceDb } from './types';
 
 const FIXTURE = join(__dirname, '__fixtures__', 'ew');
 
+// A minimal fake SourceDb pair, bypassing real sqlite entirely, for tests that only care
+// about how `word` rows are turned into ScannedSong.text (BLOB decoding, row collisions).
+const fakeSource = (songRows: unknown[], wordRows: unknown[]): ImportSource =>
+  createEasyWorshipSource({
+    pickFolder: () => Promise.resolve('/src'),
+    mkdtemp: () => '/fake-tmp',
+    rmTemp: () => {},
+    copy: () => {},
+    exists: () => true,
+    openDb: (path) => {
+      const rows = path.endsWith('SongWords.db') ? wordRows : songRows;
+      return { all: <T,>() => rows as T[], close: () => {} };
+    }
+  });
+
 // Mirrors the production opener's contract using node:sqlite, so the test never loads
 // better-sqlite3 (wrong ABI under stock Node — see testDb.ts).
 const openTestSourceDb = (path: string): SourceDb => {
@@ -106,7 +121,11 @@ describe('easyworship source', () => {
       }
     });
     await s.scan({ path: FIXTURE });
+    // .every() on an empty array is vacuously true, so pair each with a length assertion —
+    // otherwise a regression that opened nothing (or made no temp dir) would still pass.
+    expect(opened).toHaveLength(2);
     expect(opened.every((p) => !p.startsWith(FIXTURE))).toBe(true);
+    expect(temps).toHaveLength(1);
     expect(temps.every((d) => !existsSync(d))).toBe(true);
   });
 
@@ -124,6 +143,43 @@ describe('easyworship source', () => {
       }
     });
     await expect(s.scan({ path: FIXTURE })).rejects.toThrow('boom');
+    expect(temps).toHaveLength(1);
     expect(temps.every((d) => !existsSync(d))).toBe(true);
+  });
+
+  // IMPORTANT: both better-sqlite3 and node:sqlite return a Buffer/Uint8Array (not a JS
+  // string) for a BLOB-affinity column. RTF is frequently stored as a blob, so a naive
+  // `typeof w.words === 'string'` check would drop every row and land the whole library in
+  // `unreadable`.
+  it('imports lyrics whose words column comes back as a BLOB (Buffer/Uint8Array)', async () => {
+    const rtf = String.raw`{\rtf1\ansi Verse 1\par Amazing grace\par}`;
+    const s = fakeSource(
+      [{ rowid: 1, title: 'Blob Song', author: 'A. Author' }],
+      [{ song_id: 1, words: Buffer.from(rtf, 'utf8') }]
+    );
+    const outcome = await s.scan({ path: '/src' });
+    expect(outcome.unreadable).toEqual([]);
+    expect(outcome.songs).toEqual([{ title: 'Blob Song', author: 'A. Author', text: 'Verse 1\nAmazing grace' }]);
+  });
+
+  // IMPORTANT: Map.set on collision silently keeps only the last `word` row for a song_id.
+  // If the real schema stores one row per slide/verse (unverified in the spec), every song
+  // would import carrying only its final stanza — and the bug is invisible in review since
+  // the song still looks normal, just short.
+  it('appends rather than overwrites when a song has more than one word row', async () => {
+    // Word rows are raw RTF (as SongWords.db actually stores them), not plain text — a
+    // literal "\n" in that raw string is source-file wrapping that rtfToText discards, so
+    // the fixture (and the fix's join separator) both use RTF paragraph marks.
+    const s = fakeSource(
+      [{ rowid: 1, title: 'Two Stanza Song', author: '' }],
+      [
+        { song_id: 1, words: String.raw`Verse 1\par First stanza\par` },
+        { song_id: 1, words: String.raw`Verse 2\par Second stanza\par` }
+      ]
+    );
+    const outcome = await s.scan({ path: '/src' });
+    expect(outcome.songs).toEqual([
+      { title: 'Two Stanza Song', author: '', text: 'Verse 1\nFirst stanza\n\nVerse 2\nSecond stanza' }
+    ]);
   });
 });
