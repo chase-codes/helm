@@ -71,7 +71,7 @@ export interface ScanOutcome {
 export interface ImportSourceInfo { id: string; label: string }
 export type Located = { path: string };
 export type LocateFailure = {
-  error: 'no-source-files' | 'canceled' | 'all-candidates-empty';
+  error: 'no-source-files' | 'canceled' | 'all-candidates-empty' | 'candidates-unreadable';
   expected?: string;
 };
 export type LocateResult = Located | LocateFailure;

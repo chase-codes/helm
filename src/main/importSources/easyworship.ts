@@ -161,10 +161,6 @@ function slideUidCount(value: string | null | undefined): number | null {
 export interface LibraryCandidate {
   /** The directory holding Songs.db and SongWords.db. */
   path: string;
-  /** On-disk filenames, preserved with their real case so a case-sensitive filesystem can
-   *  still open what a case-insensitive match found. */
-  songsFile: string;
-  wordsFile: string;
   songs: number;
   label: string;
 }
@@ -217,34 +213,43 @@ function appVersionOf(deps: EasyWorshipDeps, dataDir: string): string | null {
 // title, per the committed fixture) to satisfy the count, and merely considering that index
 // trips "no such collation sequence" on a connection that never registered it. `NOT INDEXED`
 // forces a plain table scan so the count never looks at the index at all.
-function countCandidate(deps: EasyWorshipDeps, dataDir: string): LibraryCandidate | null {
-  const entries = deps.listDir(dataDir);
-  const names = libraryFilesIn(entries);
-  if (!names) return null;
-  const [songsFile, wordsFile] = names;
-  const temp = deps.mkdtemp();
+//
+// Everything that can throw for this one directory — listing it, making the temp dir, copying,
+// opening, counting — lives inside the try below, so a bad candidate (locked file, corrupt
+// database, a vanished mount) is never fatal to the whole locate. The `failed: true` result is
+// how the caller tells "this folder has zero songs" apart from "this folder could not be read
+// at all" — the two must not be reported to the operator as the same thing. A `console.warn`
+// still runs alongside it, but only as a developer aid when running from source: in a packaged
+// Electron app nobody ever sees the main-process console, so it reaches no operator.
+function countCandidate(deps: EasyWorshipDeps, dataDir: string): { candidate: LibraryCandidate | null; failed: boolean } {
   try {
-    copyWithSidecars(deps, dataDir, temp, songsFile);
-    const db = deps.openDb(join(temp, songsFile));
+    const entries = deps.listDir(dataDir);
+    const names = libraryFilesIn(entries);
+    if (!names) return { candidate: null, failed: false };
+    const [songsFile] = names;
+    const temp = deps.mkdtemp();
     try {
-      const songs = db.all<{ n: number }>('SELECT COUNT(*) AS n FROM song NOT INDEXED')[0]?.n ?? 0;
-      return {
-        path: dataDir,
-        songsFile,
-        wordsFile,
-        songs,
-        label: describeCandidate(dataDir, songs, appVersionOf(deps, dataDir))
-      };
+      copyWithSidecars(deps, dataDir, temp, songsFile);
+      const db = deps.openDb(join(temp, songsFile));
+      try {
+        const songs = db.all<{ n: number }>('SELECT COUNT(*) AS n FROM song NOT INDEXED')[0]?.n ?? 0;
+        return {
+          candidate: {
+            path: dataDir,
+            songs,
+            label: describeCandidate(dataDir, songs, appVersionOf(deps, dataDir))
+          },
+          failed: false
+        };
+      } finally {
+        db.close();
+      }
     } finally {
-      db.close();
+      deps.rmTemp(temp);
     }
   } catch (err) {
-    // Dropped, never fatal to the whole locate — but said out loud, because "this folder was
-    // silently not offered" is otherwise indistinguishable from "this folder does not exist".
     console.warn(`easyworship: skipping unreadable library at "${dataDir}"`, err);
-    return null;
-  } finally {
-    deps.rmTemp(temp);
+    return { candidate: null, failed: true };
   }
 }
 
@@ -279,15 +284,22 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
       const dirs = findCandidateDirs(deps, picked, 0);
       if (dirs.length === 0) return { error: 'no-source-files', expected: EW_DEFAULT_PATH };
 
-      const candidates = dirs
-        .map((d) => countCandidate(deps, d))
+      const counted = dirs.map((d) => countCandidate(deps, d));
+      const candidates = counted
+        .map((r) => r.candidate)
         .filter((c): c is LibraryCandidate => c !== null && c.songs > 0);
 
-      // Distinct from 'no-source-files' on purpose. A version directory holding a complete
-      // schema and zero songs is a real, observed state (Default_1\v6.1.2 in EW8 spec §1.2),
-      // and reporting it as "not found" would send the operator hunting for a folder they
-      // already found.
-      if (candidates.length === 0) return { error: 'all-candidates-empty', expected: EW_DEFAULT_PATH };
+      if (candidates.length === 0) {
+        // Two different situations land here, and they must not be reported as the same thing.
+        // A candidate that FAILED (locked file, corrupt database, a copy error) is not the same
+        // as a candidate that opened fine and genuinely holds zero songs — a version directory
+        // holding a complete schema and zero songs is a real, observed state (Default_1\v6.1.2
+        // in EW8 spec §1.2). Telling the operator "no songs" about a library that could not
+        // even be read sends them hunting for a folder that does exist.
+        return counted.some((r) => r.failed)
+          ? { error: 'candidates-unreadable', expected: EW_DEFAULT_PATH }
+          : { error: 'all-candidates-empty', expected: EW_DEFAULT_PATH };
+      }
       if (candidates.length === 1) return { path: candidates[0].path };
 
       // Ranked by song count, never by version string: the higher version directory was the

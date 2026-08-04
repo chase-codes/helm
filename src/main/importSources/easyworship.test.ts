@@ -479,6 +479,62 @@ describe('easyworship source', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  // The distinction FIX 1 exists for: a candidate that opened fine and genuinely has zero
+  // songs must not be reported the same way as one that could not be read at all (locked
+  // file, corrupt database, EBUSY) — the wizard's copy for the two is different and the wrong
+  // one sends the operator hunting for a folder that does exist.
+  it('reports a candidate that fails to open as unreadable, not as empty', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-unreadable-'));
+    const data = join(root, 'Default', 'v6.1', 'Databases', 'Data');
+    makeLibrary(data, [{ title: 'Locked' }]);
+    const s = createEasyWorshipSource({
+      openDb: () => {
+        throw new Error('EBUSY: resource busy or locked');
+      },
+      pickFolder: () => Promise.resolve(root)
+    });
+    expect(await s.locate()).toEqual({ error: 'candidates-unreadable', expected: EW_DEFAULT_PATH });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does not let a broken candidate block a good sibling', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-mixed-'));
+    const broken = join(root, 'Default', 'v6.1', 'Databases', 'Data');
+    const good = join(root, 'Default_1', 'v6.1', 'Databases', 'Data');
+    makeLibrary(broken, [{ title: 'Locked' }]);
+    makeLibrary(good, [{ title: 'Fine' }]);
+    const s = createEasyWorshipSource({
+      openDb: openTestSourceDb,
+      pickFolder: () => Promise.resolve(root),
+      // `copy`'s source path names the original library directory, unlike `openDb`'s (which
+      // only ever sees an anonymous temp-dir path) — so this is the seam that can single out
+      // the broken candidate deterministically regardless of traversal order.
+      copy: (src, dest) => {
+        if (src.startsWith(broken)) throw new Error('EBUSY: resource busy or locked');
+        copyFileSync(src, dest);
+      }
+    });
+    expect(await s.locate()).toEqual({ path: good });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does not reject the whole locate when a candidate cannot even be counted (mkdtemp throws)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-mkdtemp-fail-'));
+    const data = join(root, 'Default', 'v6.1', 'Databases', 'Data');
+    makeLibrary(data, [{ title: 'One' }]);
+    const s = createEasyWorshipSource({
+      openDb: openTestSourceDb,
+      pickFolder: () => Promise.resolve(root),
+      mkdtemp: () => {
+        throw new Error('ENOSPC: no space left on device');
+      }
+    });
+    // Before FIX 1, mkdtemp sat outside countCandidate's try, so this rejected the whole
+    // locate() promise instead of returning a typed error.
+    await expect(s.locate()).resolves.toEqual({ error: 'candidates-unreadable', expected: EW_DEFAULT_PATH });
+    rmSync(root, { recursive: true, force: true });
+  });
+
   it('asks which library to use when more than one holds songs, ranked by song count', async () => {
     const root = mkdtempSync(join(tmpdir(), 'ew-two-'));
     const small = join(root, 'Default', 'v6.1', 'Databases', 'Data');
