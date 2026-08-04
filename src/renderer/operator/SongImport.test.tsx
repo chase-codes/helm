@@ -205,4 +205,23 @@ describe('SongImport', () => {
     expect(await screen.findByText(/too broad to search/)).toBeTruthy();
     expect(screen.queryByText(/holds no songs/)).toBeNull();
   });
+
+  // FIX (SongImport.tsx ~line 226): the detail text was gated on `sourceStanzas !== undefined`
+  // but interpolated `parsedStanzas`, so a malformed row carrying one field without the other
+  // rendered the literal string "undefined slides · EasyWorship counts N". ImportReviewRow
+  // declares the two fields independently optional, so this shape is representable even though
+  // the EasyWorship adapter never actually produces it (see easyworship.ts). The CHECK badge
+  // stays gated on `sourceStanzas` alone; only the detail text must fall back.
+  it('never renders "undefined" when a row carries sourceStanzas without parsedStanzas', async () => {
+    installHelm({
+      token: 't',
+      rows: [{ title: 'Malformed', author: '', stanzas: 4, status: 'new', sourceStanzas: 3 }]
+    });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText('Malformed')).toBeTruthy();
+    expect(screen.getByText('CHECK')).toBeTruthy();
+    expect(screen.getByText('4 stanzas')).toBeTruthy();
+    expect(screen.queryByText(/undefined/)).toBeNull();
+  });
 });

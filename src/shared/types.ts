@@ -95,11 +95,16 @@ export interface ImportReviewRow {
   status: 'new' | 'duplicate' | 'unreadable';
   reason?: string;
   /** The source's own slide count, present only when it disagrees with ours. Orthogonal to
-   *  `status`: a song can be `new` and still be worth a second look. */
+   *  `status`: a song can be `new` and still be worth a second look. The adapter sets this and
+   *  `parsedStanzas` as a pair — always both present or both absent — but each is independently
+   *  optional in this type, so a renderer must check both before trusting either is there. */
   sourceStanzas?: number;
   /** Our own slide count for this song, on the same basis as `sourceStanzas` — present only
    *  when the two disagree. This, not `stanzas`, is the number to render beside `sourceStanzas`
-   *  in a CHECK badge: `stanzas` excludes empty slides and is not the number that was compared. */
+   *  in a CHECK badge: `stanzas` excludes empty slides and is not the number that was compared.
+   *  The adapter sets this and `sourceStanzas` as a pair — always both present or both absent —
+   *  but each is independently optional in this type, so a renderer must check both before
+   *  trusting either is there. */
   parsedStanzas?: number;
 }
 export interface SongImportScan {
