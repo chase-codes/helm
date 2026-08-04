@@ -127,17 +127,11 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
         let wordsDb: SourceDb | null = null;
         try {
           wordsDb = deps.openDb(join(temp, WORDS_DB));
-          // No WHERE and no ORDER BY against a TEXT column: EasyWorship declares
-          // COLLATE UTF8_U_CI on its text columns (title, author, words) and better-sqlite3
-          // cannot register it, so any comparison or sort touching one of those throws
-          // "no such collation sequence". rowid carries plain INTEGER affinity, is unaffected
-          // by that collation, and is the only column either query orders on.
-          //
-          // `word` stores one row per stanza for a multi-stanza song (see the append loop
-          // below), so the order those rows arrive in is significant, not cosmetic: ORDER BY
-          // rowid asks SQLite for that order directly, and the .sort() below re-asserts it in
-          // JS so correctness doesn't depend on an unspecified engine scan order surviving
-          // between here and the loop.
+          // Neither query below may use WHERE, ORDER BY, DISTINCT, or GROUP BY against a TEXT
+          // column: EasyWorship declares COLLATE UTF8_U_CI on its text columns (title, author,
+          // words) and better-sqlite3 cannot register it, so any comparison or sort touching
+          // one of those throws "no such collation sequence" at runtime. Both queries below
+          // are plain unfiltered, unordered scans for exactly that reason.
           const rows = songsDb.all<SongRow>('SELECT rowid, title, author FROM song');
           // Exactly one `word` row per song: SongWords.db declares
           // `CREATE UNIQUE INDEX word_song_id ON word (song_id)`, and the EW8 library spec

@@ -189,9 +189,10 @@ describe('easyworship source', () => {
   });
 
   // The reason the fixture declares COLLATE UTF8_U_CI on `word.words` too: this proves that
-  // ordering by rowid (INTEGER affinity, untouched by the collation) doesn't reintroduce the
-  // "no such collation sequence" crash that a naive ORDER BY on a text column would.
-  it('orders word rows by rowid without tripping the words-table collation', async () => {
+  // the unfiltered, unordered `SELECT song_id, words FROM word` scan doesn't trip the
+  // "no such collation sequence" crash that a WHERE/ORDER BY/DISTINCT/GROUP BY against a text
+  // column would.
+  it('reads the word table without tripping its words-table collation', async () => {
     const outcome = await source(FIXTURE).scan({ path: FIXTURE });
     expect(outcome.songs.map((s) => s.title)).toEqual(['Amazing Grace', 'Blessed Assurance']);
   });
