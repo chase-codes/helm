@@ -207,8 +207,10 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
             <>
               <div style={{ fontSize: '12px', color: T.faint, marginBottom: '10px' }}>
                 FOUND {plural(step.rows.length, 'SONG', 'SONGS').toUpperCase()}
-                {step.withLayouts !== undefined && step.withLayouts > 0 &&
-                  ` · ${step.withLayouts.toLocaleString()} WITH EASYWORSHIP LAYOUTS`}
+                {step.withLayouts !== undefined &&
+                  (step.withLayouts > 0
+                    ? ` · ${step.withLayouts.toLocaleString()} WITH EASYWORSHIP LAYOUTS`
+                    : ' · NONE WITH EASYWORSHIP LAYOUTS')}
               </div>
               {step.rows.map((r, i) => (
                 <div key={`${r.title}-${i}`} style={rowStyle}>

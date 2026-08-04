@@ -161,6 +161,13 @@ describe('SongImport', () => {
     expect(screen.getByText('2 stanzas')).toBeTruthy();
   });
 
+  it('renders NONE for a zero layout count, distinct from saying nothing at all', async () => {
+    installHelm({ token: 't', rows: ROWS, withLayouts: 0 });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText(/NONE WITH EASYWORSHIP LAYOUTS/)).toBeTruthy();
+  });
+
   it('explains a candidates-unreadable failure without calling the library empty', async () => {
     installHelm({ error: 'candidates-unreadable', expected: 'C:\\Softouch\\Easyworship\\' });
     renderModal();
