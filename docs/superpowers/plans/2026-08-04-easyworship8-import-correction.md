@@ -376,6 +376,26 @@ Append inside the existing `describe('easyworship source', …)` block in `src/m
 Run: `npx vitest run src/main/importSources/easyworship.test.ts`
 Expected: FAIL — the space test yields `'CHORUS\nline one\n\nline two'`, the `\line` test yields `'Verse 1\nfirst\n\nsecond'`, the title test keeps six spaces, and the collision test yields `'keep me\n\nnot me'`.
 
+- [ ] **Step 2b: Delete the two tests that pin the disproven append**
+
+`src/main/importSources/easyworship.test.ts` contains two pre-existing tests that assert the
+opposite of the new `'keeps the first word row…'` test, for the identical input shape:
+
+- `'appends rather than overwrites when a song has more than one word row'`
+- `'assembles multi-row stanzas in rowid order, even when rows arrive in a different order'`
+
+**Delete both.** They were written against the original design's explicitly *unverified* guess
+that `word` might store one row per stanza. The EW8 spec disproves it: `SongWords.db` declares
+`CREATE UNIQUE INDEX word_song_id ON word (song_id)`, and both real libraries were 1:1 with no
+orphans in either direction (1,997↔1,997 and 223↔223). The behaviour they pin cannot occur, and
+if it ever did it would silently fuse two songs.
+
+Coverage is not lost — it is deliberately inverted. The new `'keeps the first word row and never
+fuses two songs when song_id repeats'` test covers the same input with the correct expectation.
+
+This is the only pre-existing adapter test deletion in the plan. The four shared-unit test files
+in Global Constraints remain untouchable.
+
 - [ ] **Step 3: Rewrite the scan body**
 
 In `src/main/importSources/easyworship.ts`, change the import on line 5 from `rtfToText` to `rtfToParagraphs`, and add the `ewSlideBreaks` import:
