@@ -4,7 +4,13 @@
 // This is EasyWorship-specific and deliberately NOT part of importTidy's source-agnostic rule
 // set: it encodes one program's convention about what a blank paragraph means. Its output is
 // what makes the generic pipeline safe downstream — after this runs, a blank line means a
-// slide break and nothing else does, so importTidy and splitToSlides need no special cases.
+// slide break and nothing else does, for everything EasyWorship's own editor can produce, so
+// importTidy and splitToSlides need no special cases. Two things downstream can still falsify
+// that claim, both unreachable from EasyWorship's editor and both theoretical rather than
+// observed: importTidy's CR→LF rule can turn a literal `\r` inside a paragraph (reachable only
+// via an RTF `\'0d` escape) into a newline after these slide rules have already run, and its
+// artifact filter can delete a slide whose only content is `.`, `()` or `[]`, collapsing it away
+// unflagged.
 
 export interface EwSplit {
   /** Slide count exactly as EasyWorship counts it, including a leading empty slide. This is
