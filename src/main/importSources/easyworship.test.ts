@@ -12,6 +12,13 @@ const WORDS_DB_NAME = 'SongWords.db';
 
 // A minimal fake SourceDb pair, bypassing real sqlite entirely, for tests that only care
 // about how `word` rows are turned into ScannedSong.text (BLOB decoding, row collisions).
+//
+// NOTE: `all` ignores the SQL it's handed, including `PRAGMA table_info(...)` calls — so
+// `columnsOf` gets song/word rows back instead of column-name rows, and builds
+// `new Set([undefined])`. Every fake-based test therefore runs as if `author`, `slide_uids`
+// and `presentation_id` were all absent from the schema (harmless for what these tests check,
+// but the reason `withLayouts`/`sourceStanzas` never appear here — don't go looking for a bug
+// in the adapter if a fake-based test doesn't see them).
 const fakeSource = (songRows: unknown[], wordRows: unknown[]): ImportSource =>
   createEasyWorshipSource({
     pickFolder: () => Promise.resolve('/src'),
@@ -102,7 +109,8 @@ const makeLibrary = (
   return dir;
 };
 
-const tempLibrary = (name: string): string => join(mkdtempSync(join(tmpdir(), `ew-${name}-`)), 'Data');
+const tempLibrary = (name: string): string =>
+  join(mkdtempSync(join(tmpdir(), `ew-${name}-`)), 'Data');
 
 describe('easyworship source', () => {
   it('reports the two expected files when the folder does not hold them', async () => {
@@ -360,6 +368,27 @@ describe('easyworship source', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("compares against EasyWorship's slide count, not Helm's section count", async () => {
+    // A leading blank paragraph is what pulls the two counts apart: paragraphs
+    // ["", "A", "", "B", ""] give ewSlideBreaks a slideCount of 3 (rule 3 — a leading break
+    // still yields a leading empty slide), but the imported text ('A\n\nB') has no leading
+    // blank line, so splitToSlides(text).length is only 2. slide_uids agrees with the FORMER.
+    // If the adapter ever compared against splitToSlides(text).length instead, this fixture
+    // would wrongly gain a sourceStanzas flag (3 !== 2) despite the source and our parse
+    // actually agreeing (3 === 3) — don't "simplify" this fixture, that's the point of it.
+    const dir = makeLibrary(tempLibrary('leadingblank'), [
+      {
+        title: 'Leading Blank',
+        rtf: '{\\rtf1 \\par A\\par \\par B\\par}',
+        slideUids: '1-A,1-B,1-C'
+      }
+    ]);
+    const outcome = await source(dir).scan({ path: dir });
+    const song = outcome.songs.find((s) => s.title === 'Leading Blank');
+    expect(song).not.toHaveProperty('sourceStanzas');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('imports normally when the slide_uids column is absent', async () => {
     const dir = makeLibrary(tempLibrary('nouids'), [{ title: 'Bare' }], { slideUids: false });
     const outcome = await source(dir).scan({ path: dir });
@@ -384,18 +413,30 @@ describe('easyworship source', () => {
   it('imports normally, with no layout count, when presentation_id is absent', async () => {
     // The older schema in the EW8 spec §2.4 has no song.presentation_id, while reporting the
     // same schema version as one that does. Absent must mean "unknown", not "zero".
-    const dir = makeLibrary(tempLibrary('nopid'), [{ title: 'Old Schema' }], { presentationId: false });
+    const dir = makeLibrary(tempLibrary('nopid'), [{ title: 'Old Schema' }], {
+      presentationId: false
+    });
     const outcome = await source(dir).scan({ path: dir });
     expect(outcome.songs.map((s) => s.title)).toEqual(['Old Schema']);
-    expect(outcome.withLayouts).toBeUndefined();
+    expect(outcome).not.toHaveProperty('withLayouts');
     rmSync(dir, { recursive: true, force: true });
   });
 
   it('ignores an unparseable slide_uids value rather than failing the song', async () => {
-    const dir = makeLibrary(tempLibrary('baduids'), [{ title: 'Junk', slideUids: '' }]);
+    const dir = makeLibrary(tempLibrary('baduids'), [
+      { title: 'Empty', slideUids: '' },
+      { title: 'Null', slideUids: undefined },
+      { title: 'Whitespace', slideUids: ' , ' }
+    ]);
+    // node:sqlite has no way to bind an explicit SQL NULL through the fixture's positional
+    // `?` insert, so the NULL case is produced by updating the row after insert.
+    const w = new DatabaseSync(join(dir, WORDS_DB_NAME));
+    w.exec('UPDATE word SET slide_uids = NULL WHERE song_id = 2');
+    w.close();
+
     const outcome = await source(dir).scan({ path: dir });
-    expect(outcome.songs[0].title).toBe('Junk');
-    expect(outcome.songs[0]).not.toHaveProperty('sourceStanzas');
+    expect(outcome.songs.map((s) => s.title)).toEqual(['Empty', 'Null', 'Whitespace']);
+    for (const song of outcome.songs) expect(song).not.toHaveProperty('sourceStanzas');
     rmSync(dir, { recursive: true, force: true });
   });
 });
