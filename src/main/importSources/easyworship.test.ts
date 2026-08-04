@@ -369,6 +369,26 @@ describe('easyworship source', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  // The review badge renders parsedStanzas beside sourceStanzas — the two numbers actually
+  // compared — never `splitToSlides(text).length`, which excludes empty slides and can equal
+  // sourceStanzas even when the two counts that were actually compared disagree. The two
+  // fields must appear together and be absent together, or the UI could render one without
+  // the other.
+  it('sets parsedStanzas alongside sourceStanzas only when they disagree, never one without the other', async () => {
+    const dir = makeLibrary(tempLibrary('parsed'), [
+      // Two slides by our rules; EasyWorship claims three.
+      { title: 'Disagrees', rtf: '{\\rtf1 A\\par \\par B\\par}', slideUids: '1-A,1-B,1-C' },
+      { title: 'Agrees', rtf: '{\\rtf1 A\\par \\par B\\par}', slideUids: '1-A,1-B' }
+    ]);
+    const outcome = await source(dir).scan({ path: dir });
+    const disagrees = outcome.songs.find((s) => s.title === 'Disagrees');
+    expect(disagrees).toMatchObject({ sourceStanzas: 3, parsedStanzas: 2 });
+    const agrees = outcome.songs.find((s) => s.title === 'Agrees');
+    expect(agrees).not.toHaveProperty('sourceStanzas');
+    expect(agrees).not.toHaveProperty('parsedStanzas');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("compares against EasyWorship's slide count, not Helm's section count", async () => {
     // A leading blank paragraph is what pulls the two counts apart: paragraphs
     // ["", "A", "", "B", ""] give ewSlideBreaks a slideCount of 3 (rule 3 — a leading break

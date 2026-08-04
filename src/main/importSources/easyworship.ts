@@ -376,11 +376,14 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
             // empty slides. Helm's eventual section count is a different, smaller number, and
             // comparing against that would flag hundreds of songs that are perfectly fine.
             const expected = hasUids ? slideUidCount(wordRow?.slide_uids) : null;
+            const disagrees = expected !== null && expected !== slideCount;
             songs.push({
               title,
               author: (row.author ?? '').trim(),
               text,
-              ...(expected !== null && expected !== slideCount ? { sourceStanzas: expected } : {})
+              // Both fields carry the two numbers actually compared, so a reviewer sees what was
+              // checked rather than a different, unrelated count. Set together, absent together.
+              ...(disagrees ? { sourceStanzas: expected, parsedStanzas: slideCount } : {})
             });
           }
           songs.sort((a, b) => a.title.localeCompare(b.title));

@@ -71,7 +71,8 @@ export function createSongImport(
           author: song.author,
           stanzas: splitToSlides(song.text).length,
           status: duplicate ? 'duplicate' : 'new',
-          ...(song.sourceStanzas === undefined ? {} : { sourceStanzas: song.sourceStanzas })
+          ...(song.sourceStanzas === undefined ? {} : { sourceStanzas: song.sourceStanzas }),
+          ...(song.parsedStanzas === undefined ? {} : { parsedStanzas: song.parsedStanzas })
         });
       }
       for (const u of outcome.unreadable) {

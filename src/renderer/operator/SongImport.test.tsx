@@ -140,18 +140,24 @@ describe('SongImport', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('marks a row whose stanza count disagrees with the source', async () => {
+  it('marks a row whose stanza count disagrees with the source, showing the numbers actually compared', async () => {
     installHelm({
       token: 't',
       rows: [
-        { title: 'Flagged', author: '', stanzas: 2, status: 'new', sourceStanzas: 3 },
+        // stanzas (splitToSlides' count, excludes empty slides) deliberately differs from both
+        // parsedStanzas and sourceStanzas here, so the test fails if the badge's text ever
+        // regresses to rendering `r.stanzas` instead of the compared pair.
+        { title: 'Flagged', author: '', stanzas: 5, status: 'new', sourceStanzas: 3, parsedStanzas: 2 },
         { title: 'Clean', author: '', stanzas: 2, status: 'new' }
       ]
     });
     renderModal();
     fireEvent.click(await screen.findByText('EasyWorship'));
     expect(await screen.findByText('CHECK')).toBeTruthy();
-    expect(screen.getByText('2 stanzas · EasyWorship counts 3')).toBeTruthy();
+    // The two numbers beside CHECK are the ones actually compared (parsedStanzas vs
+    // sourceStanzas), and they disagree — never two equal numbers beside a CHECK badge.
+    expect(screen.getByText('2 slides · EasyWorship counts 3')).toBeTruthy();
+    expect(screen.queryByText(/^5 /)).toBeNull();
     expect(screen.getByText('2 stanzas')).toBeTruthy();
   });
 

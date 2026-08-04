@@ -221,7 +221,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
                     {r.status === 'unreadable'
                       ? r.reason
                       : r.sourceStanzas !== undefined
-                        ? `${plural(r.stanzas, 'stanza', 'stanzas')} · EasyWorship counts ${r.sourceStanzas}`
+                        ? `${r.parsedStanzas} slides · EasyWorship counts ${r.sourceStanzas}`
                         : plural(r.stanzas, 'stanza', 'stanzas')}
                   </span>
                 </div>
