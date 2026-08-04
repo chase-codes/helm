@@ -25,6 +25,45 @@ real library and check three things:
 3. **A spot-check of a flagged song's slides** — pick one CHECK-badged song and confirm the
    imported slide breaks match what EasyWorship shows on screen for that song.
 
+## If a real church already imported with the OLD importer, before this correction
+
+**Do not just re-run the import over an existing library after upgrading to this correction.**
+It will silently produce a mix of skipped-and-uncorrected songs and duplicated songs, not a
+clean re-import.
+
+Why: the dedupe key (`importKey.ts`) is built from a song's title plus its post-split lyrics.
+`splitToSlides` promotes a section's first line to a label and strips it out of the lyrics
+before the key is built. This correction moves where EasyWorship's slide boundaries fall (see
+the design spec's "Finding 2" and "Finding 3"), so for any song where a boundary now lands on
+what becomes a label line, the text handed to the dedupe key changes even though the song
+itself did not. Measured example: for the RTF
+`{\rtf1\ansi Amazing grace\line\line Chorus\line Praise God\par}`, the OLD importer produced
+the dedupe key `amazing grace praise god` (the old code flattened `\line\line` into a slide
+break, promoting "Chorus" to a label and stripping it from the key's lyrics); this correction
+produces `amazing grace chorus praise god` (the `\line\line` no longer breaks the slide, so
+"Chorus" stays inside the first section as a lyric line and enters the key).
+
+Consequence, re-running the import after upgrading:
+- A song whose split did **not** change re-imports with the same key as before → seen as a
+  duplicate → **skipped**. It never receives the correction; the church keeps the OLD,
+  possibly-wrong slide breaks for that song, forever, unless someone notices and removes it
+  by hand.
+- A song whose split **did** change re-imports with a different key → seen as new →
+  **imported a second time**, leaving two copies of the same song with two different slide
+  breaks in the library, and no indication to the operator that this happened.
+
+This is strictly a **cross-version** effect. Within a single version of the importer, running
+the import twice against the same library remains idempotent (`songImport.test.ts` pins this).
+It is only re-running *after upgrading the importer itself* that is unsafe, because the
+definition of "the same song" (the dedupe key) shifted underneath already-imported data.
+
+We deliberately did not fix this in code — see the design spec's "Cross-version re-import"
+subsection for why a split-insensitive dedupe key is not the answer.
+
+**Operator guidance:** anyone who already ran the OLD (pre-2026-08-04) importer against a real
+EasyWorship library should **delete those imported songs from Helm and import fresh** with the
+corrected importer, rather than re-running the import over them.
+
 The rest of this note is the original, pre-correction handoff and is kept for history.
 
 ---

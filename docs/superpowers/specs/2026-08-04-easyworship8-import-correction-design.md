@@ -226,6 +226,32 @@ guessed from here.
 - Collapse internal whitespace runs in titles in addition to trimming. Dedupe is
   unaffected: `importKey` already normalises `\s+` on both sides of its comparison.
 
+### 6. Cross-version re-import (documentation only — not fixed in code)
+
+This correction moves where EasyWorship's slide boundaries fall (Findings 2 and 3 above).
+`splitToSlides` promotes a section's first line to a label and strips it from the lyrics before
+`importKey.ts` builds its dedupe key from title + lyrics. When a moved boundary now lands on a
+line that becomes a label, the text fed to the key changes even though the song itself did not.
+
+Measured: for `{\rtf1\ansi Amazing grace\line\line Chorus\line Praise God\par}`, the importer
+shipped before this correction treated `\line\line` as a slide break, promoted "Chorus" to a
+label, and produced the key `amazing grace praise god`. This correction does not break the
+slide on `\line\line` (only `\par` breaks a slide — Finding 3), so "Chorus" stays in the first
+section as a lyric line and the key becomes `amazing grace chorus praise god`.
+
+Consequence for a church that already imported with the OLD importer and then re-imports after
+upgrading: songs whose split did not change are seen as duplicates and **skipped** — they never
+receive the correction — while songs whose split *did* change are seen as new and **imported a
+second time**, leaving two copies with different slide breaks. This is strictly a
+**cross-version** effect; within one version the import stays idempotent.
+
+We are not fixing this in code. A split-insensitive dedupe key would break the scanned-vs-stored
+key equality that `importKey.test.ts` deliberately pins, trading a documented one-time migration
+hazard for an undocumented, permanent weakening of the dedupe guarantee. Instead: operator
+guidance, recorded in `docs/superpowers/notes/2026-07-31-song-import-windows-handoff.md`, is
+that anyone who already ran the OLD importer against a real library should delete those
+imported songs and import fresh rather than re-running the import over them.
+
 ## Deliberately declined
 
 Each of these is a spec recommendation we are choosing not to follow, with the reason.
