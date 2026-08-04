@@ -102,9 +102,9 @@ const makeLibrary = (
       : 'INSERT INTO word (song_id, words) VALUES (?, ?)'
   );
   songs.forEach((song, i) => {
-    const args: unknown[] = [i + 1, song.rtf ?? '{\\rtf1 words\\par}'];
-    if (withUids) args.push(song.slideUids ?? '1-A');
-    insertWord.run(...(args as [number, string, string?]));
+    const rtf = song.rtf ?? '{\\rtf1 words\\par}';
+    if (withUids) insertWord.run(i + 1, rtf, song.slideUids ?? '1-A');
+    else insertWord.run(i + 1, rtf);
   });
   w.close();
   return dir;
