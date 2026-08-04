@@ -169,4 +169,11 @@ describe('SongImport', () => {
     await screen.findByText('Amazing Grace');
     expect(screen.queryByText(/LAYOUTS/)).toBeNull();
   });
+
+  it('explains an empty library differently from a missing one', async () => {
+    installHelm({ error: 'all-candidates-empty', expected: 'C:\\Softouch\\Easyworship\\' });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText(/holds no songs/)).toBeTruthy();
+  });
 });

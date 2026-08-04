@@ -96,7 +96,9 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
           message:
             result.error === 'no-source-files'
               ? "Couldn't find Songs.db and SongWords.db in that folder."
-              : 'That import source is not available.',
+              : result.error === 'all-candidates-empty'
+                ? 'Found an EasyWorship library there, but it holds no songs. EasyWorship keeps more than one library — try another profile or version folder.'
+                : 'That import source is not available.',
           expected: 'expected' in result ? result.expected : undefined
         });
       })

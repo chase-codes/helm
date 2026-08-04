@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { Located, LocateResult, ScanOutcome, ScannedSong, UnreadableSong } from '../../shared/types';
@@ -18,11 +18,23 @@ const WORDS_DB = 'SongWords.db';
 // journal). Their absence is the common case and must not be an error.
 const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
 
-// A template literal cannot end in a single unescaped backslash right before the closing
-// backtick (the lexer reads `\`` as an escaped backtick and never finds the terminator), so
-// the trailing separator is expressed as an escaped string literal instead of String.raw.
-export const EW_DEFAULT_PATH =
-  'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
+// Spelled with a lowercase `w` on disk, though the product is branded "EasyWorship" — it
+// matters when a copied folder is read on a case-sensitive filesystem.
+export const EW_ROOT = 'C:\\Users\\Public\\Documents\\Softouch\\Easyworship';
+
+// A SHAPE, not a location. The profile may be `Default_1`, the version directory may be
+// `v6.1` or `v6.1.2`, and a version directory can hold a full schema with zero songs — so
+// this is only ever shown to orient the operator, never probed as if it existed.
+export const EW_DEFAULT_PATH = `${EW_ROOT}\\<Profile>\\<Version>\\Databases\\Data\\`;
+
+// Exactly the distance from the EasyWorship root down to Data
+// (<root>/<profile>/<version>/Databases/Data), so picking the topmost sensible folder still
+// finds every library while a mis-picked home directory cannot become a whole-disk walk.
+const MAX_DEPTH = 4;
+
+// None of these ever holds the live library. Archive is the one that matters: it can hold a
+// real-looking library that is not the one in use.
+const SKIP_DIRS = new Set(['resources', 'datacache', 'archive', 'locks', 'thumbnails', 'posterframes', 'temp']);
 
 interface SongRow {
   rowid: number;
@@ -39,6 +51,11 @@ export interface EasyWorshipDeps {
   rmTemp: (dir: string) => void;
   exists: (path: string) => boolean;
   copy: (src: string, dest: string) => void;
+  listDir: (path: string) => { name: string; isDir: boolean }[];
+  readText: (path: string) => string | null;
+  /** Which library to import when more than one holds songs. Returns null when the operator
+   *  backs out. Injected so the choice is testable without Electron. */
+  pickCandidate: (candidates: LibraryCandidate[]) => Promise<LibraryCandidate | null>;
   /** Parent for the folder-picker dialog, so it's modal to the operator window instead of
    *  able to surface behind it (which reads as a hang). Mirrors mediaImport's seam. */
   getParentWindow?: () => Electron.BrowserWindow | null;
@@ -76,11 +93,35 @@ function defaultPickFolder(getParentWindow?: () => Electron.BrowserWindow | null
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { dialog } = require('electron') as typeof import('electron');
     const opts = { properties: ['openDirectory'] } as Electron.OpenDialogOptions;
+    if (existsSync(EW_ROOT)) opts.defaultPath = EW_ROOT;
     const parent = getParentWindow?.() ?? null;
     // Without a parent, the dialog isn't modal to the operator window on Windows — the
     // target platform for this migration — and can surface behind it, which reads as a hang.
     const result = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
     return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+  };
+}
+
+function defaultPickCandidate(
+  getParentWindow?: () => Electron.BrowserWindow | null
+): (candidates: LibraryCandidate[]) => Promise<LibraryCandidate | null> {
+  return async (candidates) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { dialog } = require('electron') as typeof import('electron');
+    const buttons = [...candidates.map((c) => c.label), 'Cancel'];
+    const opts: Electron.MessageBoxOptions = {
+      type: 'question',
+      title: 'Choose a library',
+      message: 'More than one EasyWorship library was found.',
+      detail: 'Pick the one to import from. They are listed with the largest first.',
+      buttons,
+      cancelId: buttons.length - 1 // no defaultId: the operator chooses, nothing is preselected
+    };
+    const parent = getParentWindow?.() ?? null;
+    const { response } = parent
+      ? await dialog.showMessageBox(parent, opts)
+      : await dialog.showMessageBox(opts);
+    return response === buttons.length - 1 ? null : candidates[response];
   };
 }
 
@@ -117,6 +158,96 @@ function slideUidCount(value: string | null | undefined): number | null {
   return n > 0 ? n : null;
 }
 
+export interface LibraryCandidate {
+  /** The directory holding Songs.db and SongWords.db. */
+  path: string;
+  /** On-disk filenames, preserved with their real case so a case-sensitive filesystem can
+   *  still open what a case-insensitive match found. */
+  songsFile: string;
+  wordsFile: string;
+  songs: number;
+  label: string;
+}
+
+function libraryFilesIn(entries: { name: string; isDir: boolean }[]): [string, string] | null {
+  const files = entries.filter((e) => !e.isDir);
+  const songs = files.find((f) => f.name.toLowerCase() === SONGS_DB.toLowerCase());
+  const words = files.find((f) => f.name.toLowerCase() === WORDS_DB.toLowerCase());
+  return songs && words ? [songs.name, words.name] : null;
+}
+
+function findCandidateDirs(deps: EasyWorshipDeps, dir: string, depth: number): string[] {
+  let entries: { name: string; isDir: boolean }[];
+  try {
+    entries = deps.listDir(dir);
+  } catch {
+    return []; // unreadable directory (permissions, a vanished mount) is not a failure
+  }
+  const found = libraryFilesIn(entries) ? [dir] : [];
+  if (depth >= MAX_DEPTH) return found;
+  for (const entry of entries) {
+    if (!entry.isDir || SKIP_DIRS.has(entry.name.toLowerCase())) continue;
+    found.push(...findCandidateDirs(deps, join(dir, entry.name), depth + 1));
+  }
+  return found;
+}
+
+// "<profile> (<version>)" pulled off the path, since that is how the operator recognises which
+// library is which. Falls back to the full path when the folder is not laid out that way.
+function describeCandidate(dataDir: string, songs: number, appVersion: string | null): string {
+  const parts = dataDir.split(/[\\/]/).filter(Boolean);
+  const dbIdx = parts.findIndex((p) => p.toLowerCase() === 'databases');
+  const where = dbIdx >= 2 ? `${parts[dbIdx - 2]} (${parts[dbIdx - 1]})` : dataDir;
+  const count = `${songs.toLocaleString()} ${songs === 1 ? 'song' : 'songs'}`;
+  return appVersion ? `${where} — ${count} — EasyWorship ${appVersion}` : `${where} — ${count}`;
+}
+
+// version.dat is two lines: app version, then data schema version. Shown to help the operator
+// tell two libraries apart — never used to infer the schema, which EW8 spec §2.4 proves it
+// cannot do (two libraries reporting 6.5.1.0 differed in 15 columns).
+function appVersionOf(deps: EasyWorshipDeps, dataDir: string): string | null {
+  const raw = deps.readText(join(dataDir, 'version.dat'));
+  const first = raw?.split(/\r?\n/)[0]?.trim();
+  return first ? first : null;
+}
+
+// Counts on a temp copy for the same reason scan does: EasyWorship holds the live files open.
+// COUNT(*) compares no text, so it never NEEDS the UTF8_U_CI collation — but without `NOT
+// INDEXED`, SQLite's planner may still pick the smallest available index (EasyWorship indexes
+// title, per the committed fixture) to satisfy the count, and merely considering that index
+// trips "no such collation sequence" on a connection that never registered it. `NOT INDEXED`
+// forces a plain table scan so the count never looks at the index at all.
+function countCandidate(deps: EasyWorshipDeps, dataDir: string): LibraryCandidate | null {
+  const entries = deps.listDir(dataDir);
+  const names = libraryFilesIn(entries);
+  if (!names) return null;
+  const [songsFile, wordsFile] = names;
+  const temp = deps.mkdtemp();
+  try {
+    copyWithSidecars(deps, dataDir, temp, songsFile);
+    const db = deps.openDb(join(temp, songsFile));
+    try {
+      const songs = db.all<{ n: number }>('SELECT COUNT(*) AS n FROM song NOT INDEXED')[0]?.n ?? 0;
+      return {
+        path: dataDir,
+        songsFile,
+        wordsFile,
+        songs,
+        label: describeCandidate(dataDir, songs, appVersionOf(deps, dataDir))
+      };
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    // Dropped, never fatal to the whole locate — but said out loud, because "this folder was
+    // silently not offered" is otherwise indistinguishable from "this folder does not exist".
+    console.warn(`easyworship: skipping unreadable library at "${dataDir}"`, err);
+    return null;
+  } finally {
+    deps.rmTemp(temp);
+  }
+}
+
 export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}): ImportSource {
   const deps: EasyWorshipDeps = {
     openDb: defaultOpenDb,
@@ -125,6 +256,15 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
     rmTemp: (dir) => rmSync(dir, { recursive: true, force: true }),
     exists: existsSync,
     copy: copyFileSync,
+    listDir: (p) => readdirSync(p, { withFileTypes: true }).map((e) => ({ name: e.name, isDir: e.isDirectory() })),
+    readText: (p) => {
+      try {
+        return readFileSync(p, 'utf8');
+      } catch {
+        return null;
+      }
+    },
+    pickCandidate: defaultPickCandidate(overrides.getParentWindow),
     ...overrides
   };
 
@@ -133,10 +273,28 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
     label: 'EasyWorship',
 
     async locate(): Promise<LocateResult> {
-      const path = await deps.pickFolder();
-      if (!path) return { error: 'canceled' };
-      const hasBoth = deps.exists(join(path, SONGS_DB)) && deps.exists(join(path, WORDS_DB));
-      return hasBoth ? { path } : { error: 'no-source-files', expected: EW_DEFAULT_PATH };
+      const picked = await deps.pickFolder();
+      if (!picked) return { error: 'canceled' };
+
+      const dirs = findCandidateDirs(deps, picked, 0);
+      if (dirs.length === 0) return { error: 'no-source-files', expected: EW_DEFAULT_PATH };
+
+      const candidates = dirs
+        .map((d) => countCandidate(deps, d))
+        .filter((c): c is LibraryCandidate => c !== null && c.songs > 0);
+
+      // Distinct from 'no-source-files' on purpose. A version directory holding a complete
+      // schema and zero songs is a real, observed state (Default_1\v6.1.2 in EW8 spec §1.2),
+      // and reporting it as "not found" would send the operator hunting for a folder they
+      // already found.
+      if (candidates.length === 0) return { error: 'all-candidates-empty', expected: EW_DEFAULT_PATH };
+      if (candidates.length === 1) return { path: candidates[0].path };
+
+      // Ranked by song count, never by version string: the higher version directory was the
+      // empty one in the real sample.
+      candidates.sort((a, b) => b.songs - a.songs);
+      const chosen = await deps.pickCandidate(candidates);
+      return chosen ? { path: chosen.path } : { error: 'canceled' };
     },
 
     async scan(located: Located): Promise<ScanOutcome> {
@@ -144,13 +302,17 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
       // live library for writing.
       const temp = deps.mkdtemp();
       try {
-        copyWithSidecars(deps, located.path, temp, SONGS_DB);
-        copyWithSidecars(deps, located.path, temp, WORDS_DB);
+        const entries = deps.listDir(located.path);
+        const names = libraryFilesIn(entries);
+        if (!names) throw new Error(`easyworship.scan: no library at "${located.path}"`);
+        const [songsFile, wordsFile] = names;
+        copyWithSidecars(deps, located.path, temp, songsFile);
+        copyWithSidecars(deps, located.path, temp, wordsFile);
 
-        const songsDb = deps.openDb(join(temp, SONGS_DB));
+        const songsDb = deps.openDb(join(temp, songsFile));
         let wordsDb: SourceDb | null = null;
         try {
-          wordsDb = deps.openDb(join(temp, WORDS_DB));
+          wordsDb = deps.openDb(join(temp, wordsFile));
           // Neither query below may use WHERE, ORDER BY, DISTINCT, or GROUP BY against a TEXT
           // column: EasyWorship declares COLLATE UTF8_U_CI on its text columns (title, author,
           // words) and better-sqlite3 cannot register it, so any comparison or sort touching

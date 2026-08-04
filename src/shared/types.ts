@@ -70,7 +70,10 @@ export interface ScanOutcome {
 }
 export interface ImportSourceInfo { id: string; label: string }
 export type Located = { path: string };
-export type LocateFailure = { error: 'no-source-files' | 'canceled'; expected?: string };
+export type LocateFailure = {
+  error: 'no-source-files' | 'canceled' | 'all-candidates-empty';
+  expected?: string;
+};
 export type LocateResult = Located | LocateFailure;
 
 export interface ImportReviewRow {

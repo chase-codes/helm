@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { basename, join } from 'path';
-import { createEasyWorshipSource } from './easyworship';
+import { createEasyWorshipSource, EW_DEFAULT_PATH } from './easyworship';
 import type { ImportSource, SourceDb } from './types';
 
 const FIXTURE = join(__dirname, '__fixtures__', 'ew');
@@ -26,6 +26,7 @@ const fakeSource = (songRows: unknown[], wordRows: unknown[]): ImportSource =>
     rmTemp: () => {},
     copy: () => {},
     exists: () => true,
+    listDir: () => [{ name: 'Songs.db', isDir: false }, { name: 'SongWords.db', isDir: false }],
     openDb: (path) => {
       const rows = path.endsWith('SongWords.db') ? wordRows : songRows;
       return { all: <T,>() => rows as T[], close: () => {} };
@@ -118,10 +119,10 @@ describe('easyworship source', () => {
     const located = await source(empty).locate();
     expect(located).toEqual({
       error: 'no-source-files',
-      // A template literal cannot end in a single unescaped backslash right before the
-      // closing backtick (the lexer reads `\`` as an escaped backtick and never finds the
-      // terminator), so the trailing separator is expressed as an escaped string literal.
-      expected: 'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\'
+      // A shape, not a path: the profile and version segments both vary in the wild, and a
+      // version directory can exist while holding zero songs.
+      expected:
+        'C:\\Users\\Public\\Documents\\Softouch\\Easyworship\\<Profile>\\<Version>\\Databases\\Data\\'
     });
     rmSync(empty, { recursive: true, force: true });
   });
@@ -438,5 +439,89 @@ describe('easyworship source', () => {
     expect(outcome.songs.map((s) => s.title)).toEqual(['Empty', 'Null', 'Whitespace']);
     for (const song of outcome.songs) expect(song).not.toHaveProperty('sourceStanzas');
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('finds a library nested below the folder the operator picked', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-nested-'));
+    const data = join(root, 'Default_1', 'v6.1', 'Databases', 'Data');
+    makeLibrary(data, [{ title: 'Nested' }]);
+    expect(await source(root).locate()).toEqual({ path: data });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('ignores a library buried in Archive', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-archive-'));
+    makeLibrary(join(root, 'Default', 'v6.1', 'Databases', 'Archive'), [{ title: 'Stale' }]);
+    expect(await source(root).locate()).toEqual({
+      error: 'no-source-files',
+      expected: EW_DEFAULT_PATH
+    });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('skips a candidate that has zero songs', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-empty-cand-'));
+    makeLibrary(join(root, 'Default_1', 'v6.1.2', 'Databases', 'Data'), []);
+    const live = join(root, 'Default_1', 'v6.1', 'Databases', 'Data');
+    makeLibrary(live, [{ title: 'Real' }]);
+    // Only one non-empty candidate remains, so no picker is shown.
+    expect(await source(root).locate()).toEqual({ path: live });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('reports the empty-library case distinctly from a missing one', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-all-empty-'));
+    makeLibrary(join(root, 'Default', 'v6.1', 'Databases', 'Data'), []);
+    expect(await source(root).locate()).toEqual({
+      error: 'all-candidates-empty',
+      expected: EW_DEFAULT_PATH
+    });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('asks which library to use when more than one holds songs, ranked by song count', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-two-'));
+    const small = join(root, 'Default', 'v6.1', 'Databases', 'Data');
+    const big = join(root, 'Default_1', 'v6.1', 'Databases', 'Data');
+    makeLibrary(small, [{ title: 'One' }]);
+    makeLibrary(big, [{ title: 'A' }, { title: 'B' }, { title: 'C' }]);
+
+    let offered: string[] = [];
+    const s = createEasyWorshipSource({
+      openDb: openTestSourceDb,
+      pickFolder: () => Promise.resolve(root),
+      pickCandidate: (cands) => {
+        offered = cands.map((c) => c.label);
+        return Promise.resolve(cands[0]);
+      }
+    });
+    expect(await s.locate()).toEqual({ path: big });
+    expect(offered[0]).toContain('Default_1 (v6.1)');
+    expect(offered[0]).toContain('3 songs');
+    expect(offered[1]).toContain('Default (v6.1)');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('treats backing out of the library picker as cancellation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-pick-cancel-'));
+    makeLibrary(join(root, 'Default', 'v6.1', 'Databases', 'Data'), [{ title: 'One' }]);
+    makeLibrary(join(root, 'Default_1', 'v6.1', 'Databases', 'Data'), [{ title: 'Two' }]);
+    const s = createEasyWorshipSource({
+      openDb: openTestSourceDb,
+      pickFolder: () => Promise.resolve(root),
+      pickCandidate: () => Promise.resolve(null)
+    });
+    expect(await s.locate()).toEqual({ error: 'canceled' });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does not descend more than four levels below the picked folder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-deep-'));
+    makeLibrary(join(root, 'a', 'b', 'c', 'd', 'e'), [{ title: 'Too Deep' }]);
+    expect(await source(root).locate()).toEqual({
+      error: 'no-source-files',
+      expected: EW_DEFAULT_PATH
+    });
+    rmSync(root, { recursive: true, force: true });
   });
 });
