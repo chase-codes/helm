@@ -17,7 +17,7 @@
 - **Never assume a column, table or file exists.** Two libraries reporting schema `6.5.1.0` differed in 15 columns/tables. Introspect with `PRAGMA table_info` and treat every optional column as nullable.
 - **One bad song never aborts a run.** Collect the failure with the song's title, continue, report at the end.
 - **`node:sqlite` rejects `CREATE TABLE … COLLATE UTF8_U_CI`** with `no such collation sequence` — verified. New test fixtures built with `DatabaseSync` **must omit the `COLLATE` clause**. The committed binary fixture at `src/main/importSources/__fixtures__/ew/` is the only thing that pins the collation hazard, and it must keep working untouched.
-- **These test files must pass unmodified** at every task boundary, as evidence the blast radius is contained: `src/shared/songs/rtfToText.test.ts`, `importTidy.test.ts`, `splitToSlides.test.ts`, `importKey.test.ts`, `src/main/songsRepo.test.ts`.
+- **These test files must pass unmodified** at every task boundary, as evidence the blast radius is contained: `src/shared/songs/importTidy.test.ts`, `splitToSlides.test.ts`, `importKey.test.ts`, `src/main/songsRepo.test.ts`. (`rtfToText.test.ts` is *appended to* in Task 1 and so is not on this list — but every one of its pre-existing cases must keep passing with its assertions unchanged.)
 - Baseline before any change: **62 test files, 526 tests, all passing** (`npm test`).
 - Commit messages: concise conventional-commit subject, no `Co-Authored-By` or `Claude-Session` trailers (see `CLAUDE.md`).
 
