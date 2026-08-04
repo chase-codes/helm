@@ -139,4 +139,34 @@ describe('SongImport', () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it('marks a row whose stanza count disagrees with the source', async () => {
+    installHelm({
+      token: 't',
+      rows: [
+        { title: 'Flagged', author: '', stanzas: 2, status: 'new', sourceStanzas: 3 },
+        { title: 'Clean', author: '', stanzas: 2, status: 'new' }
+      ]
+    });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText('CHECK')).toBeTruthy();
+    expect(screen.getByText('2 stanzas · EasyWorship counts 3')).toBeTruthy();
+    expect(screen.getByText('2 stanzas')).toBeTruthy();
+  });
+
+  it('reports how many songs carry a layout in the source', async () => {
+    installHelm({ token: 't', rows: ROWS, withLayouts: 438 });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText(/438 WITH EASYWORSHIP LAYOUTS/)).toBeTruthy();
+  });
+
+  it('says nothing about layouts when the source cannot report them', async () => {
+    installHelm({ token: 't', rows: ROWS });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    await screen.findByText('Amazing Grace');
+    expect(screen.queryByText(/LAYOUTS/)).toBeNull();
+  });
 });

@@ -70,7 +70,8 @@ export function createSongImport(
           title: song.title,
           author: song.author,
           stanzas: splitToSlides(song.text).length,
-          status: duplicate ? 'duplicate' : 'new'
+          status: duplicate ? 'duplicate' : 'new',
+          ...(song.sourceStanzas === undefined ? {} : { sourceStanzas: song.sourceStanzas })
         });
       }
       for (const u of outcome.unreadable) {
@@ -89,7 +90,7 @@ export function createSongImport(
         skipped,
         unreadable: outcome.unreadable.map((u) => ({ title: u.title, reason: u.reason }))
       });
-      return { token, rows };
+      return { token, rows, ...(outcome.withLayouts === undefined ? {} : { withLayouts: outcome.withLayouts }) };
     },
 
     commit(token) {

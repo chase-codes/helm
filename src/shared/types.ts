@@ -79,8 +79,16 @@ export interface ImportReviewRow {
   stanzas: number;
   status: 'new' | 'duplicate' | 'unreadable';
   reason?: string;
+  /** The source's own slide count, present only when it disagrees with ours. Orthogonal to
+   *  `status`: a song can be `new` and still be worth a second look. */
+  sourceStanzas?: number;
 }
-export interface SongImportScan { token: string; rows: ImportReviewRow[] }
+export interface SongImportScan {
+  token: string;
+  rows: ImportReviewRow[];
+  /** How many songs carry a laid-out slide set in the source, when the source can say. */
+  withLayouts?: number;
+}
 export type SongImportScanResult = SongImportScan | LocateFailure | { error: 'unknown-source' };
 export interface SongImportResult {
   imported: number;

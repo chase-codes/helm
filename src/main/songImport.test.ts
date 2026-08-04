@@ -188,4 +188,34 @@ describe('songImport', () => {
     expect(() => imp.commit(first.token)).toThrow(/token/);
     expect(imp.commit(second.token)).toEqual({ imported: 1, skipped: 0, unreadable: [] });
   });
+
+  it('carries a source slide-count disagreement onto the review row', async () => {
+    const result = await build(
+      fakeSource(
+        outcome([
+          { title: 'Flagged', author: '', text: AMAZING, sourceStanzas: 3 },
+          { title: 'Clean', author: '', text: BLESSED }
+        ])
+      )
+    ).scan('fake');
+    if (!('rows' in result)) throw new Error('expected a scan result');
+    expect(result.rows.find((r) => r.title === 'Flagged')?.sourceStanzas).toBe(3);
+    expect(result.rows.find((r) => r.title === 'Clean')?.sourceStanzas).toBeUndefined();
+  });
+
+  it('imports a flagged song rather than skipping it', async () => {
+    const imp = build(
+      fakeSource(outcome([{ title: 'Flagged', author: '', text: AMAZING, sourceStanzas: 3 }]))
+    );
+    const result = await imp.scan('fake');
+    if (!('rows' in result)) throw new Error('expected a scan result');
+    expect(result.rows[0].status).toBe('new');
+    expect(imp.commit(result.token).imported).toBe(1);
+  });
+
+  it('passes the source layout count through to the scan result', async () => {
+    const withLayouts = { ...outcome([{ title: 'A', author: '', text: AMAZING }]), withLayouts: 7 };
+    const result = await build(fakeSource(withLayouts)).scan('fake');
+    expect('withLayouts' in result && result.withLayouts).toBe(7);
+  });
 });

@@ -16,7 +16,7 @@ type Step =
   | { name: 'source' }
   | { name: 'scanning' }
   | { name: 'error'; message: string; expected?: string }
-  | { name: 'review'; token: string; rows: ImportReviewRow[] }
+  | { name: 'review'; token: string; rows: ImportReviewRow[]; withLayouts?: number }
   | { name: 'importing'; done: number; total: number }
   | { name: 'done'; result: SongImportResult };
 
@@ -79,7 +79,12 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
       .scan(id)
       .then((result) => {
         if ('rows' in result) {
-          setStep({ name: 'review', token: result.token, rows: result.rows });
+          setStep({
+            name: 'review',
+            token: result.token,
+            rows: result.rows,
+            ...(result.withLayouts === undefined ? {} : { withLayouts: result.withLayouts })
+          });
           return;
         }
         if (result.error === 'canceled') {
@@ -198,15 +203,22 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
             <>
               <div style={{ fontSize: '12px', color: T.faint, marginBottom: '10px' }}>
                 FOUND {plural(step.rows.length, 'SONG', 'SONGS').toUpperCase()}
+                {step.withLayouts !== undefined && step.withLayouts > 0 &&
+                  ` · ${step.withLayouts.toLocaleString()} WITH EASYWORSHIP LAYOUTS`}
               </div>
               {step.rows.map((r, i) => (
                 <div key={`${r.title}-${i}`} style={rowStyle}>
                   <span style={badgeStyle(r.status === 'new' ? T.accent : r.status === 'duplicate' ? T.faint : T.live)}>
                     {r.status === 'new' ? 'NEW' : r.status === 'duplicate' ? 'IN HELM' : 'UNREADABLE'}
                   </span>
+                  {r.sourceStanzas !== undefined && <span style={badgeStyle(T.scripture)}>CHECK</span>}
                   <span style={{ fontSize: '13.5px', color: T.text, flex: 1, minWidth: 0 }}>{r.title}</span>
                   <span style={{ fontSize: '12px', color: T.dim }}>
-                    {r.status === 'unreadable' ? r.reason : `${plural(r.stanzas, 'stanza', 'stanzas')}`}
+                    {r.status === 'unreadable'
+                      ? r.reason
+                      : r.sourceStanzas !== undefined
+                        ? `${plural(r.stanzas, 'stanza', 'stanzas')} · EasyWorship counts ${r.sourceStanzas}`
+                        : plural(r.stanzas, 'stanza', 'stanzas')}
                   </span>
                 </div>
               ))}
