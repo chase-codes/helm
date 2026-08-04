@@ -27,14 +27,38 @@ export const EW_ROOT = 'C:\\Users\\Public\\Documents\\Softouch\\Easyworship';
 // this is only ever shown to orient the operator, never probed as if it existed.
 export const EW_DEFAULT_PATH = `${EW_ROOT}\\<Profile>\\<Version>\\Databases\\Data\\`;
 
-// Exactly the distance from the EasyWorship root down to Data
-// (<root>/<profile>/<version>/Databases/Data), so picking the topmost sensible folder still
-// finds every library while a mis-picked home directory cannot become a whole-disk walk.
-const MAX_DEPTH = 4;
+// The distance from the EasyWorship root down to Data (<root>/<profile>/<version>/Databases/
+// Data) is 4, but the real installed path is `…\Softouch\Easyworship\…`, and an operator who
+// picks `…\Softouch` — a natural landing spot, and the parent the dialog may well show — needs
+// one level more to reach it. Raised to 5 to cover that pick. This is only safe because
+// MAX_DIRS_SCANNED bounds the total walk regardless of how deep or wide a mis-picked folder's
+// subtree turns out to be — depth alone no longer has to do that job.
+const MAX_DEPTH = 5;
 
 // None of these ever holds the live library. Archive is the one that matters: it can hold a
 // real-looking library that is not the one in use.
 const SKIP_DIRS = new Set(['resources', 'datacache', 'archive', 'locks', 'thumbnails', 'posterframes', 'temp']);
+
+// Hard budget on directories VISITED (listDir calls) during the walk — not depth, which
+// MAX_DEPTH already bounds, but breadth. SKIP_DIRS only denies seven EasyWorship-internal
+// names; it cannot and must not try to blocklist every OS directory (`windows`, `winsxs`,
+// `appdata`, `node_modules`, …). Without a visit budget, an operator hunting for their library
+// on a machine with a non-default install can plausibly pick a drive root or their user
+// profile, and System32/WinSxS alone hold tens of thousands of directories — enumerating them
+// synchronously on the Electron main process, with no progress and no cancel, reads as a hang.
+// 5,000 is comfortably more than any real EasyWorship-root-relative walk needs (a handful of
+// profile/version directories) while keeping the worst case a sub-second synchronous scan.
+const MAX_DIRS_SCANNED = 5000;
+
+// Mutable state threaded through the recursive walk: how many directories have been visited,
+// whether the budget ran out before the walk finished, and whether any directory along the way
+// could not be listed at all (as opposed to holding zero songs) — the same distinction
+// `countCandidate`'s `failed` flag exists to preserve, just one step earlier in the pipeline.
+interface WalkState {
+  visited: number;
+  truncated: boolean;
+  unreadable: boolean;
+}
 
 interface SongRow {
   rowid: number;
@@ -172,18 +196,31 @@ function libraryFilesIn(entries: { name: string; isDir: boolean }[]): [string, s
   return songs && words ? [songs.name, words.name] : null;
 }
 
-function findCandidateDirs(deps: EasyWorshipDeps, dir: string, depth: number): string[] {
+function findCandidateDirs(deps: EasyWorshipDeps, dir: string, depth: number, state: WalkState): string[] {
+  if (state.truncated) return [];
+  if (state.visited >= MAX_DIRS_SCANNED) {
+    state.truncated = true;
+    return [];
+  }
+  state.visited++;
+
   let entries: { name: string; isDir: boolean }[];
   try {
     entries = deps.listDir(dir);
   } catch {
-    return []; // unreadable directory (permissions, a vanished mount) is not a failure
+    // Unreadable directory (permissions, a vanished mount) is not a failure of the whole walk
+    // — a permission-denied subdirectory deeper in a broad tree is normal and must stay
+    // silent. It only matters when it's the reason the walk ends with nothing at all; that
+    // check happens in locate(), once the whole walk is done.
+    state.unreadable = true;
+    return [];
   }
   const found = libraryFilesIn(entries) ? [dir] : [];
   if (depth >= MAX_DEPTH) return found;
   for (const entry of entries) {
+    if (state.truncated) break;
     if (!entry.isDir || SKIP_DIRS.has(entry.name.toLowerCase())) continue;
-    found.push(...findCandidateDirs(deps, join(dir, entry.name), depth + 1));
+    found.push(...findCandidateDirs(deps, join(dir, entry.name), depth + 1, state));
   }
   return found;
 }
@@ -281,8 +318,19 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
       const picked = await deps.pickFolder();
       if (!picked) return { error: 'canceled' };
 
-      const dirs = findCandidateDirs(deps, picked, 0);
-      if (dirs.length === 0) return { error: 'no-source-files', expected: EW_DEFAULT_PATH };
+      const walk: WalkState = { visited: 0, truncated: false, unreadable: false };
+      const dirs = findCandidateDirs(deps, picked, 0, walk);
+      if (dirs.length === 0) {
+        // Three distinct situations land here and must not be reported as the same thing:
+        // the walk ran out of budget before it could finish (too broad a pick — the fix is a
+        // narrower folder, not "try again"); a directory along the way could not even be
+        // listed (the folder or its library may well exist, just unreadable); or the walk
+        // finished cleanly and genuinely found nothing. A library found before either the
+        // budget or a listing failure struck is handled above this branch and reaches neither.
+        if (walk.truncated) return { error: 'search-too-broad', expected: EW_DEFAULT_PATH };
+        if (walk.unreadable) return { error: 'candidates-unreadable', expected: EW_DEFAULT_PATH };
+        return { error: 'no-source-files', expected: EW_DEFAULT_PATH };
+      }
 
       const counted = dirs.map((d) => countCandidate(deps, d));
       const candidates = counted

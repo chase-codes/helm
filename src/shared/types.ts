@@ -74,7 +74,16 @@ export interface ScanOutcome {
 export interface ImportSourceInfo { id: string; label: string }
 export type Located = { path: string };
 export type LocateFailure = {
-  error: 'no-source-files' | 'canceled' | 'all-candidates-empty' | 'candidates-unreadable';
+  error:
+    | 'no-source-files'
+    | 'canceled'
+    | 'all-candidates-empty'
+    | 'candidates-unreadable'
+    /** The picked folder was too broad to search fully (a drive root, a whole user profile):
+     *  the walk hit its directory-visit budget before it could finish, and found nothing along
+     *  the way. Distinct from `no-source-files`, which means the walk finished and genuinely
+     *  found nothing — this means the walk never finished. */
+    | 'search-too-broad';
   expected?: string;
 };
 export type LocateResult = Located | LocateFailure;

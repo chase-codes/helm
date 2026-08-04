@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { basename, join } from 'path';
 import { createEasyWorshipSource, EW_DEFAULT_PATH } from './easyworship';
@@ -591,13 +591,99 @@ describe('easyworship source', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('does not descend more than four levels below the picked folder', async () => {
+  // MAX_DEPTH is 5, one more than the exact <profile>/<version>/Databases/Data distance, to
+  // cover an operator who picks the EasyWorship-root's own parent (the `Softouch` folder).
+  it('finds a library five levels below the picked folder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ew-deep-ok-'));
+    const data = join(root, 'a', 'b', 'c', 'd', 'e');
+    makeLibrary(data, [{ title: 'Five Deep' }]);
+    expect(await source(root).locate()).toEqual({ path: data });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does not descend more than five levels below the picked folder', async () => {
     const root = mkdtempSync(join(tmpdir(), 'ew-deep-'));
-    makeLibrary(join(root, 'a', 'b', 'c', 'd', 'e'), [{ title: 'Too Deep' }]);
+    makeLibrary(join(root, 'a', 'b', 'c', 'd', 'e', 'f'), [{ title: 'Too Deep' }]);
     expect(await source(root).locate()).toEqual({
       error: 'no-source-files',
       expected: EW_DEFAULT_PATH
     });
     rmSync(root, { recursive: true, force: true });
+  });
+
+  describe('a broad pick (MAX_DIRS_SCANNED)', () => {
+    // These exercise the directory-visit budget with a synthetic, procedurally-generated
+    // listDir rather than real files on disk — a real fixture wide enough to exceed the
+    // budget would mean creating thousands of directories per test run.
+    // 200 children per directory, five levels deep (MAX_DEPTH), yields tens of thousands of
+    // possible directories from a single top-level branch alone — comfortably enough to trip
+    // MAX_DIRS_SCANNED (5,000) long before a full depth-first walk could ever finish, so the
+    // budget — not depth — is what stops it.
+    const BRANCH = 200;
+    const wideTree =
+      (libraryAt?: string) =>
+      (dir: string): { name: string; isDir: boolean }[] =>
+        dir === libraryAt
+          ? [
+              { name: 'Songs.db', isDir: false },
+              { name: 'SongWords.db', isDir: false }
+            ]
+          : Array.from({ length: BRANCH }, (_, i) => ({ name: `d${i}`, isDir: true }));
+
+    it('reports search-too-broad, not no-source-files, when the budget runs out before anything is found', async () => {
+      const s = createEasyWorshipSource({
+        openDb: openTestSourceDb,
+        pickFolder: () => Promise.resolve('/src'),
+        listDir: wideTree()
+      });
+      expect(await s.locate()).toEqual({ error: 'search-too-broad', expected: EW_DEFAULT_PATH });
+    });
+
+    it('still finds a library discovered before the budget ran out, ignoring the truncation', async () => {
+      const libraryDir = join('/src', 'd0');
+      const s = createEasyWorshipSource({
+        openDb: () => ({ all: <T,>() => [{ n: 1 }] as T[], close: () => {} }),
+        pickFolder: () => Promise.resolve('/src'),
+        listDir: wideTree(libraryDir),
+        mkdtemp: () => '/fake-tmp',
+        rmTemp: () => {},
+        copy: () => {},
+        exists: () => false,
+        readText: () => null
+      });
+      expect(await s.locate()).toEqual({ path: libraryDir });
+    });
+  });
+
+  describe('an unlistable directory during the walk (Fix C)', () => {
+    it('reports candidates-unreadable, not no-source-files, when the picked folder itself cannot be listed', async () => {
+      const s = createEasyWorshipSource({
+        openDb: openTestSourceDb,
+        pickFolder: () => Promise.resolve('/src'),
+        listDir: () => {
+          throw new Error('EPERM: operation not permitted');
+        }
+      });
+      expect(await s.locate()).toEqual({ error: 'candidates-unreadable', expected: EW_DEFAULT_PATH });
+    });
+
+    it('stays silent about a listing failure deeper in the tree when a library is still found elsewhere', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'ew-partial-unreadable-'));
+      const good = join(root, 'Default_1', 'v6.1', 'Databases', 'Data');
+      makeLibrary(good, [{ title: 'Fine' }]);
+      const lockedDir = join(root, 'Default');
+      mkdirSync(lockedDir, { recursive: true });
+
+      const s = createEasyWorshipSource({
+        openDb: openTestSourceDb,
+        pickFolder: () => Promise.resolve(root),
+        listDir: (p) => {
+          if (p === lockedDir) throw new Error('EPERM: operation not permitted');
+          return readdirSync(p, { withFileTypes: true }).map((e) => ({ name: e.name, isDir: e.isDirectory() }));
+        }
+      });
+      expect(await s.locate()).toEqual({ path: good });
+      rmSync(root, { recursive: true, force: true });
+    });
   });
 });

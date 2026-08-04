@@ -100,7 +100,9 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
                 ? 'Found an EasyWorship library there, but it holds no songs. EasyWorship keeps more than one library — try another profile or version folder.'
                 : result.error === 'candidates-unreadable'
                   ? "Found an EasyWorship library there, but it couldn't be read. Close EasyWorship and try again."
-                  : 'That import source is not available.',
+                  : result.error === 'search-too-broad'
+                    ? 'That folder was too broad to search. Pick the EasyWorship folder itself, or a profile folder inside it, rather than a whole drive or user folder.'
+                    : 'That import source is not available.',
           expected: 'expected' in result ? result.expected : undefined
         });
       })

@@ -197,4 +197,12 @@ describe('SongImport', () => {
     fireEvent.click(await screen.findByText('EasyWorship'));
     expect(await screen.findByText(/holds no songs/)).toBeTruthy();
   });
+
+  it('tells the operator a broad pick was too wide to search, distinct from a missing library', async () => {
+    installHelm({ error: 'search-too-broad', expected: 'C:\\Softouch\\Easyworship\\' });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText(/too broad to search/)).toBeTruthy();
+    expect(screen.queryByText(/holds no songs/)).toBeNull();
+  });
 });
