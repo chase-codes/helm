@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { basename, join } from 'path';
 import { createEasyWorshipSource } from './easyworship';
@@ -40,6 +40,69 @@ const source = (path: string): ImportSource =>
     openDb: openTestSourceDb,
     pickFolder: () => Promise.resolve(path)
   });
+
+// Builds a real on-disk EasyWorship-shaped library. Unlike the committed binary fixture, the
+// column set is parameterised, which is the only way to test the schema drift the EW8 spec
+// found between two libraries both reporting schema 6.5.1.0.
+//
+// NOTE: no `COLLATE UTF8_U_CI` here — node:sqlite rejects CREATE TABLE with an unregistered
+// collation ("no such collation sequence"). The committed __fixtures__/ew library is what
+// pins the collation hazard; these fixtures pin column presence.
+interface FixtureSong {
+  title: string;
+  author?: string;
+  rtf?: string;
+  slideUids?: string;
+  /** song.presentation_id — > 0 means the song carries a laid-out slide set. */
+  layout?: number;
+}
+
+const makeLibrary = (
+  dir: string,
+  songs: FixtureSong[],
+  opts: { presentationId?: boolean; slideUids?: boolean } = {}
+): string => {
+  mkdirSync(dir, { recursive: true });
+  const withPid = opts.presentationId !== false;
+  const withUids = opts.slideUids !== false;
+
+  const s = new DatabaseSync(join(dir, SONGS_DB_NAME));
+  s.exec(
+    'CREATE TABLE song (rowid integer PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE, ' +
+      `title text NOT NULL, author text${withPid ? ', presentation_id integer' : ''})`
+  );
+  const insertSong = s.prepare(
+    withPid
+      ? 'INSERT INTO song (title, author, presentation_id) VALUES (?, ?, ?)'
+      : 'INSERT INTO song (title, author) VALUES (?, ?)'
+  );
+  songs.forEach((song) =>
+    withPid
+      ? insertSong.run(song.title, song.author ?? '', song.layout ?? 0)
+      : insertSong.run(song.title, song.author ?? '')
+  );
+  s.close();
+
+  const w = new DatabaseSync(join(dir, WORDS_DB_NAME));
+  w.exec(
+    'CREATE TABLE word (rowid integer PRIMARY KEY NOT NULL UNIQUE, song_id integer, ' +
+      `words rtf${withUids ? ', slide_uids text' : ''})`
+  );
+  const insertWord = w.prepare(
+    withUids
+      ? 'INSERT INTO word (song_id, words, slide_uids) VALUES (?, ?, ?)'
+      : 'INSERT INTO word (song_id, words) VALUES (?, ?)'
+  );
+  songs.forEach((song, i) => {
+    const args: unknown[] = [i + 1, song.rtf ?? '{\\rtf1 words\\par}'];
+    if (withUids) args.push(song.slideUids ?? '1-A');
+    insertWord.run(...(args as [number, string, string?]));
+  });
+  w.close();
+  return dir;
+};
+
+const tempLibrary = (name: string): string => join(mkdtempSync(join(tmpdir(), `ew-${name}-`)), 'Data');
 
 describe('easyworship source', () => {
   it('reports the two expected files when the folder does not hold them', async () => {
@@ -283,5 +346,56 @@ describe('easyworship source', () => {
       ]
     ).scan({ path: '/src' });
     expect(outcome.songs[0].text).toBe('keep me');
+  });
+
+  it('flags a song whose split disagrees with the source slide count', async () => {
+    const dir = makeLibrary(tempLibrary('uids'), [
+      // Two slides by our rules; EasyWorship claims three.
+      { title: 'Disagrees', rtf: '{\\rtf1 A\\par \\par B\\par}', slideUids: '1-A,1-B,1-C' },
+      { title: 'Agrees', rtf: '{\\rtf1 A\\par \\par B\\par}', slideUids: '1-A,1-B' }
+    ]);
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.songs.find((s) => s.title === 'Disagrees')?.sourceStanzas).toBe(3);
+    expect(outcome.songs.find((s) => s.title === 'Agrees')).not.toHaveProperty('sourceStanzas');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('imports normally when the slide_uids column is absent', async () => {
+    const dir = makeLibrary(tempLibrary('nouids'), [{ title: 'Bare' }], { slideUids: false });
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.songs).toHaveLength(1);
+    expect(outcome.songs[0]).not.toHaveProperty('sourceStanzas');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('counts how many songs carry an EasyWorship layout', async () => {
+    // This number decides whether Path A (exact slides from PresentationLayouts.db) is worth
+    // building at all: real libraries ranged from 22% coverage to zero.
+    const dir = makeLibrary(tempLibrary('layouts'), [
+      { title: 'Laid Out', layout: 17 },
+      { title: 'Plain', layout: 0 },
+      { title: 'Also Plain', layout: 0 }
+    ]);
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.withLayouts).toBe(1);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('imports normally, with no layout count, when presentation_id is absent', async () => {
+    // The older schema in the EW8 spec §2.4 has no song.presentation_id, while reporting the
+    // same schema version as one that does. Absent must mean "unknown", not "zero".
+    const dir = makeLibrary(tempLibrary('nopid'), [{ title: 'Old Schema' }], { presentationId: false });
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.songs.map((s) => s.title)).toEqual(['Old Schema']);
+    expect(outcome.withLayouts).toBeUndefined();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('ignores an unparseable slide_uids value rather than failing the song', async () => {
+    const dir = makeLibrary(tempLibrary('baduids'), [{ title: 'Junk', slideUids: '' }]);
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.songs[0].title).toBe('Junk');
+    expect(outcome.songs[0]).not.toHaveProperty('sourceStanzas');
+    rmSync(dir, { recursive: true, force: true });
   });
 });

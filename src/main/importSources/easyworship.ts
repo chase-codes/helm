@@ -24,8 +24,13 @@ const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'];
 export const EW_DEFAULT_PATH =
   'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
 
-interface SongRow { rowid: number; title: string | null; author: string | null }
-interface WordRow { song_id: number; words: string | Uint8Array | null }
+interface SongRow {
+  rowid: number;
+  title: string | null;
+  author: string | null;
+  presentation_id?: number | null;
+}
+interface WordRow { song_id: number; words: string | Uint8Array | null; slide_uids?: string | null }
 
 export interface EasyWorshipDeps {
   openDb: (path: string) => SourceDb;
@@ -93,6 +98,25 @@ function copyWithSidecars(deps: EasyWorshipDeps, srcDir: string, destDir: string
   }
 }
 
+// EW8 spec §2.4 is emphatic: two libraries both reporting data schema 6.5.1.0 differed in 15
+// columns and tables, so a version string never implies a shape. Build every optional column
+// into the SELECT at runtime and treat it as nullable when absent.
+function columnsOf(db: SourceDb, table: string): Set<string> {
+  try {
+    return new Set(db.all<{ name: string }>(`PRAGMA table_info('${table}')`).map((c) => c.name));
+  } catch {
+    return new Set();
+  }
+}
+
+// `slide_uids` is a comma-separated GUID list, one per slide — the authoritative count, free.
+// Anything unparseable yields null, which means "no cross-check for this song", never zero.
+function slideUidCount(value: string | null | undefined): number | null {
+  if (typeof value !== 'string') return null;
+  const n = value.split(',').filter((s) => s.trim() !== '').length;
+  return n > 0 ? n : null;
+}
+
 export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}): ImportSource {
   const deps: EasyWorshipDeps = {
     openDb: defaultOpenDb,
@@ -132,17 +156,27 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
           // words) and better-sqlite3 cannot register it, so any comparison or sort touching
           // one of those throws "no such collation sequence" at runtime. Both queries below
           // are plain unfiltered, unordered scans for exactly that reason.
-          const rows = songsDb.all<SongRow>('SELECT rowid, title, author FROM song');
+          const songCols = columnsOf(songsDb, 'song');
+          const wordCols = columnsOf(wordsDb, 'word');
+          const hasUids = wordCols.has('slide_uids');
+          const hasLayouts = songCols.has('presentation_id');
+          const songSelect = [
+            'rowid',
+            'title',
+            songCols.has('author') ? 'author' : "'' AS author",
+            ...(hasLayouts ? ['presentation_id'] : [])
+          ];
+          const wordSelect = ['song_id', 'words', ...(hasUids ? ['slide_uids'] : [])];
+
+          const rows = songsDb.all<SongRow>(`SELECT ${songSelect.join(', ')} FROM song`);
           // Exactly one `word` row per song: SongWords.db declares
           // `CREATE UNIQUE INDEX word_song_id ON word (song_id)`, and the EW8 library spec
           // verified 1:1 with no orphans in either direction across both real libraries
           // (1,997↔1,997 and 223↔223). No ORDER BY is needed, and appending on a repeat would
           // fuse two songs — so a repeat keeps the first row and discards the rest.
-          const words = new Map<number, string>();
-          for (const w of wordsDb.all<WordRow>('SELECT song_id, words FROM word')) {
-            const text = wordsToText(w.words);
-            if (text === undefined || words.has(w.song_id)) continue;
-            words.set(w.song_id, text);
+          const words = new Map<number, WordRow>();
+          for (const w of wordsDb.all<WordRow>(`SELECT ${wordSelect.join(', ')} FROM word`)) {
+            if (!words.has(w.song_id)) words.set(w.song_id, w);
           }
 
           const songs: ScannedSong[] = [];
@@ -152,21 +186,38 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
             // ('A Child Of The King      (Eb)'). Collapse for display and matching; the
             // EasyWorship library still holds the original if it is ever wanted.
             const title = (row.title ?? '').replace(/\s+/g, ' ').trim() || 'Untitled Song';
-            const raw = words.get(row.rowid);
+            const wordRow = words.get(row.rowid);
+            const raw = wordRow === undefined ? undefined : wordsToText(wordRow.words);
             if (raw === undefined) {
               unreadable.push({ title, reason: 'no lyrics found' });
               continue;
             }
-            const { text: joined } = ewSlideBreaks(rtfToParagraphs(raw));
+            const { slideCount, text: joined } = ewSlideBreaks(rtfToParagraphs(raw));
             const text = importTidy(joined);
             if (!text) {
               unreadable.push({ title, reason: 'no lyrics left after removing formatting' });
               continue;
             }
-            songs.push({ title, author: (row.author ?? '').trim(), text });
+            // Compare EasyWorship's count against OUR count of the same thing — both include
+            // empty slides. Helm's eventual section count is a different, smaller number, and
+            // comparing against that would flag hundreds of songs that are perfectly fine.
+            const expected = hasUids ? slideUidCount(wordRow?.slide_uids) : null;
+            songs.push({
+              title,
+              author: (row.author ?? '').trim(),
+              text,
+              ...(expected !== null && expected !== slideCount ? { sourceStanzas: expected } : {})
+            });
           }
           songs.sort((a, b) => a.title.localeCompare(b.title));
-          return { songs, unreadable };
+          // Counted over every row, not just the importable ones, because this is a fact about
+          // the source library rather than about this run. Omitted entirely when the column is
+          // absent: "unknown" and "none" are different answers, and a zero here would wrongly
+          // retire the question of whether to import EasyWorship's exact layouts.
+          const withLayouts = hasLayouts
+            ? rows.filter((r) => (r.presentation_id ?? 0) > 0).length
+            : undefined;
+          return { songs, unreadable, ...(withLayouts === undefined ? {} : { withLayouts }) };
         } finally {
           songsDb.close();
           wordsDb?.close();

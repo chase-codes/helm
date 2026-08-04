@@ -51,9 +51,23 @@ export interface MediaImportResult {
   error?: 'no-libreoffice';
 }
 
-export interface ScannedSong { title: string; author: string; text: string }
+export interface ScannedSong {
+  title: string;
+  author: string;
+  text: string;
+  /** The slide count the source itself reports, present only when it disagrees with what the
+   *  adapter's own parse produced. A song to look at, not a song to drop. */
+  sourceStanzas?: number;
+}
 export interface UnreadableSong { title: string; reason: string }
-export interface ScanOutcome { songs: ScannedSong[]; unreadable: UnreadableSong[] }
+export interface ScanOutcome {
+  songs: ScannedSong[];
+  unreadable: UnreadableSong[];
+  /** How many songs carry a laid-out slide set in the source. Absent means the source cannot
+   *  say — never zero. This is the measurement that decides whether importing those exact
+   *  layouts is worth building. */
+  withLayouts?: number;
+}
 export interface ImportSourceInfo { id: string; label: string }
 export type Located = { path: string };
 export type LocateFailure = { error: 'no-source-files' | 'canceled'; expected?: string };
