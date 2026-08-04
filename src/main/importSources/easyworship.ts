@@ -325,11 +325,18 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
         let wordsDb: SourceDb | null = null;
         try {
           wordsDb = deps.openDb(join(temp, wordsFile));
-          // Neither query below may use WHERE, ORDER BY, DISTINCT, or GROUP BY against a TEXT
-          // column: EasyWorship declares COLLATE UTF8_U_CI on its text columns (title, author,
-          // words) and better-sqlite3 cannot register it, so any comparison or sort touching
-          // one of those throws "no such collation sequence" at runtime. Both queries below
-          // are plain unfiltered, unordered scans for exactly that reason.
+          // None of the four statements below — the two PRAGMA table_info calls and the two
+          // SELECTs — may use WHERE, ORDER BY, DISTINCT, or GROUP BY against a TEXT column:
+          // EasyWorship declares COLLATE UTF8_U_CI on its text columns (title, author, words)
+          // and better-sqlite3 cannot register it, so any comparison or sort touching one of
+          // those throws "no such collation sequence" at runtime. Both SELECTs below are plain,
+          // unfiltered, unordered projections for exactly that reason — and that alone is
+          // enough: verified to plan as a bare `SCAN song` / `SCAN word`, never touching an
+          // index. A bare COUNT(*), unlike these, is NOT safe merely by being unfiltered —
+          // SQLite's planner may still satisfy a count by scanning a covering index over a
+          // collated column, and just considering that index trips the same "no such collation
+          // sequence" error with no WHERE/ORDER BY/DISTINCT/GROUP BY anywhere in sight. See
+          // `countCandidate`'s `NOT INDEXED`, which exists for exactly that reason.
           const songCols = columnsOf(songsDb, 'song');
           const wordCols = columnsOf(wordsDb, 'word');
           const hasUids = wordCols.has('slide_uids');
