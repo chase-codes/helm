@@ -2,7 +2,8 @@ import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { Located, LocateResult, ScanOutcome, ScannedSong, UnreadableSong } from '../../shared/types';
-import { rtfToText } from '../../shared/songs/rtfToText';
+import { rtfToParagraphs } from '../../shared/songs/rtfToText';
+import { ewSlideBreaks } from '../../shared/songs/ewSlideBreaks';
 import { importTidy } from '../../shared/songs/importTidy';
 import { decodeCp1252 } from '../../shared/songs/cp1252';
 import type { ImportSource, SourceDb } from './types';
@@ -24,7 +25,7 @@ export const EW_DEFAULT_PATH =
   'C:\\Users\\Public\\Documents\\Softouch\\EasyWorship\\Default\\Databases\\Data\\';
 
 interface SongRow { rowid: number; title: string | null; author: string | null }
-interface WordRow { rowid: number; song_id: number; words: string | Uint8Array | null }
+interface WordRow { song_id: number; words: string | Uint8Array | null }
 
 export interface EasyWorshipDeps {
   openDb: (path: string) => SourceDb;
@@ -138,37 +139,32 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
           // JS so correctness doesn't depend on an unspecified engine scan order surviving
           // between here and the loop.
           const rows = songsDb.all<SongRow>('SELECT rowid, title, author FROM song');
+          // Exactly one `word` row per song: SongWords.db declares
+          // `CREATE UNIQUE INDEX word_song_id ON word (song_id)`, and the EW8 library spec
+          // verified 1:1 with no orphans in either direction across both real libraries
+          // (1,997↔1,997 and 223↔223). No ORDER BY is needed, and appending on a repeat would
+          // fuse two songs — so a repeat keeps the first row and discards the rest.
           const words = new Map<number, string>();
-          const wordRows = wordsDb
-            .all<WordRow>('SELECT rowid, song_id, words FROM word ORDER BY rowid')
-            .sort((a, b) => a.rowid - b.rowid);
-          for (const w of wordRows) {
+          for (const w of wordsDb.all<WordRow>('SELECT song_id, words FROM word')) {
             const text = wordsToText(w.words);
-            if (text === undefined) continue;
-            // If the real schema stores one row per slide/verse rather than one per song
-            // (unverified in the spec), append rather than overwrite so every stanza
-            // survives. The join happens on the still-raw RTF, before rtfToText runs, so
-            // a plain "\n\n" would be swallowed as source-file line wrapping (rtfToText
-            // discards bare \r/\n); two RTF paragraph marks are what actually survive
-            // through to a blank-line slide break in the tidied output. The trailing space
-            // after the marks is a required RTF word delimiter, not stray content — without
-            // it, a control-word letter scan has no boundary and silently fuses the second
-            // \par with the next fragment's first word (e.g. "\par\parVerse" is read as one
-            // unrecognized control word, dropping "Verse" entirely).
-            const prev = words.get(w.song_id);
-            words.set(w.song_id, prev === undefined ? text : `${prev}\\par\\par ${text}`);
+            if (text === undefined || words.has(w.song_id)) continue;
+            words.set(w.song_id, text);
           }
 
           const songs: ScannedSong[] = [];
           const unreadable: UnreadableSong[] = [];
           for (const row of rows) {
-            const title = (row.title ?? '').trim() || 'Untitled Song';
+            // 869 of 1,997 titles in one real library carry runs of two or more spaces
+            // ('A Child Of The King      (Eb)'). Collapse for display and matching; the
+            // EasyWorship library still holds the original if it is ever wanted.
+            const title = (row.title ?? '').replace(/\s+/g, ' ').trim() || 'Untitled Song';
             const raw = words.get(row.rowid);
             if (raw === undefined) {
               unreadable.push({ title, reason: 'no lyrics found' });
               continue;
             }
-            const text = importTidy(rtfToText(raw));
+            const { text: joined } = ewSlideBreaks(rtfToParagraphs(raw));
+            const text = importTidy(joined);
             if (!text) {
               unreadable.push({ title, reason: 'no lyrics left after removing formatting' });
               continue;

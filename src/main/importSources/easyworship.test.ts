@@ -188,46 +188,6 @@ describe('easyworship source', () => {
     expect(outcome.songs).toEqual([{ title: 'CP1252 Song', author: '', text: "It's café song" }]);
   });
 
-  // IMPORTANT: Map.set on collision silently keeps only the last `word` row for a song_id.
-  // If the real schema stores one row per slide/verse (unverified in the spec), every song
-  // would import carrying only its final stanza — and the bug is invisible in review since
-  // the song still looks normal, just short.
-  it('appends rather than overwrites when a song has more than one word row', async () => {
-    // Word rows are raw RTF (as SongWords.db actually stores them), not plain text — a
-    // literal "\n" in that raw string is source-file wrapping that rtfToText discards, so
-    // the fixture (and the fix's join separator) both use RTF paragraph marks.
-    const s = fakeSource(
-      [{ rowid: 1, title: 'Two Stanza Song', author: '' }],
-      [
-        { rowid: 1, song_id: 1, words: String.raw`Verse 1\par First stanza\par` },
-        { rowid: 2, song_id: 1, words: String.raw`Verse 2\par Second stanza\par` }
-      ]
-    );
-    const outcome = await s.scan({ path: '/src' });
-    expect(outcome.songs).toEqual([
-      { title: 'Two Stanza Song', author: '', text: 'Verse 1\nFirst stanza\n\nVerse 2\nSecond stanza' }
-    ]);
-  });
-
-  // IMPORTANT: a bare scan (no ORDER BY) gives SQLite no ordering guarantee, and the loop
-  // above concatenates whatever order `wordsDb.all()` hands back — so if the rows arrive in
-  // anything other than rowid order, a song's stanzas would silently shuffle. Feeding rows in
-  // reverse-of-rowid order here proves assembly is keyed on rowid, not on whatever order they
-  // happened to arrive in.
-  it('assembles multi-row stanzas in rowid order, even when rows arrive in a different order', async () => {
-    const s = fakeSource(
-      [{ rowid: 1, title: 'Reordered Song', author: '' }],
-      [
-        { rowid: 20, song_id: 1, words: String.raw`Verse 2\par Second stanza\par` },
-        { rowid: 7, song_id: 1, words: String.raw`Verse 1\par First stanza\par` }
-      ]
-    );
-    const outcome = await s.scan({ path: '/src' });
-    expect(outcome.songs).toEqual([
-      { title: 'Reordered Song', author: '', text: 'Verse 1\nFirst stanza\n\nVerse 2\nSecond stanza' }
-    ]);
-  });
-
   // The reason the fixture declares COLLATE UTF8_U_CI on `word.words` too: this proves that
   // ordering by rowid (INTEGER affinity, untouched by the collation) doesn't reintroduce the
   // "no such collation sequence" crash that a naive ORDER BY on a text column would.
@@ -282,5 +242,45 @@ describe('easyworship source', () => {
 
     expect(outcome.songs.map((s) => s.title)).toEqual(['Amazing Grace', 'Blessed Assurance']);
     expect(copied.sort()).toEqual([SONGS_DB_NAME, WORDS_DB_NAME].sort());
+  });
+
+  it('does not break a slide on a paragraph holding a single space', async () => {
+    // \fntnamaut swallows one space as its delimiter, so the second space is content.
+    const rtf = '{\\rtf1 CHORUS\\par line one\\par \\fntnamaut  \\par line two\\par}';
+    const outcome = await fakeSource(
+      [{ rowid: 1, title: 'Spacer', author: '' }],
+      [{ song_id: 1, words: rtf }]
+    ).scan({ path: '/src' });
+    expect(outcome.songs[0].text).toBe('CHORUS\nline one\nline two');
+  });
+
+  it('does not break a slide on a doubled \\line', async () => {
+    const rtf = '{\\rtf1 Verse 1\\par first\\line\\line second\\par}';
+    const outcome = await fakeSource(
+      [{ rowid: 1, title: 'Soft', author: '' }],
+      [{ song_id: 1, words: rtf }]
+    ).scan({ path: '/src' });
+    expect(outcome.songs[0].text).toBe('Verse 1\nfirst\nsecond');
+  });
+
+  it('collapses runs of internal whitespace in a title', async () => {
+    const outcome = await fakeSource(
+      [{ rowid: 1, title: 'A Child Of The King      (Eb)  ', author: '' }],
+      [{ song_id: 1, words: '{\\rtf1 words\\par}' }]
+    ).scan({ path: '/src' });
+    expect(outcome.songs[0].title).toBe('A Child Of The King (Eb)');
+  });
+
+  it('keeps the first word row and never fuses two songs when song_id repeats', async () => {
+    // word_song_id is UNIQUE, so this cannot happen in a real library — but if it ever did,
+    // silently concatenating two songs is the one outcome nobody would catch in review.
+    const outcome = await fakeSource(
+      [{ rowid: 1, title: 'First', author: '' }],
+      [
+        { song_id: 1, words: '{\\rtf1 keep me\\par}' },
+        { song_id: 1, words: '{\\rtf1 not me\\par}' }
+      ]
+    ).scan({ path: '/src' });
+    expect(outcome.songs[0].text).toBe('keep me');
   });
 });
