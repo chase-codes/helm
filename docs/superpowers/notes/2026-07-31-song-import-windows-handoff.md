@@ -7,6 +7,26 @@ library**.
 Spec: `docs/superpowers/specs/2026-07-30-song-library-import-design.md`
 Plan: `docs/superpowers/plans/2026-07-30-song-library-import.md`
 
+**2026-08-04 update:** the schema questions this note poses below are now answered. Three
+real, in-use EasyWorship 8 libraries were inspected directly on Windows and the findings are
+recorded in `EasyWorship8-Library-Spec.md`, with the resulting adapter correction in
+`docs/superpowers/specs/2026-08-04-easyworship8-import-correction-design.md` and
+`docs/superpowers/plans/2026-08-04-easyworship8-import-correction.md`. That work also replaced
+the locate step: the adapter now searches downward for a `Songs.db`/`SongWords.db` pair,
+counts each candidate, drops empty ones, and ranks by song count rather than assuming a single
+fixed path. The remaining Windows task is narrower — run the import against a **copy** of the
+real library and check three things:
+
+1. **Which library the picker offers** — with more than one library on disk, confirm the one
+   ranked first (largest song count) is the one actually in use, and that a stale, empty
+   library (a real, observed state — see the spec) is dropped rather than offered.
+2. **How many songs carry a CHECK badge** in the review step (the source's own slide count
+   disagreeing with the adapter's parse) — a plausible, small number, not most of the library.
+3. **A spot-check of a flagged song's slides** — pick one CHECK-badged song and confirm the
+   imported slide breaks match what EasyWorship shows on screen for that song.
+
+The rest of this note is the original, pre-correction handoff and is kept for history.
+
 ---
 
 ## What to do first, on the Windows machine
