@@ -245,12 +245,20 @@ receive the correction — while songs whose split *did* change are seen as new 
 second time**, leaving two copies with different slide breaks. This is strictly a
 **cross-version** effect; within one version the import stays idempotent.
 
-We are not fixing this in code. A split-insensitive dedupe key would break the scanned-vs-stored
-key equality that `importKey.test.ts` deliberately pins, trading a documented one-time migration
-hazard for an undocumented, permanent weakening of the dedupe guarantee. Instead: operator
-guidance, recorded in `docs/superpowers/notes/2026-07-31-song-import-windows-handoff.md`, is
-that anyone who already ran the OLD importer against a real library should delete those
-imported songs and import fresh rather than re-running the import over them.
+**No migration is required for this correction.** The pre-correction importer shipped but was
+never run against a real EasyWorship library — the Windows verification had not happened yet —
+so no stored song anywhere carries a dedupe key built under the old rules. The hazard above is
+real but was never realised.
+
+We are not fixing this in code, and the reason outlives this correction. A split-insensitive
+dedupe key would break the scanned-vs-stored key equality that `importKey.test.ts` deliberately
+pins, trading a one-time migration hazard for a permanent weakening of the dedupe guarantee.
+
+The durable lesson is the property itself: **the dedupe key depends on where slide boundaries
+fall.** Any future change to slide splitting — importing EasyWorship's exact layouts (Path A)
+is the obvious candidate — reintroduces this hazard for every library imported before it, and
+will need the migration guidance that this time was unnecessary. That guidance is kept in
+`docs/superpowers/notes/2026-07-31-song-import-windows-handoff.md`.
 
 ## Deliberately declined
 

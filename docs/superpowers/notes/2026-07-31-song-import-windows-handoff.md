@@ -25,11 +25,18 @@ real library and check three things:
 3. **A spot-check of a flagged song's slides** — pick one CHECK-badged song and confirm the
    imported slide breaks match what EasyWorship shows on screen for that song.
 
-## If a real church already imported with the OLD importer, before this correction
+## The dedupe key is split-sensitive — no migration needed, but know why
 
-**Do not just re-run the import over an existing library after upgrading to this correction.**
-It will silently produce a mix of skipped-and-uncorrected songs and duplicated songs, not a
-clean re-import.
+**Status (2026-08-04): no migration is required.** The pre-correction importer was never run
+against a real EasyWorship library — it shipped, but the Windows verification above had not
+happened yet — so there is no imported data anywhere whose dedupe keys were built under the
+old slide-splitting rules. Nothing to clear, nothing to re-import.
+
+Keep the rest of this section anyway. It documents a live property of the code: **the dedupe
+key depends on where slide boundaries fall.** Anyone who changes slide splitting again — and
+that is a plausible future change, e.g. adding Path A layouts — reintroduces exactly this
+hazard for any library imported before their change, and will need the migration guidance
+that this time we did not.
 
 Why: the dedupe key (`importKey.ts`) is built from a song's title plus its post-split lyrics.
 `splitToSlides` promotes a section's first line to a label and strips it out of the lyrics
@@ -60,9 +67,10 @@ definition of "the same song" (the dedupe key) shifted underneath already-import
 We deliberately did not fix this in code — see the design spec's "Cross-version re-import"
 subsection for why a split-insensitive dedupe key is not the answer.
 
-**Operator guidance:** anyone who already ran the OLD (pre-2026-08-04) importer against a real
-EasyWorship library should **delete those imported songs from Helm and import fresh** with the
-corrected importer, rather than re-running the import over them.
+**Operator guidance, should this ever apply:** anyone holding songs imported under an older
+slide-splitting rule set should **delete those imported songs from Helm and import fresh**,
+rather than re-running the import over them. As of 2026-08-04 this applies to nobody — see the
+status note at the top of this section.
 
 The rest of this note is the original, pre-correction handoff and is kept for history.
 
