@@ -14,9 +14,13 @@ interface GroupState {
   uc: number;    // substitute characters to swallow after a \u escape
 }
 
-export function rtfToText(rtf: string): string {
-  if (!rtf) return '';
-  const out: string[] = [];
+// The scanner produces *paragraphs* rather than one flat string, because that distinction is
+// the only thing that can separate a slide break from a blank line inside a stanza:
+// EasyWorship breaks a slide on an empty `\par` paragraph and never on `\line` (EW8 library
+// spec §4.2). Flattening both to "\n" destroys the evidence before anything can act on it.
+function scanParagraphs(rtf: string): string[] {
+  const paragraphs: string[] = [];
+  let out: string[] = [];
   const stack: GroupState[] = [{ skip: false, uc: 1 }];
   let g = stack[0];
   let i = 0;
@@ -24,6 +28,14 @@ export function rtfToText(rtf: string): string {
 
   const emit = (s: string): void => {
     if (!g.skip) out.push(s);
+  };
+
+  // Guarded by `skip` for the same reason `emit` is: a `\par` inside {\*\pnseclvl…} is part of
+  // the discarded destination and must not break the lyric.
+  const endParagraph = (): void => {
+    if (g.skip) return;
+    paragraphs.push(out.join(''));
+    out = [];
   };
 
   while (i < rtf.length) {
@@ -113,7 +125,8 @@ export function rtfToText(rtf: string): string {
         const cp = num < 0 ? num + 0x10000 : num;
         if (cp >= 0 && cp <= 0x10ffff) emit(String.fromCodePoint(cp));
         skipChars = g.uc;
-      } else if (word === 'par' || word === 'line' || word === 'sect') emit('\n');
+      } else if (word === 'par' || word === 'sect') endParagraph();
+      else if (word === 'line') emit('\n');
       else if (word === 'tab') emit('\t');
       // every other control word is formatting and produces no text
       continue;
@@ -128,5 +141,17 @@ export function rtfToText(rtf: string): string {
     emit(ch);
   }
 
-  return out.join('');
+  // Flush unconditionally, not via endParagraph: `out` already holds only non-skipped text, so
+  // this mirrors the old `return out.join('')` exactly even when the blob ends mid-destination.
+  paragraphs.push(out.join(''));
+  return paragraphs;
+}
+
+export function rtfToText(rtf: string): string {
+  return rtf ? scanParagraphs(rtf).join('\n') : '';
+}
+
+/** One entry per `\par`/`\sect`. `\line` stays as a "\n" *within* an entry. */
+export function rtfToParagraphs(rtf: string): string[] {
+  return rtf ? scanParagraphs(rtf) : [];
 }

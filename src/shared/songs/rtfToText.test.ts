@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rtfToText } from './rtfToText';
+import { rtfToParagraphs, rtfToText } from './rtfToText';
 
 describe('rtfToText', () => {
   it('returns plain text from a minimal document', () => {
@@ -66,5 +66,28 @@ describe('rtfToText', () => {
   it('turns \\~ into a space and \\_ into a hyphen', () => {
     expect(rtfToText('{\\rtf1 Holy\\~Spirit}')).toBe('Holy Spirit');
     expect(rtfToText('{\\rtf1 well\\_being}')).toBe('well-being');
+  });
+});
+
+describe('rtfToParagraphs', () => {
+  it('splits on \\par but never on \\line', () => {
+    expect(rtfToParagraphs('{\\rtf1 one\\line two\\par three\\par}')).toEqual(['one\ntwo', 'three', '']);
+  });
+
+  // The trap from EW8 spec §4.3: a control word swallows exactly ONE following space as its
+  // delimiter. `\fntnamaut \par` is an empty paragraph (a slide break); `\fntnamaut  \par`
+  // has a second space that is content (not a break). Everything in ewSlideBreaks rests on
+  // this staying distinguishable.
+  it('keeps a one-space paragraph distinct from an empty one', () => {
+    expect(rtfToParagraphs('{\\rtf1 a\\par \\fntnamaut \\par \\fntnamaut  \\par}'))
+      .toEqual(['a', '', ' ', '']);
+  });
+
+  it('does not split on a \\par inside an ignorable destination', () => {
+    expect(rtfToParagraphs('{\\rtf1 A{\\*\\pnseclvl1 B\\par C}D\\par}')).toEqual(['AD', '']);
+  });
+
+  it('returns an empty array for empty input', () => {
+    expect(rtfToParagraphs('')).toEqual([]);
   });
 });
