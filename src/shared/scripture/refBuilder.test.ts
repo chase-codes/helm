@@ -11,7 +11,10 @@ import {
   applyKey,
   setStart,
   setEnd,
-  type RefBuilderState
+  bookCompletion,
+  refGhost,
+  type RefBuilderState,
+  type RefGhost
 } from './refBuilder'
 
 const james: BookExtent = { chapters: 5, verseCounts: [27, 26, 18, 17, 20] }
@@ -294,4 +297,85 @@ test('setStart/setEnd no-op without a chapter/start', () => {
   expect(setStart(noChapter, 5, james)).toBe(noChapter)
   const noStart: RefBuilderState = { ...base, startVerse: null }
   expect(setEnd(noStart, 5, james)).toBe(noStart)
+})
+
+// --- Book-name typeahead ---------------------------------------------------------------
+// THE INVARIANT: a ghost is visible if and only if pressing space commits a book.
+// This is the test that keeps the feature honest as the code changes. It fails if anyone
+// reintroduces a separate rule for what to display.
+
+const atBook = (bookQuery: string): RefBuilderState => ({ ...initialBuilder(), bookQuery })
+
+test('INVARIANT: refGhost is non-null exactly when space commits a book', () => {
+  const queries = [
+    '', 'g', 'ge', 'gen', 'gene', 'genesis',
+    'j', 'jo', 'joh', 'john', 'jhn', 'jn', 'job', 'jame', 'james',
+    'm', 'ma', 'mar', 'mark', 'mat', 'matthew', 'mal',
+    'p', 'pe', 'ps', 'psalm', 'psalms',
+    'r', 're', 'rev', 'ro',
+    's', 'so', 'song', 'song of sol',
+    't', 'ti', 'tit',
+    'c', 'co', 'col',
+    '1', '1 ', '1 j', '1j', '1 jo', '1jo', '1 john', '2 jo', '3 jo', '1 sa', '1sam',
+    'x', 'xyz', 'zzz', 'q', '  ', '9', '1 x'
+  ]
+  for (const q of queries) {
+    const s = atBook(q)
+    const after = applyKey(s, ' ', false, EMPTY_EXTENT).state
+    const spaceCommits = after.stage === 'chapter' && after.book !== null
+    const ghost = refGhost(s)
+    expect(
+      ghost !== null,
+      `"${q}": ghost=${JSON.stringify(ghost)} but space ${spaceCommits ? 'DOES' : 'does NOT'} commit`
+    ).toBe(spaceCommits)
+    // ...and when it does commit, the ghost names the book it commits.
+    if (spaceCommits) expect(bookCompletion(s), `"${q}"`).toBe(after.book)
+  }
+})
+
+test('INVARIANT holds past the book stage: no ghost once a book is resolved', () => {
+  const resolved: RefBuilderState = {
+    ...initialBuilder(),
+    stage: 'chapter',
+    book: 'John',
+    chapter: 3
+  }
+  expect(bookCompletion(resolved)).toBeNull()
+  expect(refGhost(resolved)).toBeNull()
+  expect(refGhost({ ...resolved, stage: 'verse', startVerse: 16 })).toBeNull()
+  expect(refGhost({ ...resolved, stage: 'endVerse', startVerse: 16, endVerse: 18 })).toBeNull()
+})
+
+test('ghost: tail form when the query is a prefix of the book name', () => {
+  expect(refGhost(atBook('gen'))).toEqual<RefGhost>({ kind: 'tail', text: 'esis' })
+  expect(refGhost(atBook('ma'))).toEqual<RefGhost>({ kind: 'tail', text: 'tthew' })
+  expect(refGhost(atBook('jo'))).toEqual<RefGhost>({ kind: 'tail', text: 'hn' })
+  expect(refGhost(atBook('song of sol'))).toEqual<RefGhost>({ kind: 'tail', text: 'omon' })
+})
+
+test('ghost: alias form when the matching alias is not a prefix of the name', () => {
+  expect(refGhost(atBook('jhn'))).toEqual<RefGhost>({ kind: 'alias', book: 'John' })
+  expect(refGhost(atBook('jn'))).toEqual<RefGhost>({ kind: 'alias', book: 'John' })
+  expect(refGhost(atBook('jb'))).toEqual<RefGhost>({ kind: 'alias', book: 'Job' })
+  expect(refGhost(atBook('1sa'))).toEqual<RefGhost>({ kind: 'alias', book: '1 Samuel' })
+})
+
+test('ghost: the whole name typed leaves an empty tail — nothing is hidden', () => {
+  // Space still commits, so the ghost must stay non-null (the invariant); there is simply
+  // nothing left to complete, because the operator is already looking at the answer.
+  expect(refGhost(atBook('genesis'))).toEqual<RefGhost>({ kind: 'tail', text: '' })
+})
+
+test('ghost: no match, no ghost', () => {
+  expect(refGhost(atBook('xyz'))).toBeNull()
+  expect(refGhost(atBook(''))).toBeNull()
+  expect(refGhost(atBook('pe'))).toBeNull() // Peter is unreachable bare
+})
+
+test('ghost: numbered books stay silent until they resolve', () => {
+  expect(refGhost(atBook('1'))).toBeNull() // space inserts a space, does not commit
+  expect(refGhost(atBook('1 '))).toBeNull()
+  expect(refGhost(atBook('1 j'))).toBeNull() // ambiguous: 1/2/3 John
+  expect(refGhost(atBook('1 jo'))).toEqual<RefGhost>({ kind: 'tail', text: 'hn' }) // exact alias
+  expect(bookCompletion(atBook('1 jo'))).toBe('1 John')
 })

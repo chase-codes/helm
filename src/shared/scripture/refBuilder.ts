@@ -1,5 +1,6 @@
 import type { BookExtent } from '../types'
 import { matchBook, matchBookExact, type ParsedRef } from './refs'
+import { norm } from '../search/fuzzy'
 
 export type BuilderStage = 'book' | 'chapter' | 'verse' | 'endVerse'
 export interface RefBuilderState {
@@ -54,6 +55,47 @@ export function toParsedRef(s: RefBuilderState): ParsedRef | null {
   return { book: s.book, ch: s.chapter, from: Math.min(from0, end0), to: Math.max(from0, end0) }
 }
 
+/**
+ * The book name that space (or Tab) would commit right now, or null.
+ *
+ * THE INVARIANT: this is the ONLY rule for whether a book commits, and it is also the only
+ * rule for whether a ghost shows. `printable` calls it to decide whether to commit; the
+ * renderer calls it (via `refGhost`) to decide what to preview. They cannot disagree,
+ * because they are the same function. Do not write a second rule for the display.
+ *
+ * Numbered books are the reason for the digit clause: a bare "1" prefix-matches 1 Samuel,
+ * but space there inserts a literal space rather than committing, so anything containing a
+ * digit must be an EXACT alias ("1 jo") before it counts as a completion.
+ */
+export function bookCompletion(s: RefBuilderState): string | null {
+  if (s.stage !== 'book') return null
+  const q = s.bookQuery
+  const b = matchBook(q)
+  if (b === null) return null
+  if (/\d/.test(q) && matchBookExact(q) === null) return null
+  return b
+}
+
+/** Two forms, because a matching alias is not always a prefix of the book name:
+ *  "gen" → tail "esis" (inline), "jhn" → alias "John" (rendered as an arrow).
+ *  Both mean the same thing: space takes this. */
+export type RefGhost = { kind: 'tail'; text: string } | { kind: 'alias'; book: string }
+
+/** What the ghost says — decided in pure code, with no DOM. Returns null exactly when
+ * `bookCompletion` does, which is what makes the invariant hold. The component decides only
+ * how each form LOOKS. */
+export function refGhost(s: RefBuilderState): RefGhost | null {
+  const book = bookCompletion(s)
+  if (book === null) return null
+  const q = norm(s.bookQuery)
+  const name = norm(book)
+  // Tail measured on the NORMALIZED name, not the raw query: `norm` can shorten the raw
+  // text (it collapses runs of spaces, which the numbered-book path can produce), so
+  // slicing the display string by the raw length would cut in the wrong place.
+  if (name.startsWith(q)) return { kind: 'tail', text: name.slice(q.length) }
+  return { kind: 'alias', book }
+}
+
 export function fromParsedRef(p: ParsedRef): RefBuilderState {
   const isRange = p.to > p.from
   return {
@@ -81,16 +123,19 @@ export function applyKey(
   return { state: printable(s, key, extent), preventDefault: true }
 }
 
+/** Commit a resolved book and move to the chapter stage. Shared by space and Tab so the
+ * two accept keys cannot drift apart. */
+function commitBook(s: RefBuilderState, book: string): RefBuilderState {
+  return { ...s, stage: 'chapter', book, bookQuery: '', chapter: null }
+}
+
 function printable(s: RefBuilderState, key: string, extent: BookExtent): RefBuilderState {
   switch (s.stage) {
     case 'book': {
       if (key === ' ') {
-        const q = s.bookQuery
-        const b = matchBook(q)
-        if (b !== null && (!/\d/.test(q) || matchBookExact(q) !== null)) {
-          return { ...s, stage: 'chapter', book: b, bookQuery: '', chapter: null }
-        }
-        if (/\d/.test(q)) return { ...s, bookQuery: q + ' ' }
+        const b = bookCompletion(s)
+        if (b !== null) return commitBook(s, b)
+        if (/\d/.test(s.bookQuery)) return { ...s, bookQuery: s.bookQuery + ' ' }
         return s
       }
       if (isAlnum(key)) return { ...s, bookQuery: s.bookQuery + key }
