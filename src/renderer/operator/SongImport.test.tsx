@@ -161,6 +161,19 @@ describe('SongImport', () => {
     expect(screen.getByText('2 stanzas')).toBeTruthy();
   });
 
+  // Found by running the wizard against a demo library: a one-slide disagreement is a real,
+  // common shape (a short chorus EasyWorship counts as several slides), and the detail text
+  // used to hardcode the plural and render "1 slides".
+  it('says "1 slide", not "1 slides", for a one-slide disagreement', async () => {
+    installHelm({
+      token: 't',
+      rows: [{ title: 'Short', author: '', stanzas: 1, status: 'new', sourceStanzas: 4, parsedStanzas: 1 }]
+    });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText('1 slide · EasyWorship counts 4')).toBeTruthy();
+  });
+
   it('renders NONE for a zero layout count, distinct from saying nothing at all', async () => {
     installHelm({ token: 't', rows: ROWS, withLayouts: 0 });
     renderModal();
