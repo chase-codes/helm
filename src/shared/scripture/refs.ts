@@ -1,5 +1,5 @@
 import { norm } from '../search/fuzzy'
-import { BOOKS } from './books'
+import { BOOKS, RANKED_BOOKS } from './books'
 
 export interface ParsedRef {
   book: string
@@ -8,12 +8,21 @@ export interface ParsedRef {
   to: number
 }
 
+const RANK = new Map(RANKED_BOOKS.map((name, i) => [name, i]))
+const rankOf = (name: string): number => RANK.get(name) ?? Number.MAX_SAFE_INTEGER
+
 export function matchBook(token: string): string | null {
   const t = norm(token)
   if (!t) return null
   for (const b of BOOKS) if (b.aliases.includes(t)) return b.name
-  for (const b of BOOKS) if (b.aliases.some((a) => a.startsWith(t))) return b.name
-  return null
+  // Prefix fallback: best-ranked match, ties broken by canonical order (strict `<` keeps
+  // the earlier, i.e. canonical, book when ranks are equal — including equal-unranked).
+  let best: string | null = null
+  for (const b of BOOKS) {
+    if (!b.aliases.some((a) => a.startsWith(t))) continue
+    if (best === null || rankOf(b.name) < rankOf(best)) best = b.name
+  }
+  return best
 }
 export function matchBookExact(token: string): string | null {
   const t = norm(token)

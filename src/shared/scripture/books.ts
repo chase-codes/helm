@@ -73,3 +73,30 @@ export const BOOKS = [
   T('Jude', 'jud', 'jd'),
   T('Revelation', 'revelations', 'rev', 're', 'apocalypse')
 ] as const
+
+/** Tie-break order for AMBIGUOUS typed prefixes — earlier wins. Everything unlisted keeps
+ * canonical order relative to itself, and sorts after everything listed. Only ever consulted
+ * when a prefix matches more than one book, so it cannot touch exact aliases.
+ * A judgement call, expected to be tuned: it is deliberately static and in one list, so
+ * retuning is a one-line change. Not learned from usage — that would make the same keystrokes
+ * resolve differently week to week and cold-start empty on a fresh install. */
+export const RANKED_BOOKS: readonly string[] = [
+  'John',
+  'Matthew',
+  'Mark',
+  'Luke',
+  'Acts',
+  'Romans',
+  'Psalm',
+  'Proverbs',
+  'Genesis',
+  'Exodus',
+  'Isaiah',
+  'Hebrews',
+  'James',
+  'Ephesians',
+  'Philippians',
+  'Galatians',
+  'Colossians',
+  'Revelation'
+]
