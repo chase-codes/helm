@@ -43,7 +43,7 @@
 
 `normalizeGetBible` calls `matchBook(b.name)` on every book name in a downloaded bible and stores the result as the canonical name. If the ranking change silently remapped any of those, installed scripture would be mis-filed — a far worse failure than anything in the entry field.
 
-The safety argument is that all 66 bundled-KJV book names — **including** the variants `Psalms` and `Song of Songs` — are declared exact aliases (`books.ts:27,30`), so they resolve on the exact-alias branch and the ranking cannot reach them. **This task pins that argument rather than trusting it:** the test asserts both that all 66 map to their canonical names *and* that each resolves via `matchBookExact`, which is the branch the ranking does not touch.
+The safety argument is that all 66 bundled-KJV book names — **including** the variants `Psalms` and `Song of Songs` — are declared exact aliases (`books.ts:27,30`), so they resolve on the exact-alias branch and the ranking cannot reach them. **This task pins that argument rather than trusting it:** the test asserts both that all 66 map to their canonical names *and* that each resolves via `matchBookExact`, which is the branch the ranking does not touch. It also pins the branch **order** with `jud` — the only token in the table where exact and prefix disagree (exact → Jude, prefix-first → Judges) — because "exact is consulted first" is what actually puts those 66 names out of the ranking's reach, and Task 2 edits that very function.
 
 **Files:**
 - Modify/Test: `src/main/bibleSource.test.ts` (append; the file already reads the bundled KJV at line 81)
@@ -72,16 +72,23 @@ test('every bundled-KJV book name resolves by exact alias, out of the ranking’
   expect(names).toHaveLength(66)
 
   for (const name of names) {
-    // Resolves at all, and by the exact-alias branch specifically.
+    // Every bundled name IS an exact alias — this is the safety argument itself.
     expect(matchBookExact(name), `"${name}" must be an exact alias`).not.toBeNull()
-    // ...and the exact branch is what matchBook returns for it, so prefix ranking
-    // can never change the answer.
+    // ...and matchBook agrees with the exact branch for it.
     expect(matchBook(name), `"${name}" must map via exact alias`).toBe(matchBookExact(name))
   }
 
   // The two names that are NOT the canonical spelling — the whole reason this test exists.
   expect(matchBook('Psalms')).toBe('Psalm')
   expect(matchBook('Song of Songs')).toBe('Song of Solomon')
+
+  // The one token where the two branches disagree: 'jud' is an exact alias of
+  // Jude, but 'judges' also prefix-matches it and comes first canonically. So
+  // this pins the ORDER — exact before prefix — which is what puts the 66 names
+  // above out of the ranking's reach. Neither book is in RANKED_BOOKS, so the
+  // prefix branch's answer here is unchanged by Task 2.
+  expect(matchBook('jud')).toBe('Jude')
+  expect(matchBookExact('jud')).toBe('Jude')
 
   // 66 distinct canonical names out, no collisions.
   expect(new Set(names.map((n) => matchBook(n))).size).toBe(66)
