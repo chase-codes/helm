@@ -133,6 +133,18 @@ describe('PreServiceMode', () => {
       expect(container).toBeTruthy()
     })
 
+    // Load-bearing since BUG-018: with nothing live a tap only selects, so this button is
+    // the operator's only way to put a specific card up without starting the rotation.
+    it('is available when nothing is live at all', async () => {
+      const { showNow } = installHelmStub(baseState, NOTHING_LIVE)
+      renderMode()
+      await screen.findByText('Greeting')
+      const btn = screen.getByText('Show this card').closest('button') as HTMLButtonElement
+      expect(btn.disabled).toBe(false)
+      fireEvent.click(btn)
+      expect(showNow).toHaveBeenCalledTimes(1)
+    })
+
     it('is inert once that card is already on screen', async () => {
       const { showNow } = installHelmStub(baseState, cardLive('a'))
       renderMode()

@@ -159,7 +159,7 @@ app.whenReady().then(() => {
   const preserviceEngine = createPreserviceEngine(preCardsRepo, {
     cue: (k, s) => presentation.cue(k, s),
     goLive: (k, s) => presentation.goLive(k, s),
-    liveKey: () => presentation.get().liveKey,
+    show: (k, s) => presentation.show(k, s),
     isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k }
   })
   preserviceEngine.onChange((s) => {

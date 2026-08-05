@@ -3,7 +3,7 @@ import { openTestDb } from './testDb';
 import { createPreCardsRepo } from './preCardsRepo';
 import { createPreserviceEngine, type PresentationSink } from './preserviceEngine';
 import type { PresentationState, Slide } from '../shared/types';
-import { applyCue, goLive, initialPresentation, setOutput } from '../shared/presentation/core';
+import { applyCue, goLive, initialPresentation, setOutput, showLive } from '../shared/presentation/core';
 
 // The fake sink models REAL presentation-state semantics (goLive's toggle-to-black
 // on same-key, applyCue's same-flow hot-update) by delegating to the actual reducer
@@ -27,7 +27,7 @@ function harness(): {
   const sink: PresentationSink = {
     cue: (key, slide) => { calls.push({ m: 'cue', key, slide }); pres = applyCue(pres, key, slide); },
     goLive: (key, slide) => { calls.push({ m: 'goLive', key, slide }); pres = goLive(pres, key, slide); },
-    liveKey: () => pres.liveKey,
+    show: (key, slide) => { calls.push({ m: 'show', key, slide }); pres = showLive(pres, key, slide); },
     isLive: (key) => pres.output === 'live' && pres.liveKey === key
   };
   const engine = createPreserviceEngine(repo, sink);
@@ -56,14 +56,18 @@ describe('preserviceEngine', () => {
     expect(calls[0].slide.kind).toBe('title');
   });
   it('rotates to the next enabled card after dwell seconds', () => {
-    const { engine, calls } = harness();
+    const { engine, presentation } = harness();
     engine.setDwell(-100); // clamps to min
     engine.engage();
+    const first = presentation().liveKey;
     const dwell = engine.getState().dwellS;
     for (let t = 1; t <= dwell; t++) engine.tick();
-    const last = calls[calls.length - 1];
-    expect(last.m).toBe('goLive');            // advanced to a new flow
-    expect(last.slide.kind).toBe('scripture'); // verse card
+    // Asserted as resulting STATE rather than as which sink method was called: the rotation
+    // routes through `show` since BUG-018, and what matters to the audience is that the next
+    // card actually reached the screen without the output dropping.
+    expect(presentation().output).toBe('live');
+    expect(presentation().liveKey).not.toBe(first); // advanced to a new card
+    expect(presentation().liveSnap?.kind).toBe('scripture'); // verse card
   });
   it('yields when another flow takes the screen', () => {
     const { engine, setLive } = harness();
@@ -144,19 +148,39 @@ describe('preserviceEngine', () => {
   // text promised "Tap any card to show it immediately". Selection now takes the screen
   // whenever nothing else owns it, and `showNow()` is the explicit, deliberate takeover.
   describe('taking the audience screen', () => {
-    it('showCard puts the card up immediately when nothing is live', () => {
+    // BUG-018. Switching what is already on screen is free; STARTING to project is not.
+    // A tap is navigation — the operator clicks a row to read a card, check a name or fix
+    // a typo before it goes up — so it must never be the thing that first puts pre-service
+    // in front of the congregation. Start loop and Show this card are the deliberate verbs.
+    it('showCard only selects when nothing is live — it never starts projecting', () => {
+      const { engine, presentation } = harness();
+      engine.showCard(2);
+      expect(presentation().output).toBe('black');
+      expect(presentation().liveKey).toBe(null);
+      expect(engine.getState().idx).toBe(2); // the selection (and so the preview) still moves
+    });
+
+    it('step only selects when nothing is live', () => {
+      const { engine, presentation } = harness();
+      engine.step(1);
+      expect(presentation().output).toBe('black');
+      expect(presentation().liveKey).toBe(null);
+    });
+
+    it('Show this card is how a tapped card reaches the screen from nothing live', () => {
       const { engine, presentation, repo } = harness();
       engine.showCard(2);
+      engine.showNow();
       expect(presentation().output).toBe('live');
       expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
       expect(presentation().liveSnap?.title).toBe('Announcements');
     });
 
-    it('step puts the card up immediately when nothing is live', () => {
-      const { engine, presentation } = harness();
-      engine.step(1);
-      expect(presentation().output).toBe('live');
-      expect(presentation().liveKey).toMatch(/^pre:/);
+    it('deleting a card never starts projecting when nothing is live', () => {
+      const { engine, presentation, repo } = harness();
+      engine.removeCard(repo.list()[0].id);
+      expect(presentation().output).toBe('black');
+      expect(presentation().liveKey).toBe(null);
     });
 
     it('showCard does NOT interrupt a live song — it only selects', () => {
@@ -257,12 +281,26 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe('song:abc:0');
     });
 
-    it('a screen pre-service took down counts as unowned — tapping brings the card back up', () => {
-      const { engine, presentation, takeDown, repo } = harness();
+    // BUG-018 tightened this: a screen pre-service itself took down is still a screen the
+    // room is looking at (the logo, or black), and bringing it back up is starting to
+    // project. `showLive`'s `output !== 'live'` guard refuses outright, which is a stricter
+    // and simpler rule than reasoning about who last owned the key.
+    it('a tap does not resurrect a screen pre-service took down', () => {
+      const { engine, presentation, takeDown } = harness();
       engine.engage();
       takeDown();
       expect(presentation().output).toBe('black');
       engine.showCard(2);
+      expect(presentation().output).toBe('black'); // stays down until asked deliberately
+      expect(engine.getState().idx).toBe(2);
+    });
+
+    it('Show this card brings the screen back after a take-down', () => {
+      const { engine, presentation, takeDown, repo } = harness();
+      engine.engage();
+      takeDown();
+      engine.showCard(2);
+      engine.showNow();
       expect(presentation().output).toBe('live');
       expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
     });

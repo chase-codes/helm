@@ -18,8 +18,10 @@ const PRE_RAIL_W = 320;
 // chip calls for a green dot specifically (see task B6 ambiguity #2).
 const PROJECTING_GREEN = '#3fb950';
 
+// Must keep the engine's promise exactly (BUG-018): a tap is navigation, so it switches the
+// screen only while pre-service is already projecting, and never starts projecting.
 const PRE_HINT =
-  'The loop rotates through the cards on the left while people arrive. Tap a card to show it now — while a song or reading is live, tap only arms it and "Show this card" takes the screen. Move to Songs when the music starts.';
+  'The loop rotates through the cards on the left while people arrive. Tap a card to select and preview it — "Start loop" or "Show this card" puts it on the screen. Once pre-service is projecting, a tap switches cards straight away. Move to Songs when the music starts.';
 
 /** Port of the prototype's per-row snippet logic (Lectern.dc.html ~L1023–1027). */
 function snippetFor(card: PreCard): string {
@@ -192,7 +194,7 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
             <span style={loopCountTag}>{`${enabledCount} IN LOOP`}</span>
           </div>
           <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '5px', lineHeight: 1.4 }}>
-            Tap a card to show it now — or to arm it, if something else is live. Toggle cards in or out of the rotation.
+            Tap a card to select it — while pre-service is on the screen, that switches it. Toggle cards in or out of the rotation.
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
