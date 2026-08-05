@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { BIBLE_MANIFEST, normalizeGetBible } from './bibleSource'
+import { matchBook, matchBookExact } from '../shared/scripture/refs'
 
 const kjvEntry = BIBLE_MANIFEST.find((e) => e.id === 'kjv')!
 
@@ -83,4 +84,30 @@ test('normalizeGetBible on the bundled kjv.json produces all 66 books with expec
   expect(bible.books).toHaveLength(66)
   const john = bible.books.find((b) => b.name === 'John')!
   expect(john.chapters[2].verses[15].text).toContain('For God so loved the world')
+})
+
+// Book-name typeahead re-ranks matchBook's PREFIX branch (refs.ts). normalizeGetBible
+// maps downloaded book names through matchBook, so a silent remap here would mis-file
+// installed scripture. The safety argument is that every bundled-KJV name — including
+// the variants "Psalms" and "Song of Songs" — is an EXACT alias, a branch the ranking
+// does not touch. Pin the argument, not just the outcome.
+test('every bundled-KJV book name resolves by exact alias, out of the ranking\'s reach', () => {
+  const raw = JSON.parse(readFileSync(join(__dirname, '../../resources/bibles/kjv.json'), 'utf-8'))
+  const names: string[] = raw.books.map((b: { name: string }) => b.name)
+  expect(names).toHaveLength(66)
+
+  for (const name of names) {
+    // Resolves at all, and by the exact-alias branch specifically.
+    expect(matchBookExact(name), `"${name}" must be an exact alias`).not.toBeNull()
+    // ...and the exact branch is what matchBook returns for it, so prefix ranking
+    // can never change the answer.
+    expect(matchBook(name), `"${name}" must map via exact alias`).toBe(matchBookExact(name))
+  }
+
+  // The two names that are NOT the canonical spelling — the whole reason this test exists.
+  expect(matchBook('Psalms')).toBe('Psalm')
+  expect(matchBook('Song of Songs')).toBe('Song of Solomon')
+
+  // 66 distinct canonical names out, no collisions.
+  expect(new Set(names.map((n) => matchBook(n))).size).toBe(66)
 })
