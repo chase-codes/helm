@@ -5,6 +5,7 @@ import { BIBLE_MANIFEST, normalizeGetBible } from './bibleSource'
 import { matchBook, matchBookExact } from '../shared/scripture/refs'
 
 const kjvEntry = BIBLE_MANIFEST.find((e) => e.id === 'kjv')!
+const kjvRaw = JSON.parse(readFileSync(join(__dirname, '../../resources/bibles/kjv.json'), 'utf-8'))
 
 const fixture = {
   translation: 'Test Version',
@@ -79,8 +80,7 @@ test('normalizeGetBible throws listing unmapped book names', () => {
 })
 
 test('normalizeGetBible on the bundled kjv.json produces all 66 books with expected text', () => {
-  const raw = JSON.parse(readFileSync(join(__dirname, '../../resources/bibles/kjv.json'), 'utf-8'))
-  const bible = normalizeGetBible(raw, kjvEntry)
+  const bible = normalizeGetBible(kjvRaw, kjvEntry)
   expect(bible.books).toHaveLength(66)
   const john = bible.books.find((b) => b.name === 'John')!
   expect(john.chapters[2].verses[15].text).toContain('For God so loved the world')
@@ -92,21 +92,27 @@ test('normalizeGetBible on the bundled kjv.json produces all 66 books with expec
 // the variants "Psalms" and "Song of Songs" — is an EXACT alias, a branch the ranking
 // does not touch. Pin the argument, not just the outcome.
 test('every bundled-KJV book name resolves by exact alias, out of the ranking\'s reach', () => {
-  const raw = JSON.parse(readFileSync(join(__dirname, '../../resources/bibles/kjv.json'), 'utf-8'))
-  const names: string[] = raw.books.map((b: { name: string }) => b.name)
+  const names: string[] = kjvRaw.books.map((b: { name: string }) => b.name)
   expect(names).toHaveLength(66)
 
   for (const name of names) {
     // Resolves at all, and by the exact-alias branch specifically.
     expect(matchBookExact(name), `"${name}" must be an exact alias`).not.toBeNull()
-    // ...and the exact branch is what matchBook returns for it, so prefix ranking
-    // can never change the answer.
+    // Both branches agree on the 66 bundled names: exact-alias returns them unchanged.
     expect(matchBook(name), `"${name}" must map via exact alias`).toBe(matchBookExact(name))
   }
 
   // The two names that are NOT the canonical spelling — the whole reason this test exists.
   expect(matchBook('Psalms')).toBe('Psalm')
   expect(matchBook('Song of Songs')).toBe('Song of Solomon')
+
+  // The one token where the two branches disagree: 'jud' is an exact alias of
+  // Jude, but 'judges' also prefix-matches it and comes first canonically. So
+  // this pins the ORDER — exact before prefix — which is what puts the 66 names
+  // above out of the ranking's reach. Neither book is in RANKED_BOOKS, so the
+  // prefix branch's answer here is unchanged by Task 2.
+  expect(matchBook('jud')).toBe('Jude')
+  expect(matchBookExact('jud')).toBe('Jude')
 
   // 66 distinct canonical names out, no collisions.
   expect(new Set(names.map((n) => matchBook(n))).size).toBe(66)
