@@ -322,11 +322,37 @@ the operator, but with the projector already showing the loop.
 - **Nothing is live** (`liveKey === null`) → a click must **select only**. Going live is a
   state change the room notices, so it needs shown intent: **Show this card** or **Start loop**.
 
-This is a smaller change than any of the three options first sketched here, and a better one.
-It keeps the fast path exactly where the operator wants it (mid-loop) and adds friction only at
-the single moment that actually matters — the transition from a dark screen to a lit one. Note
-this splits a case `ownsScreen()` currently merges: it returns true for both "nothing live" and
-"pre-service live", and those two now need different answers.
+**★ The rule is already implemented — pre-service just calls the wrong verb.**
+`shared/presentation/core.ts` deliberately offers three verbs at three intent levels, and the
+middle one *is* this rule:
+
+| verb | behaviour | meant for |
+|---|---|---|
+| `goLive` | starts projecting from any state; toggles to black when re-fired on the live key | deliberate takeover — a **Go live** button, Start loop, Show this card |
+| `showLive` (`presentation.show`) | **`if (st.output !== 'live') return st;`** then updates within the same kind | navigation — taps, arrows, cursor moves |
+| `applyCue` | same-*flow* hot update only | cueing that must never jump the screen |
+
+`showLive` refuses to start projecting and switches freely once live — the decided rule,
+verbatim, in a primitive that already exists and is already tested.
+
+**Songs, Sermon and Message already observe this discipline.** In each, `goLive` is bound to an
+explicit control (`SongsMode.tsx:521`, `SermonCenter.tsx:266`, `MessageMode.tsx:405`) while
+navigation goes through `show` — `SermonMode.tsx:245` even documents it: *"main's `showLive`
+no-ops unless output is live."* **Pre-service is the only mode that routes a tap through
+`goLive`** (`preserviceEngine.ts:44`), which is the whole bug.
+
+**Shape of the fix:** `pushLive()` is shared by five callers with two different intents —
+`engage()` (Start loop) and `showNow()` (Show this card) are deliberate takeovers and must keep
+`goLive`; the loop tick, `showCard()` and `step()` are navigation and want `show`. Split it
+(e.g. `pushLive()` / `pushShow()`) and let each caller pick. `PreserviceSink` gains a `show`
+member alongside `goLive`/`cue`/`isLive`; `stateStore.show` already exists (`stateStore.ts:16`)
+and `presGoLive`'s sibling channel is already wired.
+
+This also **subsumes `ownsScreen()`** for the navigation path: `showLive`'s `output !== 'live'`
+guard is a stricter and simpler expression of BUG-008's "a blacked-out screen is not free real
+estate" than the current `liveKey` test, because it refuses a blacked-out screen outright rather
+than reasoning about who owns it. Check whether `ownsScreen()` survives at all once
+`showCard`/`step` route through `show`.
 
 The view's hint text (`PreServiceMode.tsx:22,195`) promises "tap a card to show it now"
 unconditionally and must be reworded to match.

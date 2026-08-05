@@ -100,11 +100,13 @@ Several items below share these foundations — worth building once as reusable 
   now carries `● ARMED` (accent ring, no fill), visually distinct from `● ON SCREEN` (filled,
   live). Landed alongside the BUG-008 fix, which also added **Show this card** as the
   deliberate single-card takeover. See `bugs.md` BUG-008.
-- ~~**Decide what a single click on a card should do.**~~ **Decided, not yet built** — switching
-  what is already on screen is free; starting to project is not. While pre-service is already
-  projecting, a click switches cards as it does today; with nothing live, a click selects only
-  and going live needs **Show this card** or **Start loop**. Splits a case `ownsScreen()`
-  currently merges. See `bugs.md` BUG-018 for the rule and the reasoning.
+- ~~**Decide what a single click on a card should do.**~~ **Decided, and smaller than it looked**
+  — switching what is already on screen is free; starting to project is not. The rule turns out
+  to be an existing primitive: `shared/presentation/core.ts` already offers `showLive`
+  ("no-op unless output is live, then switch freely") next to `goLive` ("start projecting"),
+  and Songs/Sermon/Message already bind `goLive` to explicit controls while navigating via
+  `show`. Pre-service is the only mode routing a *tap* through `goLive`. So this is a verb
+  swap in `preserviceEngine`, not a new design. See `bugs.md` BUG-018.
 - **Dedicated scripture-search item.** A first-class pre-service item that matches the full
   sermon scripture-search experience (browse/search, not just type-a-reference). Depends on
   the *reusable scripture-search component* enabler above (break the capability out of
