@@ -41,6 +41,20 @@ Several items below share these foundations — worth building once as reusable 
   matching the Section Rail row count. See `docs/superpowers/specs/2026-07-06-songs-quick-wins-design.md`.
 - ~~**Secondary lyric matches under a title search.**~~ ✅ **Shipped** (`10f1509`) — a subordinate
   "Also in lyrics" group (top 3, deduped) shown only when title results are thin (fewer than 3).
+- **Move the import entry point into Settings → Songs, except on an empty library.**
+  (Operator, 2026-08-04.) Import is a once-or-twice-in-a-lifetime migration, but it currently
+  sits permanently in the song search rail — prime real estate next to the control the operator
+  uses every single service. It belongs in Settings, where `SECTIONS` already carries a
+  **`songs`** entry stubbed `enabled: false` (`SettingsModal.tsx:16-22`) waiting for content.
+  The exception is a **fresh install with an empty library**: hiding the only way to fill it
+  behind a settings pane is precisely the "reason not to migrate" the feature exists to remove,
+  so an empty library should still surface the import prominently — as the empty state of the
+  song list itself, which is where a new user is already looking and is more discoverable than
+  today's button. Once the library has songs, that prompt disappears and Settings is the home.
+  Small and self-contained: the wizard, IPC and orchestrator are untouched; this moves the
+  entry point and adds an empty-state branch. Note `SongsMode` currently owns the wizard's
+  `importOpen`/`importInFlight` state and its Escape gate, so mounting it from Settings needs
+  that guard to travel with it or be reproduced.
 - **Song library import.** A way to bring in an existing song library rather than entering
   songs one at a time. Multiple source formats eventually, but the immediate need is
   **importing from EasyWorship 8's format**. (Found during Windows rehearsal testing,
@@ -86,15 +100,11 @@ Several items below share these foundations — worth building once as reusable 
   now carries `● ARMED` (accent ring, no fill), visually distinct from `● ON SCREEN` (filled,
   live). Landed alongside the BUG-008 fix, which also added **Show this card** as the
   deliberate single-card takeover. See `bugs.md` BUG-008.
-- **Decide what a single click on a card should do.** Today it projects the card immediately
-  whenever pre-service owns the screen — which is the *normal* pre-service state — so there is
-  no chance to read or edit a card before the congregation sees it. **Show this card** already
-  exists as the deliberate takeover (added by the BUG-008 fix), so the safe design is available;
-  what is missing is a decision about the trade-off. Select-only is safest but costs a click
-  during the loop, exactly when the operator wants speed; double-click-to-show, or
-  show-on-click only while the loop is engaged, are middle grounds. Needs a brainstorm rather
-  than a patch — the current behaviour is documented in the view's own hint text, so changing
-  it is a deliberate reversal. See `bugs.md` BUG-018.
+- ~~**Decide what a single click on a card should do.**~~ **Decided, not yet built** — switching
+  what is already on screen is free; starting to project is not. While pre-service is already
+  projecting, a click switches cards as it does today; with nothing live, a click selects only
+  and going live needs **Show this card** or **Start loop**. Splits a case `ownsScreen()`
+  currently merges. See `bugs.md` BUG-018 for the rule and the reasoning.
 - **Dedicated scripture-search item.** A first-class pre-service item that matches the full
   sermon scripture-search experience (browse/search, not just type-a-reference). Depends on
   the *reusable scripture-search component* enabler above (break the capability out of

@@ -312,12 +312,24 @@ What was not considered is that "we own the screen" is the *normal* pre-service 
 guard does not protect the most common case: an operator setting up before anyone is watching
 the operator, but with the projector already showing the loop.
 
-**Fix is a design decision, not an obvious patch — needs a brainstorm.** The options are not
-equivalent: making a row click select-only is the safest and reuses **Show this card** as the
-sole takeover, but it contradicts the documented behaviour and costs a click during the loop,
-which is when the operator most wants speed. A double-click-to-show, or show-on-click only
-while the loop is *engaged*, are both plausible middle grounds. See the roadmap's Pre-service
-section.
+**Decided rule (operator, 2026-08-04):** *switching* what is already on screen is free;
+*starting* to project is not.
+
+- **Pre-service is already projecting** (`output === 'live'` and `liveKey` starts with `pre:`)
+  → a click switches cards immediately, as today. The screen is already committed, the
+  congregation is already looking at pre-service content, and swapping one card for another
+  reveals nothing that was not already a decision. Speed matters here and costs nothing.
+- **Nothing is live** (`liveKey === null`) → a click must **select only**. Going live is a
+  state change the room notices, so it needs shown intent: **Show this card** or **Start loop**.
+
+This is a smaller change than any of the three options first sketched here, and a better one.
+It keeps the fast path exactly where the operator wants it (mid-loop) and adds friction only at
+the single moment that actually matters — the transition from a dark screen to a lit one. Note
+this splits a case `ownsScreen()` currently merges: it returns true for both "nothing live" and
+"pre-service live", and those two now need different answers.
+
+The view's hint text (`PreServiceMode.tsx:22,195`) promises "tap a card to show it now"
+unconditionally and must be reworded to match.
 
 **Notes:** Reported 2026-08-04 from live use. Worth checking whether the same "big target is
 the live action" shape exists elsewhere — `SongsMode`'s section rail and the sermon list are
