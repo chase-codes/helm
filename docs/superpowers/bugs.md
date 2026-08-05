@@ -281,6 +281,50 @@ reachable for the first time, so the two are worth solving together.
 
 ---
 
+### BUG-018 — A single click on a pre-service card projects it with no chance to edit first · **SEV 3**
+**Status:** Open · **Area:** Pre-service (`PreServiceMode.tsx:271`, `preserviceEngine.ts` `showCard`)
+
+**Repro:**
+1. Be in Pre-service with **nothing live yet** (`liveKey === null`), or with pre-service
+   already owning the screen — i.e. the ordinary state before a service starts.
+2. Click any card row in the list, for any reason: to read it, to check a name, to fix a
+   typo before it goes up.
+
+**Expected:** A click selects the card so the operator can look at it and edit it. Putting it
+in front of the congregation is a separate, deliberate act — **Show this card** already exists
+for exactly that (`showNow()`, added by BUG-008).
+
+**Actual:** The click projects it immediately. The card is on the congregation's screen before
+the operator has had any opportunity to review or correct it. There is no undo — the only
+recovery is to take it down or click something else, both of which the room sees.
+
+**Root cause (verified by reading, not measured):** the row's only handler is
+`onClick={() => window.helm.preservice.showCard(i)}` (`PreServiceMode.tsx:271`). After the
+BUG-008 fix, `showCard` takes the screen whenever `ownsScreen()` is true — which includes the
+`liveKey === null` case. Editing is reachable only via smaller nested controls on the row that
+`stopPropagation`, so the large, easy-to-hit target is the destructive one and the safe
+actions are the small ones.
+
+**This is the residual of BUG-008's design, not a regression of it.** BUG-008 correctly stopped
+a tap from interrupting *another* flow, and deliberately kept "tap shows it now" when
+pre-service owns the screen — the hint text still promises that (`PreServiceMode.tsx:22,195`).
+What was not considered is that "we own the screen" is the *normal* pre-service state, so the
+guard does not protect the most common case: an operator setting up before anyone is watching
+the operator, but with the projector already showing the loop.
+
+**Fix is a design decision, not an obvious patch — needs a brainstorm.** The options are not
+equivalent: making a row click select-only is the safest and reuses **Show this card** as the
+sole takeover, but it contradicts the documented behaviour and costs a click during the loop,
+which is when the operator most wants speed. A double-click-to-show, or show-on-click only
+while the loop is *engaged*, are both plausible middle grounds. See the roadmap's Pre-service
+section.
+
+**Notes:** Reported 2026-08-04 from live use. Worth checking whether the same "big target is
+the live action" shape exists elsewhere — `SongsMode`'s section rail and the sermon list are
+the obvious places to look.
+
+---
+
 ## Fixed
 
 ### BUG-008 — Pre-service card tap silently did nothing while a song was live

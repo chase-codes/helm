@@ -86,6 +86,15 @@ Several items below share these foundations — worth building once as reusable 
   now carries `● ARMED` (accent ring, no fill), visually distinct from `● ON SCREEN` (filled,
   live). Landed alongside the BUG-008 fix, which also added **Show this card** as the
   deliberate single-card takeover. See `bugs.md` BUG-008.
+- **Decide what a single click on a card should do.** Today it projects the card immediately
+  whenever pre-service owns the screen — which is the *normal* pre-service state — so there is
+  no chance to read or edit a card before the congregation sees it. **Show this card** already
+  exists as the deliberate takeover (added by the BUG-008 fix), so the safe design is available;
+  what is missing is a decision about the trade-off. Select-only is safest but costs a click
+  during the loop, exactly when the operator wants speed; double-click-to-show, or
+  show-on-click only while the loop is engaged, are middle grounds. Needs a brainstorm rather
+  than a patch — the current behaviour is documented in the view's own hint text, so changing
+  it is a deliberate reversal. See `bugs.md` BUG-018.
 - **Dedicated scripture-search item.** A first-class pre-service item that matches the full
   sermon scripture-search experience (browse/search, not just type-a-reference). Depends on
   the *reusable scripture-search component* enabler above (break the capability out of
