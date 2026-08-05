@@ -162,18 +162,29 @@ Several items below share these foundations — worth building once as reusable 
     cross-mode assertion that scripture cannot seize the screen from Songs — the reducer is
     unit-tested and the two known reproductions are blocked by construction.
 
-- **Book-name typeahead in the ref builder.** Typing `gen` and pressing space already
-  resolves to Genesis — `matchBook` (`refs.ts:11-17`) picks exact alias first, then first
-  prefix match, and the book stage commits it on space (`refBuilder.ts:86-88`). But the
-  entry renders the raw query (`renderBuilder:35`), so the operator can't see where space
-  will land until it lands. Show the completion inline with the untyped remainder marked,
-  driven by the same `matchBook` call space uses so the preview can't disagree with the
-  result. Design questions worth their own pass: numbered books are already special-cased
-  (for `1 jo`, space appends rather than commits until `matchBookExact` resolves —
-  `refBuilder.ts:89`), so the hint must distinguish "keep typing" from "accept"; what shows
-  on no match; whether Tab also accepts; whether an ambiguous prefix can be cycled (`jo` →
-  John before Jonah, Joshua, Joel); and whether chapter/verse stages get the same
-  treatment. Discoverability item — helps operators who don't know the keyboard flow.
+- ~~**Book-name typeahead in the ref builder.**~~ ✅ **Shipped** (`c9d46a3`) — the entry now
+  shows the book space would commit as dim ghost text inline, in two forms: an inline tail
+  (`gen`→`esis`) when the query prefixes the name, and an arrow (`jhn → John`) when the
+  matching alias doesn't. The invariant — *a ghost is visible iff space (or Tab) commits it*
+  — is structural, not conventional: the commit rule moved out of `printable` into an
+  exported `bookCompletion` (`refBuilder.ts`) that both the keystroke handler and the
+  renderer call, pinned by a table-driven property test. The ghost is an overlay span, never
+  part of the input's `value`.
+  Measuring the design turned up a second defect and pulled it into scope: `matchBook`'s
+  prefix branch returned the first match in canonical order, so **the example in this entry
+  was wrong** — `BOOKS` is in canonical order, so `jo` gave *Joshua*, not John, and `ma` gave
+  *Malachi*. A preview would have advertised that on every keystroke, so the branch now
+  prefers a curated `RANKED_BOOKS` list (`books.ts`) with canonical order as the tie-break;
+  the exact-alias branch is untouched, pinned by a test that every bundled-KJV book name —
+  including the variants `Psalms` and `Song of Songs` — resolves exactly, out of the
+  ranking's reach (`bibleSource` maps downloaded book names through `matchBook`).
+  Rejected, with reasons in the spec: chapter/verse-stage hints (a range display, not a
+  completion, and it sits on the extent-fetch path where **BUG-010** already drops digits
+  typed at speed), Tab-cycling through alternatives (one more letter disambiguates), and
+  usage-based ranking (same keystrokes would resolve differently week to week, and cold-start
+  empty on a fresh install). `ti` and `co` stay "wrong" — Timothy and Corinthians are
+  numbered, so no ranking reaches them bare; the ghost at least makes that visible now.
+  Spec: `docs/superpowers/specs/2026-08-05-scripture-book-typeahead-design.md`.
 
 - **Background choices for scripture (and similar) audience output.** A settings flow
   letting operators choose the background shown behind scripture text on the audience
