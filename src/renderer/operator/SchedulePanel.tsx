@@ -1,8 +1,12 @@
-import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+import { useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { RefGhost } from '../../shared/scripture/refBuilder';
 import { TrackTabs } from './TrackTabs';
 import { UndoToast } from './UndoToast';
+
+/** Shared by the input and its ghost overlay — they must render at the exact same size or
+ * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
+const entryFont: CSSProperties = { fontSize: '13.5px', fontFamily: "'JetBrains Mono',monospace" };
 
 export type SermonTrack = 'scripture' | 'message' | 'slides';
 
@@ -25,8 +29,10 @@ export interface SchedulePanelProps {
   onEntryChange: (v: string) => void;
   onEntryKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   /** Book-name completion preview for the entry field. Non-null exactly when space (or Tab)
-   * would commit a book — see `bookCompletion` in refBuilder. Rendered as a dim overlay,
-   * never as part of `value`. */
+   * would commit a book while the entry has focus — see `bookCompletion` in refBuilder.
+   * Rendered as a dim overlay, never as part of `value`, and only while the input is
+   * focused: away from focus, space goes to onGoLive instead, so a stale ghost must not
+   * imply it would still be accepted (see Finding 1). */
   ghost?: RefGhost | null;
   canAdd: boolean;
   addLabel: string;
@@ -53,6 +59,10 @@ export function SchedulePanel({
   rows,
   undo
 }: SchedulePanelProps): JSX.Element {
+  // The ghost is derived from builder state alone and knows nothing about focus, but "space
+  // commits the book" is only true while this input has focus — when it doesn't, space goes
+  // to onGoLive instead (see Finding 1). Track focus locally and gate the overlay on it.
+  const [focused, setFocused] = useState(false);
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const schedInputStyle: CSSProperties = {
     display: 'flex',
@@ -118,13 +128,15 @@ export function SchedulePanel({
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
               <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex' }}>
                 <input
-                  style={{ flex: 1, minWidth: 0, fontSize: '13.5px', fontFamily: "'JetBrains Mono',monospace" }}
+                  style={{ ...entryFont, flex: 1, minWidth: 0 }}
                   value={value}
                   onChange={(e) => onEntryChange(e.target.value)}
                   onKeyDown={onEntryKeyDown}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
                   placeholder="Add reading — John 3:16"
                 />
-                {ghost && (
+                {ghost && focused && (
                   // A transparent copy of the typed text advances the dim completion to
                   // exactly the caret's offset — no text measuring, no scroll syncing (a
                   // book name plus a reference never gets long enough to scroll this field).
@@ -133,6 +145,7 @@ export function SchedulePanel({
                     data-ghost
                     aria-hidden="true"
                     style={{
+                      ...entryFont,
                       position: 'absolute',
                       left: 0,
                       top: 0,
@@ -140,9 +153,7 @@ export function SchedulePanel({
                       display: 'flex',
                       alignItems: 'center',
                       pointerEvents: 'none',
-                      whiteSpace: 'pre',
-                      fontSize: '13.5px',
-                      fontFamily: "'JetBrains Mono',monospace"
+                      whiteSpace: 'pre'
                     }}
                   >
                     <span style={{ color: 'transparent' }}>{value}</span>

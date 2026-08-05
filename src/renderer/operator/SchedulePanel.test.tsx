@@ -64,6 +64,7 @@ describe('SchedulePanel', () => {
   it('renders the tail ghost dimmed and aria-hidden, without touching the input value', () => {
     render(<SchedulePanel {...baseProps} value="gen" ghost={{ kind: 'tail', text: 'esis' }} />)
     const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    fireEvent.focus(input)
     expect(input.value).toBe('gen') // the ghost is NEVER in the value
     const ghost = document.querySelector('[data-ghost]') as HTMLElement
     expect(ghost).toBeTruthy()
@@ -75,6 +76,7 @@ describe('SchedulePanel', () => {
   it('renders the alias ghost as an arrow to the book name', () => {
     render(<SchedulePanel {...baseProps} value="jhn" ghost={{ kind: 'alias', book: 'John' }} />)
     const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    fireEvent.focus(input)
     expect(input.value).toBe('jhn')
     const text = document.querySelector('[data-ghost-text]') as HTMLElement
     expect(text.textContent).toBe(' → John')
@@ -82,11 +84,32 @@ describe('SchedulePanel', () => {
 
   it('renders no ghost when there is no completion', () => {
     render(<SchedulePanel {...baseProps} value="xyz" ghost={null} />)
+    fireEvent.focus(screen.getByPlaceholderText(/Add reading/))
     expect(document.querySelector('[data-ghost]')).toBeNull()
   })
 
   it('renders no ghost when the prop is omitted entirely', () => {
     render(<SchedulePanel {...baseProps} value="John 3:16" />)
+    fireEvent.focus(screen.getByPlaceholderText(/Add reading/))
+    expect(document.querySelector('[data-ghost]')).toBeNull()
+  })
+
+  // Finding 1: the ghost is derived from builder state alone and knows nothing about focus,
+  // but "space commits the book" is only true while the entry has focus — away from focus,
+  // space goes to onGoLive instead. A stale ghost surviving a click-away would promise a
+  // commit that space no longer performs, so the overlay must track focus itself.
+  it('does not render the ghost overlay before the input is focused, even with a ghost prop', () => {
+    render(<SchedulePanel {...baseProps} value="gen" ghost={{ kind: 'tail', text: 'esis' }} />)
+    expect(document.querySelector('[data-ghost]')).toBeNull()
+  })
+
+  it('shows the ghost overlay once focused, and hides it again on blur', () => {
+    render(<SchedulePanel {...baseProps} value="gen" ghost={{ kind: 'tail', text: 'esis' }} />)
+    const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    expect(document.querySelector('[data-ghost]')).toBeNull()
+    fireEvent.focus(input)
+    expect(document.querySelector('[data-ghost]')).toBeTruthy()
+    fireEvent.blur(input)
     expect(document.querySelector('[data-ghost]')).toBeNull()
   })
 })
