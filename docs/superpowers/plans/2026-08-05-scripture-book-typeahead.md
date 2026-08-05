@@ -15,7 +15,7 @@
 - **THE INVARIANT:** *A ghost is visible if and only if pressing space (or Tab) commits it.* Enforced by both paths calling the single exported `bookCompletion()`. **If you find yourself writing a second rule for what to display, stop — that is the bug this design exists to prevent.**
 - **The ghost never enters the input's `value`.** The entry is a controlled `<input>` fed by `value={renderBuilder(builder)}`. Parsing, caret, selection and `onEntryChange` stay untouched. The ghost is a sibling overlay `<span>`.
 - **Task 1 lands before Task 2.** `src/main/bibleSource.ts:65,78` uses `matchBook` to map book names from downloaded bibles onto canonical names; a silent remap there mis-files installed scripture, which is far worse than anything in the entry field. Pin it before touching the ranking.
-- **Verification standard — all of these, not a subset:** `npm test` (579 passing on `main`; keep it green), `npm run typecheck` (must be clean), and a real-app driver in `scratch/` (Electron + `playwright-core`, house pattern in `scratch/verify-bug008.mjs`).
+- **Verification standard — all of these, not a subset:** `npm test` (575 passing on `main` (measured at 58c727d); keep it green), `npm run typecheck` (must be clean), and a real-app driver in `scratch/` (Electron + `playwright-core`, house pattern in `scratch/verify-bug008.mjs`).
 - **`scratch/` stays untracked** — never `git add` anything under `scratch/`. The existing drivers there are untracked too.
 - **House rules (`CLAUDE.md`):** concise conventional-commit subjects; add a body only when it genuinely adds clarity. **No `Co-Authored-By` and no `Claude-Session` trailers.**
 - **Out of scope, do not touch while you are in these files:** BUG-010 / BUG-011 / BUG-012 (pre-existing defects in this same entry field, see `docs/superpowers/bugs.md`); chapter/verse-stage hints; Tab-cycling through alternatives; usage-based ranking. All considered and rejected — the spec says why.
@@ -948,7 +948,7 @@ Replace the whole entry with the strikethrough form. Keep it to the register of 
 - [ ] **Step 4: Final verification**
 
 Run: `npm test && npm run typecheck`
-Expected: both clean. Confirm the test count has grown from the 579 baseline on `main`.
+Expected: both clean. Confirm the test count has grown from the 575 baseline measured on `main`.
 
 - [ ] **Step 5: Commit**
 
