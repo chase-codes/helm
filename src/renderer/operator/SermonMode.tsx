@@ -9,6 +9,7 @@ import {
   renderBuilder,
   fromParsedRef,
   toParsedRef,
+  refGhost,
   EMPTY_EXTENT,
   type RefBuilderState
 } from '../../shared/scripture/refBuilder';
@@ -436,6 +437,10 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // clears the builder also moves the projector.
   const builderUnresolved = renderBuilder(builder) !== '' && toParsedRef(builder) === null;
 
+  // The completion the entry previews. Same function the space/Tab handler commits with,
+  // so what the operator sees and what the keystroke does cannot disagree.
+  const ghost = refGhost(builder);
+
   // Two independent commits. The schedule is a plan; it is not a gate to the projector, and
   // nothing that reaches the projector writes a row. Enter and `+ Add` file; Shift+Enter and
   // the Go live button show. Both read `addRef`, so an empty entry commits the cursor's
@@ -633,6 +638,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             value={renderBuilder(builder)}
             onEntryChange={onEntryChange}
             onEntryKeyDown={onEntryKeyDown}
+            ghost={ghost}
             // Unconditional on purpose: `+ Add` is always there for an operator who only
             // uses the GUI. Its label names the verse it will file, so it stays honest even
             // while the entry holds a half-typed reference (see `builderUnresolved`).

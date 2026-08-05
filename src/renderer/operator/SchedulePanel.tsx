@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type { Theme } from '../../shared/theme';
+import type { RefGhost } from '../../shared/scripture/refBuilder';
 import { TrackTabs } from './TrackTabs';
 import { UndoToast } from './UndoToast';
 
@@ -23,6 +24,10 @@ export interface SchedulePanelProps {
   value: string;
   onEntryChange: (v: string) => void;
   onEntryKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
+  /** Book-name completion preview for the entry field. Non-null exactly when space (or Tab)
+   * would commit a book — see `bookCompletion` in refBuilder. Rendered as a dim overlay,
+   * never as part of `value`. */
+  ghost?: RefGhost | null;
   canAdd: boolean;
   addLabel: string;
   onAdd: () => void;
@@ -41,6 +46,7 @@ export function SchedulePanel({
   value,
   onEntryChange,
   onEntryKeyDown,
+  ghost,
   canAdd,
   addLabel,
   onAdd,
@@ -110,13 +116,42 @@ export function SchedulePanel({
           <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
             <div style={schedInputStyle}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
-              <input
-                style={{ flex: 1, fontSize: '13.5px', fontFamily: "'JetBrains Mono',monospace" }}
-                value={value}
-                onChange={(e) => onEntryChange(e.target.value)}
-                onKeyDown={onEntryKeyDown}
-                placeholder="Add reading — John 3:16"
-              />
+              <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex' }}>
+                <input
+                  style={{ flex: 1, minWidth: 0, fontSize: '13.5px', fontFamily: "'JetBrains Mono',monospace" }}
+                  value={value}
+                  onChange={(e) => onEntryChange(e.target.value)}
+                  onKeyDown={onEntryKeyDown}
+                  placeholder="Add reading — John 3:16"
+                />
+                {ghost && (
+                  // A transparent copy of the typed text advances the dim completion to
+                  // exactly the caret's offset — no text measuring, no scroll syncing (a
+                  // book name plus a reference never gets long enough to scroll this field).
+                  // Font must match the input exactly or the ghost drifts.
+                  <span
+                    data-ghost
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      pointerEvents: 'none',
+                      whiteSpace: 'pre',
+                      fontSize: '13.5px',
+                      fontFamily: "'JetBrains Mono',monospace"
+                    }}
+                  >
+                    <span style={{ color: 'transparent' }}>{value}</span>
+                    <span data-ghost-text style={{ color: T.faint }}>
+                      {ghost.kind === 'tail' ? ghost.text : ` → ${ghost.book}`}
+                    </span>
+                  </span>
+                )}
+              </div>
             </div>
             {canAdd && (
               <button style={schedAddStyle} onClick={onAdd}>

@@ -60,4 +60,33 @@ describe('SchedulePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(onUndo).toHaveBeenCalledTimes(1)
   })
+
+  it('renders the tail ghost dimmed and aria-hidden, without touching the input value', () => {
+    render(<SchedulePanel {...baseProps} value="gen" ghost={{ kind: 'tail', text: 'esis' }} />)
+    const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    expect(input.value).toBe('gen') // the ghost is NEVER in the value
+    const ghost = document.querySelector('[data-ghost]') as HTMLElement
+    expect(ghost).toBeTruthy()
+    expect(ghost.getAttribute('aria-hidden')).toBe('true') // no double-reading the field
+    expect(ghost.textContent).toBe('genesis') // transparent copy of "gen" + dim "esis"
+    expect((ghost.querySelector('[data-ghost-text]') as HTMLElement).textContent).toBe('esis')
+  })
+
+  it('renders the alias ghost as an arrow to the book name', () => {
+    render(<SchedulePanel {...baseProps} value="jhn" ghost={{ kind: 'alias', book: 'John' }} />)
+    const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    expect(input.value).toBe('jhn')
+    const text = document.querySelector('[data-ghost-text]') as HTMLElement
+    expect(text.textContent).toBe(' → John')
+  })
+
+  it('renders no ghost when there is no completion', () => {
+    render(<SchedulePanel {...baseProps} value="xyz" ghost={null} />)
+    expect(document.querySelector('[data-ghost]')).toBeNull()
+  })
+
+  it('renders no ghost when the prop is omitted entirely', () => {
+    render(<SchedulePanel {...baseProps} value="John 3:16" />)
+    expect(document.querySelector('[data-ghost]')).toBeNull()
+  })
 })
