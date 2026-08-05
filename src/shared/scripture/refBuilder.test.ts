@@ -379,3 +379,40 @@ test('ghost: numbered books stay silent until they resolve', () => {
   expect(refGhost(atBook('1 jo'))).toEqual<RefGhost>({ kind: 'tail', text: 'hn' }) // exact alias
   expect(bookCompletion(atBook('1 jo'))).toBe('1 John')
 })
+
+test('Tab commits the book when a ghost is showing', () => {
+  const r = applyKey(atBook('ma'), 'Tab', false, EMPTY_EXTENT)
+  expect(r.state).toMatchObject({ stage: 'chapter', book: 'Matthew', bookQuery: '' })
+  expect(r.preventDefault).toBe(true)
+})
+
+test('Tab commits the alias form too', () => {
+  const r = applyKey(atBook('jhn'), 'Tab', false, EMPTY_EXTENT)
+  expect(r.state).toMatchObject({ stage: 'chapter', book: 'John' })
+  expect(r.preventDefault).toBe(true)
+})
+
+test('Tab with no ghost leaves focus alone', () => {
+  for (const q of ['', 'xyz', '1', '1 j']) {
+    const s = atBook(q)
+    const r = applyKey(s, 'Tab', false, EMPTY_EXTENT)
+    expect(r.state, `"${q}"`).toBe(s) // identity: nothing changed
+    expect(r.preventDefault, `"${q}"`).toBe(false) // focus still moves
+  }
+})
+
+test('Tab past the book stage never commits', () => {
+  const s: RefBuilderState = { ...initialBuilder(), stage: 'chapter', book: 'John', chapter: 3 }
+  const r = applyKey(s, 'Tab', false, EMPTY_EXTENT)
+  expect(r.state).toBe(s)
+  expect(r.preventDefault).toBe(false)
+})
+
+test('Tab and space commit identically wherever a ghost shows', () => {
+  for (const q of ['gen', 'ma', 'jo', 'jhn', '1 jo', 'jame']) {
+    const s = atBook(q)
+    const viaTab = applyKey(s, 'Tab', false, EMPTY_EXTENT).state
+    const viaSpace = applyKey(s, ' ', false, EMPTY_EXTENT).state
+    expect(viaTab, `"${q}"`).toEqual(viaSpace)
+  }
+})

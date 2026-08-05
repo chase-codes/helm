@@ -119,6 +119,13 @@ export function applyKey(
   extent: BookExtent
 ): Applied {
   if (key === 'Backspace') return { state: backspace(s), preventDefault: true }
+  if (key === 'Tab') {
+    // Accept only what the operator can SEE. With no ghost, Tab is not swallowed — focus
+    // moves as it normally would, rather than the field eating a key for nothing.
+    const b = bookCompletion(s)
+    if (b === null) return { state: s, preventDefault: false }
+    return { state: commitBook(s, b), preventDefault: true }
+  }
   if (key.length !== 1) return { state: s, preventDefault: false }
   return { state: printable(s, key, extent), preventDefault: true }
 }
