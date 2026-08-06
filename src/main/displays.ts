@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils';
 import { CH, type DisplayInfo, type DisplayStatus, type OutputRole, type OutputVariant, type OutputViewMode } from '../shared/types';
 import {
   DEFAULT_ROLE,
+  DEFAULT_VIEW,
   ROLE_VARIANT,
   fingerprintDisplay,
   planAttachments,
@@ -16,7 +17,7 @@ import { presentation } from './stateStore';
 const ROLES_KEY = 'displays:roles';
 const VIEWS_KEY = 'displays:views';
 
-interface Tracked { win: BrowserWindow; fingerprint: string; role: OutputRole }
+interface Tracked { win: BrowserWindow; fingerprint: string; role: OutputRole; view: OutputViewMode }
 const byDisplayId = new Map<number, Tracked>();
 const testOutputs = new Set<BrowserWindow>();
 
@@ -29,7 +30,7 @@ function loadOutput(win: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/output/index.html`);
   else win.loadFile(join(__dirname, '../renderer/output/index.html'));
 }
-export function createOutputWindow(bounds: Electron.Rectangle, frameless = true, variant: OutputVariant = 'audience'): BrowserWindow {
+export function createOutputWindow(bounds: Electron.Rectangle, frameless = true, variant: OutputVariant = 'audience', view: OutputViewMode = 'slides'): BrowserWindow {
   const win = new BrowserWindow({
     ...bounds, frame: !frameless, resizable: !frameless, movable: !frameless,
     backgroundColor: '#000000', autoHideMenuBar: true,
@@ -37,7 +38,7 @@ export function createOutputWindow(bounds: Electron.Rectangle, frameless = true,
   });
   if (frameless) { win.setAlwaysOnTop(true, 'screen-saver'); win.setSkipTaskbar(true); win.setBounds(bounds); }
   loadOutput(win);
-  presentation.registerOutput(win, variant);
+  presentation.registerOutput(win, variant, view);
   return win;
 }
 
@@ -55,7 +56,7 @@ function snapshot(d: Electron.Display): DisplaySnapshot {
 
 // The operator display is the one the operator window sits on; it is never an output.
 // Falls back to the primary display id when there is no operator window (e.g. after Cmd+W).
-function operatorDisplayId(): number {
+export function operatorDisplayId(): number {
   const opWin = getOperator();
   if (opWin && !opWin.isDestroyed()) return screen.getDisplayMatching(opWin.getBounds()).id;
   return screen.getPrimaryDisplay().id;
@@ -79,6 +80,7 @@ function sync(): void {
   const opId = operatorDisplayId();
   const plan = planAttachments(snaps, opId, savedRoles());
   const plannedIds = new Set(plan.map((a) => a.displayId));
+  const views = savedViews();
 
   // Destroy windows for displays that are no longer planned (unplugged or became operator).
   for (const [id, t] of byDisplayId) {
@@ -86,6 +88,7 @@ function sync(): void {
   }
   // Create / re-bounds / re-tag for each planned attachment.
   for (const a of plan) {
+    const view = resolveView(views, a.fingerprint);
     const existing = byDisplayId.get(a.displayId);
     if (existing && !existing.win.isDestroyed()) {
       existing.win.setBounds(a.bounds);
@@ -94,19 +97,22 @@ function sync(): void {
         existing.role = a.role;
         presentation.setOutputVariant(existing.win, ROLE_VARIANT[a.role]);
       }
+      if (existing.view !== view) {
+        existing.view = view;
+        presentation.setOutputView(existing.win, view);
+      }
       continue;
     }
-    const win = createOutputWindow(a.bounds, true, ROLE_VARIANT[a.role]);
+    const win = createOutputWindow(a.bounds, true, ROLE_VARIANT[a.role], view);
     // Symmetric to testOutputs' 'closed' cleanup: if this output is torn down by any path
     // other than our own sync/closeAllOutputs (e.g. Cmd+W), drop the stale map entry so
     // displayStatus() doesn't over-count. Guard against clobbering a replacement window a
     // later sync may have already put under this display id.
     win.on('closed', () => { if (byDisplayId.get(a.displayId)?.win === win) byDisplayId.delete(a.displayId); });
-    byDisplayId.set(a.displayId, { win, fingerprint: a.fingerprint, role: a.role });
+    byDisplayId.set(a.displayId, { win, fingerprint: a.fingerprint, role: a.role, view });
   }
 
   // Build enriched DisplayInfo[] for ALL displays (operator included) for the header/6b.
-  const views = savedViews();
   lastDisplays = snaps.map((d) => {
     const isOperator = d.id === opId;
     const tracked = byDisplayId.get(d.id);
@@ -120,7 +126,7 @@ function sync(): void {
       scaleFactor: d.scaleFactor,
       role: isOperator ? null : (tracked?.role ?? DEFAULT_ROLE),
       isOperator,
-      view: isOperator ? null : resolveView(views, fingerprint),
+      view: isOperator ? null : (tracked?.view ?? DEFAULT_VIEW),
     };
   });
   broadcastStatus();
@@ -145,6 +151,29 @@ export function setDisplayRole(fingerprint: string, role: OutputRole): void {
   // Refresh the DisplayInfo[] role values and re-broadcast.
   lastDisplays = lastDisplays.map((d) =>
     !d.isOperator && d.fingerprint === fingerprint ? { ...d, role } : d,
+  );
+  broadcastStatus();
+}
+
+// Persist a view for a fingerprint and live-re-tag every matching window (no re-spawn).
+// The literal fingerprint 'test' targets dev test-output windows instead, so the driver
+// script (and a dev on a one-display machine) can exercise leader/mirror.
+export function setDisplayView(fingerprint: string, view: OutputViewMode): void {
+  if (fingerprint === 'test') {
+    for (const w of testOutputs) if (!w.isDestroyed()) presentation.setOutputView(w, view);
+    return;
+  }
+  const views = savedViews();
+  views[fingerprint] = view;
+  settings?.set(VIEWS_KEY, views);
+  for (const t of byDisplayId.values()) {
+    if (t.fingerprint === fingerprint && !t.win.isDestroyed()) {
+      t.view = view;
+      presentation.setOutputView(t.win, view);
+    }
+  }
+  lastDisplays = lastDisplays.map((d) =>
+    !d.isOperator && d.fingerprint === fingerprint ? { ...d, view } : d,
   );
   broadcastStatus();
 }
