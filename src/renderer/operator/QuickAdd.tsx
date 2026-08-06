@@ -1,7 +1,7 @@
-import { useContext, useMemo, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import { useContext, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { splitToSlides } from '../../shared/songs/splitToSlides';
-import type { NewSongInput, Song } from '../../shared/types';
+import type { NewSongInput, Song, SongWebCandidate } from '../../shared/types';
 
 export interface QuickAddProps {
   open: boolean;
@@ -11,6 +11,14 @@ export interface QuickAddProps {
   onClose: () => void;
   onSaved: (song: Song) => void;
 }
+
+const fmtDur = (d: number): string =>
+  `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`;
+
+const stanzaCount = (t: string): number =>
+  t.split(/\n\s*\n/).filter((s) => s.trim()).length;
+
+type QaTab = 'search' | 'paste';
 
 export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
@@ -22,6 +30,13 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [tab, setTab] = useState<QaTab>('paste');
+  const [query, setQuery] = useState(initialTitle?.trim() ?? '');
+  const [results, setResults] = useState<SongWebCandidate[]>([]);
+  const [highlighted, setHighlighted] = useState(0);
+  const [searchState, setSearchState] = useState<'idle' | 'loading' | 'empty' | 'error' | 'url-error' | 'done'>('idle');
+  const [fromWeb, setFromWeb] = useState(false);
+  const searchSeq = useRef(0);
 
   // Escape is handled by App's global keydown delegate (Task 12), which asks the active
   // mode's ModeKeyHandler.onEscape() to close any open modal — SongsMode owns
@@ -29,11 +44,72 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
   // one would double-handle the same keypress (harmless since onClose is idempotent, but
   // redundant), and this component doesn't otherwise need to know about keyboard input.
 
-  const slides = useMemo(() => splitToSlides(text), [text]);
+  const previewText = tab === 'search' ? (results[highlighted]?.text ?? '') : text;
+  const slides = useMemo(() => splitToSlides(previewText), [previewText]);
 
   if (!open) return null;
 
   const canSave = !!text.trim() && !saving;
+
+  const isUrl = (s: string): boolean => /^https?:\/\//i.test(s.trim());
+
+  const pick = (c: SongWebCandidate): void => {
+    setTitle(c.title);
+    setAuthor(c.author);
+    setText(c.text);
+    setFromWeb(true);
+    setTab('paste');
+  };
+
+  const runUrl = (url: string): void => {
+    const mySeq = ++searchSeq.current;
+    setSearchState('loading');
+    window.helm.songSources.fromUrl(url.trim()).then(
+      (r) => {
+        if (searchSeq.current !== mySeq) return;
+        if ('candidate' in r) { pick(r.candidate); setSearchState('done'); }
+        else setSearchState(r.error === 'network' ? 'error' : 'url-error');
+      },
+      () => { if (searchSeq.current === mySeq) setSearchState('error'); }
+    );
+  };
+
+  const runSearch = (q: string): void => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    if (isUrl(trimmed)) { runUrl(trimmed); return; }
+    const mySeq = ++searchSeq.current;
+    setSearchState('loading');
+    window.helm.songSources.search(trimmed).then(
+      (r) => {
+        if (searchSeq.current !== mySeq) return;
+        if ('error' in r) { setSearchState('error'); return; }
+        setResults(r.candidates);
+        setHighlighted(0);
+        setSearchState(r.candidates.length === 0 ? 'empty' : 'done');
+      },
+      () => { if (searchSeq.current === mySeq) setSearchState('error'); }
+    );
+  };
+
+  const openSearchTab = (): void => {
+    setTab('search');
+    // Eager: arriving from the rail chip with a title in play, results should be waiting.
+    if (searchState === 'idle' && query.trim() && !isUrl(query)) runSearch(query);
+  };
+
+  const onSearchKey = (e: ReactKeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Enter') {
+      if (searchState === 'done' && results[highlighted] && !isUrl(query)) pick(results[highlighted]);
+      else runSearch(query);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlighted((h) => Math.min(h + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    }
+  };
 
   const save = (): void => {
     if (!canSave) return;
@@ -41,6 +117,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
     setSaveError(false);
     const input: NewSongInput = { title: title.trim() || 'Untitled Song', text };
     if (author.trim()) input.author = author.trim();
+    if (fromWeb) input.source = 'web';
     window.helm.songs.add(input).then(
       (song) => {
         onClose();
@@ -144,46 +221,107 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{ fontWeight: 700, fontSize: '18px', flex: 1 }}>Add a song</div>
             <div style={tabsWrapStyle}>
-              <button
-                style={qaTab(false, true)}
-                disabled
-                title="Online sources arrive with the song-sources slice"
-              >
+              <button style={qaTab(tab === 'search', false)} onClick={openSearchTab}>
                 Search online
               </button>
-              <button style={qaTab(true, false)}>Paste lyrics</button>
+              <button style={qaTab(tab === 'paste', false)} onClick={() => setTab('paste')}>
+                Paste lyrics
+              </button>
             </div>
           </div>
           <div style={{ fontSize: '13px', color: T.dim, margin: '6px 0 14px', lineHeight: 1.4 }}>
-            Leave a blank line between each verse or chorus. Helm splits and labels them automatically.
+            {tab === 'search'
+              ? 'Search the web for lyrics, or paste a lyrics-page URL. You review before anything is saved.'
+              : 'Leave a blank line between each verse or chorus. Helm splits and labels them automatically.'}
           </div>
         </div>
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px 20px', borderRight: `1px solid ${T.hairline}` }}>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <input
-                style={{ ...titleStyle, flex: 2, minWidth: 0 }}
-                autoFocus={!prefilled}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Song title"
-              />
-              <input
-                style={{ ...titleStyle, flex: 1, minWidth: 0, fontWeight: 500 }}
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                placeholder="Author (optional)"
+          {tab === 'paste' ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px 20px', borderRight: `1px solid ${T.hairline}` }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  style={{ ...titleStyle, flex: 2, minWidth: 0 }}
+                  autoFocus={!prefilled}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Song title"
+                />
+                <input
+                  style={{ ...titleStyle, flex: 1, minWidth: 0, fontWeight: 500 }}
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                  placeholder="Author (optional)"
+                />
+              </div>
+              <textarea
+                style={textStyle}
+                autoFocus={prefilled}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={'Paste lyrics here…\n\nVerse 1\nLine one\nLine two\n\nChorus\nThe chorus'}
               />
             </div>
-            <textarea
-              style={textStyle}
-              autoFocus={prefilled}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={'Paste lyrics here…\n\nVerse 1\nLine one\nLine two\n\nChorus\nThe chorus'}
-            />
-          </div>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px 20px', borderRight: `1px solid ${T.hairline}` }}>
+              <input
+                style={titleStyle}
+                autoFocus
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setSearchState('idle'); }}
+                onKeyDown={onSearchKey}
+                placeholder="Search by title and artist, or paste a lyrics-page URL"
+              />
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {searchState === 'loading' && <div style={{ fontSize: '13px', color: T.dim, padding: '8px 2px' }}>Searching…</div>}
+                {searchState === 'empty' && (
+                  <div style={{ fontSize: '13px', color: T.dim, padding: '8px 2px' }}>No matches — paste lyrics or try a URL.</div>
+                )}
+                {searchState === 'url-error' && (
+                  <div style={{ fontSize: '13px', color: T.live, padding: '8px 2px' }}>
+                    Couldn&rsquo;t read lyrics from that page — copy them and use Paste lyrics.
+                  </div>
+                )}
+                {searchState === 'error' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 2px' }}>
+                    <div style={{ fontSize: '13px', color: T.live }}>Couldn&rsquo;t reach the lyrics service — try again.</div>
+                    <button
+                      style={{ height: '28px', padding: '0 12px', borderRadius: '8px', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.border}`, fontSize: '12.5px', color: T.dim }}
+                      onClick={() => runSearch(query)}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {(searchState === 'done' || searchState === 'idle') &&
+                  results.map((c, i) => (
+                    <button
+                      key={`${c.title}-${c.author}-${i}`}
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        background: i === highlighted ? `${T.accent}22` : T.panel2,
+                        boxShadow: `inset 0 0 0 1px ${i === highlighted ? T.accent : T.hairline}`,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px',
+                      }}
+                      onMouseEnter={() => setHighlighted(i)}
+                      onClick={() => pick(c)}
+                    >
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: T.text }}>{c.title}</div>
+                      <div style={{ fontSize: '12px', color: T.dim }}>
+                        {c.author}
+                        {c.album ? ` · ${c.album}` : ''}
+                        {c.duration != null ? ` · ${fmtDur(c.duration)}` : ''}
+                        {` · ${stanzaCount(c.text)} stanzas`}
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
           <div style={previewPanelStyle}>
             <div style={{ padding: '14px 18px 10px', fontSize: '12px', letterSpacing: '0.06em', color: T.faint, fontWeight: 600 }}>
               PREVIEW · {slides.length} slides
