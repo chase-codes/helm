@@ -101,7 +101,7 @@ function installHelmStub(
   }
 }
 
-function Harness({ active = true }: { active?: boolean } = {}): JSX.Element {
+function Harness({ active = true, lookupNonce = 0 }: { active?: boolean; lookupNonce?: number } = {}): JSX.Element {
   const keyHandlerRef = useRef(null)
   return (
     <ThemeCtx.Provider value={themeFor('dark')}>
@@ -111,7 +111,7 @@ function Harness({ active = true }: { active?: boolean } = {}): JSX.Element {
         active={active}
         onOpenSettings={() => {}}
         biblesRevision={0}
-        lookupNonce={0}
+        lookupNonce={lookupNonce}
       />
     </ThemeCtx.Provider>
   )
@@ -475,5 +475,42 @@ describe('SermonMode — arrows during the stale-chapter tick', () => {
     resolveChapter()
     await waitFor(() => expect(show).toHaveBeenCalled())
     expect(show.mock.calls[0][0]).toBe('scr:Genesis:1:5')
+  })
+})
+
+describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', () => {
+  // App wires Mod+L to bump lookupNonce; SermonMode's two-effect split (part 1 defers
+  // setTrack('scripture') into a timeout, part 2 focuses the entry once `track` actually
+  // reads 'scripture') is exactly the code path the lint fix restructured — this pins the
+  // requirement it exists to serve, not just that it typechecks.
+  it('flips off the message track back to scripture and focuses the entry', async () => {
+    const { resolveChapter } = installHelmStub()
+    const { rerender } = render(<Harness lookupNonce={0} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Move off the scripture track first — SchedulePanel, and the entry with it, unmount
+    // entirely while the Message track is active (see the track-switch in SermonMode's
+    // render).
+    fireEvent.click(screen.getByText('Message'))
+    await waitFor(() => expect(screen.queryByPlaceholderText('Add reading — John 3:16')).toBeNull())
+
+    // Simulate App's Mod+L: bump lookupNonce. Part 1's setTrack is deferred a real tick, so
+    // the entry doesn't exist yet on the next render — wait (rather than assert
+    // synchronously) for it to remount, then check focus landed on it.
+    rerender(<Harness lookupNonce={1} />)
+    await waitFor(() => expect(entry()).toBeTruthy())
+    expect(document.activeElement).toBe(entry())
+  })
+
+  it('re-focuses the entry when already on the scripture track', async () => {
+    const { resolveChapter } = installHelmStub()
+    const { rerender } = render(<Harness lookupNonce={0} />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    expect(document.activeElement).not.toBe(entry())
+
+    rerender(<Harness lookupNonce={1} />)
+    await waitFor(() => expect(document.activeElement).toBe(entry()))
   })
 })

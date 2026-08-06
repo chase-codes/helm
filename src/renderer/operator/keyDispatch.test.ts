@@ -120,6 +120,12 @@ describe('dispatchModeKey — hotkey actions', () => {
     expect(onAction).toHaveBeenCalledWith({ id: 'song.chorus' })
   })
 
+  it('onAction is suppressed while settings is open (the settings half of the shared guard)', () => {
+    const onAction = vi.fn()
+    dispatchModeKey(ev('c'), { ...baseCtx({ scope: 'songs', settingsOpen: true }), handler: makeHandler({ onAction }) })
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
   it('digit 3 routes per scope (song.verse vs scripture.reading)', () => {
     const onAction = vi.fn()
     dispatchModeKey(ev('3'), { ...baseCtx({ scope: 'songs' }), handler: makeHandler({ onAction }) })
