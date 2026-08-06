@@ -5,6 +5,11 @@ export default defineConfig({
   plugins: [react()],
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    environment: 'node'
+    environment: 'node',
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost/'
+      }
+    }
   }
 })

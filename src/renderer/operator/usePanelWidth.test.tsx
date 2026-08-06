@@ -5,28 +5,24 @@ import { usePanelWidth, type PanelWidthOpts } from './usePanelWidth';
 
 afterEach(cleanup);
 
-// Mock localStorage for jsdom environment
-const mockLocalStorage = (() => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-    key: (index: number) => Object.keys(store)[index] ?? null,
-    get length() {
-      return Object.keys(store).length;
-    }
-  };
-})();
+// Mock localStorage since jsdom doesn't provide it in this test environment
+const mockStorage: Record<string, string> = {};
+const mockLocalStorage = {
+  getItem: (key: string) => mockStorage[key] ?? null,
+  setItem: (key: string, value: string) => {
+    mockStorage[key] = value;
+  },
+  removeItem: (key: string) => {
+    delete mockStorage[key];
+  },
+  clear: () => {
+    Object.keys(mockStorage).forEach(key => delete mockStorage[key]);
+  },
+  key: (index: number) => Object.keys(mockStorage)[index] ?? null,
+  length: Object.keys(mockStorage).length
+};
 
-vi.stubGlobal('localStorage', mockLocalStorage);
+vi.stubGlobal('localStorage', mockLocalStorage as any);
 
 beforeEach(() => mockLocalStorage.clear());
 
@@ -95,5 +91,19 @@ describe('usePanelWidth', () => {
     expect(document.body.style.cursor).toBe('');
     expect(document.body.style.userSelect).toBe('');
     expect(localStorage.getItem('testW')).toBeNull();
+  });
+
+  it('drags a left-anchored panel from a clamped out-of-range persisted value', () => {
+    // Persist an out-of-range value (9999, which clamps to 420)
+    localStorage.setItem('testW', '9999');
+    const r = render(<Harness />);
+    // Rendered width should be clamped
+    expect(r.getByTestId('width').textContent).toBe('420');
+    // Start drag at clientX 100, move to 90 (delta = -10, left-anchor so 420 - 10 = 410)
+    fireEvent.mouseDown(r.getByTestId('divider'), { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 90 });
+    // Width should respond immediately from clamped 420, not stay frozen
+    expect(r.getByTestId('width').textContent).toBe('410');
+    fireEvent.mouseUp(window);
   });
 });

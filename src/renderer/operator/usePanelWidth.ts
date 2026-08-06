@@ -46,7 +46,7 @@ export function usePanelWidth(storageKey: string, opts: PanelWidthOpts): PanelWi
   const startDrag = (e: ReactMouseEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = width;
+    const startW = clamp(width);
     let latest = startW;
     const onMove = (ev: MouseEvent): void => {
       const dx = ev.clientX - startX;
