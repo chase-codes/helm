@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { splitToSlides } from '../../shared/songs/splitToSlides';
-import type { Song } from '../../shared/types';
+import type { NewSongInput, Song } from '../../shared/types';
 
 export interface QuickAddProps {
   open: boolean;
@@ -18,6 +18,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
   // mount (and therefore fresh field state) happens on every open.
   const prefilled = !!initialTitle?.trim();
   const [title, setTitle] = useState(initialTitle?.trim() ?? '');
+  const [author, setAuthor] = useState('');
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -38,7 +39,9 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
     if (!canSave) return;
     setSaving(true);
     setSaveError(false);
-    window.helm.songs.add({ title: title.trim() || 'Untitled Song', text }).then(
+    const input: NewSongInput = { title: title.trim() || 'Untitled Song', text };
+    if (author.trim()) input.author = author.trim();
+    window.helm.songs.add(input).then(
       (song) => {
         onClose();
         onSaved(song);
@@ -158,7 +161,21 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px 20px', borderRight: `1px solid ${T.hairline}` }}>
-            <input style={titleStyle} autoFocus={!prefilled} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input
+                style={{ ...titleStyle, flex: 2, minWidth: 0 }}
+                autoFocus={!prefilled}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Song title"
+              />
+              <input
+                style={{ ...titleStyle, flex: 1, minWidth: 0, fontWeight: 500 }}
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                placeholder="Author (optional)"
+              />
+            </div>
             <textarea
               style={textStyle}
               autoFocus={prefilled}
