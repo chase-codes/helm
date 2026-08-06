@@ -40,3 +40,22 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'song.verse', label: 'Jump to Verse 1–9', scope: 'songs', defaults: DIGITS, fixed: true, digitBlock: true },
   { id: 'scripture.reading', label: 'Jump to reading 1–9', scope: 'scripture', defaults: DIGITS, fixed: true, digitBlock: true }
 ]
+
+const NON_FIXED_ACTION_IDS = new Set(HOTKEY_ACTIONS.filter((a) => !a.fixed).map((a) => a.id))
+
+/** Guards the settings-store 'hotkeys' value on load: it's untrusted (hand-edited, from an
+ * older/newer app version, or just corrupt) and both the dispatcher (`bindingsOf`'s
+ * `.includes`) and the Shortcuts pane (`bindings.map`) assume every entry is a known,
+ * non-fixed action id mapped to a string array — an unvalidated value can throw on every
+ * keydown or crash the settings render. Drops anything that doesn't match that shape rather
+ * than throwing, so a bad value degrades to "no overrides" instead of bricking the app. */
+export function sanitizeOverrides(value: unknown): HotkeyOverrides {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const out: HotkeyOverrides = {}
+  for (const [id, bindings] of Object.entries(value as Record<string, unknown>)) {
+    if (!NON_FIXED_ACTION_IDS.has(id)) continue
+    if (!Array.isArray(bindings) || !bindings.every((b) => typeof b === 'string')) continue
+    out[id] = bindings
+  }
+  return out
+}

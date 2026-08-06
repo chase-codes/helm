@@ -46,7 +46,14 @@ export function ShortcutsSettings({ overrides, onChange }: ShortcutsSettingsProp
         setConflict({ binding, holder })
         return
       }
-      onChange({ ...overrides, [capturingId]: [binding] })
+      const action = HOTKEY_ACTIONS.find((a) => a.id === capturingId)
+      const current = action ? (overrides[action.id] ?? action.defaults) : []
+      // Rebinding to a key the action already holds is a no-op — recording it anyway would
+      // write a redundant single-binding override (dropping any OTHER synonym default holds)
+      // and mark the row "customized" for a rebind that changed nothing.
+      if (!current.includes(binding)) {
+        onChange({ ...overrides, [capturingId]: [binding] })
+      }
       setCapturingId(null)
       setConflict(null)
     }

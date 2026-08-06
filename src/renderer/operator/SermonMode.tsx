@@ -411,8 +411,12 @@ export function SermonMode({
   };
 
   // The reading 1–9 hotkey and a schedule-row click are the same gesture: cursor to the
-  // reading's start, row selected, rail pinned to that verse.
+  // reading's start, row selected, rail pinned to that verse. Resets the builder (like
+  // goLiveFromBuilder already does) so a half-typed ref left over in the entry (e.g. "Rom")
+  // doesn't keep previewing ITS book on the rail — without this, the fresh scroll request
+  // above would pin the reading's verse number onto whatever book the builder was on.
   const jumpToReading = (r: ScriptureReading): void => {
+    setBuilder(initialBuilder());
     jumpTo(r.book, r.ch, r.from);
     sel.select(r.id);
     requestRailScroll(r.from, 'start');

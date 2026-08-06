@@ -114,6 +114,12 @@ describe('dispatchModeKey — hotkey actions', () => {
     expect(ctx.onAppAction).not.toHaveBeenCalled()
   })
 
+  it('app actions are suppressed while the mode reports a modal open (the isModalOpen half of the same guard)', () => {
+    const ctx = baseCtx()
+    dispatchModeKey(ev('2', { ctrl: true }), { ...ctx, handler: makeHandler({ isModalOpen: () => true }) })
+    expect(ctx.onAppAction).not.toHaveBeenCalled()
+  })
+
   it('C in songs scope reaches onAction as song.chorus', () => {
     const onAction = vi.fn()
     dispatchModeKey(ev('c'), { ...baseCtx({ scope: 'songs' }), handler: makeHandler({ onAction }) })

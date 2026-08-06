@@ -60,6 +60,18 @@ describe('ShortcutsSettings', () => {
     expect(onChange).toHaveBeenCalledWith({})
   })
 
+  it('rebinding an action to a key it already holds is a no-op (Finding 5)', () => {
+    // song.chorus defaults to ['Home', 'C'] — pressing 'C' while capturing its rebind names
+    // a synonym it already has, not a change.
+    const { onChange } = renderPane()
+    fireEvent.click(screen.getByRole('button', { name: /rebind Jump to chorus/i }))
+    expect(screen.getByText(/press a key/i)).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'c' })
+    expect(onChange).not.toHaveBeenCalled()
+    // Capture still ends cleanly rather than hanging armed.
+    expect(screen.queryByText(/press a key/i)).toBeNull()
+  })
+
   it('fixed actions offer no rebind button', () => {
     renderPane()
     expect(screen.queryByRole('button', { name: /rebind Close \/ clear/i })).toBeNull()

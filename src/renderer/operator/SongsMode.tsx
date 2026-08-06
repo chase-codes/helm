@@ -31,6 +31,17 @@ const SECTION_W_MAX = 620;
 const SECONDARY_TITLE_MAX = 3;
 const SECONDARY_LIMIT = 3;
 
+// Shared by the cue effect, goLive, and jumpSection — all three build the identical
+// lyrics-slide literal for a song section, so a change to the shape only has one place to go.
+function slideFor(song: Song, section: { label: string; lines: string[] }): Slide {
+  return {
+    kind: 'lyrics',
+    accent: '#e0a341',
+    label: `${song.title} · ${section.label}`,
+    lines: section.lines
+  };
+}
+
 function toRow(song: Song, snippet: string, activeSongId: string | null): SongRow {
   return {
     id: song.id,
@@ -150,12 +161,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   useEffect(() => {
     if (!activeSong || !currentSectionObj) return;
     const key = keyForSong(activeSong.id, clampedSection);
-    const slide: Slide = {
-      kind: 'lyrics',
-      accent: '#e0a341',
-      label: `${activeSong.title} · ${currentSectionObj.label}`,
-      lines: currentSectionObj.lines
-    };
+    const slide = slideFor(activeSong, currentSectionObj);
     window.helm.presentation.cue(key, slide);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSong?.id, clampedSection]);
@@ -201,13 +207,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
 
   const goLive = (): void => {
     if (!activeSong || !currentSectionObj || !curKey) return;
-    const slide: Slide = {
-      kind: 'lyrics',
-      accent: '#e0a341',
-      label: `${activeSong.title} · ${currentSectionObj.label}`,
-      lines: currentSectionObj.lines
-    };
-    window.helm.presentation.goLive(curKey, slide);
+    window.helm.presentation.goLive(curKey, slideFor(activeSong, currentSectionObj));
   };
 
   const toggleLogo = (): void => {
@@ -236,12 +236,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     // liveKey !== key: goLive on the already-live key means "take down" in main — a
     // no-op jump must not black the screen.
     if (output === 'live' && liveSong?.songId === activeSong.id && liveKey !== key) {
-      window.helm.presentation.goLive(key, {
-        kind: 'lyrics',
-        accent: '#e0a341',
-        label: `${activeSong.title} · ${target.label}`,
-        lines: target.lines
-      });
+      window.helm.presentation.goLive(key, slideFor(activeSong, target));
     }
   };
 

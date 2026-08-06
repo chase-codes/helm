@@ -8,7 +8,7 @@ import { SermonMode } from './SermonMode';
 import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
-import type { AppActionId, HotkeyOverrides } from '../../shared/hotkeys/actions';
+import { sanitizeOverrides, type AppActionId, type HotkeyOverrides } from '../../shared/hotkeys/actions';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
@@ -74,8 +74,8 @@ function App(): JSX.Element {
   const [hotkeyOverrides, setHotkeyOverrides] = useState<HotkeyOverrides>({});
   useEffect(() => {
     void window.helm.settings
-      .get<HotkeyOverrides>('hotkeys', {})
-      .then(setHotkeyOverrides)
+      .get<unknown>('hotkeys', {})
+      .then((v) => setHotkeyOverrides(sanitizeOverrides(v)))
       .catch(console.error);
   }, []);
 

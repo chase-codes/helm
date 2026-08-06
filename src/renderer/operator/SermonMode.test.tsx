@@ -590,6 +590,53 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
   })
 })
 
+describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4)', () => {
+  // A half-typed ref in the entry resolves a book ("Romans") but no chapter yet, so the
+  // rail previews Romans (builder.book) over the CUED chapter (scrCh, since builder.chapter
+  // is still null) — a foreign preview that a reading jump into a different book must clear,
+  // or the fresh scroll request lands the wrong chapter's verse number on the rail.
+  it('clears the entry and the rail follows the reading, not the abandoned builder book', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 3, to: 3 }
+    ])
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+
+    // Resolve the book only — chapter/verse left untyped, mirroring the reported repro.
+    typeInEntry('Romans ')
+    await waitFor(() => expect(entryValue()).toBe('Romans'))
+    // The rail is now previewing the abandoned builder book instead of the cued chapter.
+    await waitFor(() => expect(screen.getByText('Romans 1')).toBeTruthy())
+
+    // Reading 1 hotkey (digit press) jumps into Genesis — a different book than the builder.
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 1 }))
+
+    expect(entryValue()).toBe('')
+    await waitFor(() => expect(screen.getByText('Genesis 1')).toBeTruthy())
+    expect(screen.queryByText('Romans 1')).toBeNull()
+  })
+
+  it('a schedule-row click also resets the builder', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 3, to: 3 }
+    ])
+    render(<Harness />)
+    resolveChapter()
+    const row = await screen.findByText('Genesis 1:3')
+
+    typeInEntry('Romans ')
+    await waitFor(() => expect(entryValue()).toBe('Romans'))
+    await waitFor(() => expect(screen.getByText('Romans 1')).toBeTruthy())
+
+    fireEvent.click(row.closest('button') as HTMLElement)
+
+    expect(entryValue()).toBe('')
+    await waitFor(() => expect(screen.getByText('Genesis 1')).toBeTruthy())
+  })
+})
+
 describe('SermonMode — ChapterRail scroll requests', () => {
   it('does not re-fire an already-consumed scroll request when ChapterRail remounts', async () => {
     const scrollSpy = vi.fn()
