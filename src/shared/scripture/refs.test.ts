@@ -72,6 +72,9 @@ test('unranked prefix matches keep canonical order among themselves', () => {
   expect(matchBook('hab')).toBe('Habakkuk')
   expect(matchBook('zep')).toBe('Zephaniah')
   expect(matchBook('gene')).toBe('Genesis')
+  // A true two-unranked tie: both prefix-match "ze", neither is in RANKED_BOOKS, so
+  // canonical order decides — Zephaniah (35) before Zechariah (37).
+  expect(matchBook('ze')).toBe('Zephaniah')
 })
 
 test('every RANKED_BOOKS entry names a real book', () => {

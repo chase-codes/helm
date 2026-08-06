@@ -401,6 +401,14 @@ test('Tab with no ghost leaves focus alone', () => {
   }
 })
 
+test('Shift+Tab still commits the ghost — deliberate, not a bug: applyKey ignores _shift on', () => {
+  // the Tab branch, so Shift+Tab does not move focus backwards while a ghost is showing.
+  // This pins that choice so a future reader doesn't "fix" it into an unhandled shift.
+  const r = applyKey(atBook('ma'), 'Tab', true, EMPTY_EXTENT)
+  expect(r.state).toMatchObject({ stage: 'chapter', book: 'Matthew', bookQuery: '' })
+  expect(r.preventDefault).toBe(true)
+})
+
 test('Tab past the book stage never commits', () => {
   const s: RefBuilderState = { ...initialBuilder(), stage: 'chapter', book: 'John', chapter: 3 }
   const r = applyKey(s, 'Tab', false, EMPTY_EXTENT)

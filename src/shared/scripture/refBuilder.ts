@@ -68,7 +68,11 @@ export function toParsedRef(s: RefBuilderState): ParsedRef | null {
  * digit must be an EXACT alias ("1 jo") before it counts as a completion.
  */
 export function bookCompletion(s: RefBuilderState): string | null {
-  if (s.stage !== 'book') return null
+  // `renderBuilder`'s transparent ghost spacer is `s.bookQuery`, and it only renders that
+  // while `s.book === null` — so the guard here must match, or a (currently unreachable)
+  // state with both a resolved book AND a leftover bookQuery would show a ghost aligned
+  // under the wrong spacer (see Finding 4).
+  if (s.stage !== 'book' || s.book !== null) return null
   const q = s.bookQuery
   const b = matchBook(q)
   if (b === null) return null

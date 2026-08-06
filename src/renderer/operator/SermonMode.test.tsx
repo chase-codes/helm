@@ -215,6 +215,26 @@ describe('SermonMode — direct preview to live', () => {
   })
 })
 
+describe('SermonMode — the book-name ghost is wired to the entry', () => {
+  // refGhost and the overlay are each well tested in isolation, but nothing before this
+  // asserted SermonMode actually threads `ghost={ghost}` through to SchedulePanel — deleting
+  // that prop would drop the whole feature with a green suite otherwise (Finding 5).
+  it('typing a book prefix shows the completion as dim ghost text', async () => {
+    const { resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByPlaceholderText('Add reading — John 3:16')).toBeTruthy())
+
+    fireEvent.focus(entry())
+    typeInEntry('ma')
+    await waitFor(() =>
+      expect((document.querySelector('[data-ghost-text]') as HTMLElement | null)?.textContent).toBe(
+        'tthew'
+      )
+    )
+  })
+})
+
 describe('SermonMode — a half-typed reference is not a commit', () => {
   it('Shift+Enter on an unresolved book neither goes live nor clears the typing', async () => {
     const { goLive, resolveChapter } = installHelmStub()
