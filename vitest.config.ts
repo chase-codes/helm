@@ -6,10 +6,6 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     environment: 'node',
-    environmentOptions: {
-      jsdom: {
-        url: 'http://localhost/'
-      }
-    }
+    setupFiles: ['./src/test/localStorage.ts']
   }
 })

@@ -1,30 +1,10 @@
 // @vitest-environment jsdom
 import { render, fireEvent, cleanup } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { usePanelWidth, type PanelWidthOpts } from './usePanelWidth';
 
 afterEach(cleanup);
-
-// Mock localStorage since jsdom doesn't provide it in this test environment
-const mockStorage: Record<string, string> = {};
-const mockLocalStorage = {
-  getItem: (key: string) => mockStorage[key] ?? null,
-  setItem: (key: string, value: string) => {
-    mockStorage[key] = value;
-  },
-  removeItem: (key: string) => {
-    delete mockStorage[key];
-  },
-  clear: () => {
-    Object.keys(mockStorage).forEach(key => delete mockStorage[key]);
-  },
-  key: (index: number) => Object.keys(mockStorage)[index] ?? null,
-  length: Object.keys(mockStorage).length
-};
-
-vi.stubGlobal('localStorage', mockLocalStorage as any);
-
-beforeEach(() => mockLocalStorage.clear());
+beforeEach(() => localStorage.clear());
 
 const OPTS: PanelWidthOpts = { def: 270, min: 200, max: 420, anchor: 'left' };
 
