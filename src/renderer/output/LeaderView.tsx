@@ -31,12 +31,19 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
 
   const rootRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
-  const section = parsed && song ? song.sections[parsed.section] : undefined
+  // Gate on identity, not just presence: on a direct song A -> song B switch, `parsed`
+  // points at B immediately but `song` state still holds A until B's fetch resolves. Without
+  // this check the render below would attribute A's title/section/rail to B's live key for
+  // that window — a stale-song frankenstein render, not the (harmless) "still loading"
+  // fallback it's supposed to be.
+  const current = parsed && song && song.id === parsed.songId ? song : null
+  const section = current && parsed ? current.sections[parsed.section] : undefined
   useFitText(rootRef, heroRef, section ? LEADER_BAND : null, [st.liveKey, song?.id])
 
-  // Not a song (or the song was deleted): show exactly what the slides view would, but keep
-  // the `leader-view` testid contract OutputApp's view-branching test relies on.
-  if (!parsed || !song || !section)
+  // Not a song (or the song was deleted, or its fetch hasn't resolved yet for the live key):
+  // show exactly what the slides view would, but keep the `leader-view` testid contract
+  // OutputApp's view-branching test relies on.
+  if (!parsed || !current || !section)
     return (
       <div data-testid="leader-view" style={{ position: 'fixed', inset: 0 }}>
         <SlidesView payload={payload} />
@@ -125,7 +132,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     <div style={rootStyle} data-testid="leader-view">
       <div ref={rootRef} style={heroWrapStyle}>
         <div style={titleRowStyle}>
-          <span>{song.title}</span>
+          <span>{current.title}</span>
           <span>· {section.label}</span>
           {chip && <span style={chipStyle}>{chip}</span>}
         </div>
@@ -143,7 +150,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
         </div>
       </div>
       <div style={railStyle} data-testid="leader-rail">
-        {song.sections.map((s, i) => {
+        {current.sections.map((s, i) => {
           const live = parsed.section === i
           return (
             <div
