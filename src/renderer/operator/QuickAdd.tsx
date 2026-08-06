@@ -5,15 +5,19 @@ import type { Song } from '../../shared/types';
 
 export interface QuickAddProps {
   open: boolean;
+  /** Prefill for the title field (e.g. the rail's search query). When non-blank,
+   *  initial focus lands in the lyrics textarea instead of the title input. */
+  initialTitle?: string;
   onClose: () => void;
   onSaved: (song: Song) => void;
 }
 
-export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element | null {
+export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
   // The parent only mounts this component while `open` is true, so a fresh
   // mount (and therefore fresh field state) happens on every open.
-  const [title, setTitle] = useState('');
+  const prefilled = !!initialTitle?.trim();
+  const [title, setTitle] = useState(initialTitle?.trim() ?? '');
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -154,9 +158,10 @@ export function QuickAdd({ open, onClose, onSaved }: QuickAddProps): JSX.Element
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px 20px', borderRight: `1px solid ${T.hairline}` }}>
-            <input style={titleStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" />
+            <input style={titleStyle} autoFocus={!prefilled} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" />
             <textarea
               style={textStyle}
+              autoFocus={prefilled}
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={'Paste lyrics here…\n\nVerse 1\nLine one\nLine two\n\nChorus\nThe chorus'}
