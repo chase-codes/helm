@@ -244,24 +244,37 @@ describe('SongsMode hotkey jumps', () => {
     const { goLive } = installHelmStubWith([CHORUS_SONG], live);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
-    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
-    // onAction is registered on the very first render, before the library/presentation-state
-    // promises resolve — so their setState calls land in a later macrotask flush that a plain
-    // microtask `await` doesn't wait through (see the identical tick above in "does not close
-    // the import wizard…"). Without this, the handler closure below still sees the pre-load
-    // state (no active song / output still 'black') and the live-follow branch never fires.
-    await new Promise((r) => setTimeout(r, 0));
+    // Wait on rendered proof that the library AND presentation state have both loaded —
+    // onAction is registered (truthy) on the very first render, before either promise
+    // resolves, so waiting on it alone races the closure below against stale pre-load state
+    // (no active song / output still 'black'), and the live-follow branch never fires.
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
     await waitFor(() => expect(goLive).toHaveBeenCalledWith('song:s2:1', expect.objectContaining({ label: 'With Chorus · Chorus' })));
+  });
+
+  it('chorus jump onto the already-live section does not fire a same-key take-down', async () => {
+    // liveKey sits on the Chorus (index 1) up front; selection starts at Verse 1 (index 0)
+    // as usual. The chorus jump below lands exactly on that already-live section — a no-op
+    // jump. Regression check for the guard's `liveKey !== key` clause: without it, this would
+    // call goLive on the key that's already live, which main reads as "take down" and would
+    // black the screen out from under the operator instead of leaving it alone.
+    const live: PresentationState = { output: 'live', liveKey: 'song:s2:1', liveSnap: null };
+    const { goLive } = installHelmStubWith([CHORUS_SONG], live);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus')).toBeTruthy());
+    expect(goLive).not.toHaveBeenCalled();
   });
 
   it('repeat chorus press cycles to Chorus 2; verse digit matches label', async () => {
     installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
-    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
-    // Same load-timing tick as above — let the library promise land before firing.
-    await new Promise((r) => setTimeout(r, 0));
+    // Same load-timing wait as above — let the library land (and render) before firing.
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
     act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
     await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus 2')).toBeTruthy());
@@ -278,5 +291,18 @@ describe('SongsMode hotkey jumps', () => {
     fireEvent.change(input, { target: { value: 'grace' } });
     act(() => keyHandlerRef.current?.onAction?.({ id: 'field.clear' }));
     await waitFor(() => expect(input.value).toBe(''));
+  });
+
+  it('focus.search and field.clear still work before any song has loaded', async () => {
+    installHelmStubWith([], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
+    const input = screen.getByPlaceholderText(/Title or a lyric line/) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'grace' } });
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'field.clear' }));
+    expect(input.value).toBe('');
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'focus.search' }));
+    expect(document.activeElement).toBe(input);
   });
 });
