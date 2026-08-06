@@ -230,14 +230,27 @@ app.whenReady().then(() => {
   // the user grants Screen Recording permission; MirrorView renders the instruction.
   session.defaultSession.setDisplayMediaRequestHandler(
     (_request, callback) => {
+      let called = false
+      const done = (result: Parameters<typeof callback>[0]): void => {
+        if (called) return
+        called = true
+        clearTimeout(timer)
+        callback(result)
+      }
+      // desktopCapturer.getSources() can hang without ever resolving or rejecting —
+      // without a bound, the renderer's getDisplayMedia() call would never settle and
+      // MirrorView would sit on a bare <video> with no stream and no error: a literal
+      // silent black screen. Time it out and fail closed (MirrorView renders its own
+      // in-place error once getDisplayMedia's promise rejects).
+      const timer = setTimeout(() => done({}), 5000)
       desktopCapturer
         .getSources({ types: ['screen'] })
         .then((sources) => {
           const opId = String(operatorDisplayId())
           const match = sources.find((s) => s.display_id === opId) ?? sources[0]
-          callback(match ? { video: match } : {})
+          done(match ? { video: match } : {})
         })
-        .catch(() => callback({}))
+        .catch(() => done({}))
     },
     { useSystemPicker: false }
   )

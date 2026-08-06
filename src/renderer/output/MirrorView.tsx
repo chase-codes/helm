@@ -32,6 +32,13 @@ export function MirrorView(): JSX.Element {
             for (const t of s.getTracks()) t.stop()
             return
           }
+          if (stream) {
+            // A concurrent acquisition already won (e.g. two tracks' 'ended' listeners each
+            // scheduled a retry before the timer clear below was in place to dedupe them) —
+            // stop this newcomer rather than clobbering the stream already attached.
+            for (const t of s.getTracks()) t.stop()
+            return
+          }
           stream = s
           setError(null)
           const video = videoRef.current
@@ -40,13 +47,20 @@ export function MirrorView(): JSX.Element {
             void video.play?.()
           }
           // If the capture dies (display topology change, permission revoked), retry.
+          // { once: true } plus the retryTimer clear below keep a multi-track stream's
+          // 'ended' events (one per track) from arming more than one concurrent restart.
           for (const t of s.getTracks())
-            t.addEventListener('ended', () => {
-              if (live) {
-                stop()
-                retryTimer = setTimeout(start, RETRY_MS)
-              }
-            })
+            t.addEventListener(
+              'ended',
+              () => {
+                if (live) {
+                  stop()
+                  if (retryTimer) clearTimeout(retryTimer)
+                  retryTimer = setTimeout(start, RETRY_MS)
+                }
+              },
+              { once: true }
+            )
         })
         .catch(() => {
           if (!live) return
@@ -56,6 +70,7 @@ export function MirrorView(): JSX.Element {
               ? 'Screen capture unavailable. Helm needs the Screen Recording permission: System Settings → Privacy & Security → Screen Recording, then relaunch Helm.'
               : 'Screen capture unavailable. Check that no other app is blocking screen capture, or switch this display back to Slides view.'
           )
+          if (retryTimer) clearTimeout(retryTimer)
           retryTimer = setTimeout(start, RETRY_MS)
         })
     }
