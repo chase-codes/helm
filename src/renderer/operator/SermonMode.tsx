@@ -26,6 +26,8 @@ import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack';
 import { useContextMenu } from './useContextMenu';
 import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
+import { usePanelWidth } from './usePanelWidth';
+import { PanelDivider } from './PanelDivider';
 
 export interface SermonModeProps {
   themeMode: ThemeMode;
@@ -39,8 +41,8 @@ export interface SermonModeProps {
   biblesRevision: number;
 }
 
-const SCHEDULE_PANEL_W = 270;
-const RIGHT_PANEL_W = 330;
+const SERMON_LEFT = { def: 270, min: 200, max: 420, anchor: 'left' } as const;
+const SERMON_RIGHT = { def: 330, min: 240, max: 520, anchor: 'right' } as const;
 // Stable no-op fallbacks for ChapterRail's planned/cued/live tint props when the rail is
 // previewing a book/chapter OTHER than the cued one (see `railIsCued` below) — module-level
 // so passing them doesn't allocate a fresh Set/closure every render.
@@ -70,6 +72,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   const contextMenu = useContextMenu();
   const sel = useListSelection();
   const undo = useTimedUndo<ScriptureReading>();
+
+  // Shared by all tracks (Task 4 threads these into MessageMode/SlidesTrack too), so
+  // they live at the top level rather than inside the scripture-track branch below.
+  const leftPanel = usePanelWidth('helmSermonLeftW', SERMON_LEFT);
+  const rightPanel = usePanelWidth('helmSermonRightW', SERMON_RIGHT);
 
   // Private ref MessageMode populates with its own arrow/goLive handlers while it's
   // mounted and active — kept separate from `keyHandlerRef` below so SermonMode remains
@@ -632,7 +639,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
         <>
           <SchedulePanel
             theme={T}
-            width={SCHEDULE_PANEL_W}
+            width={leftPanel.width}
             track={track}
             setTrack={setTrack}
             value={renderBuilder(builder)}
@@ -648,6 +655,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             rows={scheduleRows}
             undo={undo.pending ? { label: formatRef(undo.pending), onUndo: undoRemove } : undefined}
           />
+          <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
           <SermonCenter
             theme={T}
             variant="verse"
@@ -667,10 +675,11 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             onGoLive={goLive}
             onToggleLogo={toggleLogo}
           />
+          <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
           <ChapterRail
             theme={T}
             dark={dark}
-            width={RIGHT_PANEL_W}
+            width={rightPanel.width}
             book={previewBook}
             ch={previewCh}
             verseCount={railVerseCount}

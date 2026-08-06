@@ -411,6 +411,27 @@ describe('SermonMode — inactive/off-track does not reach the projector', () =>
   })
 })
 
+describe('SermonMode — scripture track rails are resizable', () => {
+  it('scripture track rails resize from the dividers and persist the sermon-wide keys', async () => {
+    localStorage.clear()
+    const { resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    const dividers = screen.getAllByTitle('Drag to resize')
+    expect(dividers).toHaveLength(2)
+    fireEvent.mouseDown(dividers[0], { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 160 })
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('helmSermonLeftW')).toBe('330') // 270 + 60
+    fireEvent.mouseDown(dividers[1], { clientX: 500 })
+    fireEvent.mouseMove(window, { clientX: 440 })
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('helmSermonRightW')).toBe('390') // 330 + 60 (right-anchored)
+  })
+})
+
 describe('SermonMode — arrows during the stale-chapter tick', () => {
   it('ignores Next verse rather than collapsing the cursor to verse 1', async () => {
     // Chapter deliberately left unresolved for the whole interaction: liveChapter is null,
