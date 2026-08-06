@@ -77,7 +77,18 @@ function installHelmStub(
       goLive,
       setOutput,
       cue: vi.fn()
-    }
+    },
+    // Minimal Message-track stubs: SermonMode.test.tsx only exercises the divider
+    // count after switching to the Message tab (see the resizable-rails describe
+    // block below), never MessageMode's own data-fetching behavior — an empty tape
+    // list keeps its post-mount effects (get/timing/onAudioProgress) from firing.
+    message: {
+      list: () => Promise.resolve([]),
+      get: () => Promise.resolve(null),
+      timing: () => Promise.resolve([]),
+      onAudioProgress: () => () => {}
+    },
+    quoteSchedule: { list: () => Promise.resolve([]) }
   }
   return {
     show,
@@ -429,6 +440,20 @@ describe('SermonMode — scripture track rails are resizable', () => {
     fireEvent.mouseMove(window, { clientX: 440 })
     fireEvent.mouseUp(window)
     expect(localStorage.getItem('helmSermonRightW')).toBe('390') // 330 + 60 (right-anchored)
+  })
+
+  // MessageMode's own drag mechanics are covered by usePanelWidth/PanelDivider's unit
+  // tests plus the scripture-track case just above — this only pins that SermonMode
+  // threads the SAME leftPanel/rightPanel controls into MessageMode (Task 4), not a
+  // fresh pair, by asserting both dividers render once the Message tab is active.
+  it('message track also renders both resize dividers', async () => {
+    const { resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    fireEvent.click(screen.getByText('Message'))
+    await waitFor(() => expect(screen.getAllByTitle('Drag to resize')).toHaveLength(2))
   })
 })
 

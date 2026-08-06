@@ -5,6 +5,7 @@ import { SlidesTrack } from './SlidesTrack'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { MediaItem, PresentationState } from '../../shared/types'
+import type { PanelWidthControl } from './usePanelWidth'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -70,10 +71,19 @@ function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<
   return { goLive: helm.presentation.goLive, cue: helm.presentation.cue }
 }
 
-function renderTrack(): void {
-  render(
+const stubPanel = (width: number): PanelWidthControl => ({ width, dragging: false, startDrag: vi.fn() })
+
+function renderTrack(opts?: { leftPanel?: PanelWidthControl; rightPanel?: PanelWidthControl }): ReturnType<typeof render> {
+  return render(
     <ThemeCtx.Provider value={themeFor('dark')}>
-      <SlidesTrack slidesKeyRef={{ current: null }} active track="slides" setTrack={() => {}} />
+      <SlidesTrack
+        slidesKeyRef={{ current: null }}
+        active
+        track="slides"
+        setTrack={() => {}}
+        leftPanel={opts?.leftPanel ?? stubPanel(270)}
+        rightPanel={opts?.rightPanel ?? stubPanel(330)}
+      />
     </ThemeCtx.Provider>
   )
 }
@@ -314,12 +324,33 @@ describe('SlidesTrack', () => {
     installHelmStub()
     const view = render(
       <ThemeCtx.Provider value={themeFor('dark')}>
-        <SlidesTrack slidesKeyRef={{ current: null }} active track="slides" setTrack={() => {}} />
+        <SlidesTrack
+          slidesKeyRef={{ current: null }}
+          active
+          track="slides"
+          setTrack={() => {}}
+          leftPanel={stubPanel(270)}
+          rightPanel={stubPanel(330)}
+        />
       </ThemeCtx.Provider>
     )
     fireEvent.contextMenu((await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement)
     fireEvent.click(await screen.findByText('Delete'))
     view.unmount()
     await waitFor(() => expect(window.helm.media.remove).toHaveBeenCalledWith('img1'))
+  })
+
+  it('renders both resize dividers wired to the panel controls', async () => {
+    installHelmStub()
+    const left = stubPanel(270)
+    const right = stubPanel(330)
+    const r = renderTrack({ leftPanel: left, rightPanel: right })
+    await screen.findByText('▤ Sermon.pptx')
+    const dividers = r.getAllByTitle('Drag to resize')
+    expect(dividers).toHaveLength(2)
+    fireEvent.mouseDown(dividers[0], { clientX: 10 })
+    expect(left.startDrag).toHaveBeenCalled()
+    fireEvent.mouseDown(dividers[1], { clientX: 10 })
+    expect(right.startDrag).toHaveBeenCalled()
   })
 })

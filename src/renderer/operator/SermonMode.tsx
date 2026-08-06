@@ -629,12 +629,27 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
         // MessageSearchRail) plus the center hero and ParagraphRail — SchedulePanel is
         // NOT also rendered here, since that would double up the rail (SchedulePanel's
         // tabs-only panel as one column, MessageSearchRail as a second sibling column).
-        <MessageMode themeMode={themeMode} messageKeyRef={messageKeyRef} active={active} track={track} setTrack={setTrack} />
+        <MessageMode
+          themeMode={themeMode}
+          messageKeyRef={messageKeyRef}
+          active={active}
+          track={track}
+          setTrack={setTrack}
+          leftPanel={leftPanel}
+          rightPanel={rightPanel}
+        />
       ) : track === 'slides' ? (
         // Slides track: same reasoning as Message above — SlidesTrack owns its own
         // TrackTabs + media-library rail + hero + deck rail, so SchedulePanel (whose
         // body only ever renders for 'scripture') is not also rendered as a sibling.
-        <SlidesTrack slidesKeyRef={slidesKeyRef} active={active} track={track} setTrack={setTrack} />
+        <SlidesTrack
+          slidesKeyRef={slidesKeyRef}
+          active={active}
+          track={track}
+          setTrack={setTrack}
+          leftPanel={leftPanel}
+          rightPanel={rightPanel}
+        />
       ) : (
         <>
           <SchedulePanel

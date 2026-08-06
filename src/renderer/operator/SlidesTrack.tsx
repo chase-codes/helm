@@ -3,6 +3,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
+import { PanelDivider } from './PanelDivider';
 import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { SlideCanvas } from '../shared/SlideCanvas';
@@ -12,6 +13,7 @@ import { useContextMenu } from './useContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import { UndoToast } from './UndoToast';
 import { pickNeighborId } from './pickNeighbor';
+import type { PanelWidthControl } from './usePanelWidth';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -29,10 +31,12 @@ export interface SlidesTrackProps {
   active: boolean;
   track: SermonTrack;
   setTrack: (t: SermonTrack) => void;
+  // Shared with the Scripture and Message tracks — SermonMode owns a single pair for the
+  // whole sermon page (Task 4), so the left/right rails stay the same width switching
+  // tracks rather than each track remembering (or resetting) its own.
+  leftPanel: PanelWidthControl;
+  rightPanel: PanelWidthControl;
 }
-
-const RAIL_W = 270;
-const RIGHT_PANEL_W = 330;
 
 function iconFor(item: MediaItem): string {
   if (item.type === 'deck') return '▤';
@@ -60,7 +64,7 @@ function fmtClock(ms: number): string {
  * L324-337 (`deckSlideRows` L964). Owns its own TrackTabs (not SchedulePanel) for the
  * same reason MessageMode does — see MessageMode.tsx's doc comment on the double-rail
  * bug that splitting them would cause. */
-export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTrackProps): JSX.Element {
+export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, rightPanel }: SlidesTrackProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { output, liveKey } = usePresentationState();
   const vstate = useVideoState();
@@ -307,7 +311,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
   }
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
-  const railStyle: CSSProperties = { width: `${RAIL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
+  const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const rowStyle = (isCurrent: boolean): CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
@@ -370,7 +374,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     textAlign: 'center'
   };
 
-  const comingPanelStyle: CSSProperties = { width: `${RIGHT_PANEL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
+  const comingPanelStyle: CSSProperties = { width: `${rightPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const numStyle = (isCued: boolean): CSSProperties => ({
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: '11px',
@@ -431,6 +435,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
     fontWeight: 600,
     color: T.dim
   };
+
+  // The right-hand panel (deck slide rail / video transport) only renders for those two
+  // media types — gate its divider the same way so there's nothing to divide otherwise
+  // (e.g. a plain image, which has no right panel at all).
+  const hasRightPanel = selected != null && (selected.type === 'deck' || selected.type === 'video');
 
   const heroMedia =
     selected && selected.type === 'video' ? (
@@ -507,6 +516,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
         )}
       </div>
 
+      <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
+
       <SermonCenter
         theme={T}
         variant="slide"
@@ -526,6 +537,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack }: SlidesTra
         onGoLive={goLive}
         onToggleLogo={toggleLogo}
       />
+
+      {hasRightPanel && <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />}
 
       {selected && selected.type === 'deck' && (
         <div style={comingPanelStyle}>

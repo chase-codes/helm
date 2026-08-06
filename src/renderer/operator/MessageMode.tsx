@@ -7,10 +7,12 @@ import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
 import { MessageSearchRail, type MsgQuoteRow, type MsgScheduleRow, type MsgTapeRow } from './MessageSearchRail';
 import { ParagraphRail } from './ParagraphRail';
+import { PanelDivider } from './PanelDivider';
 import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { TapePlayer } from './TapePlayer';
 import { TrackTabs } from './TrackTabs';
+import type { PanelWidthControl } from './usePanelWidth';
 
 /** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
  * playable by an HTML5 `<audio>` element. Handles POSIX paths (`/a/b.m4a`) and Windows
@@ -44,17 +46,19 @@ export interface MessageModeProps {
   active: boolean;
   track: SermonTrack;
   setTrack: (t: SermonTrack) => void;
+  // Shared with the Scripture and Slides tracks — SermonMode owns a single pair for the
+  // whole sermon page (Task 4), so the left/right rails stay the same width switching
+  // tracks rather than each track remembering (or resetting) its own.
+  leftPanel: PanelWidthControl;
+  rightPanel: PanelWidthControl;
 }
-
-const RAIL_W = 270;
-const RIGHT_PANEL_W = 330;
 
 /** Message track: a single left rail (track tabs + search/scope the tape corpus, owned
  * here rather than split across SchedulePanel and a sibling MessageSearchRail column —
  * see TrackTabs/MessageSearchRail doc comments), the cued quote as the center hero, and
  * the current tape's paragraphs (planned quotes highlighted) on the right. Ported
  * character-exact from Lectern.pretty.html's `trackIsMessage` branch. */
-export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack }: MessageModeProps): JSX.Element {
+export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack, leftPanel, rightPanel }: MessageModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -339,7 +343,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
   }));
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
-  const railStyle: CSSProperties = { width: `${RAIL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
+  const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   // No design source for this action — the reading view is new in slice 4 — so it's
   // styled to sit quietly under the ported tape-player card rather than ported from
   // Lectern.pretty.html. `key={msgId}` below remounts TapePlayer (fresh `playing`/`pos`/
@@ -386,6 +390,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
           tapePlayer={tapePlayer}
         />
       </div>
+      <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
       <SermonCenter
         theme={T}
         variant="quote"
@@ -405,10 +410,11 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack 
         onGoLive={goLive}
         onToggleLogo={toggleLogo}
       />
+      <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
       <ParagraphRail
         theme={T}
         dark={dark}
-        width={RIGHT_PANEL_W}
+        width={rightPanel.width}
         title={liveMsg?.title ?? ''}
         plannedCount={plannedSet.size}
         paragraphs={liveMsg?.paragraphs ?? []}
