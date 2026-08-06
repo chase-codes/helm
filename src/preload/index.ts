@@ -101,5 +101,9 @@ const api: HelmApi = {
     commit: (token) => ipcRenderer.invoke(CH.songImportCommit, token),
     onProgress: sub(CH.songImportProgress),
   },
+  songSources: {
+    search: (query) => ipcRenderer.invoke(CH.songSourcesSearch, query),
+    fromUrl: (url) => ipcRenderer.invoke(CH.songSourcesFromUrl, url),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

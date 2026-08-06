@@ -9,6 +9,15 @@ export interface Song {
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
 export interface NewSongInput { title: string; author?: string; text: string; source?: string }
+export interface SongWebCandidate {
+  title: string; author: string;
+  text: string;              // tidied + chorus-labeled — display-ready
+  album?: string; duration?: number;
+}
+export type SongWebSearchResult = { candidates: SongWebCandidate[] } | { error: 'network' };
+export type SongFromUrlResult =
+  | { candidate: SongWebCandidate }
+  | { error: 'network' | 'bad-url' | 'no-lyrics' };
 
 export type SlideKind =
   | 'lyrics' | 'scripture' | 'quote' | 'title' | 'sermon'
@@ -188,6 +197,7 @@ export const CH = {
   videoSetMuted: 'video:setMuted', videoReportDuration: 'video:reportDuration',
   songImportSources: 'songImport:sources', songImportScan: 'songImport:scan',
   songImportCommit: 'songImport:commit', songImportProgress: 'songImport:progress',
+  songSourcesSearch: 'songSources:search', songSourcesFromUrl: 'songSources:fromUrl',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -325,5 +335,9 @@ export interface HelmApi {
     scan(sourceId: string): Promise<SongImportScanResult>;
     commit(token: string): Promise<SongImportResult>;
     onProgress(cb: (p: SongImportProgress) => void): () => void;
+  };
+  songSources: {
+    search(query: string): Promise<SongWebSearchResult>;
+    fromUrl(url: string): Promise<SongFromUrlResult>;
   };
 }
