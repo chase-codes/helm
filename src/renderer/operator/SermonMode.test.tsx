@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useRef, type JSX } from 'react'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SermonMode } from './SermonMode'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
@@ -11,6 +11,7 @@ import type { ChapterData, PresentationState, ScriptureReading } from '../../sha
 // @testing-library/react's auto afterEach(cleanup) never registers; without
 // this, DOM from one test leaks into the next.
 afterEach(cleanup)
+beforeEach(() => localStorage.clear())
 
 const GENESIS_1: ChapterData = {
   book: 'Genesis',
@@ -424,7 +425,6 @@ describe('SermonMode — inactive/off-track does not reach the projector', () =>
 
 describe('SermonMode — scripture track rails are resizable', () => {
   it('scripture track rails resize from the dividers and persist the sermon-wide keys', async () => {
-    localStorage.clear()
     const { resolveChapter } = installHelmStub()
     render(<Harness />)
     resolveChapter()

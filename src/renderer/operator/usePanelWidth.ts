@@ -45,6 +45,8 @@ export function usePanelWidth(storageKey: string, opts: PanelWidthOpts): PanelWi
 
   const startDrag = (e: ReactMouseEvent): void => {
     e.preventDefault();
+    // A second button pressed mid-drag must not stack a second listener set.
+    if (dragCleanupRef.current) return;
     const startX = e.clientX;
     const startW = clamp(width);
     let latest = startW;

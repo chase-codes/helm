@@ -9,7 +9,7 @@ class MemoryStorage implements Storage {
   removeItem(key: string): void { this.store.delete(key); }
   setItem(key: string, value: string): void { this.store.set(key, String(value)); }
 }
-if (typeof window !== 'undefined' && typeof globalThis.localStorage === 'undefined') {
+if (typeof window !== 'undefined' && typeof window.localStorage === 'undefined') {
   const storage = new MemoryStorage();
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });

@@ -86,4 +86,20 @@ describe('usePanelWidth', () => {
     expect(r.getByTestId('width').textContent).toBe('410');
     fireEvent.mouseUp(window);
   });
+
+  it('a second mousedown mid-drag does not reset the anchor or stack handlers', () => {
+    const r = render(<Harness />);
+    // Start first drag at clientX 100
+    fireEvent.mouseDown(r.getByTestId('divider'), { clientX: 100 });
+    expect(r.getByTestId('dragging').textContent).toBe('true');
+    // Fire a second mousedown at clientX 300 (should be ignored)
+    fireEvent.mouseDown(r.getByTestId('divider'), { clientX: 300 });
+    // Move to 150 (first drag's anchor is 100, so +50 delta → 270 + 50 = 320)
+    fireEvent.mouseMove(window, { clientX: 150 });
+    expect(r.getByTestId('width').textContent).toBe('320');
+    fireEvent.mouseUp(window);
+    expect(r.getByTestId('dragging').textContent).toBe('false');
+    // Persisted value should match the first drag's calculation, not affected by the second mousedown
+    expect(localStorage.getItem('testW')).toBe('320');
+  });
 });
