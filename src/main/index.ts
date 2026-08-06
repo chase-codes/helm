@@ -25,6 +25,7 @@ import { createPreserviceEngine } from './preserviceEngine'
 import { createMediaRepo } from './mediaRepo'
 import { createMediaImport, findSoffice } from './mediaImport'
 import { createSongImport } from './songImport'
+import { createSongSources } from './songSources'
 import { createEasyWorshipSource } from './importSources/easyworship'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
@@ -204,6 +205,7 @@ app.whenReady().then(() => {
       onProgress: broadcastSongImportProgress
     }
   )
+  const songSources = createSongSources()
 
   registerIpc(
     repo,
@@ -217,7 +219,8 @@ app.whenReady().then(() => {
     preserviceEngine,
     mediaRepo,
     mediaImport,
-    songImport
+    songImport,
+    songSources
   )
 
   buildMenu()

@@ -23,6 +23,7 @@ import type { PreserviceEngine } from './preserviceEngine';
 import type { MediaRepo } from './mediaRepo';
 import type { MediaImport } from './mediaImport';
 import type { SongImport } from './songImport';
+import type { SongSources } from './songSources';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { video } from './videoState';
@@ -41,6 +42,7 @@ export function registerIpc(
   mediaRepo: MediaRepo,
   mediaImport: MediaImport,
   songImport: SongImport,
+  songSources: SongSources,
 ): void {
   ipcMain.handle(CH.songsSearch, (_e, q: string, field: SearchField) => repo.search(q, field));
   ipcMain.handle(CH.songsList, () => repo.list());
@@ -116,6 +118,9 @@ export function registerIpc(
   ipcMain.handle(CH.songImportSources, () => songImport.sources());
   ipcMain.handle(CH.songImportScan, (_e, sourceId: string) => songImport.scan(sourceId));
   ipcMain.handle(CH.songImportCommit, (_e, token: string) => songImport.commit(token));
+
+  ipcMain.handle(CH.songSourcesSearch, (_e, q: string) => songSources.search(q));
+  ipcMain.handle(CH.songSourcesFromUrl, (_e, url: string) => songSources.fromUrl(url));
 
   ipcMain.handle(CH.videoGetState, () => video.get());
   ipcMain.on(CH.videoLoad, (_e, key: string, src: string) => video.load(key, src));
