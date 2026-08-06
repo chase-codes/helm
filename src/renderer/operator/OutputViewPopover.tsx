@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, type CSSProperties, type JSX } from 'react'
+import { useContext, useEffect, useRef, type CSSProperties, type JSX, type RefObject } from 'react'
 import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from './useHelm'
 import { OUTPUT_VIEWS } from '../../shared/displays/roles'
@@ -11,7 +11,13 @@ const VIEW_LABEL: Record<OutputViewMode, string> = {
 }
 
 /** Quick per-screen view switcher, anchored under the header's outputs chip. */
-export function OutputViewPopover({ onClose }: { onClose: () => void }): JSX.Element {
+export function OutputViewPopover({
+  onClose,
+  containRef
+}: {
+  onClose: () => void
+  containRef: RefObject<HTMLDivElement | null>
+}): JSX.Element {
   const T = useContext(ThemeCtx)
   const { displays } = useDisplayStatus()
   const outputs = displays.filter((d) => !d.isOperator)
@@ -27,10 +33,11 @@ export function OutputViewPopover({ onClose }: { onClose: () => void }): JSX.Ele
   }, [onClose])
 
   // Dismiss on outside click (capture phase) or window blur.
+  // Check containRef (chip + popover) not just the popover, so clicks on the chip don't dismiss prematurely.
   // Mousedown in capture phase fires before the click handler, so inside-check is mandatory.
   useEffect(() => {
     const onDown = (e: MouseEvent): void => {
-      if (!popRef.current?.contains(e.target as Node)) onClose()
+      if (!containRef.current?.contains(e.target as Node)) onClose()
     }
     const dismiss = (): void => onClose()
     document.addEventListener('mousedown', onDown, true)
@@ -39,7 +46,7 @@ export function OutputViewPopover({ onClose }: { onClose: () => void }): JSX.Ele
       document.removeEventListener('mousedown', onDown, true)
       window.removeEventListener('blur', dismiss)
     }
-  }, [onClose])
+  }, [onClose, containRef])
 
   const popStyle: CSSProperties = {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import { useContext, useState, type CSSProperties, type JSX } from 'react'
+import { useContext, useRef, useState, type CSSProperties, type JSX } from 'react'
 import type { Mode, ThemeMode } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
@@ -30,6 +30,7 @@ export function Header({
   const { outputs } = useDisplayStatus()
   const clock = useClock()
   const [viewsOpen, setViewsOpen] = useState(false)
+  const outputsContainerRef = useRef<HTMLDivElement | null>(null)
 
   const isLive = output === 'live'
   const snapLbl = liveSnap ? (liveSnap.label ?? liveSnap.ref ?? liveSnap.title ?? '') : ''
@@ -149,7 +150,7 @@ export function Header({
         ))}
       </div>
       <div style={{ flex: 1 }} />
-      <div style={{ position: 'relative' }}>
+      <div ref={outputsContainerRef} style={{ position: 'relative' }}>
         <button
           style={{ ...outputsChipStyle, cursor: 'pointer', background: 'transparent' }}
           onClick={() => setViewsOpen((o) => !o)}
@@ -158,7 +159,9 @@ export function Header({
           {outputs} OUTPUT{outputs === 1 ? '' : 'S'}
           {isLive ? ' · LIVE' : ''}
         </button>
-        {viewsOpen && <OutputViewPopover onClose={() => setViewsOpen(false)} />}
+        {viewsOpen && (
+          <OutputViewPopover onClose={() => setViewsOpen(false)} containRef={outputsContainerRef} />
+        )}
       </div>
       <button
         style={liveStatusStyle}

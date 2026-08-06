@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useRef, useState, type ReactNode } from 'react'
 import { OutputViewPopover } from './OutputViewPopover'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
@@ -60,10 +61,36 @@ function installHelmStub(): ReturnType<typeof vi.fn> {
   }
   return setView
 }
+
+// Test wrapper component that includes container ref (mimics Header's structure).
+function PopoverWithContainer({ onClose }: { onClose: () => void }): ReactNode {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <div data-testid="chip-button">Chip</div>
+      <OutputViewPopover onClose={onClose} containRef={containerRef} />
+    </div>
+  )
+}
+
+// Stateful harness for testing chip toggle behavior (open/close without flicker).
+function StatefulPopoverHarness(): ReactNode {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button data-testid="chip-toggle" onClick={() => setOpen((o) => !o)}>
+        Chip
+      </button>
+      {open && <OutputViewPopover onClose={() => setOpen(false)} containRef={containerRef} />}
+    </div>
+  )
+}
+
 const renderPopover = (onClose = vi.fn()) =>
   render(
     <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
-      <OutputViewPopover onClose={onClose} />
+      <PopoverWithContainer onClose={onClose} />
     </ThemeCtx.Provider>
   )
 
@@ -115,5 +142,23 @@ describe('OutputViewPopover', () => {
     // The click handler runs (setView), then its onClick calls onClose.
     expect(setView).toHaveBeenCalledWith('label:Projector', 'slides')
     expect(onClose).toHaveBeenCalledTimes(1) // only the click's onClose, not the mousedown
+  })
+
+  it('chip toggle closes popover without reopen flicker (mousedown in container)', async () => {
+    installHelmStub()
+    const r = render(
+      <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
+        <StatefulPopoverHarness />
+      </ThemeCtx.Provider>
+    )
+    // Open popover
+    fireEvent.click(r.getByTestId('chip-toggle'))
+    await waitFor(() => expect(r.getByTestId('output-view-popover')).toBeTruthy())
+    // Click chip (inside container) — mousedown should not trigger outside-close
+    const chipBtn = r.getByTestId('chip-toggle')
+    fireEvent.mouseDown(chipBtn) // capture phase: inside container, so no dismiss
+    fireEvent.click(chipBtn) // bubble phase: onClick toggles closed
+    // Popover should be gone now (state is closed)
+    await waitFor(() => expect(r.queryByTestId('output-view-popover')).toBeNull())
   })
 })
