@@ -282,6 +282,21 @@ describe('SongsMode hotkey jumps', () => {
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 2')).toBeTruthy());
   });
 
+  it('opens QuickAdd with the search query prefilled as the title', async () => {
+    installHelmStub();
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+
+    fireEvent.change(screen.getByPlaceholderText('Title or a lyric line…'), {
+      target: { value: 'Way Maker' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Add.*Way Maker.*new song/ }));
+
+    const title = (await screen.findByPlaceholderText('Song title')) as HTMLInputElement;
+    expect(title.value).toBe('Way Maker');
+  });
+
   it('field.clear empties the search query', async () => {
     installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };

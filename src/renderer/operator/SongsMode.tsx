@@ -67,6 +67,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [section, setSection] = useState(0);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddTitle, setQuickAddTitle] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importInFlight, setImportInFlight] = useState(false);
   const listPanel = usePanelWidth('helmSongListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
@@ -297,7 +298,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
   const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
 
-  const emptyText = `No match for “${q}”. Try another word, or paste it as a new song below.`;
+  const emptyText = `No match for “${q}”. Try another word, or add it as a new song above.`;
 
   // ---------------- styles ----------------
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
@@ -400,7 +401,10 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         emptyText={emptyText}
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
-        onAddSong={() => setQuickAddOpen(true)}
+        onAddSong={() => {
+          setQuickAddTitle(q.trim());
+          setQuickAddOpen(true);
+        }}
         onImportSongs={() => setImportOpen(true)}
         onRowContextMenu={(id, e) =>
           contextMenu.open(e, [{ label: 'Edit', onSelect: () => onEditSong(id) }])
@@ -474,7 +478,9 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
       </div>
 
       {contextMenu.menu}
-      {quickAddOpen && <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />}
+      {quickAddOpen && (
+        <QuickAdd open={quickAddOpen} initialTitle={quickAddTitle} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />
+      )}
       {importOpen && (
         <SongImport
           open={importOpen}
