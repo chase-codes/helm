@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
@@ -11,6 +11,8 @@ import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
 import { SongImport } from './SongImport';
 import { useContextMenu } from './useContextMenu';
+import { usePanelWidth } from './usePanelWidth';
+import { PanelDivider } from './PanelDivider';
 
 export interface SongsModeProps {
   themeMode: ThemeMode;
@@ -26,20 +28,6 @@ const SECTION_W_MIN = 260;
 const SECTION_W_MAX = 620;
 const SECONDARY_TITLE_MAX = 3;
 const SECONDARY_LIMIT = 3;
-
-type DragTarget = 'list' | 'sections' | null;
-
-/** Loads a persisted panel width; falls back to `fallback` when missing/invalid (parses to NaN). */
-function loadWidth(key: string, fallback: number): number {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    const v = parseFloat(raw);
-    return Number.isFinite(v) ? v : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 function toRow(song: Song, snippet: string, activeSongId: string | null): SongRow {
   return {
@@ -68,9 +56,8 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importInFlight, setImportInFlight] = useState(false);
-  const [listW, setListW] = useState(() => loadWidth('helmSongListW', LIST_W_DEFAULT));
-  const [sectionW, setSectionW] = useState(() => loadWidth('helmSectionPanelW', SECTION_W_DEFAULT));
-  const [dragging, setDragging] = useState<DragTarget>(null);
+  const listPanel = usePanelWidth('helmSongListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
+  const sectionPanel = usePanelWidth('helmSectionPanelW', { def: SECTION_W_DEFAULT, min: SECTION_W_MIN, max: SECTION_W_MAX, anchor: 'right' });
 
   // Cancellation guard for refreshLibrary's setState calls: reused by both the initial-load
   // effect below and SongImport's onImported callback, so it can't live as a per-call `let
@@ -268,63 +255,6 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     };
   });
 
-  // Holds the active drag's teardown (remove window listeners, reset body cursor/
-  // userSelect). Set by startColDrag, cleared when the drag ends; the unmount effect
-  // below invokes it if SongsMode unmounts mid-drag so no dangling listeners or a stuck
-  // col-resize cursor survive the component.
-  const dragCleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    return () => {
-      dragCleanupRef.current?.();
-      dragCleanupRef.current = null;
-    };
-  }, []);
-
-  // Drag-resize for the two column dividers (list <-> hero, hero <-> sections). Mirrors
-  // the prototype's startColDrag: mousemove/mouseup on window, body cursor + userSelect
-  // suppressed while dragging, persisted to localStorage on release. Note the section
-  // panel's drag direction is inverted (startW - dx) since it's anchored to the right edge.
-  const startColDrag = (which: Exclude<DragTarget, null>, e: ReactMouseEvent): void => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = which === 'list' ? listW : sectionW;
-    let latest = startW;
-    const onMove = (ev: MouseEvent): void => {
-      const dx = ev.clientX - startX;
-      if (which === 'list') {
-        latest = Math.max(LIST_W_MIN, Math.min(LIST_W_MAX, startW + dx));
-        setListW(latest);
-      } else {
-        latest = Math.max(SECTION_W_MIN, Math.min(SECTION_W_MAX, startW - dx));
-        setSectionW(latest);
-      }
-    };
-    const cleanup = (): void => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      dragCleanupRef.current = null;
-    };
-    const onUp = (): void => {
-      cleanup();
-      setDragging(null);
-      // Persist only on a real mouseup — an unmount-aborted drag skips this (the width
-      // state it was mutating is being torn down anyway).
-      try {
-        localStorage.setItem(which === 'list' ? 'helmSongListW' : 'helmSectionPanelW', String(latest));
-      } catch {
-        // localStorage unavailable (e.g. private mode) — width just won't persist.
-      }
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    dragCleanupRef.current = cleanup;
-    setDragging(which);
-  };
-
   const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
   const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
 
@@ -415,33 +345,12 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     display: 'flex',
     alignItems: 'center'
   };
-  const dividerStyle = (w: number): CSSProperties => ({
-    width: `${w}px`,
-    flexShrink: 0,
-    cursor: 'col-resize',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '6px'
-  });
-  // Defensive clamp at render time (mirrors the prototype), in case a persisted value
-  // is outside the current bounds (e.g. edited by hand in devtools).
-  const listWClamped = Math.max(LIST_W_MIN, Math.min(LIST_W_MAX, listW));
-  const sectionWClamped = Math.max(SECTION_W_MIN, Math.min(SECTION_W_MAX, sectionW));
-
-  const gripStyle = (which: Exclude<DragTarget, null>): CSSProperties => ({
-    width: '3px',
-    height: '44px',
-    borderRadius: '2px',
-    background: dragging === which ? T.accent : T.border
-  });
-
   return (
     <div style={rootStyle}>
       <SongSearchRail
         theme={T}
         dark={dark}
-        width={listWClamped}
+        width={listPanel.width}
         q={q}
         setQ={setQ}
         field={field}
@@ -459,9 +368,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         }
       />
 
-      <div style={{ ...dividerStyle(10), background: T.appBg }} title="Drag to resize" onMouseDown={(e) => startColDrag('list', e)}>
-        <div style={gripStyle('list')} />
-      </div>
+      <PanelDivider active={listPanel.dragging} onMouseDown={listPanel.startDrag} background={T.appBg} />
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '16px 10px 16px 12px', background: T.appBg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px', flexShrink: 0 }}>
@@ -491,18 +398,17 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
             </div>
           </div>
 
-          <div
-            style={dividerStyle(12)}
+          <PanelDivider
+            active={sectionPanel.dragging}
+            onMouseDown={sectionPanel.startDrag}
+            hit={12}
             title="Drag to resize — lyric text scales with the panel"
-            onMouseDown={(e) => startColDrag('sections', e)}
-          >
-            <div style={gripStyle('sections')} />
-          </div>
+          />
 
           <SectionRail
             theme={T}
             dark={dark}
-            width={sectionWClamped}
+            width={sectionPanel.width}
             sections={activeSong?.sections ?? []}
             cuedIndex={clampedSection}
             isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
