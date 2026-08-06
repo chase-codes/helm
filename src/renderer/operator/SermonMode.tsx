@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { formatRef, parseRef, type ParsedRef } from '../../shared/scripture/refs';
@@ -320,13 +321,22 @@ export function SermonMode({
   const verseCount = liveChapter?.verseCount || 1;
   const liveCols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
 
+  // One-shot scroll commands for ChapterRail — see its scrollRequest prop doc.
+  const [railScroll, setRailScroll] = useState<{ v: number; align: 'start' | 'nearest'; nonce: number } | null>(
+    null
+  );
+  const requestRailScroll = (v: number, align: 'start' | 'nearest'): void =>
+    setRailScroll((p) => ({ v, align, nonce: (p?.nonce ?? 0) + 1 }));
+
   const stepVerse = (dir: 1 | -1): void => {
     // Same stale-chapter guard as `goLive` and the show effect. While `liveChapter` is
     // null, `verseCount` falls back to 1, so `Math.min(verseCount, v + dir)` would
     // collapse the cursor to verse 1 — and the show effect would then put verse 1 on the
     // projector. Ignore the arrow for that tick; the operator can press again.
     if (!liveChapter) return;
-    setScrV((v) => Math.max(1, Math.min(verseCount, v + dir)));
+    const nv = Math.max(1, Math.min(verseCount, scrV + dir));
+    setScrV(nv);
+    requestRailScroll(nv, 'nearest');
   };
 
   const goLive = (): void => {
@@ -382,6 +392,14 @@ export function SermonMode({
         undo.arm(reading);
       })
       .catch(console.error);
+  };
+
+  // The reading 1–9 hotkey and a schedule-row click are the same gesture: cursor to the
+  // reading's start, row selected, rail pinned to that verse.
+  const jumpToReading = (r: ScriptureReading): void => {
+    jumpTo(r.book, r.ch, r.from);
+    sel.select(r.id);
+    requestRailScroll(r.from, 'start');
   };
 
   const undoRemove = (): void => {
@@ -507,6 +525,7 @@ export function SermonMode({
     // the projector. Safe to do ahead of the guard — the show effect this triggers is a
     // same-key no-op when the guard is about to fire.
     jumpTo(p.book, p.ch, p.from);
+    requestRailScroll(p.from, 'start');
     // `goLive` blacks the output when fired on the key already live (see
     // shared/presentation/core.ts) — correct for the Go live / Take down button, wrong here.
     // Shift+Enter names a reference, so blanking is never what was asked for; if it's
@@ -574,10 +593,7 @@ export function SermonMode({
       meta: `${n} ${n === 1 ? 'verse' : 'verses'} · ${primary}`,
       isCurrent,
       isSelected: sel.isSelected(r.id),
-      onClick: () => {
-        jumpTo(r.book, r.ch, r.from);
-        sel.select(r.id);
-      },
+      onClick: () => jumpToReading(r),
       onContextMenu: (e) => {
         sel.select(r.id);
         contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReading(r.id) }]);
@@ -642,6 +658,17 @@ export function SermonMode({
       isModalOpen: () => false,
       onDelete: () => {
         if (track === 'scripture' && sel.selectedId) removeReading(sel.selectedId);
+      },
+      onAction: (a: ResolvedHotkey) => {
+        if (track !== 'scripture') return;
+        if (a.id === 'scripture.reading' && a.digit) {
+          const r = schedule[a.digit - 1];
+          if (r) jumpToReading(r);
+        } else if (a.id === 'focus.search') {
+          entryRef.current?.focus();
+        } else if (a.id === 'field.clear') {
+          setBuilder(initialBuilder());
+        }
       }
     };
     return () => {
@@ -744,6 +771,7 @@ export function SermonMode({
             previewOf={railPreviewOf}
             selectedRange={selectedRange}
             onSelectVerse={onRailSelectVerse}
+            scrollRequest={railScroll}
           />
         </>
       )}

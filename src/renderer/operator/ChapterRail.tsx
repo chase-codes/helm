@@ -14,6 +14,11 @@ export interface ChapterRailProps {
   previewOf: (v: number) => string
   selectedRange: { from: number; to: number } | null
   onSelectVerse: (v: number, shift: boolean) => void
+  /** One-shot scroll command from SermonMode. 'start' pins the verse to the top of the
+   * rail (schedule click / reading hotkey / lookup jump); 'nearest' just keeps it in
+   * view (arrow steps). The nonce makes each request fire exactly once; verseCount is a
+   * dep too so a cross-chapter jump re-applies once the new chapter's rows exist. */
+  scrollRequest?: { v: number; align: 'start' | 'nearest'; nonce: number } | null
 }
 
 const HINT = 'Tap a verse to go there — on screen when you\'re live. Shift-tap to build a range.'
@@ -37,7 +42,8 @@ export function ChapterRail({
   isVerseLive,
   previewOf,
   selectedRange,
-  onSelectVerse
+  onSelectVerse,
+  scrollRequest
 }: ChapterRailProps): JSX.Element {
   // Same width-derived font as SectionRail's secFont: the pastor reads this
   // column over the pulpit mirror, so widening the rail must enlarge the text.
@@ -61,6 +67,21 @@ export function ChapterRail({
   useEffect(() => {
     selectedFromRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [selectedRange?.from])
+
+  // SermonMode's one-shot scroll requests: schedule-row clicks, the reading hotkey, and
+  // goLiveFromBuilder all want the target verse pinned to the TOP of the rail ('start');
+  // arrow verse-steps just want it kept in view ('nearest'). Looked up by data-verse
+  // rather than threaded through a ref map, since the row list is built fresh each render.
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!scrollRequest) return
+    listRef.current
+      ?.querySelector(`[data-verse="${scrollRequest.v}"]`)
+      ?.scrollIntoView?.({ block: scrollRequest.align })
+    // scrollRequest is consumed by identity of its nonce (one shot per request);
+    // verseCount re-applies it when a cross-chapter jump's rows land a tick later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollRequest?.nonce, verseCount])
 
   const rowStyle = (
     isLive: boolean,
@@ -156,6 +177,7 @@ export function ChapterRail({
         </div>
       </div>
       <div
+        ref={listRef}
         style={{
           flex: 1,
           minHeight: 0,
@@ -177,6 +199,7 @@ export function ChapterRail({
             <button
               key={v}
               data-selected={selected}
+              data-verse={v}
               style={rowStyle(isLive, isCued, planned, selected)}
               onClick={(e) => onSelectVerse(v, e.shiftKey)}
               ref={v === selectedRange?.from ? selectedFromRef : undefined}

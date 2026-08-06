@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import type { JSX } from 'react'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ChapterRail } from './ChapterRail'
+import { ChapterRail, type ChapterRailProps } from './ChapterRail'
 import { themeFor } from '../../shared/theme'
 
 // This project's vitest config does not set `globals: true`, so
@@ -52,5 +53,39 @@ describe('ChapterRail', () => {
     render(<ChapterRail {...baseProps} width={360} />)
     el = screen.getByText('verse 3 text') as HTMLElement
     expect(el.style.fontSize).toBe('15px') // 360/24 = 15, within band
+  })
+})
+
+// Renders a ChapterRail with baseProps plus overrides — extends the file's own default
+// fixture rather than inventing a second one, so these cases exercise the same shape as
+// the tests above.
+const rail = (overrides: Partial<ChapterRailProps> = {}): JSX.Element => (
+  <ChapterRail {...baseProps} {...overrides} />
+)
+
+describe('ChapterRail scrollRequest', () => {
+  it('scrolls the requested verse with the requested alignment', () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    render(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'start', nonce: 1 } }))
+    expect(spy).toHaveBeenCalledWith({ block: 'start' })
+  })
+
+  it('re-applies the same request when the chapter rows arrive (verseCount change)', () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    const { rerender } = render(rail({ verseCount: 1, scrollRequest: { v: 4, align: 'start', nonce: 1 } }))
+    spy.mockClear()
+    rerender(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'start', nonce: 1 } }))
+    expect(spy).toHaveBeenCalledWith({ block: 'start' })
+  })
+
+  it('does not scroll again on unrelated re-renders with an unchanged nonce', () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    const { rerender } = render(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'nearest', nonce: 1 } }))
+    spy.mockClear()
+    rerender(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'nearest', nonce: 1 } }))
+    expect(spy).not.toHaveBeenCalled()
   })
 })
