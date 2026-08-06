@@ -10,12 +10,14 @@ import {
 import { ThemeCtx } from './ThemeCtx'
 import { MessageImport } from './MessageImport'
 import { DisplaysSettings } from './DisplaysSettings'
+import { ShortcutsSettings } from './ShortcutsSettings'
 import type {
   BibleInstallProgress,
   BibleManifestEntry,
   MessageInstallProgress,
   MessageMeta
 } from '../../shared/types'
+import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 
 export interface SettingsModalProps {
   open: boolean
@@ -25,11 +27,14 @@ export interface SettingsModalProps {
   // SermonMode so any mounted instance refetches the manifest, without this component
   // reaching into SermonMode directly.
   onBiblesChanged: () => void
+  hotkeyOverrides: HotkeyOverrides
+  onHotkeyOverridesChange: (next: HotkeyOverrides) => void
 }
 
 const SECTIONS = [
   { id: 'bibles', label: 'Bibles', enabled: true },
   { id: 'displays', label: 'Displays', enabled: true },
+  { id: 'shortcuts', label: 'Shortcuts', enabled: true },
   { id: 'songs', label: 'Songs', enabled: false },
   { id: 'message', label: 'Message', enabled: true },
   { id: 'backup', label: 'Backup', enabled: false }
@@ -41,7 +46,9 @@ const REMOVE_CONFIRM_MS = 4000
 export function SettingsModal({
   open,
   onClose,
-  onBiblesChanged
+  onBiblesChanged,
+  hotkeyOverrides,
+  onHotkeyOverridesChange
 }: SettingsModalProps): JSX.Element | null {
   const T = useContext(ThemeCtx)
   // The parent only mounts this component while `open` is true (matching QuickAdd's
@@ -445,6 +452,9 @@ export function SettingsModal({
             </div>
             <div style={contentStyle}>
               {section === 'displays' && <DisplaysSettings />}
+              {section === 'shortcuts' && (
+                <ShortcutsSettings overrides={hotkeyOverrides} onChange={onHotkeyOverridesChange} />
+              )}
               {section === 'bibles' && (
                 <>
                   <div style={sectionTitleStyle}>Bibles</div>

@@ -70,15 +70,20 @@ function App(): JSX.Element {
   const keyHandlerRef = useRef<ModeKeyHandler | null>(null);
 
   // Hotkey rebinds, loaded once and kept in App state so Settings edits re-resolve
-  // the live keymap immediately (dispatch reads this on every keydown). The setter
-  // (settings.set('hotkeys', next)) lands with the Shortcuts settings pane, which is
-  // the only thing that will ever produce a `next` to save.
+  // the live keymap immediately (dispatch reads this on every keydown).
   const [hotkeyOverrides, setHotkeyOverrides] = useState<HotkeyOverrides>({});
   useEffect(() => {
     void window.helm.settings
       .get<HotkeyOverrides>('hotkeys', {})
       .then(setHotkeyOverrides)
       .catch(console.error);
+  }, []);
+
+  // ShortcutsSettings' only way to persist a rebind/reset: update local state (so the
+  // live dispatcher sees it next render) and mirror it to the settings store.
+  const saveHotkeyOverrides = useCallback((next: HotkeyOverrides): void => {
+    setHotkeyOverrides(next);
+    window.helm.settings.set('hotkeys', next);
   }, []);
 
   // Bumped by the scripture-lookup hotkey; SermonMode reacts by forcing its scripture
@@ -161,6 +166,8 @@ function App(): JSX.Element {
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
             onBiblesChanged={() => setBiblesRevision((r) => r + 1)}
+            hotkeyOverrides={hotkeyOverrides}
+            onHotkeyOverridesChange={saveHotkeyOverrides}
           />
         )}
       </div>
