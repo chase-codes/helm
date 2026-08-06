@@ -353,4 +353,21 @@ describe('SlidesTrack', () => {
     fireEvent.mouseDown(dividers[1], { clientX: 10 })
     expect(right.startDrag).toHaveBeenCalled()
   })
+
+  it('renders only the left divider when the selected item has no right panel', async () => {
+    installHelmStub()
+    const left = stubPanel(270)
+    const right = stubPanel(330)
+    const r = renderTrack({ leftPanel: left, rightPanel: right })
+    // An image item has no right-hand panel (unlike a deck or video), so the right
+    // divider must not render alongside nothing to divide.
+    const imgRow = (await r.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
+    fireEvent.click(imgRow)
+    await waitFor(() => expect(r.queryByText('1')).toBeNull()) // no deck slide rail up
+    const dividers = r.getAllByTitle('Drag to resize')
+    expect(dividers).toHaveLength(1)
+    fireEvent.mouseDown(dividers[0], { clientX: 10 })
+    expect(left.startDrag).toHaveBeenCalled()
+    expect(right.startDrag).not.toHaveBeenCalled()
+  })
 })
