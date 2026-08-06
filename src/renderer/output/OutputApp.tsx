@@ -1,25 +1,28 @@
-import React, { useEffect, useState } from 'react'
-import type { OutputPayload } from '../../shared/types'
-import { SlideCanvas } from '../shared/SlideCanvas'
-import { ReadingCanvas } from '../shared/ReadingCanvas'
-import { VideoCanvas } from '../shared/VideoCanvas'
+import { useEffect, useState, type JSX } from 'react';
+import type { OutputPayload } from '../../shared/types';
+import { SlidesView } from './SlidesView';
+import { LeaderView } from './LeaderView';
+import { MirrorView } from './MirrorView';
+import { OutputErrorBoundary } from './OutputErrorBoundary';
 
-export function OutputApp(): React.JSX.Element {
-  const [payload, setPayload] = useState<OutputPayload>({ slide: { kind: 'black' }, variant: 'audience' })
-  useEffect(() => window.helm.output.onSlide(setPayload), [])
+export function OutputApp({ _forceCrashViewForTest = false }: { _forceCrashViewForTest?: boolean }): JSX.Element {
+  const [payload, setPayload] = useState<OutputPayload>({ slide: { kind: 'black' }, variant: 'audience', view: 'slides' });
+  useEffect(() => window.helm.output.onSlide(setPayload), []);
   useEffect(() => {
-    document.body.style.cursor = 'none'
-    document.body.style.background = '#000'
-  }, [])
+    document.body.style.cursor = 'none';
+    document.body.style.background = '#000';
+  }, []);
+  const view =
+    payload.view === 'mirror' ? <MirrorView />
+    : payload.view === 'leader' ? (_forceCrashViewForTest ? <CrashForTest /> : <LeaderView payload={payload} />)
+    : <SlidesView payload={payload} />;
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
-      {payload.slide.kind === 'reading' ? (
-        <ReadingCanvas slide={payload.slide} fill />
-      ) : payload.slide.kind === 'video' ? (
-        <VideoCanvas slide={payload.slide} fill />
-      ) : (
-        <SlideCanvas slide={payload.slide} variant={payload.variant} fill />
-      )}
+      <OutputErrorBoundary resetKey={payload.view} fallback={<SlidesView payload={payload} />}>
+        {view}
+      </OutputErrorBoundary>
     </div>
-  )
+  );
 }
+
+function CrashForTest(): JSX.Element { throw new Error('forced crash for boundary test'); }
