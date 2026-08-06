@@ -42,4 +42,38 @@ describe('parseGeniusHtml', () => {
   it('returns null when containers hold no text', () => {
     expect(parseGeniusHtml('<div data-lyrics-container="true">   </div>')).toBeNull();
   });
+
+  it('handles nested LyricsHeader div with data-exclude-from-selection', () => {
+    // Real Genius markup nests a header div inside the lyrics container
+    const html = `<!DOCTYPE html><html><head>
+<meta property="og:title" content="Artist – Song Title"/>
+</head><body>
+<div data-lyrics-container="true" class="Lyrics__Container">
+  <div data-exclude-from-selection="true" class="LyricsHeader__Container">
+    <h2>Song Title Lyrics</h2>
+    <div>8 Contributors</div>
+  </div>
+  [Verse 1]<br/>First line of verse<br/>Second line of verse
+</div>
+</body></html>`;
+    const out = parseGeniusHtml(html);
+    expect(out).not.toBeNull();
+    expect(out!.text).toContain('Verse 1');
+    expect(out!.text).toContain('First line of verse');
+    expect(out!.text).not.toContain('Contributors');
+    expect(out!.text).not.toContain('Song Title Lyrics');
+  });
+
+  it('handles og:title with content before property', () => {
+    // Real Genius emits <meta content="..." property="og:title" /> with attribute order reversed
+    const html = `<!DOCTYPE html><html><head>
+<meta content="The Beatles – Yesterday" property="og:title"/>
+</head><body>
+<div data-lyrics-container="true">[Verse]<br/>Yesterday all my troubles seemed so far away</div>
+</body></html>`;
+    const out = parseGeniusHtml(html);
+    expect(out).not.toBeNull();
+    expect(out!.title).toBe('Yesterday');
+    expect(out!.author).toBe('The Beatles');
+  });
 });
