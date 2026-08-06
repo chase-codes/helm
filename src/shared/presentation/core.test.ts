@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { applyCue, goLive, initialPresentation, keyForSong, outputPayload, sameFlow, sameKind, setOutput, showLive } from './core';
-import type { Slide } from '../types';
+import type { PresentationState, Slide } from '../types';
 
 const slide = (label: string): Slide => ({ kind: 'lyrics', label, lines: ['x'] });
 
@@ -47,6 +47,12 @@ test('outputPayload passes through the requested variant', () => {
   expect(outputPayload(initialPresentation(), 'livestream').variant).toBe('livestream');
   // variant does not change slide derivation
   expect(outputPayload(setOutput(initialPresentation(), 'logo'), 'stage').slide).toEqual({ kind: 'logo', title: 'HELM' });
+});
+test('outputPayload carries the view and defaults it to slides', () => {
+  const st = { output: 'live', liveKey: 'song:a:0', liveSnap: slide('V1') } as PresentationState;
+  expect(outputPayload(st).view).toBe('slides');
+  expect(outputPayload(st, 'stage', 'leader').view).toBe('leader');
+  expect(outputPayload(st, 'stage', 'leader').variant).toBe('stage');
 });
 test('showLive while live hot-updates the screen, even across flows', () => {
   let st = goLive(initialPresentation(), 'scr:Genesis:1:1', slide('Gen 1:1'));

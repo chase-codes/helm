@@ -1,10 +1,12 @@
-import { expect, test } from 'vitest';
+import { expect, test, describe, it } from 'vitest';
 import {
   DEFAULT_ROLE,
   OUTPUT_ROLES,
   ROLE_VARIANT,
   fingerprintDisplay,
   planAttachments,
+  resolveView,
+  DEFAULT_VIEW,
   type DisplaySnapshot,
 } from './roles';
 import type { OutputRole } from '../types';
@@ -71,4 +73,14 @@ test('planAttachments handles a mix of known and unknown displays', () => {
 
 test('planAttachments returns [] for an empty display list', () => {
   expect(planAttachments([], 1, {})).toEqual([]);
+});
+
+describe('resolveView', () => {
+  it('returns the saved view for a known fingerprint', () => {
+    expect(resolveView({ 'label:BenQ GW2480': 'leader' }, 'label:BenQ GW2480')).toBe('leader');
+  });
+  it('defaults an unknown fingerprint to slides', () => {
+    expect(resolveView({}, 'label:BenQ GW2480')).toBe(DEFAULT_VIEW);
+    expect(DEFAULT_VIEW).toBe('slides');
+  });
 });

@@ -1,7 +1,10 @@
-import type { OutputVariant, OutputRole } from '../types';
+import type { OutputVariant, OutputRole, OutputViewMode } from '../types';
 
 export const OUTPUT_ROLES: OutputRole[] = ['audience', 'stage', 'livestream'];
 export const DEFAULT_ROLE: OutputRole = 'audience';
+
+export const OUTPUT_VIEWS: OutputViewMode[] = ['slides', 'leader', 'mirror'];
+export const DEFAULT_VIEW: OutputViewMode = 'slides';
 
 // Roles map onto the SlideCanvas variants that already exist (types.ts OutputVariant).
 // 'main'/'leader' variants are not exposed as roles in v1.
@@ -55,4 +58,9 @@ export function planAttachments(
       const role = savedRoles[fingerprint] ?? DEFAULT_ROLE;
       return { displayId: d.id, fingerprint, role, bounds: d.bounds };
     });
+}
+
+/** Saved view for a fingerprint, defaulting to the plain slides render. */
+export function resolveView(saved: Record<string, OutputViewMode>, fingerprint: string): OutputViewMode {
+  return saved[fingerprint] ?? DEFAULT_VIEW;
 }

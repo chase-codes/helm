@@ -1,18 +1,20 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
-import { CH, type DisplayInfo, type DisplayStatus, type OutputRole, type OutputVariant } from '../shared/types';
+import { CH, type DisplayInfo, type DisplayStatus, type OutputRole, type OutputVariant, type OutputViewMode } from '../shared/types';
 import {
   DEFAULT_ROLE,
   ROLE_VARIANT,
   fingerprintDisplay,
   planAttachments,
+  resolveView,
   type DisplaySnapshot,
 } from '../shared/displays/roles';
 import type { SettingsRepo } from './settingsRepo';
 import { presentation } from './stateStore';
 
 const ROLES_KEY = 'displays:roles';
+const VIEWS_KEY = 'displays:views';
 
 interface Tracked { win: BrowserWindow; fingerprint: string; role: OutputRole }
 const byDisplayId = new Map<number, Tracked>();
@@ -63,6 +65,10 @@ function savedRoles(): Record<string, OutputRole> {
   return settings?.get<Record<string, OutputRole>>(ROLES_KEY, {}) ?? {};
 }
 
+function savedViews(): Record<string, OutputViewMode> {
+  return settings?.get<Record<string, OutputViewMode>>(VIEWS_KEY, {}) ?? {};
+}
+
 function broadcastStatus(): void {
   const status = displayStatus();
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.displaysStatus, status);
@@ -100,18 +106,21 @@ function sync(): void {
   }
 
   // Build enriched DisplayInfo[] for ALL displays (operator included) for the header/6b.
+  const views = savedViews();
   lastDisplays = snaps.map((d) => {
     const isOperator = d.id === opId;
     const tracked = byDisplayId.get(d.id);
+    const fingerprint = fingerprintDisplay(d);
     return {
       id: d.id,
-      fingerprint: fingerprintDisplay(d),
+      fingerprint,
       label: d.label ?? '',
       width: d.size.width,
       height: d.size.height,
       scaleFactor: d.scaleFactor,
       role: isOperator ? null : (tracked?.role ?? DEFAULT_ROLE),
       isOperator,
+      view: isOperator ? null : resolveView(views, fingerprint),
     };
   });
   broadcastStatus();
