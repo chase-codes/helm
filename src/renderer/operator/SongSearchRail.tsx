@@ -159,7 +159,7 @@ export function SongSearchRail({
           <span style={{ fontSize: '15px', opacity: 0.5 }}>⌕</span>
           <input
             ref={inputRef}
-            style={{ flex: 1, fontSize: '13.5px' }}
+            style={{ flex: 1, minWidth: 0, fontSize: '13.5px' }}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKeyDown}

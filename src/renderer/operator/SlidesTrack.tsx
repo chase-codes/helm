@@ -607,7 +607,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 max={100}
                 value={Math.round(vstate.volume * 100)}
                 onChange={(e) => window.helm.video.setVolume(Number(e.target.value) / 100)}
-                style={{ flex: 1 }}
+                style={{ flex: 1, minWidth: 0 }}
               />
             </div>
           </div>
