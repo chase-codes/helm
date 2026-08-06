@@ -37,4 +37,59 @@ describe('extractLyricsFromHtml', () => {
     const html = '<div><p>Line one<br/>Line two</p></div>';
     expect(extractLyricsFromHtml(html)).toBeNull();
   });
+
+  it('extracts lyrics on AZLyrics-style pages (source-newline-per-line)', () => {
+    // Real lyrics pages often put each <br>-terminated line on its own source line.
+    // The nav nav index has 27 single-word links on separate source lines.
+    // Must extract real lyrics with stanza breaks, not nav chrome.
+    const azLyricsStyle = `<html><body>
+<nav>
+<a href="/?q=A">A</a>
+<a href="/?q=B">B</a>
+<a href="/?q=C">C</a>
+<a href="/?q=D">D</a>
+<a href="/?q=E">E</a>
+<a href="/?q=F">F</a>
+<a href="/?q=G">G</a>
+<a href="/?q=H">H</a>
+<a href="/?q=I">I</a>
+<a href="/?q=J">J</a>
+<a href="/?q=K">K</a>
+<a href="/?q=L">L</a>
+<a href="/?q=M">M</a>
+<a href="/?q=N">N</a>
+<a href="/?q=O">O</a>
+<a href="/?q=P">P</a>
+<a href="/?q=Q">Q</a>
+<a href="/?q=R">R</a>
+<a href="/?q=S">S</a>
+<a href="/?q=T">T</a>
+<a href="/?q=U">U</a>
+<a href="/?q=V">V</a>
+<a href="/?q=W">W</a>
+<a href="/?q=X">X</a>
+<a href="/?q=Y">Y</a>
+<a href="/?q=Z">Z</a>
+<a href="/?q=0-9">0-9</a>
+</nav>
+<div class="lyrics">
+<p>
+First verse line one<br/>
+First verse line two<br/>
+First verse line three
+</p>
+<p>
+Second verse line one<br/>
+Second verse line two<br/>
+Second verse line three
+</p>
+</div>
+</body></html>`;
+    const out = extractLyricsFromHtml(azLyricsStyle);
+    expect(out).not.toBeNull();
+    expect(out!).toContain('First verse line one');
+    expect(out!).toContain('Second verse line one');
+    expect(out!).not.toContain('>A<');
+    expect(out!.split(/\n\s*\n/).length).toBe(2);
+  });
 });

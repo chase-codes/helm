@@ -16,6 +16,7 @@ export function htmlToText(html: string): string {
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<head[\s\S]*?<\/head>/i, '')
+      .replace(/\s*\n\s*/g, ' ')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/(p|div|h[1-6]|li|ul|ol|nav|header|footer|section|article|table|tr)>/gi, '\n\n')
       .replace(/<[^>]+>/g, '')
