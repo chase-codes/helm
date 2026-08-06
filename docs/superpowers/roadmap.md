@@ -170,6 +170,14 @@ Several items below share these foundations — worth building once as reusable 
   exported `bookCompletion` (`refBuilder.ts`) that both the keystroke handler and the
   renderer call, pinned by a table-driven property test. The ghost is an overlay span, never
   part of the input's `value`.
+  The final review caught the one place the invariant leaked: `refGhost` reads builder state,
+  which knows nothing about focus, but space only commits *while the entry has focus* — blurred,
+  `dispatchModeKey` sends it to `onGoLive`, which blacks the screen when the cue is already
+  live. A schedule-row click blurs the field (`blurOnPointerClick`) without clearing the
+  builder, so a ghost could sit on screen promising a book commit while space took the screen
+  down mid-service. The overlay is now gated on focus as well (`SchedulePanel`), which narrows
+  *when* it shows without adding a second rule for *what* it says; the typed text survives the
+  blur, so nothing is lost. Covered by the real-app driver, not just unit tests.
   Measuring the design turned up a second defect and pulled it into scope: `matchBook`'s
   prefix branch returned the first match in canonical order, so **the example in this entry
   was wrong** — `BOOKS` is in canonical order, so `jo` gave *Joshua*, not John, and `ma` gave
