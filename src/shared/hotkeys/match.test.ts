@@ -68,6 +68,10 @@ describe('resolveHotkey', () => {
     expect(resolveHotkey(ev('/'), opts({ typing: true }))).toBeNull()
     expect(resolveHotkey(ev('Backspace', { ctrl: true }), opts({ typing: true }))).toEqual({ id: 'field.clear' })
   })
+  it('typing suppresses digit blocks', () => {
+    expect(resolveHotkey(ev('3'), opts({ scope: 'songs', typing: true }))).toBeNull()
+    expect(resolveHotkey(ev('3'), opts({ scope: 'scripture', typing: true }))).toBeNull()
+  })
   it('overrides replace defaults', () => {
     const overrides = { 'song.bridge': ['X'] }
     expect(resolveHotkey(ev('b'), opts({ scope: 'songs', overrides }))).toBeNull()
@@ -93,9 +97,10 @@ describe('bindingConflict', () => {
     expect(bindingConflict('4', 'song.chorus', {})?.id).toBe('song.verse')
   })
   it('songs↔scripture do not clash (different pages)', () => {
-    // scripture.reading holds '1'–'9', but so does song.verse — checking a songs-scope
-    // binding against scripture scope must not match scripture.reading first.
-    expect(bindingConflict('Z', 'song.bridge', {})).toBeNull()
+    // scripture.reading holds '1'–'9', but so does song.verse — both use digit blocks but
+    // in different scopes. Checking if we can bind '3' to song.verse must not see a conflict
+    // with scripture.reading (even though both hold that digit).
+    expect(bindingConflict('3', 'song.verse', {})).toBeNull()
   })
   it('respects overrides when detecting clashes', () => {
     expect(bindingConflict('X', 'song.tag', { 'song.bridge': ['X'] })?.id).toBe('song.bridge')
