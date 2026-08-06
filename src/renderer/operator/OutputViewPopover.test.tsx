@@ -87,7 +87,7 @@ function StatefulPopoverHarness(): ReactNode {
   )
 }
 
-const renderPopover = (onClose = vi.fn()) =>
+const renderPopover = (onClose = vi.fn()): ReturnType<typeof render> =>
   render(
     <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
       <PopoverWithContainer onClose={onClose} />

@@ -2,6 +2,8 @@ import { beforeEach, expect, test } from 'vitest'
 import type Database from 'better-sqlite3'
 import { openTestDb } from './testDb'
 import { createSettingsRepo, type SettingsRepo } from './settingsRepo'
+import { resolveView } from '../shared/displays/roles'
+import type { OutputViewMode } from '../shared/types'
 
 let db: Database.Database
 let repo: SettingsRepo
@@ -38,4 +40,17 @@ test('JSON round-trip preserves types: a number stays a number, not a string', (
   const result = repo.get('count', 0)
   expect(result).toBe(7)
   expect(typeof result).toBe('number')
+})
+
+test('set then get round-trips displays:views, and resolveView reads the fetched record', () => {
+  const views: Record<string, OutputViewMode> = {
+    'label:BenQ': 'leader',
+    'geo:1024x600@1r0': 'mirror'
+  }
+  repo.set('displays:views', views)
+  const fetched = repo.get<Record<string, OutputViewMode>>('displays:views', {})
+  expect(fetched).toEqual(views)
+  expect(resolveView(fetched, 'label:BenQ')).toBe('leader')
+  expect(resolveView(fetched, 'geo:1024x600@1r0')).toBe('mirror')
+  expect(resolveView(fetched, 'label:Unknown')).toBe('slides')
 })

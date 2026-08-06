@@ -20,9 +20,17 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     // synchronously in the effect body, which React flags as a footgun).
     if (!parsed) return
     let live = true
-    void window.helm.songs.get(parsed.songId).then((s) => {
-      if (live) setSong(s)
-    })
+    void window.helm.songs
+      .get(parsed.songId)
+      .then((s) => {
+        if (live) setSong(s)
+      })
+      .catch((err: unknown) => {
+        // Leave `song` null — the render below falls back to SlidesView whenever
+        // `current`/`section` can't be resolved, so an IPC failure here degrades to
+        // that fallback instead of becoming an unhandled rejection.
+        console.error('[helm] leader song fetch failed:', err)
+      })
     return () => {
       live = false
     }
@@ -67,6 +75,17 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     flexDirection: 'column',
     padding: '3cqmin 4cqmin',
     containerType: 'size'
+  }
+  const heroMiddleStyle: CSSProperties = {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    alignItems: 'center',
+    // The actual fit-measurement box: containerType for cqmin (useFitText reads/writes
+    // FIT_SIZE_VAR in cqmin, which must resolve against this element) and overflow:hidden
+    // so a section that "fits" the outer hero column can't still spill past what's visible.
+    containerType: 'size',
+    overflow: 'hidden'
   }
   const titleRowStyle: CSSProperties = {
     display: 'flex',
@@ -130,13 +149,13 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
 
   return (
     <div style={rootStyle} data-testid="leader-view">
-      <div ref={rootRef} style={heroWrapStyle}>
+      <div style={heroWrapStyle}>
         <div style={titleRowStyle}>
           <span>{current.title}</span>
           <span>· {section.label}</span>
           {chip && <span style={chipStyle}>{chip}</span>}
         </div>
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
+        <div ref={rootRef} style={heroMiddleStyle}>
           <div
             ref={heroRef}
             style={{ display: 'flex', flexDirection: 'column', gap: '0.8em', width: '100%' }}

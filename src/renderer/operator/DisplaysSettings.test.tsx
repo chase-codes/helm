@@ -65,7 +65,7 @@ function installHelmStub(): {
   return { setRole, setView }
 }
 
-const renderPane = () =>
+const renderPane = (): ReturnType<typeof render> =>
   render(
     <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
       <DisplaysSettings />
