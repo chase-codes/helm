@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { RefGhost } from '../../shared/scripture/refBuilder';
 import { TrackTabs } from './TrackTabs';
@@ -39,6 +39,8 @@ export interface SchedulePanelProps {
   onAdd: () => void;
   rows: ScheduleRow[];
   undo?: { label: string; onUndo: () => void };
+  /** Lets SermonMode focus the reading entry (scripture-lookup hotkey, '/'). */
+  entryRef?: RefObject<HTMLInputElement | null>;
 }
 
 /** Left rail: track switcher + (Scripture only, for now) the add-reading input and
@@ -57,7 +59,8 @@ export function SchedulePanel({
   addLabel,
   onAdd,
   rows,
-  undo
+  undo,
+  entryRef
 }: SchedulePanelProps): JSX.Element {
   // The ghost is derived from builder state alone and knows nothing about focus, but "space
   // commits the book" is only true while this input has focus — when it doesn't, space goes
@@ -128,6 +131,7 @@ export function SchedulePanel({
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
               <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex' }}>
                 <input
+                  ref={entryRef}
                   style={{ ...entryFont, flex: 1, minWidth: 0 }}
                   value={value}
                   onChange={(e) => onEntryChange(e.target.value)}

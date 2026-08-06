@@ -39,6 +39,9 @@ export interface SermonModeProps {
   // phases do, so App mediates the refresh instead of SermonMode/SettingsModal reaching
   // into each other directly.
   biblesRevision: number;
+  // Bumped by App's scripture-lookup hotkey; the effects below force the scripture
+  // track and focus the entry.
+  lookupNonce: number;
 }
 
 const SERMON_LEFT = { def: 270, min: 200, max: 420, anchor: 'left' } as const;
@@ -49,7 +52,14 @@ const SERMON_RIGHT = { def: 330, min: 240, max: 520, anchor: 'right' } as const;
 const EMPTY_PLANNED = new Set<number>();
 const NEVER_LIVE = (): boolean => false;
 
-export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, biblesRevision }: SermonModeProps): JSX.Element {
+export function SermonMode({
+  themeMode,
+  keyHandlerRef,
+  active,
+  onOpenSettings,
+  biblesRevision,
+  lookupNonce
+}: SermonModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -88,6 +98,35 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
   // Private ref SlidesTrack populates with its own arrow/goLive handlers while it's
   // mounted and active — same pattern as messageKeyRef above, for the same reason.
   const slidesKeyRef: SlidesKeyRef = useRef(null);
+
+  const entryRef = useRef<HTMLInputElement | null>(null);
+  // Which lookupNonce the focus effect below has already handled, so a track change made
+  // for any OTHER reason while idle (e.g. clicking Message) doesn't re-steal focus back to
+  // an entry the operator never asked to jump to.
+  const focusedLookupRef = useRef(0);
+
+  // Scripture-lookup hotkey, part 1: force the scripture track. Deferred into a timeout
+  // rather than called inline in the effect body — a same-tick setState here is exactly
+  // the render-cascade shape react-hooks/set-state-in-effect flags, and there's already a
+  // real reason to defer: the focus effect below needs SchedulePanel's input to have
+  // mounted (it isn't rendered on the message/slides tracks) before it can reach it.
+  useEffect(() => {
+    if (lookupNonce === 0) return;
+    const t = setTimeout(() => setTrack('scripture'), 0);
+    return () => clearTimeout(t);
+  }, [lookupNonce]);
+
+  // Scripture-lookup hotkey, part 2: once `track` actually reads 'scripture' — either
+  // already did (this effect then fires on the same tick as the nonce bump) or only after
+  // part 1's timeout lands the switch — focus the entry. The focusedLookupRef guard makes
+  // this idempotent per press: it only acts once per lookupNonce value, however many times
+  // `track` changes afterward.
+  useEffect(() => {
+    if (lookupNonce === 0 || lookupNonce === focusedLookupRef.current) return;
+    if (track !== 'scripture') return;
+    focusedLookupRef.current = lookupNonce;
+    entryRef.current?.focus();
+  }, [lookupNonce, track]);
 
   // Guards the persist-on-change effect below from firing with the ['kjv'] default
   // before settings.get resolves (which would clobber a real saved selection).
@@ -669,6 +708,7 @@ export function SermonMode({ themeMode, keyHandlerRef, active, onOpenSettings, b
             onAdd={addToSchedule}
             rows={scheduleRows}
             undo={undo.pending ? { label: formatRef(undo.pending), onUndo: undoRemove } : undefined}
+            entryRef={entryRef}
           />
           <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
           <SermonCenter

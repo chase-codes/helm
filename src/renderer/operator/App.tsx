@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { themeFor } from '../../shared/theme';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
@@ -8,6 +8,8 @@ import { SermonMode } from './SermonMode';
 import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
+import type { AppActionId, HotkeyOverrides } from '../../shared/hotkeys/actions';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
 export type ThemeMode = 'dark' | 'light';
@@ -37,6 +39,12 @@ export interface ModeKeyHandler {
    * Delete/Backspace untouched. See useListSelection + the interaction-primitives design.
    */
   onDelete?: () => void;
+  /**
+   * Registry-resolved hotkey actions beyond the core set (section jumps, reading
+   * jumps, focus/clear field). Optional — modes ignore actions they don't own.
+   * Suppressed by App while Settings or a mode modal is open, same as goLive/delete.
+   */
+  onAction?: (a: ResolvedHotkey) => void;
 }
 
 export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
@@ -61,16 +69,47 @@ function App(): JSX.Element {
   // once on `document` here so future modes plug in without App changing.
   const keyHandlerRef = useRef<ModeKeyHandler | null>(null);
 
+  // Hotkey rebinds, loaded once and kept in App state so Settings edits re-resolve
+  // the live keymap immediately (dispatch reads this on every keydown). The setter
+  // (settings.set('hotkeys', next)) lands with the Shortcuts settings pane, which is
+  // the only thing that will ever produce a `next` to save.
+  const [hotkeyOverrides, setHotkeyOverrides] = useState<HotkeyOverrides>({});
+  useEffect(() => {
+    void window.helm.settings
+      .get<HotkeyOverrides>('hotkeys', {})
+      .then(setHotkeyOverrides)
+      .catch(console.error);
+  }, []);
+
+  // Bumped by the scripture-lookup hotkey; SermonMode reacts by forcing its scripture
+  // track and focusing the ref entry (same App-mediated pattern as biblesRevision).
+  const [lookupNonce, setLookupNonce] = useState(0);
+
+  // useCallback([]) so it's a stable dep for the keydown effect below — it only touches
+  // stable setters, so it never needs to change.
+  const onAppAction = useCallback((id: AppActionId): void => {
+    if (id === 'page.pre') setMode('pre');
+    else if (id === 'page.songs') setMode('songs');
+    else if (id === 'page.sermon') setMode('sermon');
+    else {
+      setMode('sermon');
+      setLookupNonce((n) => n + 1);
+    }
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void =>
       dispatchModeKey(e, {
         settingsOpen,
         closeSettings: () => setSettingsOpen(false),
-        handler: keyHandlerRef.current
+        handler: keyHandlerRef.current,
+        scope: mode === 'songs' ? 'songs' : mode === 'sermon' ? 'scripture' : null,
+        overrides: hotkeyOverrides,
+        onAppAction
       });
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [settingsOpen]);
+  }, [settingsOpen, mode, hotkeyOverrides, onAppAction]);
 
   // Release DOM focus from mouse-clicked buttons so the last-clicked control doesn't keep
   // a lingering :focus-visible ring once keyboard navigation begins (BUG-001). See
@@ -113,6 +152,7 @@ function App(): JSX.Element {
               active={mode === 'sermon'}
               onOpenSettings={() => setSettingsOpen(true)}
               biblesRevision={biblesRevision}
+              lookupNonce={lookupNonce}
             />
           </div>
         </div>

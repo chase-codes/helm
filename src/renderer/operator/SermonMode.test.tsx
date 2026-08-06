@@ -111,6 +111,7 @@ function Harness({ active = true }: { active?: boolean } = {}): JSX.Element {
         active={active}
         onOpenSettings={() => {}}
         biblesRevision={0}
+        lookupNonce={0}
       />
     </ThemeCtx.Provider>
   )

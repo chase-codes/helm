@@ -1,20 +1,29 @@
 import type { ModeKeyHandler } from './App';
+import type { AppActionId, HotkeyOverrides } from '../../shared/hotkeys/actions';
+import { resolveHotkey } from '../../shared/hotkeys/match';
 
 export interface KeyDispatchCtx {
   settingsOpen: boolean;
   closeSettings: () => void;
   handler: ModeKeyHandler | null;
+  /** Which mode-scope bindings are in play: Songs page → 'songs', Sermon page →
+   * 'scripture' (SermonMode ignores scripture actions on its message/slides tracks),
+   * Pre-service → null (global only). */
+  scope: 'songs' | 'scripture' | null;
+  overrides: HotkeyOverrides;
+  onAppAction: (id: AppActionId) => void;
+  /** Test seam; defaults to real platform detection inside resolveHotkey. */
+  isMac?: boolean;
 }
 
 /**
- * Pure translation of a document keydown into the active mode's delegate action.
- * Extracted verbatim from App's inline handler (so the branch table stays unit-testable
- * without mounting the whole app) plus the new Delete/Backspace branch. App wires this to
- * `document` and passes fresh context each event.
- *
- * Escape fires even while typing (closes any open modal); settings sits above the mode
- * layer so an open settings modal closes first. Everything else is gated behind the typing
- * guard so editing an input/textarea is never hijacked.
+ * Document-keydown → action dispatch. Escape stays hardcoded and first (closes any open
+ * modal, even while typing; settings sits above the mode layer). Everything else resolves
+ * through the hotkey registry: core actions keep their dedicated ModeKeyHandler methods
+ * (arrows/goLive/delete, with their pre-existing guard semantics preserved exactly),
+ * page-level actions go to App via onAppAction, and the rest reach the active mode's
+ * optional onAction. The typing guard lives in resolveHotkey now: unmodified bindings
+ * never fire from an input/textarea, Mod/Alt bindings do.
  */
 export function dispatchModeKey(e: KeyboardEvent, ctx: KeyDispatchCtx): void {
   const target = e.target as HTMLElement | null;
@@ -30,25 +39,48 @@ export function dispatchModeKey(e: KeyboardEvent, ctx: KeyDispatchCtx): void {
     handler?.onEscape();
     return;
   }
-  if (typing) return;
 
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-    e.preventDefault();
-    handler?.onArrow(1);
-  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    handler?.onArrow(-1);
-  } else if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    // Guard Enter/Space→goLive behind an open modal (quick-add or settings).
-    if (ctx.settingsOpen || handler?.isModalOpen()) return;
-    handler?.onGoLive();
-  } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    // Only act when the active mode offers a delete AND no modal is up — mirrors the
-    // Enter/Space guard so a destructive delete can't fire behind Settings/QuickAdd.
-    // (Backspace is the primary "delete" key on Mac keyboards, so both map here.)
-    if (!handler?.onDelete || ctx.settingsOpen || handler.isModalOpen()) return;
-    e.preventDefault();
-    handler.onDelete();
+  const resolved = resolveHotkey(e, { scope: ctx.scope, typing, overrides: ctx.overrides, isMac: ctx.isMac });
+  if (!resolved) return;
+
+  switch (resolved.id) {
+    case 'page.pre':
+    case 'page.songs':
+    case 'page.sermon':
+    case 'scripture.lookup':
+      // Behind Settings or a mode modal a silent page switch would strand the modal.
+      if (ctx.settingsOpen || handler?.isModalOpen()) return;
+      e.preventDefault();
+      ctx.onAppAction(resolved.id);
+      return;
+    case 'nav.next':
+      e.preventDefault();
+      handler?.onArrow(1);
+      return;
+    case 'nav.prev':
+      e.preventDefault();
+      handler?.onArrow(-1);
+      return;
+    case 'go.live':
+      e.preventDefault();
+      // Guard Enter/Space→goLive behind an open modal (quick-add or settings).
+      if (ctx.settingsOpen || handler?.isModalOpen()) return;
+      handler?.onGoLive();
+      return;
+    case 'item.delete':
+      // Only act when the active mode offers a delete AND no modal is up — a destructive
+      // delete can't fire behind Settings/QuickAdd. (Backspace is the primary "delete"
+      // key on Mac keyboards, so both map here by default.)
+      if (!handler?.onDelete || ctx.settingsOpen || handler.isModalOpen()) return;
+      e.preventDefault();
+      handler.onDelete();
+      return;
+    default:
+      // Mode-scoped extras (section jumps, reading jumps, focus/clear field). Same
+      // modal guard as goLive/delete.
+      if (ctx.settingsOpen || handler?.isModalOpen()) return;
+      if (!handler?.onAction) return;
+      e.preventDefault();
+      handler.onAction(resolved);
   }
 }
