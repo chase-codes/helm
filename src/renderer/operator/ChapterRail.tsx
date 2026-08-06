@@ -39,6 +39,9 @@ export function ChapterRail({
   selectedRange,
   onSelectVerse
 }: ChapterRailProps): JSX.Element {
+  // Same width-derived font as SectionRail's secFont: the pastor reads this
+  // column over the pulpit mirror, so widening the rail must enlarge the text.
+  const verseFont = Math.round(Math.max(13, Math.min(18, width / 24)) * 10) / 10
   const panelStyle: CSSProperties = {
     width: `${width}px`,
     flexShrink: 0,
@@ -117,7 +120,7 @@ export function ChapterRail({
     color: isLive ? T.live : T.dim
   })
   const textStyle = (isCued: boolean, planned: boolean): CSSProperties => ({
-    fontSize: '12.5px',
+    fontSize: `${verseFont}px`,
     lineHeight: 1.42,
     fontWeight: 500,
     color: isCued ? T.text : planned ? (dark ? '#b4b1aa' : '#5f5848') : T.dim,
