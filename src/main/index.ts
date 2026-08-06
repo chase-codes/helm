@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu, protocol } from 'electron'
+import { app, shell, BrowserWindow, Menu, protocol, session, desktopCapturer } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -28,12 +28,21 @@ import { createSongImport } from './songImport'
 import { createEasyWorshipSource } from './importSources/easyworship'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
-import { initDisplays, openTestOutput, closeAllOutputs, resyncDisplays } from './displays'
+import {
+  initDisplays,
+  openTestOutput,
+  closeAllOutputs,
+  resyncDisplays,
+  operatorDisplayId
+} from './displays'
 import { registerMediaProtocol, libraryRoot } from './library'
 import { presentation } from './stateStore'
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'helm-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+  {
+    scheme: 'helm-media',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
 ])
 
 let operatorWindow: BrowserWindow | null = null
@@ -137,17 +146,20 @@ app.whenReady().then(() => {
   const settingsRepo = createSettingsRepo(db)
   // Same broadcast-to-all-windows pattern as displaysStatus in displays.ts.
   const broadcastBibleProgress = (p: BibleInstallProgress): void => {
-    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.biblesProgress, p)
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.biblesProgress, p)
   }
   const installer = createBibleInstaller(biblesRepo, broadcastBibleProgress)
 
   const messagesRepo = createMessagesRepo(db)
   const messagesScheduleRepo = createMessagesScheduleRepo(db)
   const broadcastMessageInstallProgress = (p: MessageInstallProgress): void => {
-    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.messageInstallProgress, p)
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.messageInstallProgress, p)
   }
   const broadcastAudioProgress = (p: AudioDownloadProgress): void => {
-    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.messageAudioProgress, p)
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.messageAudioProgress, p)
   }
   const messageInstaller = createMessageInstaller(
     messagesRepo,
@@ -160,15 +172,20 @@ app.whenReady().then(() => {
     cue: (k, s) => presentation.cue(k, s),
     goLive: (k, s) => presentation.goLive(k, s),
     liveKey: () => presentation.get().liveKey,
-    isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k }
+    isLive: (k) => {
+      const s = presentation.get()
+      return s.output === 'live' && s.liveKey === k
+    }
   })
   preserviceEngine.onChange((s) => {
-    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)
   })
 
   const mediaRepo = createMediaRepo(db)
   const broadcastMediaProgress = (p: MediaImportProgress): void => {
-    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.mediaImportProgress, p)
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.mediaImportProgress, p)
   }
   const mediaImport = createMediaImport(mediaRepo, libRoot, {
     findSoffice: () => findSoffice(undefined, process.resourcesPath),
@@ -177,11 +194,16 @@ app.whenReady().then(() => {
   })
 
   const broadcastSongImportProgress = (p: SongImportProgress): void => {
-    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.songImportProgress, p)
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.songImportProgress, p)
   }
-  const songImport = createSongImport(repo, [createEasyWorshipSource({ getParentWindow: () => operatorWindow })], {
-    onProgress: broadcastSongImportProgress
-  })
+  const songImport = createSongImport(
+    repo,
+    [createEasyWorshipSource({ getParentWindow: () => operatorWindow })],
+    {
+      onProgress: broadcastSongImportProgress
+    }
+  )
 
   registerIpc(
     repo,
@@ -201,6 +223,24 @@ app.whenReady().then(() => {
   buildMenu()
   createWindow()
   initDisplays(() => operatorWindow, settingsRepo)
+
+  // Mirror view: answer any renderer getDisplayMedia call with the operator's screen —
+  // no picker, no user gesture. Screen (not window) capture so the mirror includes the
+  // cursor and any modals, matching what OS-level mirroring showed. macOS: fails until
+  // the user grants Screen Recording permission; MirrorView renders the instruction.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      desktopCapturer
+        .getSources({ types: ['screen'] })
+        .then((sources) => {
+          const opId = String(operatorDisplayId())
+          const match = sources.find((s) => s.display_id === opId) ?? sources[0]
+          callback(match ? { video: match } : {})
+        })
+        .catch(() => callback({}))
+    },
+    { useSystemPicker: false }
+  )
 
   // Fire-and-forget: awaiting this before createWindow() would block boot by ~2s
   // on first run. The UI catches up via bibles:progress broadcasts / manifest() polling.
