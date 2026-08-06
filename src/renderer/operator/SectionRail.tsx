@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX } from 'react';
+import { useEffect, useRef, type CSSProperties, type JSX } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SongSection } from '../../shared/types';
 
@@ -62,6 +62,14 @@ export function SectionRail({ theme: T, dark, width, sections, cuedIndex, isSect
     textWrap: 'pretty'
   });
 
+  // Keep the cued card visible on hotkey jumps (mirrors ChapterRail's selection-scroll):
+  // an effect keyed on the index, not a callback ref, so a manual scroll isn't fought
+  // on every re-render.
+  const cuedRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    cuedRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [cuedIndex]);
+
   return (
     <div style={sectionPanelStyle}>
       <div style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, marginBottom: '10px', flexShrink: 0 }}>
@@ -73,7 +81,7 @@ export function SectionRail({ theme: T, dark, width, sections, cuedIndex, isSect
           const isLive = isSectionLive(i);
           const showBadge = isCued || isLive;
           return (
-            <button key={i} style={secRowStyle(isCued, isLive)} onClick={() => onSelect(i)}>
+            <button key={i} ref={i === cuedIndex ? cuedRef : undefined} style={secRowStyle(isCued, isLive)} onClick={() => onSelect(i)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <div style={secLabelStyle(isCued)}>{sc.label}</div>
                 {showBadge && (

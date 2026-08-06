@@ -2,9 +2,11 @@ import { useCallback, useContext, useEffect, useRef, useState, type CSSPropertie
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
-import { keyForSong } from '../../shared/presentation/core';
+import { keyForSong, parseSongKey } from '../../shared/presentation/core';
 import { stanzaLabel } from '../../shared/songs/stanza';
 import { secondaryLyricRows } from '../../shared/songs/secondaryLyric';
+import { chorusJump, labelJump, verseJump } from '../../shared/songs/sectionJump';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
@@ -218,6 +220,47 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     setSection((s) => Math.max(0, Math.min(n - 1, s + dir)));
   };
 
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Section-jump hotkeys (chorus/bridge/tag/verse-N). The jump always moves the
+  // selection; the projector follows ONLY when this song is already live — then the
+  // target section goes live in the same keypress. On logo/black, or when a different
+  // song is live, it's a quiet cue (the cue effect above fires off the section change).
+  const jumpSection = (idx: number | null): void => {
+    if (idx === null || !activeSong) return;
+    const target = activeSong.sections[idx];
+    if (!target) return;
+    setSection(idx);
+    const liveSong = parseSongKey(liveKey);
+    const key = keyForSong(activeSong.id, idx);
+    // liveKey !== key: goLive on the already-live key means "take down" in main — a
+    // no-op jump must not black the screen.
+    if (output === 'live' && liveSong?.songId === activeSong.id && liveKey !== key) {
+      window.helm.presentation.goLive(key, {
+        kind: 'lyrics',
+        accent: '#e0a341',
+        label: `${activeSong.title} · ${target.label}`,
+        lines: target.lines
+      });
+    }
+  };
+
+  const onAction = (a: ResolvedHotkey): void => {
+    if (a.id === 'focus.search') {
+      searchInputRef.current?.focus();
+      return;
+    }
+    if (a.id === 'field.clear') {
+      setQ('');
+      return;
+    }
+    if (!activeSong) return;
+    if (a.id === 'song.chorus') jumpSection(chorusJump(activeSong.sections, clampedSection));
+    else if (a.id === 'song.bridge') jumpSection(labelJump(activeSong.sections, 'bridge'));
+    else if (a.id === 'song.tag') jumpSection(labelJump(activeSong.sections, 'tag'));
+    else if (a.id === 'song.verse' && a.digit) jumpSection(verseJump(activeSong.sections, a.digit));
+  };
+
   // Register this mode's keyboard delegate on every render so the closure below always
   // sees current state. While inactive, skip touching the ref entirely rather than
   // nulling it: App keeps both Songs and Sermon mounted (keep-alive contract), so a mode
@@ -248,7 +291,8 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
       },
       onArrow: step,
       onGoLive: goLive,
-      isModalOpen: () => quickAddOpen || importOpen
+      isModalOpen: () => quickAddOpen || importOpen,
+      onAction
     };
     return () => {
       keyHandlerRef.current = null;
@@ -366,6 +410,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         onRowContextMenu={(id, e) =>
           contextMenu.open(e, [{ label: 'Edit', onSelect: () => onEditSong(id) }])
         }
+        inputRef={searchInputRef}
       />
 
       <PanelDivider active={listPanel.dragging} onMouseDown={listPanel.startDrag} background={T.appBg} />

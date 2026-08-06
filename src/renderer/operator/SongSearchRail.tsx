@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
 
@@ -34,6 +34,7 @@ export interface SongSearchRailProps {
   onAddSong: () => void;
   onImportSongs: () => void;
   onRowContextMenu?: (id: string, e: ReactMouseEvent) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }
 
 export function SongSearchRail({
@@ -52,7 +53,8 @@ export function SongSearchRail({
   onSelect,
   onAddSong,
   onImportSongs,
-  onRowContextMenu
+  onRowContextMenu,
+  inputRef
 }: SongSearchRailProps): JSX.Element {
   const opRailStyle: CSSProperties = {
     width: `${width}px`,
@@ -144,6 +146,7 @@ export function SongSearchRail({
         <div style={opSearchBoxStyle}>
           <span style={{ fontSize: '15px', opacity: 0.5 }}>⌕</span>
           <input
+            ref={inputRef}
             style={{ flex: 1, fontSize: '13.5px' }}
             value={q}
             onChange={(e) => setQ(e.target.value)}

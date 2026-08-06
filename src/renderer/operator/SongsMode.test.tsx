@@ -69,6 +69,42 @@ const renderMode = (keyHandlerRef: ModeKeyHandlerRef): ReturnType<typeof render>
     </ThemeCtx.Provider>
   );
 
+const CHORUS_SONG: Song = {
+  id: 's2',
+  title: 'With Chorus',
+  author: 'A',
+  sections: [
+    { label: 'Verse 1', lines: ['v1'] },
+    { label: 'Chorus', lines: ['c1'] },
+    { label: 'Verse 2', lines: ['v2'] },
+    { label: 'Chorus 2', lines: ['c2'] }
+  ],
+  source: 'manual',
+  createdAt: 0
+};
+
+// Like installHelmStub but with a chorus-bearing song and a configurable live state.
+function installHelmStubWith(songs: Song[], state: PresentationState): { goLive: ReturnType<typeof vi.fn> } {
+  const goLive = vi.fn();
+  (window as unknown as { helm: unknown }).helm = {
+    songs: { list: () => Promise.resolve(songs), search: vi.fn(() => Promise.resolve([])) },
+    presentation: {
+      get: () => Promise.resolve(state),
+      onState: () => () => {},
+      cue: vi.fn(),
+      goLive,
+      setOutput: vi.fn()
+    },
+    songImport: {
+      sources: () => Promise.resolve([]),
+      scan: vi.fn(),
+      commit: vi.fn(),
+      onProgress: () => () => {}
+    }
+  };
+  return { goLive };
+}
+
 describe('SongsMode', () => {
   // CRITICAL: the import wizard (Task 7) must be wired into the same isModalOpen/onEscape
   // contract as QuickAdd. Without it, keyDispatch's typing guard never trips inside the
@@ -190,5 +226,57 @@ describe('SongsMode', () => {
     expect(search).toHaveBeenNthCalledWith(2, 'amazing', 'all');
     fireEvent.click(screen.getByText('Close'));
     await waitFor(() => expect(screen.getByText('Newly Imported Song')).toBeTruthy());
+  });
+});
+
+describe('SongsMode hotkey jumps', () => {
+  it('chorus jump moves the selection without going live when output is not live', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus')).toBeTruthy());
+  });
+
+  it('chorus jump goes live in the same press when this song is already live', async () => {
+    const live: PresentationState = { output: 'live', liveKey: 'song:s2:0', liveSnap: null };
+    const { goLive } = installHelmStubWith([CHORUS_SONG], live);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
+    // onAction is registered on the very first render, before the library/presentation-state
+    // promises resolve — so their setState calls land in a later macrotask flush that a plain
+    // microtask `await` doesn't wait through (see the identical tick above in "does not close
+    // the import wizard…"). Without this, the handler closure below still sees the pre-load
+    // state (no active song / output still 'black') and the live-follow branch never fires.
+    await new Promise((r) => setTimeout(r, 0));
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
+    await waitFor(() => expect(goLive).toHaveBeenCalledWith('song:s2:1', expect.objectContaining({ label: 'With Chorus · Chorus' })));
+  });
+
+  it('repeat chorus press cycles to Chorus 2; verse digit matches label', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
+    // Same load-timing tick as above — let the library promise land before firing.
+    await new Promise((r) => setTimeout(r, 0));
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus 2')).toBeTruthy());
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.verse', digit: 2 }));
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 2')).toBeTruthy());
+  });
+
+  it('field.clear empties the search query', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
+    const input = screen.getByPlaceholderText(/Title or a lyric line/) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'grace' } });
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'field.clear' }));
+    await waitFor(() => expect(input.value).toBe(''));
   });
 });
