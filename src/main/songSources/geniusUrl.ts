@@ -5,6 +5,53 @@ import { decodeEntities } from './htmlText';
 
 const KNOWN_LABEL = /^(chorus|verse|bridge|refrain|intro|outro|tag|pre-?chorus)\b/i;
 
+// Depth-aware div closing finder: given opening tag end position, finds the true </div> closing tag
+// by counting nested <div> and </div> to handle nesting. Returns the closing tag's index or -1 if not found.
+function findDivEnd(html: string, contentStartPos: number): number {
+  let depth = 1;
+  let pos = contentStartPos;
+
+  while (pos < html.length && depth > 0) {
+    const divOpen = html.indexOf('<div', pos);
+    const divClose = html.indexOf('</div>', pos);
+
+    if (divClose === -1) return -1;
+    if (divOpen !== -1 && divOpen < divClose) {
+      depth++;
+      pos = divOpen + 4;
+    } else {
+      depth--;
+      pos = divClose + 6;
+    }
+  }
+
+  return depth === 0 ? pos - 6 : -1; // Return position of closing tag start
+}
+
+function stripExcludeBlocks(html: string): string {
+  let result = html;
+  const excludeRegex = /<div[^>]*data-exclude-from-selection="true"[^>]*>/g;
+  let match;
+  const toRemove: Array<{ start: number; end: number }> = [];
+
+  while ((match = excludeRegex.exec(result))) {
+    const openingTagEnd = match.index + match[0].length;
+    const closingPos = findDivEnd(result, openingTagEnd);
+    if (closingPos !== -1) {
+      const closingEnd = closingPos + 6; // Length of '</div>'
+      toRemove.push({ start: match.index, end: closingEnd });
+    }
+  }
+
+  // Remove in reverse order to preserve indices
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    const { start, end } = toRemove[i];
+    result = result.substring(0, start) + result.substring(end);
+  }
+
+  return result;
+}
+
 function findLyricsContainers(html: string): string[] {
   const containers: string[] = [];
   const regex = /<div[^>]*data-lyrics-container="true"[^>]*>/g;
@@ -13,28 +60,12 @@ function findLyricsContainers(html: string): string[] {
   while ((match = regex.exec(html))) {
     const openingTag = match[0];
     const startPos = match.index + openingTag.length;
-    let depth = 1;
-    let pos = startPos;
+    const closingPos = findDivEnd(html, startPos);
 
-    // Depth-aware scanning: count <div> and </div> to find the true closing tag
-    while (pos < html.length && depth > 0) {
-      const divOpen = html.indexOf('<div', pos);
-      const divClose = html.indexOf('</div>', pos);
-
-      if (divClose === -1) break;
-      if (divOpen !== -1 && divOpen < divClose) {
-        depth++;
-        pos = divOpen + 4;
-      } else {
-        depth--;
-        pos = divClose + 6;
-      }
-    }
-
-    if (depth === 0) {
-      let content = html.substring(startPos, pos - 6);
-      // Strip data-exclude-from-selection header blocks (nested divs with excluded class)
-      content = content.replace(/<div[^>]*data-exclude-from-selection="true"[^>]*>[\s\S]*?<\/div>/g, '');
+    if (closingPos !== -1) {
+      let content = html.substring(startPos, closingPos);
+      // Strip data-exclude-from-selection header blocks (depth-aware to handle nesting)
+      content = stripExcludeBlocks(content);
       if (content.trim()) {
         containers.push(content);
       }

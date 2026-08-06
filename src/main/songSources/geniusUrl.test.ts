@@ -76,4 +76,28 @@ describe('parseGeniusHtml', () => {
     expect(out!.title).toBe('Yesterday');
     expect(out!.author).toBe('The Beatles');
   });
+
+  it('strips exclude blocks with nested divs followed by more header content', () => {
+    // Realistic Genius header: nested div (Contributors) followed by h2 (Song Title)
+    // Non-greedy regex fails here — matches first </div> (the nested), leaving h2 behind
+    const html = `<!DOCTYPE html><html><head>
+<meta property="og:title" content="Artist – Song Title"/>
+</head><body>
+<div data-lyrics-container="true">
+  <div data-exclude-from-selection="true" class="LyricsHeader__Container">
+    <div>8 Contributors</div>
+    <h2>Song Title Lyrics</h2>
+    Translations
+  </div>
+  [Verse 1]<br/>Actual lyrics start here
+</div>
+</body></html>`;
+    const out = parseGeniusHtml(html);
+    expect(out).not.toBeNull();
+    expect(out!.text).toContain('Verse 1');
+    expect(out!.text).toContain('Actual lyrics start here');
+    expect(out!.text).not.toContain('Contributors');
+    expect(out!.text).not.toContain('Song Title Lyrics');
+    expect(out!.text).not.toContain('Translations');
+  });
 });
