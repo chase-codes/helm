@@ -1,4 +1,4 @@
-import { useContext, useEffect, type CSSProperties, type JSX } from 'react'
+import { useContext, useEffect, useRef, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from './useHelm'
 import { OUTPUT_VIEWS } from '../../shared/displays/roles'
@@ -15,13 +15,30 @@ export function OutputViewPopover({ onClose }: { onClose: () => void }): JSX.Ele
   const T = useContext(ThemeCtx)
   const { displays } = useDisplayStatus()
   const outputs = displays.filter((d) => !d.isOperator)
+  const popRef = useRef<HTMLDivElement | null>(null)
 
+  // Dismiss on Escape key.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Dismiss on outside click (capture phase) or window blur.
+  // Mousedown in capture phase fires before the click handler, so inside-check is mandatory.
+  useEffect(() => {
+    const onDown = (e: MouseEvent): void => {
+      if (!popRef.current?.contains(e.target as Node)) onClose()
+    }
+    const dismiss = (): void => onClose()
+    document.addEventListener('mousedown', onDown, true)
+    window.addEventListener('blur', dismiss)
+    return () => {
+      document.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('blur', dismiss)
+    }
   }, [onClose])
 
   const popStyle: CSSProperties = {
@@ -78,7 +95,7 @@ export function OutputViewPopover({ onClose }: { onClose: () => void }): JSX.Ele
   })
 
   return (
-    <div style={popStyle} data-testid="output-view-popover">
+    <div ref={popRef} style={popStyle} data-testid="output-view-popover">
       {outputs.length === 0 && (
         <div style={{ ...nameStyle, color: T.dim, padding: '6px 8px' }}>
           No output displays connected

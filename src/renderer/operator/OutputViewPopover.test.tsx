@@ -93,4 +93,27 @@ describe('OutputViewPopover', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('closes on outside mousedown', async () => {
+    installHelmStub()
+    const onClose = vi.fn()
+    renderPopover(onClose)
+    await waitFor(() => expect(onClose).not.toHaveBeenCalled())
+    fireEvent.mouseDown(document.body)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('does not close on inside mousedown (button click proceeds)', async () => {
+    const setView = installHelmStub()
+    const onClose = vi.fn()
+    const r = renderPopover(onClose)
+    await waitFor(() => expect(r.getByText('Projector')).toBeTruthy())
+    // Fire mousedown on the button itself (capture phase) then click (bubble phase).
+    const btn = r.getByTestId('view-label:Projector-slides')
+    fireEvent.mouseDown(btn)
+    fireEvent.click(btn)
+    // The click handler runs (setView), then its onClick calls onClose.
+    expect(setView).toHaveBeenCalledWith('label:Projector', 'slides')
+    expect(onClose).toHaveBeenCalledTimes(1) // only the click's onClose, not the mousedown
+  })
 })
