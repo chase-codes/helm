@@ -88,4 +88,20 @@ describe('ChapterRail scrollRequest', () => {
     rerender(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'nearest', nonce: 1 } }))
     expect(spy).not.toHaveBeenCalled()
   })
+
+  it('reports onScrollConsumed only once the target row is actually found', () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    const onScrollConsumed = vi.fn()
+    // verseCount 1: verse 4's row doesn't exist yet (cross-chapter jump, rows not landed) —
+    // the request must NOT be reported consumed, or the verseCount re-apply below would
+    // never get a chance to fire it for real.
+    const { rerender } = render(
+      rail({ verseCount: 1, scrollRequest: { v: 4, align: 'start', nonce: 1 }, onScrollConsumed })
+    )
+    expect(onScrollConsumed).not.toHaveBeenCalled()
+
+    // Rows land — same nonce, new verseCount — NOW the row exists and gets scrolled.
+    rerender(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'start', nonce: 1 }, onScrollConsumed }))
+    expect(onScrollConsumed).toHaveBeenCalledWith(1)
+  })
 })

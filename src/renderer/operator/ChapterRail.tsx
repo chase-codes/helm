@@ -19,6 +19,12 @@ export interface ChapterRailProps {
    * view (arrow steps). The nonce makes each request fire exactly once; verseCount is a
    * dep too so a cross-chapter jump re-applies once the new chapter's rows exist. */
   scrollRequest?: { v: number; align: 'start' | 'nearest'; nonce: number } | null
+  /** Fired the moment a scrollRequest actually lands a scroll (its target row was found).
+   * SermonMode records the highest consumed nonce and withholds a matching-or-older one
+   * on a later mount, so remounting ChapterRail (track flipped away and back) doesn't
+   * replay an already-consumed request. Not fired when the row isn't found yet — that's
+   * the cross-chapter case, where the SAME request must still fire once the rows land. */
+  onScrollConsumed?: (nonce: number) => void
 }
 
 const HINT = 'Tap a verse to go there — on screen when you\'re live. Shift-tap to build a range.'
@@ -43,7 +49,8 @@ export function ChapterRail({
   previewOf,
   selectedRange,
   onSelectVerse,
-  scrollRequest
+  scrollRequest,
+  onScrollConsumed
 }: ChapterRailProps): JSX.Element {
   // Same width-derived font as SectionRail's secFont: the pastor reads this
   // column over the pulpit mirror, so widening the rail must enlarge the text.
@@ -75,9 +82,13 @@ export function ChapterRail({
   const listRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!scrollRequest) return
-    listRef.current
-      ?.querySelector(`[data-verse="${scrollRequest.v}"]`)
-      ?.scrollIntoView?.({ block: scrollRequest.align })
+    const row = listRef.current?.querySelector(`[data-verse="${scrollRequest.v}"]`)
+    // Row not there yet (cross-chapter jump, rows haven't landed) — leave the request
+    // un-consumed so the verseCount dep below re-runs this same nonce once they do,
+    // rather than reporting done on a scroll that never happened.
+    if (!row) return
+    row.scrollIntoView?.({ block: scrollRequest.align })
+    onScrollConsumed?.(scrollRequest.nonce)
     // scrollRequest is consumed by identity of its nonce (one shot per request);
     // verseCount re-applies it when a cross-chapter jump's rows land a tick later.
     // eslint-disable-next-line react-hooks/exhaustive-deps

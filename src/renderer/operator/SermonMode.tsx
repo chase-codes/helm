@@ -321,10 +321,26 @@ export function SermonMode({
   const verseCount = liveChapter?.verseCount || 1;
   const liveCols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
 
-  // One-shot scroll commands for ChapterRail — see its scrollRequest prop doc.
+  // One-shot scroll commands for ChapterRail — see its scrollRequest prop doc. `railScroll`
+  // itself is never cleared after use (nonces only ever go up, so re-passing the same
+  // object is harmless while ChapterRail stays mounted — its own effect no-ops on an
+  // unchanged nonce/verseCount pair). The problem is remounting: switching the Sermon
+  // track away and back unmounts/remounts ChapterRail, and a mount effect always runs
+  // once regardless of whether its deps "changed" from some previous instance — so
+  // without `consumedNonce`, the last already-applied request would fire again on every
+  // remount. `consumedNonce` tracks the highest nonce ChapterRail has confirmed (via
+  // `onScrollConsumed`, below) actually landed a scroll; `scrollRequest` is withheld once
+  // its nonce is no longer greater than that. State rather than a ref deliberately — a
+  // ref can't be read while computing the JSX prop below (that's a render-phase ref read,
+  // which this repo's lint config rejects), and the setState below lives in a plain
+  // callback invoked by the child, not inside one of this component's own effects, so it
+  // doesn't run into the set-state-in-effect rule either. A genuinely fresh nonce (e.g.
+  // goLiveFromBuilder switching track and requesting a scroll in the same commit) always
+  // clears the `>` check and fires on the fresh mount as it should.
   const [railScroll, setRailScroll] = useState<{ v: number; align: 'start' | 'nearest'; nonce: number } | null>(
     null
   );
+  const [consumedNonce, setConsumedNonce] = useState(0);
   const requestRailScroll = (v: number, align: 'start' | 'nearest'): void =>
     setRailScroll((p) => ({ v, align, nonce: (p?.nonce ?? 0) + 1 }));
 
@@ -771,7 +787,8 @@ export function SermonMode({
             previewOf={railPreviewOf}
             selectedRange={selectedRange}
             onSelectVerse={onRailSelectVerse}
-            scrollRequest={railScroll}
+            scrollRequest={railScroll && railScroll.nonce > consumedNonce ? railScroll : null}
+            onScrollConsumed={setConsumedNonce}
           />
         </>
       )}

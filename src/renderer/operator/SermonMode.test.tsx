@@ -3,6 +3,7 @@ import { useRef, type JSX } from 'react'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SermonMode } from './SermonMode'
+import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { ChapterData, PresentationState, ScriptureReading } from '../../shared/types'
@@ -101,13 +102,21 @@ function installHelmStub(
   }
 }
 
-function Harness({ active = true, lookupNonce = 0 }: { active?: boolean; lookupNonce?: number } = {}): JSX.Element {
-  const keyHandlerRef = useRef(null)
+function Harness({
+  active = true,
+  lookupNonce = 0,
+  keyHandlerRef
+}: { active?: boolean; lookupNonce?: number; keyHandlerRef?: ModeKeyHandlerRef } = {}): JSX.Element {
+  // Most tests never read the handler ref, so an internal one covers them; the
+  // onAction/remount tests below pass their own external ref (SongsMode.test.tsx's
+  // pattern) so they can invoke keyHandlerRef.current?.onAction directly.
+  const ownRef = useRef(null)
+  const ref = keyHandlerRef ?? ownRef
   return (
     <ThemeCtx.Provider value={themeFor('dark')}>
       <SermonMode
         themeMode="dark"
-        keyHandlerRef={keyHandlerRef}
+        keyHandlerRef={ref}
         active={active}
         onOpenSettings={() => {}}
         biblesRevision={0}
@@ -512,5 +521,101 @@ describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', (
 
     rerender(<Harness lookupNonce={1} />)
     await waitFor(() => expect(document.activeElement).toBe(entry()))
+  })
+})
+
+describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
+  it('scripture.reading digit 2 jumps to the 2nd scheduled reading', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+      { id: 'r2', book: 'Genesis', ch: 1, from: 3, to: 3 }
+    ])
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 2 }))
+    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+  })
+
+  it('focus.search focuses the entry input', async () => {
+    const { resolveChapter } = installHelmStub()
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    expect(document.activeElement).not.toBe(entry())
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'focus.search' }))
+    expect(document.activeElement).toBe(entry())
+  })
+
+  it('field.clear resets the builder', async () => {
+    const { resolveChapter } = installHelmStub()
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+
+    typeInEntry('Rom')
+    expect(entryValue()).toBe('Rom')
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'field.clear' }))
+    expect(entryValue()).toBe('')
+  })
+
+  it('is inert while another track is active', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 3, to: 3 }
+    ])
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
+
+    // Move off the scripture track — TrackTabs is rendered by MessageMode too, so
+    // 'Scripture'/'Message' stay clickable throughout.
+    fireEvent.click(screen.getByText('Message'))
+    await waitFor(() => expect(screen.queryByPlaceholderText('Add reading — John 3:16')).toBeNull())
+
+    // Fire the reading hotkey while on the Message track — the `track !== 'scripture'`
+    // guard must swallow it rather than moving the (currently invisible) cursor.
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 1 }))
+
+    // The hero label is the cursor's own text ("Genesis 1:1"); the schedule row for
+    // reading 1 ("Genesis 1:3") stays on screen regardless, so asserting the hero still
+    // reads the untouched cursor is the unambiguous check that the action was swallowed.
+    fireEvent.click(screen.getByText('Scripture'))
+    await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
+  })
+})
+
+describe('SermonMode — ChapterRail scroll requests', () => {
+  it('does not re-fire an already-consumed scroll request when ChapterRail remounts', async () => {
+    const scrollSpy = vi.fn()
+    Element.prototype.scrollIntoView = scrollSpy
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 3, to: 3 }
+    ])
+    render(<Harness />)
+    resolveChapter()
+    const row = await screen.findByText('Genesis 1:3')
+    scrollSpy.mockClear()
+
+    // A schedule-row click requests a 'start' scroll and it lands (the rows are already
+    // loaded) — this is the request that must NOT replay later.
+    fireEvent.click(row.closest('button') as HTMLElement)
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith({ block: 'start' }))
+    scrollSpy.mockClear()
+
+    // Flip away to Message and back — ChapterRail unmounts, then remounts fresh. Its
+    // mount effect runs unconditionally regardless of prior deps, so without
+    // consumedNonceRef this replays the same, already-satisfied, request.
+    fireEvent.click(screen.getByText('Message'))
+    await waitFor(() => expect(screen.queryByText('Verse 3')).toBeNull())
+    fireEvent.click(screen.getByText('Scripture'))
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+
+    expect(scrollSpy).not.toHaveBeenCalled()
   })
 })
