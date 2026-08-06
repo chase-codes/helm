@@ -118,16 +118,28 @@ export function SongSearchRail({
     WebkitBoxOrient: 'vertical'
   };
   const activeBadgeStyle: CSSProperties = { fontSize: '10px', color: T.accent, flexShrink: 0, marginTop: '3px' };
-  const pasteSongStyle: CSSProperties = {
+  const addChipStyle: CSSProperties = {
     width: '100%',
-    height: '42px',
+    height: '34px',
     marginTop: '8px',
-    borderRadius: '11px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '13.5px',
+    padding: '0 10px',
+    borderRadius: '9px',
+    background: `${T.accent}22`,
+    color: T.accent,
+    fontSize: '12.5px',
     fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  };
+  const importRowStyle: CSSProperties = {
+    width: '100%',
+    height: '26px',
+    marginTop: '5px',
+    borderRadius: '8px',
+    fontSize: '11.5px',
+    fontWeight: 600,
+    color: T.faint,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -166,6 +178,14 @@ export function SongSearchRail({
             </button>
           ))}
         </div>
+        <button style={addChipStyle} onClick={onAddSong}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {q.trim() ? `+ Add "${q.trim()}" as a new song` : '+ Add a song'}
+          </span>
+        </button>
+        <button style={importRowStyle} onClick={onImportSongs}>
+          ↓ Import a song library
+        </button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>
         {rows.map((r) => (
@@ -233,12 +253,6 @@ export function SongSearchRail({
           </>
         )}
         {noResults && <div style={{ padding: '14px 8px', color: T.faint, fontSize: '12.5px', lineHeight: 1.5 }}>{emptyText}</div>}
-        <button style={pasteSongStyle} onClick={onAddSong}>
-          + Add a song — search or paste
-        </button>
-        <button style={pasteSongStyle} onClick={onImportSongs}>
-          ↓ Import a song library
-        </button>
       </div>
     </div>
   );
