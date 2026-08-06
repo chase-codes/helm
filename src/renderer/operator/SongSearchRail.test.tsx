@@ -52,7 +52,7 @@ describe('SongSearchRail', () => {
 
   it('labels the chip with the query when one is typed', () => {
     render(<SongSearchRail {...baseProps} q="Way Maker" />)
-    expect(screen.getByText('+ Add "Way Maker" as a new song')).toBeTruthy()
+    expect(screen.getByText('+ Add “Way Maker” as a new song')).toBeTruthy()
   })
 
   it('clicking the chip fires onAddSong', () => {

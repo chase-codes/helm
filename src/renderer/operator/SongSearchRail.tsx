@@ -180,7 +180,7 @@ export function SongSearchRail({
         </div>
         <button style={addChipStyle} onClick={onAddSong}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {q.trim() ? `+ Add "${q.trim()}" as a new song` : '+ Add a song'}
+            {q.trim() ? `+ Add “${q.trim()}” as a new song` : '+ Add a song'}
           </span>
         </button>
         <button style={importRowStyle} onClick={onImportSongs}>
