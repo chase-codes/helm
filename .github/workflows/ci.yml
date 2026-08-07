@@ -1,0 +1,47 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache bundled bibles
+        id: bibles
+        uses: actions/cache@v4
+        with:
+          path: resources/bibles
+          key: bibles-${{ hashFiles('scripts/fetch-bibles.mjs') }}
+      - name: Fetch bundled bibles
+        if: steps.bibles.outputs.cache-hit != 'true'
+        run: node scripts/fetch-bibles.mjs
+      - run: npm run build
+      - run: npx electron-builder --win --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helm-setup
+          path: |
+            dist/*-setup.exe
+            dist/*Setup.exe
+          retention-days: 14
