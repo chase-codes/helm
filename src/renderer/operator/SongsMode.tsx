@@ -308,6 +308,20 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
       setArmedNextId(null);
       return;
     }
+    if (liveParsed?.songId === armed.id) {
+      // Divergence-window hole: the armed song can already BE the live song if it was
+      // re-armed after a prior commitSwitch's goLive() send but before that broadcast's
+      // liveKey landed (selection already moved, reconciliation not yet caught up — see
+      // pendingSwitchRef above). goLive on an already-live key means "take down" in main,
+      // so just disarm here instead of re-sending it; the reconciliation effect has
+      // already (or is about to) put the selection on this song.
+      setArmedNextId(null);
+      if (activeSongId !== armed.id) {
+        setActiveSongId(armed.id);
+        setSection(0);
+      }
+      return;
+    }
     pendingSwitchRef.current = armed.id;
     window.helm.presentation.goLive(keyForSong(armed.id, 0), slideFor(armed, armed.sections[0]));
     setActiveSongId(armed.id);
