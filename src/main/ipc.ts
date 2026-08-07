@@ -27,7 +27,14 @@ import type { SongSources } from './songSources';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { video } from './videoState';
-import { displayStatus, openTestOutput, setDisplayRole, setDisplayView } from './displays';
+import {
+  displayStatus,
+  openTestOutput,
+  setDisplayRole,
+  setDisplayView,
+  setLeaderSplitByFingerprint,
+  setLeaderSplitFromSender,
+} from './displays';
 
 export function registerIpc(
   repo: SongsRepo,
@@ -57,6 +64,8 @@ export function registerIpc(
   ipcMain.on(CH.displaysOpenTest, () => openTestOutput());
   ipcMain.on(CH.displaysSetRole, (_e, fp: string, role: OutputRole) => setDisplayRole(fp, role));
   ipcMain.on(CH.displaysSetView, (_e, fp: string, view: OutputViewMode) => setDisplayView(fp, view));
+  ipcMain.on(CH.displaysSetLeaderSplit, (e, fp: string | null, px: number) =>
+    fp === null ? setLeaderSplitFromSender(e.sender, px) : setLeaderSplitByFingerprint(fp, px));
   ipcMain.handle(CH.biblesManifest, () => installer.manifest());
   ipcMain.on(CH.biblesInstall, (_e, id: string) => installer.install(id));
   ipcMain.handle(CH.biblesUninstall, (_e, id: string) => installer.uninstall(id));

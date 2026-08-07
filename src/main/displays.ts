@@ -5,10 +5,13 @@ import { CH, type DisplayInfo, type DisplayStatus, type OutputRole, type OutputV
 import {
   DEFAULT_ROLE,
   DEFAULT_VIEW,
+  DEFAULT_LEADER_SPLIT,
   ROLE_VARIANT,
   fingerprintDisplay,
   planAttachments,
   resolveView,
+  resolveLeaderSplit,
+  clampLeaderSplit,
   type DisplaySnapshot,
 } from '../shared/displays/roles';
 import type { SettingsRepo } from './settingsRepo';
@@ -16,8 +19,9 @@ import { presentation } from './stateStore';
 
 const ROLES_KEY = 'displays:roles';
 const VIEWS_KEY = 'displays:views';
+const SPLITS_KEY = 'displays:leaderSplits';
 
-interface Tracked { win: BrowserWindow; fingerprint: string; role: OutputRole; view: OutputViewMode }
+interface Tracked { win: BrowserWindow; fingerprint: string; role: OutputRole; view: OutputViewMode; leaderSplit: number }
 const byDisplayId = new Map<number, Tracked>();
 const testOutputs = new Set<BrowserWindow>();
 
@@ -30,7 +34,7 @@ function loadOutput(win: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/output/index.html`);
   else win.loadFile(join(__dirname, '../renderer/output/index.html'));
 }
-export function createOutputWindow(bounds: Electron.Rectangle, frameless = true, variant: OutputVariant = 'audience', view: OutputViewMode = 'slides'): BrowserWindow {
+export function createOutputWindow(bounds: Electron.Rectangle, frameless = true, variant: OutputVariant = 'audience', view: OutputViewMode = 'slides', leaderSplit: number = DEFAULT_LEADER_SPLIT): BrowserWindow {
   const win = new BrowserWindow({
     ...bounds, frame: !frameless, resizable: !frameless, movable: !frameless,
     backgroundColor: '#000000', autoHideMenuBar: true,
@@ -38,7 +42,7 @@ export function createOutputWindow(bounds: Electron.Rectangle, frameless = true,
   });
   if (frameless) { win.setAlwaysOnTop(true, 'screen-saver'); win.setSkipTaskbar(true); win.setBounds(bounds); }
   loadOutput(win);
-  presentation.registerOutput(win, variant, view);
+  presentation.registerOutput(win, variant, view, leaderSplit);
   return win;
 }
 
@@ -70,6 +74,10 @@ function savedViews(): Record<string, OutputViewMode> {
   return settings?.get<Record<string, OutputViewMode>>(VIEWS_KEY, {}) ?? {};
 }
 
+function savedSplits(): Record<string, number> {
+  return settings?.get<Record<string, number>>(SPLITS_KEY, {}) ?? {};
+}
+
 function broadcastStatus(): void {
   const status = displayStatus();
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.displaysStatus, status);
@@ -81,6 +89,7 @@ function sync(): void {
   const plan = planAttachments(snaps, opId, savedRoles());
   const plannedIds = new Set(plan.map((a) => a.displayId));
   const views = savedViews();
+  const splits = savedSplits();
 
   // Destroy windows for displays that are no longer planned (unplugged or became operator).
   for (const [id, t] of byDisplayId) {
@@ -89,6 +98,7 @@ function sync(): void {
   // Create / re-bounds / re-tag for each planned attachment.
   for (const a of plan) {
     const view = resolveView(views, a.fingerprint);
+    const leaderSplit = resolveLeaderSplit(splits, a.fingerprint);
     const existing = byDisplayId.get(a.displayId);
     if (existing && !existing.win.isDestroyed()) {
       existing.win.setBounds(a.bounds);
@@ -101,15 +111,19 @@ function sync(): void {
         existing.view = view;
         presentation.setOutputView(existing.win, view);
       }
+      if (existing.leaderSplit !== leaderSplit) {
+        existing.leaderSplit = leaderSplit;
+        presentation.setOutputLeaderSplit(existing.win, leaderSplit);
+      }
       continue;
     }
-    const win = createOutputWindow(a.bounds, true, ROLE_VARIANT[a.role], view);
+    const win = createOutputWindow(a.bounds, true, ROLE_VARIANT[a.role], view, leaderSplit);
     // Symmetric to testOutputs' 'closed' cleanup: if this output is torn down by any path
     // other than our own sync/closeAllOutputs (e.g. Cmd+W), drop the stale map entry so
     // displayStatus() doesn't over-count. Guard against clobbering a replacement window a
     // later sync may have already put under this display id.
     win.on('closed', () => { if (byDisplayId.get(a.displayId)?.win === win) byDisplayId.delete(a.displayId); });
-    byDisplayId.set(a.displayId, { win, fingerprint: a.fingerprint, role: a.role, view });
+    byDisplayId.set(a.displayId, { win, fingerprint: a.fingerprint, role: a.role, view, leaderSplit });
   }
 
   // Build enriched DisplayInfo[] for ALL displays (operator included) for the header/6b.
@@ -127,6 +141,7 @@ function sync(): void {
       role: isOperator ? null : (tracked?.role ?? DEFAULT_ROLE),
       isOperator,
       view: isOperator ? null : (tracked?.view ?? DEFAULT_VIEW),
+      leaderSplit: isOperator ? null : resolveLeaderSplit(splits, fingerprint),
     };
   });
   broadcastStatus();
@@ -176,6 +191,35 @@ export function setDisplayView(fingerprint: string, view: OutputViewMode): void 
     !d.isOperator && d.fingerprint === fingerprint ? { ...d, view } : d,
   );
   broadcastStatus();
+}
+
+// Persist a leader split for a fingerprint and live-re-tag every matching window (no re-spawn).
+export function setLeaderSplitByFingerprint(fingerprint: string, px: number): void {
+  const clamped = clampLeaderSplit(px);
+  const splits = savedSplits();
+  splits[fingerprint] = clamped;
+  settings?.set(SPLITS_KEY, splits);
+  for (const t of byDisplayId.values()) {
+    if (t.fingerprint === fingerprint && !t.win.isDestroyed()) {
+      t.leaderSplit = clamped;
+      presentation.setOutputLeaderSplit(t.win, clamped);
+    }
+  }
+  lastDisplays = lastDisplays.map((d) =>
+    !d.isOperator && d.fingerprint === fingerprint ? { ...d, leaderSplit: clamped } : d,
+  );
+  broadcastStatus();
+}
+// The leader window reports its own drag; it doesn't know its fingerprint, but main can
+// resolve it from the sending WebContents. Test outputs (dev windows, no fingerprint)
+// get a live re-tag only — nothing to persist against.
+export function setLeaderSplitFromSender(sender: Electron.WebContents, px: number): void {
+  for (const t of byDisplayId.values()) {
+    if (t.win.webContents === sender) { setLeaderSplitByFingerprint(t.fingerprint, px); return; }
+  }
+  for (const w of testOutputs) {
+    if (w.webContents === sender && !w.isDestroyed()) presentation.setOutputLeaderSplit(w, clampLeaderSplit(px));
+  }
 }
 
 export function initDisplays(getOperatorWindow: () => BrowserWindow | null, settingsRepo: SettingsRepo): void {

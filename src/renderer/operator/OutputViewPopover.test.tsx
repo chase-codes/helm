@@ -21,7 +21,8 @@ const STATUS: DisplayStatus = {
       scaleFactor: 2,
       role: null,
       view: null,
-      isOperator: true
+      isOperator: true,
+      leaderSplit: null
     },
     {
       id: 2,
@@ -32,7 +33,8 @@ const STATUS: DisplayStatus = {
       scaleFactor: 1,
       role: 'audience',
       view: 'slides',
-      isOperator: false
+      isOperator: false,
+      leaderSplit: 320
     },
     {
       id: 3,
@@ -43,7 +45,8 @@ const STATUS: DisplayStatus = {
       scaleFactor: 1,
       role: 'stage',
       view: 'mirror',
-      isOperator: false
+      isOperator: false,
+      leaderSplit: 320
     }
   ]
 }

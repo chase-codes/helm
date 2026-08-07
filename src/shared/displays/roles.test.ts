@@ -7,6 +7,8 @@ import {
   planAttachments,
   resolveView,
   DEFAULT_VIEW,
+  clampLeaderSplit,
+  resolveLeaderSplit,
   type DisplaySnapshot,
 } from './roles';
 import type { OutputRole } from '../types';
@@ -84,3 +86,16 @@ describe('resolveView', () => {
     expect(DEFAULT_VIEW).toBe('slides');
   });
 });
+
+test('clampLeaderSplit clamps, rounds, and defaults non-numbers', () => {
+  expect(clampLeaderSplit(320)).toBe(320)
+  expect(clampLeaderSplit(10)).toBe(220)
+  expect(clampLeaderSplit(9000)).toBe(560)
+  expect(clampLeaderSplit(300.6)).toBe(301)
+  expect(clampLeaderSplit(undefined)).toBe(320)
+  expect(clampLeaderSplit('x')).toBe(320)
+})
+test('resolveLeaderSplit reads the saved value for a fingerprint, defaulting when absent', () => {
+  expect(resolveLeaderSplit({ fp1: 400 }, 'fp1')).toBe(400)
+  expect(resolveLeaderSplit({}, 'fp1')).toBe(320)
+})

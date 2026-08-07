@@ -148,7 +148,7 @@ export interface VideoStateWire {
 export type OutputVariant = 'audience' | 'main' | 'stage' | 'leader' | 'livestream';
 export type OutputRole = 'audience' | 'stage' | 'livestream';  // declared here; roles.ts imports it
 export type OutputViewMode = 'slides' | 'leader' | 'mirror';
-export interface OutputPayload { slide: Slide; variant: OutputVariant; view: OutputViewMode }
+export interface OutputPayload { slide: Slide; variant: OutputVariant; view: OutputViewMode; leaderSplit?: number }
 export interface DisplayInfo {
   id: number;
   fingerprint: string;
@@ -159,6 +159,7 @@ export interface DisplayInfo {
   role: OutputRole | null;  // null for the operator display (not an output)
   isOperator: boolean;
   view: OutputViewMode | null;  // resolved view for outputs; null for the operator display
+  leaderSplit: number | null;   // rail px for the leader view; null for the operator display
 }
 export interface DisplayStatus { outputs: number; displays: DisplayInfo[] }
 
@@ -173,6 +174,7 @@ export const CH = {
   displaysGet: 'displays:get', displaysStatus: 'displays:status',
   displaysOpenTest: 'displays:openTest', displaysSetRole: 'displays:setRole',
   displaysSetView: 'displays:setView',
+  displaysSetLeaderSplit: 'displays:setLeaderSplit',
   biblesManifest: 'bibles:manifest', biblesInstall: 'bibles:install',
   biblesUninstall: 'bibles:uninstall',
   biblesProgress: 'bibles:progress',  // main → all windows
@@ -274,6 +276,7 @@ export interface HelmApi {
     openTest(): void;
     setRole(fingerprint: string, role: OutputRole): void;
     setView(fingerprint: string, view: OutputViewMode): void;
+    setLeaderSplit(fingerprint: string | null, px: number): void;
   };
   bibles: {
     manifest(): Promise<BibleManifestEntry[]>;

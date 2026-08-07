@@ -28,6 +28,7 @@ const api: HelmApi = {
     openTest: () => ipcRenderer.send(CH.displaysOpenTest),
     setRole: (fp, role) => ipcRenderer.send(CH.displaysSetRole, fp, role),
     setView: (fp, view) => ipcRenderer.send(CH.displaysSetView, fp, view),
+    setLeaderSplit: (fp, px) => ipcRenderer.send(CH.displaysSetLeaderSplit, fp, px),
   },
   bibles: {
     manifest: () => ipcRenderer.invoke(CH.biblesManifest),

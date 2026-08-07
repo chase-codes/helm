@@ -64,3 +64,15 @@ export function planAttachments(
 export function resolveView(saved: Record<string, OutputViewMode>, fingerprint: string): OutputViewMode {
   return saved[fingerprint] ?? DEFAULT_VIEW;
 }
+
+/** Leader view hero/rail split: the rail's width in px. */
+export const LEADER_SPLIT_MIN = 220;
+export const LEADER_SPLIT_MAX = 560;
+export const DEFAULT_LEADER_SPLIT = 320;
+export function clampLeaderSplit(v: unknown): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_LEADER_SPLIT;
+  return Math.max(LEADER_SPLIT_MIN, Math.min(LEADER_SPLIT_MAX, Math.round(n)));
+}
+export function resolveLeaderSplit(saved: Record<string, number>, fingerprint: string): number {
+  return clampLeaderSplit(saved[fingerprint]);
+}
