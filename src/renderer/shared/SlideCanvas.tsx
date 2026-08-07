@@ -84,7 +84,8 @@ export function SlideCanvas({
     letterSpacing: '-0.015em',
     color: '#fff',
     textShadow: '0 2px 22px rgba(0,0,0,.55)',
-    maxWidth: '94%',
+    // No maxWidth here: with nowrap, a capped line box overflows to the right only, pushing
+    // long lines off-center where the fitter can't see it. contentStyle's padding is the margin.
     whiteSpace: 'nowrap'
   };
 

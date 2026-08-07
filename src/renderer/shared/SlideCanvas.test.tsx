@@ -124,4 +124,8 @@ test('lyric lines are nowrap so the fitter, not the box, controls line breaks', 
   const r = render(<SlideCanvas variant="audience" slide={{ kind: 'lyrics', lines: ['Blessed assurance, Jesus is mine!'] }} />);
   const line = r.getByText('Blessed assurance, Jesus is mine!');
   expect(line.style.whiteSpace).toBe('nowrap');
+  // No width cap: a capped box + nowrap overflows to the RIGHT only (LTR), so long lines
+  // render off-center while the fitter can't see the overflow. The container's own padding
+  // provides the side margin; the line box must be free to match its text width.
+  expect(line.style.maxWidth).toBe('');
 });
