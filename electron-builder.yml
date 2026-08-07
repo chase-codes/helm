@@ -23,10 +23,15 @@ extraResources:
 win:
   executableName: Helm
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: Helm-Setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+publish:
+  provider: github
+  owner: chase-codes
+  repo: helm
+  releaseType: draft
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
