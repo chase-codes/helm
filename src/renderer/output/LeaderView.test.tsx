@@ -291,6 +291,18 @@ describe('LeaderView', () => {
     expect(lines.some((el) => (el as HTMLElement).style.whiteSpace === 'nowrap')).toBe(true)
   })
 
+  it('pads the hero symmetrically so centered lyrics sit on the panel center', async () => {
+    const snap = { kind: 'lyrics' as const, accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines }
+    const st: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: snap, cuedKey: 'song:s1:0', cuedSnap: snap }
+    installHelmStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    // The hero wrap is the first child of the root; its content centers within the padded
+    // box, so unequal horizontal padding shifts the optical center off the panel center.
+    const hero = r.getByTestId('leader-view').firstElementChild as HTMLElement
+    expect(hero.style.paddingLeft).toBe(hero.style.paddingRight)
+  })
+
   it('follows a changed payload.leaderSplit on rerender when not dragging', async () => {
     const snap = { kind: 'lyrics' as const, accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines }
     const st: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: snap, cuedKey: 'song:s1:0', cuedSnap: snap }

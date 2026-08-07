@@ -131,7 +131,10 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    padding: '3cqmin 0 3cqmin 4cqmin',
+    // Symmetric horizontal padding: the lyric block centers within this padded box, so
+    // unequal sides would push the optical center off the panel center (the divider is a
+    // flex sibling, not part of this panel — it doesn't stand in for right padding).
+    padding: '3cqmin 4cqmin',
     containerType: 'size'
   }
   const heroMiddleStyle: CSSProperties = {
