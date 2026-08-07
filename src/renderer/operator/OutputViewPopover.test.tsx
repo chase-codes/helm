@@ -51,18 +51,20 @@ const STATUS: DisplayStatus = {
   ]
 }
 
-function installHelmStub(): ReturnType<typeof vi.fn> {
+function installHelmStub(): { setView: ReturnType<typeof vi.fn>; setLeaderSplit: ReturnType<typeof vi.fn> } {
   const setView = vi.fn()
+  const setLeaderSplit = vi.fn()
   ;(window as unknown as { helm: unknown }).helm = {
     displays: {
       get: () => Promise.resolve(STATUS),
       onStatus: () => () => {},
       setView,
+      setLeaderSplit,
       setRole: vi.fn(),
       openTest: vi.fn()
     }
   }
-  return setView
+  return { setView, setLeaderSplit }
 }
 
 // Test wrapper component that includes container ref (mimics Header's structure).
@@ -107,7 +109,7 @@ describe('OutputViewPopover', () => {
   })
 
   it('switches a view and closes', async () => {
-    const setView = installHelmStub()
+    const { setView } = installHelmStub()
     const onClose = vi.fn()
     const r = renderPopover(onClose)
     await waitFor(() => expect(r.getByText('Projector')).toBeTruthy())
@@ -134,7 +136,7 @@ describe('OutputViewPopover', () => {
   })
 
   it('does not close on inside mousedown (button click proceeds)', async () => {
-    const setView = installHelmStub()
+    const { setView } = installHelmStub()
     const onClose = vi.fn()
     const r = renderPopover(onClose)
     await waitFor(() => expect(r.getByText('Projector')).toBeTruthy())
@@ -163,5 +165,56 @@ describe('OutputViewPopover', () => {
     fireEvent.click(chipBtn) // bubble phase: onClick toggles closed
     // Popover should be gone now (state is closed)
     await waitFor(() => expect(r.queryByTestId('output-view-popover')).toBeNull())
+  })
+
+  it('shows a leader-split slider only for leader-view outputs and sends changes by fingerprint', async () => {
+    const setLeaderSplit = vi.fn()
+    const leaderStatus: DisplayStatus = {
+      outputs: 2,
+      displays: [
+        {
+          id: 1,
+          fingerprint: 'fpL',
+          label: 'Leader Screen',
+          width: 1920,
+          height: 1080,
+          scaleFactor: 1,
+          role: 'stage',
+          view: 'leader',
+          isOperator: false,
+          leaderSplit: 320
+        },
+        {
+          id: 2,
+          fingerprint: 'fpS',
+          label: 'Slides Screen',
+          width: 1920,
+          height: 1080,
+          scaleFactor: 1,
+          role: 'audience',
+          view: 'slides',
+          isOperator: false,
+          leaderSplit: null
+        }
+      ]
+    }
+    ;(window as unknown as { helm: unknown }).helm = {
+      displays: {
+        get: () => Promise.resolve(leaderStatus),
+        onStatus: () => () => {},
+        setView: vi.fn(),
+        setLeaderSplit,
+        setRole: vi.fn(),
+        openTest: vi.fn()
+      }
+    }
+    const onClose = vi.fn()
+    const r = renderPopover(onClose)
+    await waitFor(() => expect(r.getByTestId('split-fpL')).toBeTruthy())
+    expect(r.queryByTestId('split-fpS')).toBeNull()
+
+    fireEvent.change(r.getByTestId('split-fpL'), { target: { value: '400' } })
+    expect(setLeaderSplit).toHaveBeenCalledWith('fpL', 400)
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

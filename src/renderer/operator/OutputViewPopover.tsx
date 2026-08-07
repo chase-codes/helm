@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, type CSSProperties, type JSX, type RefObject } from 'react'
 import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from './useHelm'
-import { OUTPUT_VIEWS } from '../../shared/displays/roles'
+import { DEFAULT_LEADER_SPLIT, LEADER_SPLIT_MAX, LEADER_SPLIT_MIN, OUTPUT_VIEWS } from '../../shared/displays/roles'
 import type { OutputViewMode } from '../../shared/types'
 
 const VIEW_LABEL: Record<OutputViewMode, string> = {
@@ -111,26 +111,43 @@ export function OutputViewPopover({
       {outputs.map((d) => {
         const name = d.label || `${d.width}×${d.height}`
         return (
-          <div key={d.fingerprint} style={rowStyle}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={nameStyle}>{name}</div>
-              <div style={roleStyle}>{d.role ?? ''}</div>
+          <div key={d.fingerprint}>
+            <div style={rowStyle}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={nameStyle}>{name}</div>
+                <div style={roleStyle}>{d.role ?? ''}</div>
+              </div>
+              <div style={segWrapStyle}>
+                {OUTPUT_VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    style={segStyle(d.view === v)}
+                    data-testid={`view-${d.fingerprint}-${v}`}
+                    onClick={() => {
+                      window.helm.displays.setView(d.fingerprint, v)
+                      onClose()
+                    }}
+                  >
+                    {VIEW_LABEL[v]}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={segWrapStyle}>
-              {OUTPUT_VIEWS.map((v) => (
-                <button
-                  key={v}
-                  style={segStyle(d.view === v)}
-                  data-testid={`view-${d.fingerprint}-${v}`}
-                  onClick={() => {
-                    window.helm.displays.setView(d.fingerprint, v)
-                    onClose()
-                  }}
-                >
-                  {VIEW_LABEL[v]}
-                </button>
-              ))}
-            </div>
+            {d.view === 'leader' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 8px 6px' }}>
+                <span style={{ ...roleStyle, flexShrink: 0 }}>SPLIT</span>
+                <input
+                  type="range"
+                  min={LEADER_SPLIT_MIN}
+                  max={LEADER_SPLIT_MAX}
+                  step={10}
+                  value={d.leaderSplit ?? DEFAULT_LEADER_SPLIT}
+                  data-testid={`split-${d.fingerprint}`}
+                  style={{ flex: 1, accentColor: T.accent }}
+                  onChange={(e) => window.helm.displays.setLeaderSplit(d.fingerprint, Number(e.target.value))}
+                />
+              </div>
+            )}
           </div>
         )
       })}
