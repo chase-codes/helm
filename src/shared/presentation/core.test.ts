@@ -16,7 +16,22 @@ import type { PresentationState, Slide } from '../types'
 const slide = (label: string): Slide => ({ kind: 'lyrics', label, lines: ['x'] })
 
 test('initial state is black with no snapshot', () => {
-  expect(initialPresentation()).toEqual({ output: 'black', liveKey: null, liveSnap: null })
+  expect(initialPresentation()).toEqual({
+    output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null
+  })
+})
+test('applyCue always records the cue, even while black', () => {
+  const st = applyCue(initialPresentation(), 'song:a:0', slide('V1'))
+  expect(st.cuedKey).toBe('song:a:0')
+  expect(st.cuedSnap?.label).toBe('V1')
+  expect(st.liveSnap).toBeNull() // screen untouched
+})
+test('applyCue records a cross-flow cue without touching the live screen', () => {
+  let st = goLive(initialPresentation(), 'song:a:0', slide('V1'))
+  st = applyCue(st, 'song:b:0', slide('OTHER'))
+  expect(st.liveKey).toBe('song:a:0')
+  expect(st.cuedKey).toBe('song:b:0')
+  expect(st.cuedSnap?.label).toBe('OTHER')
 })
 test('goLive snapshots the cued slide', () => {
   const st = goLive(initialPresentation(), keyForSong('a', 0), slide('V1'))
@@ -71,7 +86,7 @@ test('outputPayload passes through the requested variant', () => {
   })
 })
 test('outputPayload carries the view and defaults it to slides', () => {
-  const st = { output: 'live', liveKey: 'song:a:0', liveSnap: slide('V1') } as PresentationState
+  const st = { output: 'live', liveKey: 'song:a:0', liveSnap: slide('V1'), cuedKey: null, cuedSnap: null } as PresentationState
   expect(outputPayload(st).view).toBe('slides')
   expect(outputPayload(st, 'stage', 'leader').view).toBe('leader')
   expect(outputPayload(st, 'stage', 'leader').variant).toBe('stage')
@@ -127,7 +142,7 @@ test('showLive still follows the cursor across books within scripture', () => {
 })
 test('showLive fills a live-but-empty output (logo toggle can leave liveKey null)', () => {
   const st = showLive(
-    { output: 'live', liveKey: null, liveSnap: null },
+    { output: 'live', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null },
     'scr:Genesis:1:1',
     slide('Gen 1:1')
   )

@@ -8,7 +8,7 @@ import type {
 } from '../types'
 
 export function initialPresentation(): PresentationState {
-  return { output: 'black', liveKey: null, liveSnap: null }
+  return { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
 }
 export function keyForSong(songId: string, section: number): string {
   return `song:${songId}:${section}`
@@ -39,13 +39,14 @@ export function sameKind(a: string | null, b: string | null): boolean {
   return a.split(':')[0] === b.split(':')[0]
 }
 export function applyCue(st: PresentationState, key: string, slide: Slide): PresentationState {
+  const cued = { ...st, cuedKey: key, cuedSnap: slide }
   if (st.output === 'live' && sameFlow(st.liveKey, key))
-    return { ...st, liveKey: key, liveSnap: slide }
-  return st
+    return { ...cued, liveKey: key, liveSnap: slide }
+  return cued
 }
 export function goLive(st: PresentationState, key: string, slide: Slide): PresentationState {
   if (st.output === 'live' && st.liveKey === key) return { ...st, output: 'black' }
-  return { output: 'live', liveKey: key, liveSnap: slide }
+  return { ...st, output: 'live', liveKey: key, liveSnap: slide }
 }
 /** Navigation's route to the screen: updates what's live when output is already live,
  * anywhere within the SAME kind of content, and never toggles. Distinct from both

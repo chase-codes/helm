@@ -33,7 +33,7 @@ type StubHelm = {
 }
 
 function baseHelm(): StubHelm {
-  const state: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
+  const state: PresentationState = { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
   return {
     presentation: {
       get: () => Promise.resolve(state),

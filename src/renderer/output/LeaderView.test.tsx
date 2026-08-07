@@ -40,6 +40,13 @@ describe('LeaderView', () => {
         accent: '#e0a341',
         label: 'Amazing Grace · Verse 2',
         lines: SONG.sections[1].lines
+      },
+      cuedKey: 'song:s1:1',
+      cuedSnap: {
+        kind: 'lyrics',
+        accent: '#e0a341',
+        label: 'Amazing Grace · Verse 2',
+        lines: SONG.sections[1].lines
       }
     }
     installHelmStub(st)
@@ -65,6 +72,13 @@ describe('LeaderView', () => {
         accent: '#e0a341',
         label: 'Amazing Grace · Verse 1',
         lines: SONG.sections[0].lines
+      },
+      cuedKey: 'song:s1:0',
+      cuedSnap: {
+        kind: 'lyrics',
+        accent: '#e0a341',
+        label: 'Amazing Grace · Verse 1',
+        lines: SONG.sections[0].lines
       }
     }
     installHelmStub(st)
@@ -83,6 +97,13 @@ describe('LeaderView', () => {
         accent: '#7fb069',
         ref: 'John 3:16',
         columns: [{ version: 'KJV', text: 'For God so loved the world' }]
+      },
+      cuedKey: 'scr:kjv:John:3',
+      cuedSnap: {
+        kind: 'scripture',
+        accent: '#7fb069',
+        ref: 'John 3:16',
+        columns: [{ version: 'KJV', text: 'For God so loved the world' }]
       }
     }
     installHelmStub(st)
@@ -95,7 +116,9 @@ describe('LeaderView', () => {
     const st: PresentationState = {
       output: 'live',
       liveKey: 'song:GONE:0',
-      liveSnap: { kind: 'lyrics', accent: '#e0a341', label: 'x', lines: ['orphan line'] }
+      liveSnap: { kind: 'lyrics', accent: '#e0a341', label: 'x', lines: ['orphan line'] },
+      cuedKey: 'song:GONE:0',
+      cuedSnap: { kind: 'lyrics', accent: '#e0a341', label: 'x', lines: ['orphan line'] }
     }
     installHelmStub(st)
     const r = render(<LeaderView payload={payload(st)} />)
@@ -124,12 +147,26 @@ describe('LeaderView', () => {
         accent: '#e0a341',
         label: 'Amazing Grace · Verse 1',
         lines: SONG.sections[0].lines
+      },
+      cuedKey: 'song:s1:0',
+      cuedSnap: {
+        kind: 'lyrics',
+        accent: '#e0a341',
+        label: 'Amazing Grace · Verse 1',
+        lines: SONG.sections[0].lines
       }
     }
     const stB: PresentationState = {
       output: 'live',
       liveKey: 'song:s2:0',
       liveSnap: {
+        kind: 'lyrics',
+        accent: '#6f9cf0',
+        label: 'How Great Thou Art · Verse 1',
+        lines: SONG_B.sections[0].lines
+      },
+      cuedKey: 'song:s2:0',
+      cuedSnap: {
         kind: 'lyrics',
         accent: '#6f9cf0',
         label: 'How Great Thou Art · Verse 1',

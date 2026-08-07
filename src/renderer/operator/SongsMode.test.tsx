@@ -19,7 +19,7 @@ import type {
 // this, DOM from one test leaks into the next.
 afterEach(cleanup);
 
-const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null };
+const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null };
 
 const SONGS: Song[] = [
   {
@@ -240,7 +240,7 @@ describe('SongsMode hotkey jumps', () => {
   });
 
   it('chorus jump goes live in the same press when this song is already live', async () => {
-    const live: PresentationState = { output: 'live', liveKey: 'song:s2:0', liveSnap: null };
+    const live: PresentationState = { output: 'live', liveKey: 'song:s2:0', liveSnap: null, cuedKey: null, cuedSnap: null };
     const { goLive } = installHelmStubWith([CHORUS_SONG], live);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
@@ -259,7 +259,7 @@ describe('SongsMode hotkey jumps', () => {
     // jump. Regression check for the guard's `liveKey !== key` clause: without it, this would
     // call goLive on the key that's already live, which main reads as "take down" and would
     // black the screen out from under the operator instead of leaving it alone.
-    const live: PresentationState = { output: 'live', liveKey: 'song:s2:1', liveSnap: null };
+    const live: PresentationState = { output: 'live', liveKey: 'song:s2:1', liveSnap: null, cuedKey: null, cuedSnap: null };
     const { goLive } = installHelmStubWith([CHORUS_SONG], live);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);

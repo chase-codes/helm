@@ -24,16 +24,20 @@ const baseState: PreState = {
   cards
 }
 
-const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
+const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
 const SONG_LIVE: PresentationState = {
   output: 'live',
   liveKey: 'song:abc:0',
-  liveSnap: { kind: 'lyrics', label: 'Amazing Grace', lines: ['x'] }
+  liveSnap: { kind: 'lyrics', label: 'Amazing Grace', lines: ['x'] },
+  cuedKey: null,
+  cuedSnap: null
 }
 const cardLive = (id: string): PresentationState => ({
   output: 'live',
   liveKey: `pre:${id}`,
-  liveSnap: { kind: 'title', title: 'Greeting' }
+  liveSnap: { kind: 'title', title: 'Greeting' },
+  cuedKey: null,
+  cuedSnap: null
 })
 
 function installHelmStub(

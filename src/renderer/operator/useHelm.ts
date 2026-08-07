@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DisplayStatus, PresentationState, PreState, VideoStateWire } from '../../shared/types';
 
 export function usePresentationState(): PresentationState {
-  const [st, setSt] = useState<PresentationState>({ output: 'black', liveKey: null, liveSnap: null });
+  const [st, setSt] = useState<PresentationState>({ output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null });
   useEffect(() => {
     let live = true;
     void window.helm.presentation.get().then((s) => { if (live) setSt(s); });

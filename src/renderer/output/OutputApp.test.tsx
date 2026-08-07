@@ -10,7 +10,7 @@ function installHelmStub(): (p: OutputPayload) => void {
   let push: (p: OutputPayload) => void = () => {};
   (window as unknown as { helm: unknown }).helm = {
     output: { onSlide: (cb: (p: OutputPayload) => void) => { push = cb; return () => {}; } },
-    presentation: { get: () => Promise.resolve({ output: 'black', liveKey: null, liveSnap: null }), onState: () => () => {} },
+    presentation: { get: () => Promise.resolve({ output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }), onState: () => () => {} },
     songs: { get: () => Promise.resolve(null) },
   };
   return (p) => act(() => push(p));

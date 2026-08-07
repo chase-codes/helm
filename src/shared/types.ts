@@ -133,6 +133,7 @@ export interface SongImportProgress { done: number; total: number }
 export type OutputMode = 'live' | 'logo' | 'black';
 export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
+  cuedKey: string | null; cuedSnap: Slide | null;
 }
 export interface VideoStateWire {
   key: string | null; src: string | null;

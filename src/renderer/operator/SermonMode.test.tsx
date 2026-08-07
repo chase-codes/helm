@@ -27,11 +27,13 @@ const GENESIS_1: ChapterData = {
   }
 }
 
-const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null }
+const NOTHING_LIVE: PresentationState = { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
 const GEN_1_1_LIVE: PresentationState = {
   output: 'live',
   liveKey: 'scr:Genesis:1:1',
-  liveSnap: { kind: 'scripture', accent: '#6f9cf0', ref: 'Genesis 1:1', label: 'Genesis 1:1', columns: [] }
+  liveSnap: { kind: 'scripture', accent: '#6f9cf0', ref: 'Genesis 1:1', label: 'Genesis 1:1', columns: [] },
+  cuedKey: null,
+  cuedSnap: null
 }
 
 function installHelmStub(
@@ -403,7 +405,7 @@ describe('SermonMode — inactive/off-track does not reach the projector', () =>
   // Fresh session: nothing has ever been taken live, so liveKey is null. Main's showLive
   // allows an update in that state (a fresh rail must be able to fill an empty screen) —
   // which is exactly the hole this gate closes for a mode that isn't the one in use.
-  const LOGO_NOTHING_LIVE: PresentationState = { output: 'logo', liveKey: null, liveSnap: null }
+  const LOGO_NOTHING_LIVE: PresentationState = { output: 'logo', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
 
   it('an output flip to live does not push the cursor while SermonMode is inactive', async () => {
     const { show, resolveChapter, pushState } = installHelmStub(LOGO_NOTHING_LIVE)
