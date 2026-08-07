@@ -1,0 +1,33 @@
+name: Bug report
+description: Something in Helm isn't working right
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Helm version
+      description: Shown in Help → Report a Problem, or the installer filename
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Songs tab
+        2. ...
+    validations:
+      required: false

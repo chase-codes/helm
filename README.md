@@ -9,6 +9,15 @@ one shared presentation state, so what you see in the preview is exactly what th
 sees. See `docs/superpowers/specs/2026-07-03-helm-design.md` §1 for the full purpose and
 success criteria.
 
+## Download (Windows)
+
+**[Download Helm](https://github.com/chase-codes/helm/releases/latest/download/Helm-Setup.exe)** — installs per-user, no admin needed, and updates itself.
+
+> **Note:** Until Helm's code-signing certificate is in place, Windows SmartScreen
+> will show "Windows protected your PC" on first run. Click **More info → Run
+> anyway**. This is expected for new unsigned apps and will go away in a future
+> release.
+
 **Status:** slice 1–2 (songs mode), slice 3 (scripture), slice 4 (the Message track), and
 slice 5 (the pre-service loop) are implemented — song search, cue, go-live, quick-add, keyboard control, resizable panels,
 auto-attaching output window; scripture reference parsing, bundled KJV plus an in-app Bible
