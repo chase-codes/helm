@@ -224,7 +224,10 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
               <button style={qaTab(tab === 'search', false)} onClick={openSearchTab}>
                 Search online
               </button>
-              <button style={qaTab(tab === 'paste', false)} onClick={() => setTab('paste')}>
+              <button
+                style={qaTab(tab === 'paste', false)}
+                onClick={() => { searchSeq.current++; setTab('paste'); }}
+              >
                 Paste lyrics
               </button>
             </div>

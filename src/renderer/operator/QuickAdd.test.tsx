@@ -171,4 +171,29 @@ describe('QuickAdd Search online tab', () => {
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(await screen.findByText('Couldn’t read lyrics from that page — copy them and use Paste lyrics.')).toBeTruthy();
   });
+
+  it('does not let a late URL fetch clobber lyrics typed after manually switching to Paste', async () => {
+    let resolveFn: ((r: { candidate: typeof CANDIDATES[0] }) => void) | undefined;
+    const fromUrl = vi.fn(() => new Promise((r) => { resolveFn = r; }));
+    stubSources({ fromUrl: fromUrl as unknown as ReturnType<typeof vi.fn> });
+    renderQuickAdd();
+    fireEvent.click(screen.getByText('Search online'));
+    const box = screen.getByPlaceholderText(/Search by title/) as HTMLInputElement;
+    fireEvent.change(box, { target: { value: 'https://genius.com/Sinach-way-maker-lyrics' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(fromUrl).toHaveBeenCalled();
+
+    // Manual switch away from Search online before the fetch resolves.
+    fireEvent.click(screen.getByText('Paste lyrics'));
+    const lyrics = screen.getByPlaceholderText(/Paste lyrics here/) as HTMLTextAreaElement;
+    fireEvent.change(lyrics, { target: { value: 'My own typed lyrics' } });
+
+    // Now the stale fetch resolves — it must not clobber the user's typed text.
+    resolveFn?.({ candidate: CANDIDATES[0] });
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(lyrics.value).toBe('My own typed lyrics');
+    const titleInput = screen.getByPlaceholderText('Song title') as HTMLInputElement;
+    expect(titleInput.value).toBe('');
+  });
 });
