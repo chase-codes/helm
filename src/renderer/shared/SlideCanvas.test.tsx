@@ -119,3 +119,9 @@ test('audience label omits the key when unset and hides entirely with no fields'
   const bare = render(<SlideCanvas variant="audience" slide={{ kind: 'lyrics', lines: ['x'] }} />);
   expect(bare.queryByTestId('audience-label')).toBeNull();
 });
+
+test('lyric lines are nowrap so the fitter, not the box, controls line breaks', () => {
+  const r = render(<SlideCanvas variant="audience" slide={{ kind: 'lyrics', lines: ['Blessed assurance, Jesus is mine!'] }} />);
+  const line = r.getByText('Blessed assurance, Jesus is mine!');
+  expect(line.style.whiteSpace).toBe('nowrap');
+});

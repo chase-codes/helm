@@ -84,7 +84,8 @@ export function SlideCanvas({
     letterSpacing: '-0.015em',
     color: '#fff',
     textShadow: '0 2px 22px rgba(0,0,0,.55)',
-    maxWidth: '94%'
+    maxWidth: '94%',
+    whiteSpace: 'nowrap'
   };
 
   const single = (s.columns || []).length <= 1;

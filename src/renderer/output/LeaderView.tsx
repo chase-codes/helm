@@ -109,7 +109,8 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     fontWeight: 700,
     lineHeight: 1.22,
     letterSpacing: '-0.012em',
-    fontSize: `max(14px, ${fitSizeValue('7.4cqmin')})`
+    fontSize: `max(14px, ${fitSizeValue('7.4cqmin')})`,
+    whiteSpace: 'nowrap'
   }
   const railStyle: CSSProperties = {
     width: '30%',
