@@ -92,7 +92,7 @@ describe('findSoffice', () => {
   it('bundledSofficeCandidates returns platform-appropriate paths under resourcesPath', () => {
     const cands = bundledSofficeCandidates('/app/resources');
     expect(cands.length).toBeGreaterThan(0);
-    expect(cands.every((c) => c.startsWith('/app/resources'))).toBe(true);
+    expect(cands.every((c) => c.startsWith(join('/app/resources')))).toBe(true);
   });
 });
 
