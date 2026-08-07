@@ -194,7 +194,12 @@ export function setDisplayView(fingerprint: string, view: OutputViewMode): void 
 }
 
 // Persist a leader split for a fingerprint and live-re-tag every matching window (no re-spawn).
+// Same 'test' special-case as setDisplayView: targets dev test-output windows, no persistence.
 export function setLeaderSplitByFingerprint(fingerprint: string, px: number): void {
+  if (fingerprint === 'test') {
+    for (const w of testOutputs) if (!w.isDestroyed()) presentation.setOutputLeaderSplit(w, clampLeaderSplit(px));
+    return;
+  }
   const clamped = clampLeaderSplit(px);
   const splits = savedSplits();
   splits[fingerprint] = clamped;
