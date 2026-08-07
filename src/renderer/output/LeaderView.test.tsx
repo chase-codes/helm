@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, cleanup, waitFor, act } from '@testing-library/react'
+import { render, cleanup, waitFor, act, fireEvent } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LeaderView } from './LeaderView'
 import type { OutputPayload, PresentationState, Song } from '../../shared/types'
@@ -289,5 +289,57 @@ describe('LeaderView', () => {
     // uniqueness.
     const lines = r.getAllByText('Amazing grace how sweet the sound')
     expect(lines.some((el) => (el as HTMLElement).style.whiteSpace === 'nowrap')).toBe(true)
+  })
+
+  it('follows a changed payload.leaderSplit on rerender when not dragging', async () => {
+    const snap = { kind: 'lyrics' as const, accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines }
+    const st: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: snap, cuedKey: 'song:s1:0', cuedSnap: snap }
+    installHelmStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    expect(r.getByTestId('leader-rail').style.width).toBe('320px')
+    // A real prop change (not a drag) — e.g. another window's operator moved the split, or the
+    // main process pushed a resolved default — must be picked up on the next render.
+    r.rerender(<LeaderView payload={{ ...payload(st), leaderSplit: 450 }} />)
+    expect(r.getByTestId('leader-rail').style.width).toBe('450px')
+  })
+
+  it('drags the divider to resize the rail and commits via setLeaderSplit on release', async () => {
+    const snap = { kind: 'lyrics' as const, accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines }
+    const st: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: snap, cuedKey: 'song:s1:0', cuedSnap: snap }
+    installHelmStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    const divider = r.getByTestId('leader-divider')
+    // Rail is right-anchored: dragging left (clientX decreases) grows it. Start split is 320
+    // (from payload); moving 100px left should grow it to 420.
+    fireEvent.mouseDown(divider, { clientX: 500 })
+    fireEvent.mouseMove(window, { clientX: 400 })
+    expect(r.getByTestId('leader-rail').style.width).toBe('420px')
+    fireEvent.mouseUp(window)
+    expect(r.getByTestId('leader-rail').style.width).toBe('420px')
+    const helm = (window as unknown as { helm: { displays: { setLeaderSplit: (fp: string | null, px: number) => void } } }).helm
+    expect(helm.displays.setLeaderSplit).toHaveBeenCalledWith(null, 420)
+  })
+
+  it('does not let a mid-drag payload.leaderSplit change (e.g. the commit echo) clobber the drag on release', async () => {
+    const snap = { kind: 'lyrics' as const, accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines }
+    const st: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: snap, cuedKey: 'song:s1:0', cuedSnap: snap }
+    installHelmStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    const divider = r.getByTestId('leader-divider')
+    fireEvent.mouseDown(divider, { clientX: 500 })
+    fireEvent.mouseMove(window, { clientX: 400 }) // drags the rail to 420px
+    expect(r.getByTestId('leader-rail').style.width).toBe('420px')
+    // A stale payload value lands mid-drag (a real echo would eventually carry the drag's own
+    // value, but any value arriving before release — including an unrelated update — must not
+    // fight the live drag).
+    r.rerender(<LeaderView payload={{ ...payload(st), leaderSplit: 275 }} />)
+    expect(r.getByTestId('leader-rail').style.width).toBe('420px')
+    fireEvent.mouseUp(window)
+    // The dragged width survives release: the mid-drag payload value was absorbed into the
+    // "already seen" mirror without being re-applied once dragging stops.
+    expect(r.getByTestId('leader-rail').style.width).toBe('420px')
   })
 })

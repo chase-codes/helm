@@ -48,13 +48,18 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
   // during render" pattern (mirrored-in-state previous value, compared and corrected before
   // paint) rather than an effect — react-hooks/set-state-in-effect flags an unconditional
   // setState at the top of a useEffect body; see SongImport.tsx's `openFor` for the same shape.
+  // The mirror (`prevPayloadSplit`) advances unconditionally — even mid-drag — so that the
+  // commit echo (setLeaderSplit(null, px) round-tripping back through this same window once
+  // main persists it) is recognized as "already seen" and doesn't re-fire after the drag ends.
+  // Only the *derived* update (`setSplit`) is gated on `!dragging`, so a payload change that
+  // arrives mid-drag can't fight the live drag or clobber the just-dragged width on release.
   const clampedPayloadSplit = clampLeaderSplit(payload.leaderSplit ?? DEFAULT_LEADER_SPLIT)
   const [split, setSplit] = useState(clampedPayloadSplit)
   const [prevPayloadSplit, setPrevPayloadSplit] = useState(clampedPayloadSplit)
   const [dragging, setDragging] = useState(false)
-  if (!dragging && clampedPayloadSplit !== prevPayloadSplit) {
+  if (clampedPayloadSplit !== prevPayloadSplit) {
     setPrevPayloadSplit(clampedPayloadSplit)
-    setSplit(clampedPayloadSplit)
+    if (!dragging) setSplit(clampedPayloadSplit)
   }
   const dragCleanupRef = useRef<(() => void) | null>(null)
   useEffect(() => () => dragCleanupRef.current?.(), [])
