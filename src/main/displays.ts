@@ -148,7 +148,8 @@ function sync(): void {
 }
 
 export function displayStatus(): DisplayStatus {
-  return { outputs: byDisplayId.size, displays: lastDisplays };
+  const liveTestOutputs = [...testOutputs].filter((w) => !w.isDestroyed()).length;
+  return { outputs: byDisplayId.size + liveTestOutputs, displays: lastDisplays };
 }
 
 // Persist a role for a fingerprint and live-re-tag every matching window (no re-spawn —
@@ -243,10 +244,14 @@ export function initDisplays(getOperatorWindow: () => BrowserWindow | null, sett
 export function resyncDisplays(): void { resync?.(); }
 
 // Dev helper: windowed output for single-display machines.
+// Test outputs count toward displayStatus()'s `outputs` (the update pill guard) same as real
+// display outputs, so both directions need an explicit broadcast — the 'closed' handler below
+// doesn't get one for free the way sync()'s real-display teardown does via its own broadcast.
 export function openTestOutput(): void {
   const win = createOutputWindow({ x: 80, y: 80, width: 960, height: 540 }, false);
   testOutputs.add(win);
-  win.on('closed', () => testOutputs.delete(win));
+  win.on('closed', () => { testOutputs.delete(win); broadcastStatus(); });
+  broadcastStatus();
 }
 
 // Destroys every output window (real-display and test) so none are left orphaned once the
