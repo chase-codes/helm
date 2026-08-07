@@ -67,10 +67,22 @@ take-down red). Not armed → unchanged (`● Go live` / `■ Take down`).
 the row), distinct from the active-row highlight. `SongRow` gains `isArmed: boolean`.
 
 **Disarm triggers:** Escape (see §3), clicking the armed row, clicking the live song's
-row, committing the switch, take-down (output leaves 'live'), and the lock condition
-becoming false for any reason (e.g. scripture takes the screen). Implement the latter two
-as: `armedNextId` is only meaningful while locked; when the lock condition is false the
-UI ignores it and the next state change clears it (effect keyed on the lock condition).
+row, committing the switch, and the lock condition becoming false while output is still
+'live' (cross-kind takeover, e.g. scripture takes the screen — plain disarm, selection
+untouched).
+
+**Take-down converts the arm to the selection:** when `output` leaves 'live' (take-down
+to black/logo) while a song is armed, the armed song becomes the selection
+(`activeSongId = armedNextId`, `section = 0`, disarm). The hero transitions to it, the
+cue effect fires, and the leader — which follows the cue while output is down — shows it
+too: arm mid-song, take down at song's end, and the next song is staged everywhere,
+one Enter from live. Implement as an effect watching `output` + `armedNextId` so every
+take-down path (button, Escape step 4, other modes) gets the same conversion.
+
+**Button row while armed:** the Switch button replaces Go-live, but take-down must stay
+reachable — while armed and live, show both `■ Take down` and `⇄ Switch to <title>`.
+(Escape-then-Escape instead performs disarm, then a plain take-down — pressing Escape is
+an explicit "undo my arm" first; the button is the arm-preserving take-down.)
 
 **QuickAdd save while locked:** arm the new song instead of selecting it (library
 refreshes so it appears in the list, armed). Not locked → today's behavior (select it).
@@ -124,14 +136,19 @@ inside a field from firing it.
   still true but reconciliation can't select it — center falls back to unlocked behavior
   (no crash; hero shows the selected song); leader already falls back to SlidesView.
 - Take-down via Escape while armed: Escape disarms first (step 2); a second Escape takes
-  the screen down (step 4). Deliberate: one key, one action.
+  the screen down (step 4). Deliberate: one key, one action — Escape is the "undo my arm"
+  path; the Take down button is the arm-preserving path (arm converts to selection).
+- Armed song deleted before take-down: conversion effect finds no song for the id →
+  plain disarm, selection unchanged.
 
 ## Testing
 
 - SongsMode unit tests: click while locked arms without cueing (no `presentation.cue`
   call, `activeSongId` unchanged); click on armed/live rows disarms; Enter commits
   (goLive called with armed key, selection follows, disarm); QuickAdd save arms while
-  locked and selects while not; not-locked clicks behave as before.
+  locked and selects while not; not-locked clicks behave as before; take-down while
+  armed converts the arm to the selection (hero shows armed song, cue fires); both
+  Take-down and Switch buttons render while armed.
 - LeaderView tests: live-first shown key (browsing/cue changes while live don't move it;
   follows cue when output black); existing cue-follow tests updated to output-down states.
 - Escape chain tests: each step in order, including armed-before-blur and
