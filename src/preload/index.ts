@@ -106,5 +106,10 @@ const api: HelmApi = {
     search: (query) => ipcRenderer.invoke(CH.songSourcesSearch, query),
     fromUrl: (url) => ipcRenderer.invoke(CH.songSourcesFromUrl, url),
   },
+  updates: {
+    getStatus: () => ipcRenderer.invoke(CH.updatesGetStatus),
+    install: () => ipcRenderer.invoke(CH.updatesInstall),
+    onStatus: sub(CH.updatesStatus),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

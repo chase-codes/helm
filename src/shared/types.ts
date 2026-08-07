@@ -163,6 +163,9 @@ export interface DisplayInfo {
 }
 export interface DisplayStatus { outputs: number; displays: DisplayInfo[] }
 
+export type UpdateState = 'idle' | 'available' | 'ready'
+export interface UpdateStatus { state: UpdateState; version: string | null }
+
 export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
   songsGet: 'songs:get', songsAdd: 'songs:add',
@@ -206,6 +209,8 @@ export const CH = {
   songImportSources: 'songImport:sources', songImportScan: 'songImport:scan',
   songImportCommit: 'songImport:commit', songImportProgress: 'songImport:progress',
   songSourcesSearch: 'songSources:search', songSourcesFromUrl: 'songSources:fromUrl',
+  updatesGetStatus: 'updates:getStatus', updatesInstall: 'updates:install',
+  updatesStatus: 'updates:status',           // main → all windows
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -348,5 +353,10 @@ export interface HelmApi {
   songSources: {
     search(query: string): Promise<SongWebSearchResult>;
     fromUrl(url: string): Promise<SongFromUrlResult>;
+  };
+  updates: {
+    getStatus(): Promise<UpdateStatus>;
+    install(): Promise<boolean>;
+    onStatus(cb: (s: UpdateStatus) => void): () => void;
   };
 }

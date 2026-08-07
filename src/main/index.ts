@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, Menu, protocol, session, desktopCapturer } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import {
   CH,
@@ -8,7 +9,8 @@ import {
   type BibleInstallProgress,
   type MediaImportProgress,
   type MessageInstallProgress,
-  type SongImportProgress
+  type SongImportProgress,
+  type UpdateStatus
 } from '../shared/types'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
@@ -29,6 +31,7 @@ import { createSongSources } from './songSources'
 import { createEasyWorshipSource } from './importSources/easyworship'
 import { seedIfEmpty } from './seed'
 import { registerIpc } from './ipc'
+import { createUpdater } from './updater'
 import {
   initDisplays,
   openTestOutput,
@@ -207,6 +210,16 @@ app.whenReady().then(() => {
   )
   const songSources = createSongSources()
 
+  const broadcastUpdateStatus = (s: UpdateStatus): void => {
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed()) w.webContents.send(CH.updatesStatus, s)
+  }
+  // electron-updater throws on unpacked builds — dev gets the no-op null driver.
+  const updater = createUpdater(app.isPackaged ? autoUpdater : null, {
+    outputCount: () => presentation.outputCount(),
+    broadcast: broadcastUpdateStatus
+  })
+
   registerIpc(
     repo,
     biblesRepo,
@@ -220,11 +233,13 @@ app.whenReady().then(() => {
     mediaRepo,
     mediaImport,
     songImport,
-    songSources
+    songSources,
+    updater
   )
 
   buildMenu()
   createWindow()
+  updater.start()
   initDisplays(() => operatorWindow, settingsRepo)
 
   // Mirror view: answer any renderer getDisplayMedia call with the operator's screen —

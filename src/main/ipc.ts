@@ -24,6 +24,7 @@ import type { MediaRepo } from './mediaRepo';
 import type { MediaImport } from './mediaImport';
 import type { SongImport } from './songImport';
 import type { SongSources } from './songSources';
+import type { Updater } from './updater';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { video } from './videoState';
@@ -50,6 +51,7 @@ export function registerIpc(
   mediaImport: MediaImport,
   songImport: SongImport,
   songSources: SongSources,
+  updater: Updater,
 ): void {
   ipcMain.handle(CH.songsSearch, (_e, q: string, field: SearchField) => repo.search(q, field));
   ipcMain.handle(CH.songsList, () => repo.list());
@@ -139,4 +141,7 @@ export function registerIpc(
   ipcMain.on(CH.videoSetVolume, (_e, v: number) => video.setVolume(v));
   ipcMain.on(CH.videoSetMuted, (_e, m: boolean) => video.setMuted(m));
   ipcMain.on(CH.videoReportDuration, (_e, ms: number) => video.reportDuration(ms));
+
+  ipcMain.handle(CH.updatesGetStatus, () => updater.status());
+  ipcMain.handle(CH.updatesInstall, () => updater.install());
 }
