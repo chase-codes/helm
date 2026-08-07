@@ -13,10 +13,10 @@ const LEADER_BAND = bandCandidates(10.5, 3.5)
 
 export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element {
   const st = usePresentationState()
-  // The leader follows the operator's selection (cue), not the projector: a cued section
-  // shows here immediately, before Go live. Falls back to the live key so a leader window
-  // opened mid-service (no cue recorded yet) still shows the song on screen.
-  const shownKey = st.cuedKey ?? st.liveKey
+  // Live-first: while output is live the leader is locked to the live song — the
+  // congregation is singing it, and no amount of operator browsing/arming may move this
+  // display. When output is down, follow the cue instead (prep view between songs).
+  const shownKey = st.output === 'live' && st.liveKey ? st.liveKey : (st.cuedKey ?? st.liveKey)
   const parsed = parseSongKey(shownKey)
   const [song, setSong] = useState<Song | null>(null)
   useEffect(() => {

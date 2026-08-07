@@ -215,7 +215,7 @@ describe('LeaderView', () => {
     expect(r.queryByText('Amazing Grace')).toBeNull()
   })
 
-  it('follows the cued section immediately, without go-live, and shows CUED', async () => {
+  it('stays locked to the live section while a different section is cued (browsing cannot move it)', async () => {
     const st: PresentationState = {
       output: 'live',
       liveKey: 'song:s1:0',
@@ -226,10 +226,26 @@ describe('LeaderView', () => {
     installHelmStub(st)
     const r = render(<LeaderView payload={payload(st)} />)
     await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
-    // Hero shows the CUED section (Verse 2), not the live one.
+    // Hero shows the LIVE section (Verse 1), not the cued one.
+    expect(r.getByTestId('leader-section-0').dataset.live).toBe('true')
+    expect(r.getByTestId('leader-section-1').dataset.live).toBe('false')
+    expect(r.getByText('LIVE')).toBeTruthy()
+    expect(r.queryByText('CUED')).toBeNull()
+  })
+  it('follows the cued selection while output is down (prep view)', async () => {
+    const st: PresentationState = {
+      output: 'black',
+      liveKey: 'song:s1:0',
+      liveSnap: { kind: 'lyrics', accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines },
+      cuedKey: 'song:s1:1',
+      cuedSnap: { kind: 'lyrics', accent: '#e0a341', label: 'Amazing Grace · Verse 2', lines: SONG.sections[1].lines }
+    }
+    installHelmStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
     expect(r.getByTestId('leader-section-1').dataset.live).toBe('true')
     expect(r.getByText('CUED')).toBeTruthy()
-    expect(r.queryByText('LIVE')).toBeNull()
+    expect(r.getByText('BLACK')).toBeTruthy()
   })
 
   it('shows LIVE when the displayed section is what the congregation sees', async () => {
