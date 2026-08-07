@@ -44,14 +44,15 @@ function slideFor(song: Song, section: { label: string; lines: string[] }): Slid
   };
 }
 
-function toRow(song: Song, snippet: string, activeSongId: string | null): SongRow {
+function toRow(song: Song, snippet: string, activeSongId: string | null, armedId: string | null = null): SongRow {
   return {
     id: song.id,
     title: song.title,
     author: `${song.author} · ${stanzaLabel(song.sections.length)}`,
     snippet,
     hasSnippet: !!snippet,
-    isActive: song.id === activeSongId
+    isActive: song.id === activeSongId,
+    isArmed: song.id === armedId
   };
 }
 
@@ -68,6 +69,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const [library, setLibrary] = useState<Song[]>([]);
   const [activeSongId, setActiveSongId] = useState<string | null>(null);
   const [section, setSection] = useState(0);
+  const [armedNextId, setArmedNextId] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [importOpen, setImportOpen] = useState(false);
@@ -160,6 +162,13 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const clampedSection = activeSong ? Math.max(0, Math.min(section, activeSong.sections.length - 1)) : 0;
   const currentSectionObj = activeSong ? activeSong.sections[clampedSection] : undefined;
 
+  // Live lock (spec §1): while a song is live, the center is bound to it and list clicks
+  // arm instead of selecting. parseSongKey is null for scripture/media keys, so a
+  // cross-kind live screen leaves the Songs list in its normal select-to-cue behavior.
+  const liveParsed = parseSongKey(liveKey);
+  const locked = output === 'live' && liveParsed !== null;
+  const armed = locked && armedNextId ? (library.find((s) => s.id === armedNextId) ?? null) : null;
+
   // Cue on every song/section change.
   useEffect(() => {
     if (!activeSong || !currentSectionObj) return;
@@ -169,7 +178,88 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSong?.id, clampedSection]);
 
+  // Set when a switch commits, cleared once the broadcast confirms the new live key — the
+  // reconciling effect below must not snap the selection back to the OLD live song in the
+  // gap between our goLive() send and the state broadcast returning.
+  const pendingSwitchRef = useRef<string | null>(null);
+
+  // Center lock reconciliation (spec §1): while locked, the selection must equal the live
+  // song. Divergence is either the commit transient (latched above — skip until the
+  // broadcast catches up) or an external live change; reselect the live song for the
+  // latter. A live song missing from the library (deleted while live) falls back to
+  // unlocked behavior untouched.
+  //
+  // Unlike the two blocks below, this one stays a real effect: it has to read/write
+  // `pendingSwitchRef`, and refs may only be touched outside of render (react-hooks/refs)
+  // — an effect body is exactly that. The reconciling setState calls are then deferred
+  // into a timeout rather than called inline in the effect body, since a same-tick
+  // setState there is exactly the render-cascade shape react-hooks/set-state-in-effect
+  // flags (see SermonMode.tsx's scripture-lookup effect for the same deferral).
+  useEffect(() => {
+    if (!locked || !liveParsed) {
+      pendingSwitchRef.current = null;
+      return;
+    }
+    if (pendingSwitchRef.current) {
+      if (liveParsed.songId === pendingSwitchRef.current) pendingSwitchRef.current = null;
+      return;
+    }
+    if (activeSongId === liveParsed.songId) return;
+    if (!library.some((s) => s.id === liveParsed.songId)) return;
+    const songId = liveParsed.songId;
+    const sectionIdx = liveParsed.section;
+    const t = setTimeout(() => {
+      setActiveSongId(songId);
+      setSection(sectionIdx);
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, liveParsed?.songId, liveParsed?.section, activeSongId, library]);
+
+  // Cross-kind takeover (scripture/media grabs the screen while a song was live): the song
+  // flow the arm was staged for is over — plain disarm, selection untouched (spec §1).
+  // Same render-time-adjustment shape as above (guarded, idempotent).
+  if (!locked && output === 'live' && armedNextId !== null) {
+    setArmedNextId(null);
+  }
+
+  // Take-down converts the arm to the selection (spec §1): arm mid-song, take down at the
+  // song's end, and the next song is staged in the hero — and, via the cue effect, on the
+  // leader (which follows the cue while output is down). `prevOutput` mirrors the previous
+  // render's output (same render-time-adjustment shape as above) so every take-down path
+  // (button, Escape, logo toggle) converts identically, exactly once per live→non-live
+  // transition.
+  const [prevOutput, setPrevOutput] = useState(output);
+  if (output !== prevOutput) {
+    const wasLive = prevOutput === 'live';
+    setPrevOutput(output);
+    if (wasLive && output !== 'live' && armedNextId) {
+      const armedSongNow = library.find((s) => s.id === armedNextId) ?? null;
+      setArmedNextId(null);
+      if (armedSongNow) {
+        setActiveSongId(armedSongNow.id);
+        setSection(0);
+      }
+    }
+  }
+
   const selectSong = (id: string): void => {
+    if (locked && liveParsed) {
+      if (id === liveParsed.songId) {
+        // Clicking the live song's row: back to base — disarm and make sure the center
+        // really is on the live song (it always should be; belt and suspenders).
+        setArmedNextId(null);
+        if (activeSongId !== id) {
+          setActiveSongId(id);
+          setSection(liveParsed.section);
+        }
+        return;
+      }
+      // Toggle off on the armed row, arm on any other row. Arming is silent: no selection
+      // change, no cue, no screen traffic — Enter or the Switch button commits.
+      setArmedNextId((cur) => (cur === id ? null : id));
+      return;
+    }
     setActiveSongId(id);
     setSection(0);
   };
@@ -189,8 +279,8 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
 
   const hasQuery = !!q.trim();
   const displayedRows: SongRow[] = hasQuery
-    ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId))
-    : library.map((s) => toRow(s, '', activeSongId));
+    ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId, armed?.id ?? null))
+    : library.map((s) => toRow(s, '', activeSongId, armed?.id ?? null));
   const noResults = hasQuery && results.length === 0;
   const secondaryResults =
     field === 'title' && hasQuery ? secondaryLyricRows(results, lyricHint, SECONDARY_TITLE_MAX, SECONDARY_LIMIT) : [];
@@ -211,6 +301,22 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
   const goLive = (): void => {
     if (!activeSong || !currentSectionObj || !curKey) return;
     window.helm.presentation.goLive(curKey, slideFor(activeSong, currentSectionObj));
+  };
+
+  const commitSwitch = (): void => {
+    if (!armed || !armed.sections.length) {
+      setArmedNextId(null);
+      return;
+    }
+    pendingSwitchRef.current = armed.id;
+    window.helm.presentation.goLive(keyForSong(armed.id, 0), slideFor(armed, armed.sections[0]));
+    setActiveSongId(armed.id);
+    setSection(0);
+    setArmedNextId(null);
+  };
+
+  const takeDown = (): void => {
+    window.helm.presentation.setOutput('black');
   };
 
   const toggleLogo = (): void => {
@@ -234,7 +340,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     const target = activeSong.sections[idx];
     if (!target) return;
     setSection(idx);
-    const liveSong = parseSongKey(liveKey);
+    const liveSong = liveParsed;
     const key = keyForSong(activeSong.id, idx);
     // liveKey !== key: goLive on the already-live key means "take down" in main — a
     // no-op jump must not black the screen.
@@ -288,7 +394,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
         return false;
       },
       onArrow: step,
-      onGoLive: goLive,
+      onGoLive: armed ? commitSwitch : goLive,
       isModalOpen: () => quickAddOpen || importOpen,
       onAction
     };
@@ -365,7 +471,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     height: '46px',
     padding: '0 20px',
     borderRadius: '11px',
-    background: cuedIsLive ? T.live : '#2f9e5b',
+    background: !armed && cuedIsLive ? T.live : '#2f9e5b',
     color: '#fff',
     fontSize: '14.5px',
     fontWeight: 700,
@@ -470,8 +576,13 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
             Cue next ›
           </button>
           <div style={{ flex: 1 }} />
-          <button style={goLiveStyle} onClick={goLive}>
-            {cuedIsLive ? '■ Take down' : '● Go live'}
+          {armed && (
+            <button style={{ ...goLiveStyle, background: T.live }} onClick={takeDown}>
+              ■ Take down
+            </button>
+          )}
+          <button style={goLiveStyle} onClick={armed ? commitSwitch : goLive}>
+            {armed ? `⇄ Switch to ${armed.title}` : cuedIsLive ? '■ Take down' : '● Go live'}
           </button>
           <button style={logoBtnStyle} onClick={toggleLogo}>
             {output === 'logo' ? 'Logo on screen' : 'Logo'}

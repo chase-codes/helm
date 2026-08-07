@@ -83,17 +83,34 @@ const CHORUS_SONG: Song = {
   createdAt: 0
 };
 
-// Like installHelmStub but with a chorus-bearing song and a configurable live state.
-function installHelmStubWith(songs: Song[], state: PresentationState): { goLive: ReturnType<typeof vi.fn> } {
+// Like installHelmStub but with configurable songs + live state, spies on every
+// presentation call, and a pushState seam to drive onState mid-test.
+function installHelmStubWith(
+  songs: Song[],
+  state: PresentationState
+): {
+  goLive: ReturnType<typeof vi.fn>;
+  cue: ReturnType<typeof vi.fn>;
+  setOutput: ReturnType<typeof vi.fn>;
+  add: ReturnType<typeof vi.fn>;
+  pushState: (s: PresentationState) => void;
+} {
   const goLive = vi.fn();
+  const cue = vi.fn();
+  const setOutput = vi.fn();
+  const add = vi.fn();
+  let stateCb: (s: PresentationState) => void = () => {};
   (window as unknown as { helm: unknown }).helm = {
-    songs: { list: () => Promise.resolve(songs), search: vi.fn(() => Promise.resolve([])) },
+    songs: { list: () => Promise.resolve(songs), search: vi.fn(() => Promise.resolve([])), add },
     presentation: {
       get: () => Promise.resolve(state),
-      onState: () => () => {},
-      cue: vi.fn(),
+      onState: (cb: (s: PresentationState) => void) => {
+        stateCb = cb;
+        return () => {};
+      },
+      cue,
       goLive,
-      setOutput: vi.fn()
+      setOutput
     },
     songImport: {
       sources: () => Promise.resolve([]),
@@ -102,7 +119,7 @@ function installHelmStubWith(songs: Song[], state: PresentationState): { goLive:
       onProgress: () => () => {}
     }
   };
-  return { goLive };
+  return { goLive, cue, setOutput, add, pushState: (s) => stateCb(s) };
 }
 
 describe('SongsMode', () => {
@@ -319,5 +336,142 @@ describe('SongsMode hotkey jumps', () => {
     expect(input.value).toBe('');
     act(() => keyHandlerRef.current?.onAction?.({ id: 'focus.search' }));
     expect(document.activeElement).toBe(input);
+  });
+});
+
+const NEXT_SONG: Song = {
+  id: 's3',
+  title: 'Blessed Assurance',
+  author: 'Fanny Crosby',
+  sections: [{ label: 'Verse 1', lines: ['Blessed assurance'] }],
+  source: 'manual',
+  createdAt: 1
+};
+const LIVE_ON_S2: PresentationState = {
+  output: 'live', liveKey: 'song:s2:0',
+  liveSnap: { kind: 'lyrics', label: 'With Chorus · Verse 1', lines: ['v1'] },
+  cuedKey: 'song:s2:0', cuedSnap: null
+};
+
+describe('SongsMode armed switching', () => {
+  it('clicking another song while live arms it: center stays, no cue, Switch button appears', async () => {
+    const { cue, goLive } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    cue.mockClear(); // drop the initial-selection cue of s2:0
+
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    // Center unchanged: hero still shows the live song (title appears twice — rail row + hero header).
+    expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(0);
+    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    expect(screen.getByText('NEXT')).toBeTruthy();
+    // Arming is silent: no cue, no goLive.
+    expect(cue).not.toHaveBeenCalled();
+    expect(goLive).not.toHaveBeenCalled();
+  });
+
+  it('the Switch button commits: armed song goes live at section 0 and becomes the selection', async () => {
+    const { goLive } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    expect(goLive).toHaveBeenCalledWith('song:s3:0', expect.objectContaining({ label: 'Blessed Assurance · Verse 1' }));
+    // Selection followed the commit; arm cleared.
+    await waitFor(() => expect(screen.getAllByText('Blessed Assurance').length).toBeGreaterThan(1)); // rail row + hero header
+    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+  });
+
+  it('Enter (onGoLive) commits the switch while armed', async () => {
+    const { goLive } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    act(() => keyHandlerRef.current?.onGoLive());
+    expect(goLive).toHaveBeenCalledWith('song:s3:0', expect.anything());
+  });
+
+  it('clicking the armed row again, or the live row, disarms', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    expect(screen.getByText('NEXT')).toBeTruthy();
+    fireEvent.click(screen.getByText('Blessed Assurance')); // armed row toggles off
+    expect(screen.queryByText('NEXT')).toBeNull();
+    fireEvent.click(screen.getByText('Blessed Assurance')); // re-arm
+    // "With Chorus" also appears in the (unclickable) hero header — target the rail row specifically.
+    const liveRowBtn = screen
+      .getAllByText('With Chorus')
+      .map((el) => el.closest('button'))
+      .find((b): b is HTMLButtonElement => !!b)!;
+    fireEvent.click(liveRowBtn); // live row disarms
+    expect(screen.queryByText('NEXT')).toBeNull();
+  });
+
+  it('both Take down and Switch render while armed; Take down sends output black', async () => {
+    const { setOutput } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    expect(screen.getByText('■ Take down')).toBeTruthy();
+    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    fireEvent.click(screen.getByText('■ Take down'));
+    expect(setOutput).toHaveBeenCalledWith('black');
+  });
+
+  it('take-down while armed converts the arm to the selection', async () => {
+    const { pushState, cue } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    cue.mockClear();
+    act(() => pushState({ ...LIVE_ON_S2, output: 'black' }));
+    // Hero transitions to the armed song, the arm clears, and the cue effect stages it.
+    await waitFor(() => expect(screen.getByText('Fanny Crosby')).toBeTruthy());
+    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('song:s3:0', expect.anything()));
+  });
+
+  it('a cross-kind takeover (scripture live) plain-disarms without moving the selection', async () => {
+    const { pushState } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    act(() => pushState({ ...LIVE_ON_S2, liveKey: 'scr:kjv:John:3', liveSnap: { kind: 'scripture' } }));
+    await waitFor(() => expect(screen.queryByText(/⇄ Switch to/)).toBeNull());
+    expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(0); // selection untouched
+  });
+
+  it('clicks while output is down select exactly as before (no arming)', async () => {
+    const { cue } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    await waitFor(() => expect(screen.getByText('Fanny Crosby')).toBeTruthy());
+    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('song:s3:0', expect.anything()));
+  });
+
+  it('QuickAdd save while live arms the new song instead of selecting it', async () => {
+    const { add } = installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    add.mockResolvedValue(NEXT_SONG);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('+ Add a song'));
+    fireEvent.change(await screen.findByPlaceholderText(/Paste lyrics here/), { target: { value: 'Blessed assurance' } });
+    fireEvent.click(screen.getByText('Add to library'));
+    // The new song lands armed; the center never left the live song.
+    await waitFor(() => expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy());
+    expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(0);
   });
 });

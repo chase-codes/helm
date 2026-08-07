@@ -7,7 +7,7 @@ import { themeFor } from '../../shared/theme'
 afterEach(cleanup)
 
 const rows: SongRow[] = [
-  { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: false }
+  { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: false, isArmed: false }
 ]
 
 const baseProps = {

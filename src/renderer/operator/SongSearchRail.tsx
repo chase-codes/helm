@@ -9,6 +9,7 @@ export interface SongRow {
   snippet: string;
   hasSnippet: boolean;
   isActive: boolean;
+  isArmed: boolean;
 }
 
 const FIELD_TABS: Array<{ id: SearchField; label: string }> = [
@@ -191,7 +192,7 @@ export function SongSearchRail({
         {rows.map((r) => (
           <button
             key={r.id}
-            style={rowStyle(r.isActive)}
+            style={{ ...rowStyle(r.isActive), ...(r.isArmed ? { boxShadow: `inset 0 0 0 2px ${T.accent}` } : {}) }}
             onClick={() => onSelect(r.id)}
             onContextMenu={(e) => onRowContextMenu?.(r.id, e)}
           >
@@ -213,6 +214,11 @@ export function SongSearchRail({
               </div>
               {r.hasSnippet && <div style={snippetStyle}>&ldquo;{r.snippet}&rdquo;</div>}
             </div>
+            {r.isArmed && (
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9px', letterSpacing: '0.08em', fontWeight: 700, color: T.accent, flexShrink: 0, marginTop: '4px' }}>
+                NEXT
+              </div>
+            )}
             {r.isActive && <div style={activeBadgeStyle}>●</div>}
           </button>
         ))}
