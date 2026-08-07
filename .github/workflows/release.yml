@@ -1,0 +1,43 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "Tag v$TAG does not match package.json version $PKG" >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Cache bundled bibles
+        id: bibles
+        uses: actions/cache@v4
+        with:
+          path: resources/bibles
+          key: bibles-${{ hashFiles('scripts/fetch-bibles.mjs') }}
+      - name: Fetch bundled bibles
+        if: steps.bibles.outputs.cache-hit != 'true'
+        run: node scripts/fetch-bibles.mjs
+      - run: npm run build
+      - name: Build installer and publish draft release
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
