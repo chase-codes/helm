@@ -53,16 +53,22 @@ export function createSongSources(fetchFn: typeof fetch = fetch): SongSources {
         return { error: 'network' };
       }
 
-      if (/(^|\.)genius\.com$/.test(parsed.hostname)) {
-        const g = parseGeniusHtml(html);
-        // Markup drift degrades to the generic extractor rather than a dead end.
-        if (g) return { candidate: { ...g, text: pipeline(g.text) } };
+      // The parsers are pure string transforms with no throwing paths today; the catch is
+      // insurance for the never-throw-across-IPC contract if one ever grows a throw.
+      try {
+        if (/(^|\.)genius\.com$/.test(parsed.hostname)) {
+          const g = parseGeniusHtml(html);
+          // Markup drift degrades to the generic extractor rather than a dead end.
+          if (g) return { candidate: { ...g, text: pipeline(g.text) } };
+        }
+        const text = extractLyricsFromHtml(html);
+        if (!text) return { error: 'no-lyrics' };
+        return {
+          candidate: { title: pageTitle(html) || 'Untitled Song', author: '', text: pipeline(text) },
+        };
+      } catch {
+        return { error: 'no-lyrics' };
       }
-      const text = extractLyricsFromHtml(html);
-      if (!text) return { error: 'no-lyrics' };
-      return {
-        candidate: { title: pageTitle(html) || 'Untitled Song', author: '', text: pipeline(text) },
-      };
     },
   };
 }

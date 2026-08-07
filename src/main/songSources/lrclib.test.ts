@@ -22,6 +22,8 @@ describe('searchLrclib', () => {
   });
 
   it('maps rows to display-ready candidates (tidied + chorus-labeled)', async () => {
+    // No stanza may open with a section word ("Verse …") — detectChorus treats that as
+    // already-labeled text and would skip labeling entirely.
     const withChorus = 'First line one\nFirst line two\n\nRepeat me now\nRepeat me now\n\nSecond stanza here\nMore words here\n\nRepeat me now\nRepeat me now';
     const f = fakeFetch([apiRow({ plainLyrics: withChorus })]);
     const out = await searchLrclib('goodness of god', f);

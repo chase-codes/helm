@@ -108,6 +108,18 @@ describe('QuickAdd Search online tab', () => {
     expect(await screen.findByText(/Leeland chorus line/)).toBeTruthy();
   });
 
+  it('Enter picks the highlighted result', async () => {
+    stubSources();
+    renderQuickAdd('Way Maker');
+    fireEvent.click(screen.getByText('Search online'));
+    await screen.findByText('Way Maker (Live)');
+    const box = screen.getByPlaceholderText(/Search by title/);
+    fireEvent.keyDown(box, { key: 'ArrowDown' });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect((screen.getByPlaceholderText('Song title') as HTMLInputElement).value).toBe('Way Maker (Live)');
+    expect((screen.getByPlaceholderText('Author (optional)') as HTMLInputElement).value).toBe('Leeland');
+  });
+
   it('pick fills the editor, flips to Paste lyrics, and saves with source web', async () => {
     const { add } = stubSources();
     renderQuickAdd('Way Maker');

@@ -15,8 +15,10 @@ export interface QuickAddProps {
 const fmtDur = (d: number): string =>
   `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`;
 
-const stanzaCount = (t: string): number =>
-  t.split(/\n\s*\n/).filter((s) => s.trim()).length;
+const stanzaLabel = (t: string): string => {
+  const n = t.split(/\n\s*\n/).filter((s) => s.trim()).length;
+  return `${n} ${n === 1 ? 'stanza' : 'stanzas'}`;
+};
 
 type QaTab = 'search' | 'paste';
 
@@ -104,7 +106,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
       else runSearch(query);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlighted((h) => Math.min(h + 1, results.length - 1));
+      setHighlighted((h) => Math.min(h + 1, Math.max(results.length - 1, 0)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlighted((h) => Math.max(h - 1, 0));
@@ -318,7 +320,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
                         {c.author}
                         {c.album ? ` · ${c.album}` : ''}
                         {c.duration != null ? ` · ${fmtDur(c.duration)}` : ''}
-                        {` · ${stanzaCount(c.text)} stanzas`}
+                        {` · ${stanzaLabel(c.text)}`}
                       </div>
                     </button>
                   ))}

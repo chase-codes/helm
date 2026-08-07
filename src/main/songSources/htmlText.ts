@@ -7,8 +7,14 @@ const ENTITIES: Record<string, string> = {
   '&#x27;': "'", '&#39;': "'", '&nbsp;': ' ',
 };
 
+const codePoint = (m: string, cp: number): string =>
+  cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+
 export const decodeEntities = (s: string): string =>
-  s.replace(/&(?:amp|lt|gt|quot|#x27|#39|nbsp);/g, (m) => ENTITIES[m] ?? m);
+  s
+    .replace(/&(?:amp|lt|gt|quot|#x27|#39|nbsp);/g, (m) => ENTITIES[m] ?? m)
+    .replace(/&#x([0-9a-f]+);/gi, (m, h: string) => codePoint(m, parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (m, d: string) => codePoint(m, Number(d)));
 
 export function htmlToText(html: string): string {
   return decodeEntities(
