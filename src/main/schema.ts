@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS songs (
   author TEXT NOT NULL DEFAULT '',
   sections_json TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'local',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  music_key TEXT NOT NULL DEFAULT ''
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS song_fts USING fts5(
   title, author, lyrics, tokenize='unicode61 remove_diacritics 2'

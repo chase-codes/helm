@@ -5,10 +5,12 @@ export interface SongSection { label: string; lines: string[] }
 export interface Song {
   id: string; title: string; author: string;
   sections: SongSection[]; source: string; createdAt: number;
+  /** Musical key, e.g. "G", "Bb", "F#m". Absent when not set. */
+  key?: string;
 }
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
-export interface NewSongInput { title: string; author?: string; text: string; source?: string }
+export interface NewSongInput { title: string; author?: string; text: string; source?: string; key?: string }
 export interface SongWebCandidate {
   title: string; author: string;
   text: string;              // tidied + chorus-labeled — display-ready

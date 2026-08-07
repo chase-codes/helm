@@ -40,3 +40,10 @@ test('seedIfEmpty is idempotent', () => {
   seedIfEmpty(repo);
   expect(repo.count()).toBe(10);
 });
+
+test('add persists an optional musical key and round-trips it', () => {
+  const withKey = repo.add({ title: 'Blessed Assurance', text: 'Verse 1\nBlessed assurance', key: 'D' });
+  expect(repo.get(withKey.id)?.key).toBe('D');
+  const without = repo.add({ title: 'No Key', text: 'Verse 1\nx' });
+  expect(repo.get(without.id)?.key).toBeUndefined();
+});

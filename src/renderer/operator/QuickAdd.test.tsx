@@ -55,6 +55,28 @@ describe('QuickAdd author field', () => {
   });
 });
 
+describe('QuickAdd key field', () => {
+  it('passes a typed key through to songs.add and omits it when blank', async () => {
+    const add = vi.fn().mockResolvedValue({
+      id: 's1', title: 'Way Maker', author: '', sections: [], source: 'local', createdAt: 1,
+    });
+    (window as unknown as { helm: unknown }).helm = { songs: { add } };
+    renderQuickAdd('Way Maker');
+    fireEvent.change(screen.getByPlaceholderText(/Paste lyrics here/), { target: { value: 'Some line\nAnother line' } });
+    fireEvent.change(screen.getByPlaceholderText('Key'), { target: { value: 'G' } });
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ key: 'G' })));
+
+    cleanup();
+    add.mockClear();
+    renderQuickAdd('Way Maker');
+    fireEvent.change(screen.getByPlaceholderText(/Paste lyrics here/), { target: { value: 'Some line\nAnother line' } });
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(add).toHaveBeenCalled());
+    expect(add.mock.calls[0][0].key).toBeUndefined();
+  });
+});
+
 const CANDIDATES = [
   {
     title: 'Way Maker', author: 'Sinach', album: 'Way Maker', duration: 300,

@@ -13,11 +13,14 @@ export interface SongsRepo {
   search(q: string, field: SearchField): SongSearchResult[];
   count(): number;
 }
-interface Row { id: string; title: string; author: string; sections_json: string; source: string; created_at: number; rowid: number }
-const toSong = (r: Row): Song => ({ id: r.id, title: r.title, author: r.author, sections: JSON.parse(r.sections_json), source: r.source, createdAt: r.created_at });
+interface Row { id: string; title: string; author: string; sections_json: string; source: string; created_at: number; music_key: string; rowid: number }
+const toSong = (r: Row): Song => ({
+  id: r.id, title: r.title, author: r.author, sections: JSON.parse(r.sections_json),
+  source: r.source, createdAt: r.created_at, ...(r.music_key ? { key: r.music_key } : {})
+});
 
 export function createSongsRepo(db: Database.Database): SongsRepo {
-  const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at) VALUES (?,?,?,?,?,?)');
+  const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at, music_key) VALUES (?,?,?,?,?,?,?)');
   const insertFts = db.prepare('INSERT INTO song_fts (rowid, title, author, lyrics) VALUES ((SELECT rowid FROM songs WHERE id = ?),?,?,?)');
   const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSong);
   return {
@@ -27,9 +30,10 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     add(input) {
       const sections = splitToSlides(input.text);
       if (!sections.length) throw new Error('Song has no content');
-      const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now() };
+      const key = input.key?.trim();
+      const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
       db.transaction(() => {
-        insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt);
+        insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
         insertFts.run(song.id, song.title, song.author, lyricsOf(song));
       })();
       return song;

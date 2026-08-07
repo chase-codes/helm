@@ -29,6 +29,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
   const prefilled = !!initialTitle?.trim();
   const [title, setTitle] = useState(initialTitle?.trim() ?? '');
   const [author, setAuthor] = useState('');
+  const [songKey, setSongKey] = useState('');
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -119,6 +120,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
     setSaveError(false);
     const input: NewSongInput = { title: title.trim() || 'Untitled Song', text };
     if (author.trim()) input.author = author.trim();
+    if (songKey.trim()) input.key = songKey.trim();
     if (fromWeb) input.source = 'web';
     window.helm.songs.add(input).then(
       (song) => {
@@ -257,6 +259,13 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
                   value={author}
                   onChange={(e) => setAuthor(e.target.value)}
                   placeholder="Author (optional)"
+                />
+                <input
+                  style={{ ...titleStyle, width: '90px', flex: 'none', fontWeight: 500 }}
+                  value={songKey}
+                  onChange={(e) => setSongKey(e.target.value)}
+                  placeholder="Key"
+                  title="Musical key (optional), e.g. G or Bb"
                 />
               </div>
               <textarea
