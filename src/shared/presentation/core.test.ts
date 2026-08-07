@@ -44,6 +44,11 @@ test('goLive on the already-live key takes it down (black)', () => {
   st = goLive(st, 'song:a:0', slide('V1'))
   expect(st.output).toBe('black')
 })
+test('goLive records the cue (leader follows what goes live)', () => {
+  const st = goLive(initialPresentation(), 'song:a:0', slide('V1'))
+  expect(st.cuedKey).toBe('song:a:0')
+  expect(st.cuedSnap?.label).toBe('V1')
+})
 test('sameFlow: same song different section is same flow; different song is not', () => {
   expect(sameFlow('song:a:0', 'song:a:2')).toBe(true)
   expect(sameFlow('song:a:0', 'song:b:0')).toBe(false)
@@ -139,6 +144,19 @@ test('showLive still follows the cursor across books within scripture', () => {
   st = showLive(st, 'scr:Romans:8:28', slide('Rom 8:28'))
   expect(st.liveKey).toBe('scr:Romans:8:28')
   expect(st.liveSnap?.label).toBe('Rom 8:28')
+})
+test('showLive records the cue when it takes the screen', () => {
+  let st = goLive(initialPresentation(), 'scr:Genesis:1:1', slide('Gen 1:1'))
+  st = showLive(st, 'scr:Romans:8:28', slide('Rom 8:28'))
+  expect(st.cuedKey).toBe('scr:Romans:8:28')
+  expect(st.cuedSnap?.label).toBe('Rom 8:28')
+})
+test('showLive that refuses the screen leaves the cue alone', () => {
+  let st = goLive(initialPresentation(), 'song:a:0', slide('V1'))
+  st = applyCue(st, 'song:a:0', slide('V1'))
+  st = showLive(st, 'scr:Genesis:1:1', slide('Gen 1:1'))
+  expect(st.liveKey).toBe('song:a:0')
+  expect(st.cuedKey).toBe('song:a:0')
 })
 test('showLive fills a live-but-empty output (logo toggle can leave liveKey null)', () => {
   const st = showLive(

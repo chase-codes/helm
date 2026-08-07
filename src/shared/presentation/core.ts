@@ -44,9 +44,12 @@ export function applyCue(st: PresentationState, key: string, slide: Slide): Pres
     return { ...cued, liveKey: key, liveSnap: slide }
   return cued
 }
+/** Taking the screen also records the cue — the leader display renders `cuedKey ?? liveKey`,
+ * and must follow what actually goes live rather than show a stale cue. The take-down
+ * branch (already-live key → black) leaves cue state untouched. */
 export function goLive(st: PresentationState, key: string, slide: Slide): PresentationState {
   if (st.output === 'live' && st.liveKey === key) return { ...st, output: 'black' }
-  return { ...st, output: 'live', liveKey: key, liveSnap: slide }
+  return { ...st, output: 'live', liveKey: key, liveSnap: slide, cuedKey: key, cuedSnap: slide }
 }
 /** Navigation's route to the screen: updates what's live when output is already live,
  * anywhere within the SAME kind of content, and never toggles. Distinct from both
@@ -59,11 +62,16 @@ export function goLive(st: PresentationState, key: string, slide: Slide): Presen
  * The `sameKind` guard is what stops a scripture cursor moving in a background tab from
  * seizing a projector showing a song. `liveKey === null` while live is reachable
  * (SermonMode's logo toggle can leave output live having never gone live) and must still
- * be fillable, or the screen stays blank with no way to recover from the rail. */
+ * be fillable, or the screen stays blank with no way to recover from the rail.
+ *
+ * When it does take the screen, it also records the cue (leader tracks it). It must NOT
+ * do so in the refusal paths above: showLive fires from background-tab cursors, and
+ * recording a refused show would make the leader jump to a background tab's content
+ * while something else is live. */
 export function showLive(st: PresentationState, key: string, slide: Slide): PresentationState {
   if (st.output !== 'live') return st
   if (!(st.liveKey === null || sameKind(st.liveKey, key))) return st
-  return { ...st, liveKey: key, liveSnap: slide }
+  return { ...st, liveKey: key, liveSnap: slide, cuedKey: key, cuedSnap: slide }
 }
 export function setOutput(st: PresentationState, mode: OutputMode): PresentationState {
   return { ...st, output: mode }
