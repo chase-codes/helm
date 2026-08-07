@@ -38,7 +38,9 @@ function slideFor(song: Song, section: { label: string; lines: string[] }): Slid
     kind: 'lyrics',
     accent: '#e0a341',
     label: `${song.title} · ${section.label}`,
-    lines: section.lines
+    lines: section.lines,
+    sectionLabel: section.label,
+    ...(song.key ? { songKey: song.key } : {})
   };
 }
 

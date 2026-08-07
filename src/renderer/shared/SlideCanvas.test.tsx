@@ -103,3 +103,19 @@ test('lyric auto-fit does not re-measure when a re-render changes only an unrela
   rerender(<SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} variant="stage" clock="12:01" />);
   expect(clientHeightReads).toBe(readsAfterMount);
 });
+
+test('audience variant shows the section label and key on lyrics slides', () => {
+  const r = render(
+    <SlideCanvas variant="audience" slide={{ kind: 'lyrics', lines: ['x'], label: 'Song · Verse 1', sectionLabel: 'Verse 1', songKey: 'G' }} />
+  );
+  expect(r.getByTestId('audience-label').textContent).toBe('Verse 1 · Key G');
+});
+test('audience label omits the key when unset and hides entirely with no fields', () => {
+  const withLabel = render(
+    <SlideCanvas variant="audience" slide={{ kind: 'lyrics', lines: ['x'], sectionLabel: 'Chorus' }} />
+  );
+  expect(withLabel.getByTestId('audience-label').textContent).toBe('Chorus');
+  cleanup();
+  const bare = render(<SlideCanvas variant="audience" slide={{ kind: 'lyrics', lines: ['x'] }} />);
+  expect(bare.queryByTestId('audience-label')).toBeNull();
+});

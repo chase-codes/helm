@@ -31,6 +31,9 @@ export interface Slide {
   title?: string; subtitle?: string; points?: string[];
   bg?: string; src?: string;
   paras?: { label: string; text: string }[]; activeOrd?: number;
+  /** Lyrics only: bare section label ("Verse 1") and song key ("G") for view-side chrome.
+   *  `label` above stays the pre-baked "Title · Section" string stage/livestream render. */
+  sectionLabel?: string; songKey?: string;
 }
 
 export type PreCardType = 'message' | 'verse' | 'list' | 'logo' | 'image';

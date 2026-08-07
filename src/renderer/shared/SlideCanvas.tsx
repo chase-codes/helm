@@ -278,6 +278,25 @@ export function SlideCanvas({
     color: 'rgba(255,255,255,.38)'
   };
 
+  const isAudience = variant === 'audience';
+  const audienceLabelText = [s.sectionLabel, s.songKey ? `Key ${s.songKey}` : '']
+    .filter(Boolean)
+    .join(' · ');
+  const showAudienceLabel = isAudience && kind === 'lyrics' && !!audienceLabelText;
+  const audienceLabelStyle: CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: '3.2cqmin',
+    zIndex: 5,
+    textAlign: 'center',
+    fontFamily: "'JetBrains Mono',monospace",
+    fontSize: 'clamp(7px,2.2cqmin,14px)',
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,.34)'
+  };
+
   let ltPrimary = '';
   let ltSecondary = '';
   if (kind === 'scripture') {
@@ -438,6 +457,12 @@ export function SlideCanvas({
       )}
 
       {showLabel && <div style={labelStyle}>{s.label || ''}</div>}
+
+      {showAudienceLabel && (
+        <div style={audienceLabelStyle} data-testid="audience-label">
+          {audienceLabelText}
+        </div>
+      )}
 
       {showChrome && (
         <>
