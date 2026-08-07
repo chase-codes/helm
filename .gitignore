@@ -7,3 +7,6 @@ out
 
 # Agent session scratch (SDD ledgers, task briefs, review packages, reports)
 .superpowers/
+
+# Agent/session scratch — never ship
+scratch/
