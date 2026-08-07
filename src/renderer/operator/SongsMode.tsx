@@ -405,6 +405,24 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
           setImportOpen(false);
           return true;
         }
+        // Progressive back-out (spec §3): after modals, undo the most recent intent
+        // first (an armed switch), then leave a text field, and only then touch the
+        // screen. Order matters: a typing operator must never black the screen with a
+        // stray Escape, and disarming before blur means "undo my arm" always wins.
+        if (armedNextId) {
+          setArmedNextId(null);
+          return true;
+        }
+        const el = document.activeElement as HTMLElement | null;
+        const tag = el?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') {
+          el?.blur();
+          return true;
+        }
+        if (output === 'live') {
+          window.helm.presentation.setOutput('black');
+          return true;
+        }
         return false;
       },
       onArrow: step,

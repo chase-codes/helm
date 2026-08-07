@@ -520,3 +520,45 @@ describe('SongsMode armed switching', () => {
     expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(1); // rail row + hero header
   });
 });
+
+describe('SongsMode escape chain', () => {
+  it('Escape disarms first, then takes the screen down on a second press', async () => {
+    const { setOutput } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+
+    let handled: boolean | undefined;
+    act(() => { handled = keyHandlerRef.current?.onEscape(); });
+    expect(handled).toBe(true);
+    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(setOutput).not.toHaveBeenCalled();
+
+    act(() => { handled = keyHandlerRef.current?.onEscape(); });
+    expect(handled).toBe(true);
+    expect(setOutput).toHaveBeenCalledWith('black');
+  });
+
+  it('Escape while typing blurs the field and never takes the screen down', async () => {
+    const { setOutput } = installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const input = screen.getByPlaceholderText(/Title or a lyric line/) as HTMLInputElement;
+    input.focus();
+    let handled: boolean | undefined;
+    act(() => { handled = keyHandlerRef.current?.onEscape(); });
+    expect(handled).toBe(true);
+    expect(document.activeElement).not.toBe(input);
+    expect(setOutput).not.toHaveBeenCalled();
+  });
+
+  it('Escape with output down and nothing armed stays unhandled (App fallthrough)', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(keyHandlerRef.current?.onEscape()).toBe(false);
+  });
+});
