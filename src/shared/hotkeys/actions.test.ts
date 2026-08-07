@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeOverrides } from './actions'
+import { sanitizeOverrides, HOTKEY_ACTIONS } from './actions'
 
 describe('sanitizeOverrides', () => {
   it('passes through a valid overrides map unchanged', () => {
@@ -47,5 +47,12 @@ describe('sanitizeOverrides', () => {
         'app.escape': ['fixed-should-drop']
       })
     ).toEqual({ 'song.bridge': ['X'] })
+  })
+})
+
+describe('HOTKEY_ACTIONS', () => {
+  it('focus.search ships both / and \\ as default bindings', () => {
+    const action = HOTKEY_ACTIONS.find((a) => a.id === 'focus.search')!
+    expect(action.defaults).toEqual(['/', '\\'])
   })
 })

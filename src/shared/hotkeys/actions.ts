@@ -27,7 +27,7 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'page.songs', label: 'Go to Songs', scope: 'global', defaults: ['Mod+2'] },
   { id: 'page.sermon', label: 'Go to Sermon', scope: 'global', defaults: ['Mod+3'] },
   { id: 'scripture.lookup', label: 'Scripture lookup', scope: 'global', defaults: ['Mod+L'] },
-  { id: 'focus.search', label: 'Focus search / entry', scope: 'global', defaults: ['/'] },
+  { id: 'focus.search', label: 'Focus search / entry', scope: 'global', defaults: ['/', '\\'] },
   { id: 'field.clear', label: 'Clear field', scope: 'global', defaults: ['Mod+Backspace', 'Mod+Delete'] },
   { id: 'go.live', label: 'Go live / take down', scope: 'global', defaults: ['Enter', 'Space'] },
   { id: 'nav.next', label: 'Next', scope: 'global', defaults: ['ArrowRight', 'ArrowDown'] },
