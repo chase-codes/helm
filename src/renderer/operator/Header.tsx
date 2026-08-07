@@ -3,6 +3,7 @@ import type { Mode, ThemeMode } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
+import { UpdatePill } from './UpdatePill'
 
 export interface HeaderProps {
   mode: Mode
@@ -180,6 +181,7 @@ export function Header({
         </span>
         {isLive && <span style={takeDownChipStyle}>✕ TAKE DOWN</span>}
       </button>
+      <UpdatePill />
       <button style={themeBtnStyle} onClick={toggleTheme}>
         {themeMode === 'dark' ? '☀' : '☾'}
       </button>
