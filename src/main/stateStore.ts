@@ -1,12 +1,20 @@
 import { BrowserWindow } from 'electron';
-import { CH, type OutputMode, type OutputVariant, type OutputViewMode, type PresentationState, type Slide } from '../shared/types';
+import {
+  CH,
+  type OutputMode,
+  type OutputPayload,
+  type OutputVariant,
+  type OutputViewMode,
+  type PresentationState,
+  type Slide,
+} from '../shared/types';
 import { applyCue, goLive, initialPresentation, outputPayload, setOutput, showLive } from '../shared/presentation/core';
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../shared/displays/roles';
 
 let state: PresentationState = initialPresentation();
 const outputWindows = new Map<BrowserWindow, { variant: OutputVariant; view: OutputViewMode; leaderSplit: number }>();
 
-function payloadFor(t: { variant: OutputVariant; view: OutputViewMode; leaderSplit: number }) {
+function payloadFor(t: { variant: OutputVariant; view: OutputViewMode; leaderSplit: number }): OutputPayload {
   return { ...outputPayload(state, t.variant, t.view), leaderSplit: t.leaderSplit };
 }
 function broadcast(): void {
