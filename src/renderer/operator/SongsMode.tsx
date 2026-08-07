@@ -291,7 +291,12 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
       e.preventDefault();
       if (displayedRows.length) selectSong(displayedRows[0].id);
     } else if (e.key === 'Escape') {
-      setQ('');
+      // One key, one action: a non-empty query consumes the press (clear only); the next
+      // press falls through to the global escape chain (disarm → blur → take down).
+      if (q) {
+        e.stopPropagation();
+        setQ('');
+      }
     }
   };
 
@@ -308,13 +313,15 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
       setArmedNextId(null);
       return;
     }
-    if (liveParsed?.songId === armed.id) {
+    if (liveParsed?.songId === armed.id || pendingSwitchRef.current === armed.id) {
       // Divergence-window hole: the armed song can already BE the live song if it was
       // re-armed after a prior commitSwitch's goLive() send but before that broadcast's
       // liveKey landed (selection already moved, reconciliation not yet caught up — see
       // pendingSwitchRef above). goLive on an already-live key means "take down" in main,
       // so just disarm here instead of re-sending it; the reconciliation effect has
-      // already (or is about to) put the selection on this song.
+      // already (or is about to) put the selection on this song. The pendingSwitchRef arm
+      // covers the same divergence window one round trip earlier: a re-arm + re-commit
+      // before the broadcast even lands, when liveParsed is still stale.
       setArmedNextId(null);
       if (activeSongId !== armed.id) {
         setActiveSongId(armed.id);

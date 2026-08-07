@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
 import { themeFor } from '../../shared/theme';
+import { dispatchModeKey } from './keyDispatch';
 import type { ModeKeyHandlerRef } from './App';
 import type {
   ImportReviewRow,
@@ -416,6 +417,35 @@ describe('SongsMode armed switching', () => {
     fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
     expect(goLive).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    // Selection landed on (stayed on) the armed song — rail row + hero header.
+    expect(screen.getAllByText('Blessed Assurance').length).toBeGreaterThan(1);
+  });
+
+  it('re-arming and re-committing the same song before its broadcast lands sends only one goLive', async () => {
+    const { goLive } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    // Arm and commit: goLive fires once, pendingSwitchRef latches to s3. The stub's live
+    // state is never pushed in this test, so liveParsed stays on the OLD key (song:s2:0)
+    // throughout — this is the pre-broadcast window the pendingSwitchRef guard covers.
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    expect(goLive).toHaveBeenCalledTimes(1);
+
+    // Re-arm the same (now-selected) song and commit again, still before any broadcast.
+    const s3RowBtn = screen
+      .getAllByText('Blessed Assurance')
+      .map((el) => el.closest('button'))
+      .find((b): b is HTMLButtonElement => !!b)!;
+    fireEvent.click(s3RowBtn);
+    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+
+    // Guarded by pendingSwitchRef (liveParsed is still stale): no second goLive.
+    expect(goLive).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
   });
 
   it('Enter (onGoLive) commits the switch while armed', async () => {
@@ -538,6 +568,52 @@ describe('SongsMode escape chain', () => {
     act(() => { handled = keyHandlerRef.current?.onEscape(); });
     expect(handled).toBe(true);
     expect(setOutput).toHaveBeenCalledWith('black');
+  });
+
+  it('Escape in the search field is one key, one action: clears the query without also disarming', async () => {
+    const { setOutput } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+
+    // Wire a REAL document-level keydown listener via dispatchModeKey, mirroring App.tsx's
+    // own wiring exactly. This is the only way to actually prove e.stopPropagation() in the
+    // input's React handler stops the native bubble from reaching the document dispatcher
+    // (React 19 delegates its synthetic events at the root container — a DOM descendant of
+    // document — so a stopPropagation() there does stop the native bubble past it) rather
+    // than just assuming it based on the render tree.
+    const onKeyDown = (e: KeyboardEvent): void =>
+      dispatchModeKey(e, {
+        settingsOpen: false,
+        closeSettings: () => {},
+        handler: keyHandlerRef.current,
+        scope: 'songs',
+        overrides: {},
+        onAppAction: () => {}
+      });
+    document.addEventListener('keydown', onKeyDown);
+    try {
+      const input = screen.getByPlaceholderText(/Title or a lyric line/) as HTMLInputElement;
+      input.focus();
+      fireEvent.change(input, { target: { value: 'abc' } });
+
+      // First Escape: query non-empty, so the field consumes it (clears only) and stops
+      // propagation — the document dispatcher's onEscape must never run, so the arm survives.
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(input.value).toBe('');
+      expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+      expect(setOutput).not.toHaveBeenCalled();
+
+      // Second Escape: query already empty, so the field is a no-op and the press reaches
+      // the global chain, which disarms (progressive back-out, next step).
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+      expect(setOutput).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', onKeyDown);
+    }
   });
 
   it('Escape while typing blurs the field and never takes the screen down', async () => {
