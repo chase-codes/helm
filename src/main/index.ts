@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, Menu, protocol, session, desktopCapturer } from 'electron'
 import { join } from 'path'
+import os from 'node:os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
@@ -12,6 +13,7 @@ import {
   type SongImportProgress,
   type UpdateStatus
 } from '../shared/types'
+import { reportProblemUrl } from './feedback'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { createBiblesRepo } from './biblesRepo'
@@ -121,6 +123,16 @@ function buildMenu(): void {
     {
       label: 'View',
       submenu: [{ label: 'Open Test Output', click: () => openTestOutput() }]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Report a Problem…',
+          click: () =>
+            shell.openExternal(reportProblemUrl(app.getVersion(), `Windows (${os.release()})`))
+        }
+      ]
     }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
