@@ -94,6 +94,11 @@ npm run build && npx electron-builder --dir   # unpacked app in dist/
 - **Design source:** `docs/design/` — the vendored prototype (`Lectern.pretty.html`,
   `Lectern.dc.html`, `SlideCanvas.dc.html`) that the operator UI and output rendering
   are ported from pixel-for-pixel.
+- **Bugs & backlog:** [GitHub Issues](https://github.com/chase-codes/helm/issues) —
+  bugs carry the `bug` label plus a severity (`sev-1`…`sev-4`) and an `area:*` label;
+  feature ideas carry `enhancement` plus an `area:*` label. Pre-migration history
+  (fixed bugs, shipped roadmap items) stays in `docs/superpowers/bugs.md` and
+  `docs/superpowers/roadmap.md`.
 - **Brand assets:** `assets/` — the helm-wheel mark (`helm-mark.svg`, `helm-mark-ink.svg`),
   app icon (`app-icon/`, 16/32/48 px are hand-tuned and never regenerated), the UI icon
   set (`icons/`, `currentColor` SVGs), and the GitHub banner. Rasters, `build/icon.*`,
