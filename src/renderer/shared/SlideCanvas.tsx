@@ -14,7 +14,14 @@ import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
 // force a synchronous re-measure) even when nothing fit-relevant changed, e.g. once a
 // second from the stage variant's ticking clock prop.
 const LYRICS_BAND = bandCandidates(10.5, 3.5);
-const SCRIPTURE_BAND = bandCandidates(10, 3);
+// Scripture's floor sits at 1.5, not 3: versions stack vertically, so two long verses
+// need roughly double the height the old side-by-side layout did, and fitFontSize
+// degrades to the smallest candidate when nothing fits — with a 3cqmin floor the walk
+// gave up and the slide clipped (no scrolling exists on the output) in any
+// narrower-than-16:9 window. The walk is descending and stops at the first fit, so the
+// extra candidates cost nothing unless the content actually needs them. Exported for
+// the test that pins the floor.
+export const SCRIPTURE_BAND = bandCandidates(10, 1.5);
 
 export interface SlideCanvasProps {
   slide: Slide;
@@ -89,7 +96,6 @@ export function SlideCanvas({
     whiteSpace: 'nowrap'
   };
 
-  const single = (s.columns || []).length <= 1;
   const scriptureWrap: CSSProperties = {
     position: 'relative',
     zIndex: 2,
@@ -98,7 +104,11 @@ export function SlideCanvas({
     alignItems: 'center',
     gap: '4cqmin',
     width: '100%',
-    padding: '6cqmin',
+    // Tighter side padding than the 6cqmin this launched with: stacked versions live or
+    // die by line length — every cqmin of margin costs wrapped lines, which costs font
+    // size. 3.5cqmin keeps a visible safe area (projectors overscan) without starving
+    // the text run; columnStyle's 94% cap provides the rest of the breathing room.
+    padding: '5cqmin 3.5cqmin',
     boxSizing: 'border-box'
   };
   const refStyle: CSSProperties = {
@@ -114,20 +124,23 @@ export function SlideCanvas({
     color: accent,
     fontWeight: 500
   };
+  // Versions stack vertically (never side by side): two columns sharing the width were
+  // too cramped to read from the congregation — each version gets the full slide width.
   const colsStyle: CSSProperties = {
     display: 'flex',
-    gap: '5cqmin',
+    flexDirection: 'column',
+    gap: '4cqmin',
     width: '100%',
     justifyContent: 'center',
-    alignItems: 'flex-start'
+    alignItems: 'center'
   };
   const columnStyle: CSSProperties = {
-    flex: 1,
-    maxWidth: single ? '86%' : '47%',
+    width: '100%',
+    maxWidth: '94%',
     display: 'flex',
     flexDirection: 'column',
     gap: '1.8cqmin',
-    textAlign: single ? 'center' : 'left'
+    textAlign: 'center'
   };
   const versionStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
