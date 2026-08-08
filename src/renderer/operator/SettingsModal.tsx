@@ -11,7 +11,8 @@ import { ThemeCtx } from './ThemeCtx'
 import { MessageImport } from './MessageImport'
 import { DisplaysSettings } from './DisplaysSettings'
 import { ShortcutsSettings } from './ShortcutsSettings'
-import { DisplayIcon, ImportIcon } from '../shared/icons'
+import { AppearanceSettings } from './AppearanceSettings'
+import { DisplayIcon, ImportIcon, ThemesIcon } from '../shared/icons'
 import type {
   BibleInstallProgress,
   BibleManifestEntry,
@@ -19,6 +20,7 @@ import type {
   MessageMeta
 } from '../../shared/types'
 import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
+import type { ThemeFamily, ThemeMode } from '../../shared/theme'
 
 export interface SettingsModalProps {
   open: boolean
@@ -30,15 +32,18 @@ export interface SettingsModalProps {
   onBiblesChanged: () => void
   hotkeyOverrides: HotkeyOverrides
   onHotkeyOverridesChange: (next: HotkeyOverrides) => void
+  family: ThemeFamily
+  setFamily: (f: ThemeFamily) => void
+  themeMode: ThemeMode
+  setThemeMode: (m: ThemeMode) => void
 }
 
 const SECTIONS = [
-  { id: 'bibles', label: 'Bibles', enabled: true },
-  { id: 'displays', label: 'Displays', enabled: true },
-  { id: 'shortcuts', label: 'Shortcuts', enabled: true },
-  { id: 'songs', label: 'Songs', enabled: false },
-  { id: 'message', label: 'Message', enabled: true },
-  { id: 'backup', label: 'Backup', enabled: false }
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'bibles', label: 'Bibles' },
+  { id: 'displays', label: 'Displays' },
+  { id: 'shortcuts', label: 'Shortcuts' },
+  { id: 'message', label: 'Message' }
 ] as const
 type SettingsSection = (typeof SECTIONS)[number]['id']
 
@@ -49,13 +54,17 @@ export function SettingsModal({
   onClose,
   onBiblesChanged,
   hotkeyOverrides,
-  onHotkeyOverridesChange
+  onHotkeyOverridesChange,
+  family,
+  setFamily,
+  themeMode,
+  setThemeMode
 }: SettingsModalProps): JSX.Element | null {
   const T = useContext(ThemeCtx)
   // The parent only mounts this component while `open` is true (matching QuickAdd's
   // pattern), so this is belt-and-suspenders — but keep it since the prop is part of
   // the documented contract.
-  const [section, setSection] = useState<SettingsSection>('bibles')
+  const [section, setSection] = useState<SettingsSection>('appearance')
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([])
   // Per-id transient install state, driven entirely by bibles.onProgress broadcasts —
   // never set optimistically on click, so what's on screen always matches what main
@@ -211,16 +220,15 @@ export function SettingsModal({
     borderRight: `1px solid ${T.hairline}`,
     background: T.panel2
   }
-  const navItemStyle = (active: boolean, enabled: boolean): CSSProperties => ({
+  const navItemStyle = (active: boolean): CSSProperties => ({
     height: '34px',
     padding: '0 12px',
     borderRadius: '8px',
     fontSize: '13px',
     fontWeight: active ? 700 : 600,
-    color: !enabled ? T.faint : active ? T.text : T.dim,
+    color: active ? T.text : T.dim,
     background: active ? T.panel3 : 'transparent',
-    opacity: enabled ? 1 : 0.55,
-    cursor: enabled ? 'pointer' : 'not-allowed',
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center'
   })
@@ -442,17 +450,24 @@ export function SettingsModal({
               {SECTIONS.map((s) => (
                 <button
                   key={s.id}
-                  disabled={!s.enabled}
-                  style={{ ...navItemStyle(section === s.id, s.enabled), display: 'flex', alignItems: 'center', gap: '8px' }}
-                  title={s.enabled ? undefined : 'Coming with later slices'}
-                  onClick={() => s.enabled && setSection(s.id)}
+                  style={{ ...navItemStyle(section === s.id), gap: '8px' }}
+                  onClick={() => setSection(s.id)}
                 >
+                  {s.id === 'appearance' && <ThemesIcon size={15} />}
                   {s.id === 'displays' && <DisplayIcon size={15} />}
                   {s.label}
                 </button>
               ))}
             </div>
             <div style={contentStyle}>
+              {section === 'appearance' && (
+                <AppearanceSettings
+                  family={family}
+                  onFamilyChange={setFamily}
+                  themeMode={themeMode}
+                  onModeChange={setThemeMode}
+                />
+              )}
               {section === 'displays' && <DisplaysSettings />}
               {section === 'shortcuts' && (
                 <ShortcutsSettings overrides={hotkeyOverrides} onChange={onHotkeyOverridesChange} />

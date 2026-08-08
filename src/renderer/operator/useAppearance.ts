@@ -27,6 +27,7 @@ export function useAppearance(): {
   mode: ThemeMode;
   theme: Theme;
   toggleMode: () => void;
+  setMode: (m: ThemeMode) => void;
   setFamily: (f: ThemeFamily) => void;
 } {
   const [appearance, setAppearance] = useState<Appearance>(DEFAULT_APPEARANCE);
@@ -48,6 +49,7 @@ export function useAppearance(): {
     mode: appearance.mode,
     theme: themeFor(appearance.family, appearance.mode),
     toggleMode: () => update({ ...appearance, mode: appearance.mode === 'dark' ? 'light' : 'dark' }),
+    setMode: (mode) => update({ ...appearance, mode }),
     setFamily: (family) => update({ ...appearance, family })
   };
 }
