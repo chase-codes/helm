@@ -3,16 +3,20 @@ import type { Mode, ThemeMode } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
+import { ThemePopover } from './ThemePopover'
 import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
 import type { IconProps } from '../shared/icons'
-import { MoonIcon, PreServiceIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
+import { MoonIcon, PreServiceIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon, ThemesIcon } from '../shared/icons'
+import type { ThemeFamily } from '../../shared/theme'
 
 export interface HeaderProps {
   mode: Mode
   setMode: (m: Mode) => void
   themeMode: ThemeMode
   toggleTheme: () => void
+  family: ThemeFamily
+  setFamily: (f: ThemeFamily) => void
   onOpenSettings: () => void
 }
 
@@ -27,6 +31,8 @@ export function Header({
   setMode,
   themeMode,
   toggleTheme,
+  family,
+  setFamily,
   onOpenSettings
 }: HeaderProps): JSX.Element {
   const T = useContext(ThemeCtx)
@@ -35,6 +41,8 @@ export function Header({
   const clock = useClock()
   const [viewsOpen, setViewsOpen] = useState(false)
   const outputsContainerRef = useRef<HTMLDivElement | null>(null)
+  const [themesOpen, setThemesOpen] = useState(false)
+  const themesContainerRef = useRef<HTMLDivElement | null>(null)
 
   const isLive = output === 'live'
   const snapLbl = liveSnap ? (liveSnap.label ?? liveSnap.ref ?? liveSnap.title ?? '') : ''
@@ -180,6 +188,19 @@ export function Header({
       <button style={themeBtnStyle} onClick={toggleTheme} title="Light/dark">
         {themeMode === 'dark' ? <SunIcon size={17} /> : <MoonIcon size={17} />}
       </button>
+      <div ref={themesContainerRef} style={{ position: 'relative' }}>
+        <button style={themeBtnStyle} onClick={() => setThemesOpen((o) => !o)} title="Theme">
+          <ThemesIcon size={17} />
+        </button>
+        {themesOpen && (
+          <ThemePopover
+            family={family}
+            onSelect={setFamily}
+            onClose={() => setThemesOpen(false)}
+            containRef={themesContainerRef}
+          />
+        )}
+      </div>
       <button style={themeBtnStyle} onClick={onOpenSettings} title="Settings">
         <SettingsIcon size={17} />
       </button>

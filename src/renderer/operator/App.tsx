@@ -51,7 +51,7 @@ export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
 
 function App(): JSX.Element {
   const [mode, setMode] = useState<Mode>('songs');
-  const { mode: themeMode, theme, toggleMode: toggleTheme } = useAppearance();
+  const { mode: themeMode, theme, toggleMode: toggleTheme, family, setFamily } = useAppearance();
 
   // Settings is app-level (not owned by any mode) — it can be opened from the header
   // gear regardless of which mode is active, so its state lives here rather than in
@@ -137,7 +137,7 @@ function App(): JSX.Element {
   return (
     <ThemeCtx.Provider value={theme}>
       <div style={rootStyle}>
-        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
+        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} family={family} setFamily={setFamily} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
           {mode === 'pre' && <PreServiceMode themeMode={themeMode} active={mode === 'pre'} />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
