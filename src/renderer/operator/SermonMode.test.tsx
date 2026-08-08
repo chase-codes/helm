@@ -115,7 +115,7 @@ function Harness({
   const ownRef = useRef(null)
   const ref = keyHandlerRef ?? ownRef
   return (
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <SermonMode
         themeMode="dark"
         keyHandlerRef={ref}

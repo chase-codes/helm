@@ -22,7 +22,7 @@ function rows(overrides: Partial<ScheduleRow> = {}): ScheduleRow[] {
 }
 
 const baseProps = {
-  theme: themeFor('dark'),
+  theme: themeFor('classic', 'dark'),
   width: 270,
   track: 'scripture' as const,
   setTrack: vi.fn(),

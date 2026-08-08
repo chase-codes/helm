@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
-import { themeFor } from '../../shared/theme';
+import { themeFor, type ThemeMode } from '../../shared/theme';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
 import { dispatchModeKey } from './keyDispatch';
@@ -12,7 +12,7 @@ import { sanitizeOverrides, type AppActionId, type HotkeyOverrides } from '../..
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
-export type ThemeMode = 'dark' | 'light';
+export type { ThemeMode } from '../../shared/theme';
 
 /**
  * Delegate interface a mode registers on `keyHandlerRef` so the global
@@ -52,7 +52,7 @@ export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
 function App(): JSX.Element {
   const [mode, setMode] = useState<Mode>('songs');
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
-  const theme = themeFor(themeMode);
+  const theme = themeFor('classic', themeMode);
   const toggleTheme = (): void => setThemeMode((m) => (m === 'dark' ? 'light' : 'dark'));
 
   // Settings is app-level (not owned by any mode) — it can be opened from the header

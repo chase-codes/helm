@@ -71,7 +71,7 @@ function installHelmStub(
 
 const renderMode = (): ReturnType<typeof render> =>
   render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <PreServiceMode themeMode="dark" active />
     </ThemeCtx.Provider>
   )

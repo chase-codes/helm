@@ -75,7 +75,7 @@ const stubPanel = (width: number): PanelWidthControl => ({ width, dragging: fals
 
 function renderTrack(opts?: { leftPanel?: PanelWidthControl; rightPanel?: PanelWidthControl }): ReturnType<typeof render> {
   return render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <SlidesTrack
         slidesKeyRef={{ current: null }}
         active
@@ -323,7 +323,7 @@ describe('SlidesTrack', () => {
   it('unmounting with a pending delete commits it (no dropped delete on track switch)', async () => {
     installHelmStub()
     const view = render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <SlidesTrack
           slidesKeyRef={{ current: null }}
           active

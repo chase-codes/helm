@@ -11,7 +11,7 @@ const rows: SongRow[] = [
 ]
 
 const baseProps = {
-  theme: themeFor('dark'),
+  theme: themeFor('classic', 'dark'),
   dark: true,
   width: 250,
   q: '',

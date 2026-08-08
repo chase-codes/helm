@@ -31,7 +31,7 @@ function installHelm(over: {
 
 function renderEditor(): void {
   render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <PreCardEditor card={null} onClose={() => {}} />
     </ThemeCtx.Provider>
   )
@@ -103,7 +103,7 @@ describe('PreCardEditor verse look-up', () => {
   it('leaves pre-existing verse text intact when a look-up fails', async () => {
     installHelm()
     render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <PreCardEditor
           card={{ id: 'c1', type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'existing verse text', version: 'KJV', enabled: true }}
           onClose={() => {}}

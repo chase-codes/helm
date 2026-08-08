@@ -11,7 +11,7 @@ import { themeFor } from '../../shared/theme'
 afterEach(cleanup)
 
 const baseProps = {
-  theme: themeFor('dark'),
+  theme: themeFor('classic', 'dark'),
   dark: true,
   width: 330,
   book: 'James',

@@ -13,7 +13,7 @@ function renderPane(
   onChange = vi.fn()
 ): { onChange: ReturnType<typeof vi.fn> } {
   render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <ShortcutsSettings overrides={overrides} onChange={onChange} />
     </ThemeCtx.Provider>
   )

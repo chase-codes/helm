@@ -9,7 +9,7 @@ afterEach(cleanup)
 
 function renderMenu(items: ContextMenuItem[], onClose = vi.fn()): { onClose: typeof onClose } {
   render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <ContextMenu open x={100} y={120} items={items} onClose={onClose} />
     </ThemeCtx.Provider>
   )
@@ -19,7 +19,7 @@ function renderMenu(items: ContextMenuItem[], onClose = vi.fn()): { onClose: typ
 describe('ContextMenu', () => {
   it('renders nothing when closed', () => {
     render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <ContextMenu open={false} x={0} y={0} items={[{ label: 'Edit', onSelect: vi.fn() }]} onClose={vi.fn()} />
       </ThemeCtx.Provider>
     )
@@ -58,7 +58,7 @@ describe('ContextMenu', () => {
   it('closes on an outside mousedown', () => {
     const onClose = vi.fn()
     render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <ContextMenu open x={10} y={10} items={[{ label: 'Edit', onSelect: vi.fn() }]} onClose={onClose} />
       </ThemeCtx.Provider>
     )
@@ -69,7 +69,7 @@ describe('ContextMenu', () => {
   it('closes on an outside right-click (so the target row can reopen it)', () => {
     const onClose = vi.fn()
     render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <ContextMenu open x={10} y={10} items={[{ label: 'Edit', onSelect: vi.fn() }]} onClose={onClose} />
       </ThemeCtx.Provider>
     )

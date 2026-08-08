@@ -9,7 +9,7 @@ afterEach(cleanup)
 
 const renderQuickAdd = (initialTitle?: string): ReturnType<typeof render> =>
   render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <QuickAdd open initialTitle={initialTitle} onClose={vi.fn()} onSaved={vi.fn()} />
     </ThemeCtx.Provider>
   )
