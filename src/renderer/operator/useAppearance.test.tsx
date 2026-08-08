@@ -53,4 +53,13 @@ describe('useAppearance', () => {
     expect(result.current.mode).toBe('dark')
     expect(settingsSet).toHaveBeenCalledWith('appearance', { family: 'helm', mode: 'dark' })
   })
+
+  it('setMode sets an absolute mode and persists', async () => {
+    const { result } = renderHook(() => useAppearance())
+    await waitFor(() => expect(settingsGet).toHaveBeenCalled())
+    act(() => result.current.setMode('light'))
+    expect(result.current.mode).toBe('light')
+    expect(result.current.family).toBe('classic')
+    expect(settingsSet).toHaveBeenCalledWith('appearance', { family: 'classic', mode: 'light' })
+  })
 })
