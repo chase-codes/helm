@@ -137,7 +137,7 @@ function App(): JSX.Element {
   return (
     <ThemeCtx.Provider value={theme}>
       <div style={rootStyle}>
-        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} family={family} setFamily={setFamily} onOpenSettings={() => setSettingsOpen(true)} />
+        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
           {mode === 'pre' && <PreServiceMode themeMode={themeMode} active={mode === 'pre'} />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
