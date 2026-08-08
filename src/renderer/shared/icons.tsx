@@ -129,6 +129,15 @@ export function SettingsIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function ShortcutsIcon(p: IconProps): JSX.Element {
+  return (
+    <Icon {...p}>
+      <rect x="2.5" y="5" width="15" height="10" rx="2" />
+      <path d="M5.5 8h.01M8.5 8h.01M11.5 8h.01M14.5 8h.01M6.5 12h7" />
+    </Icon>
+  )
+}
+
 export function SongsIcon(p: IconProps): JSX.Element {
   return (
     <Icon {...p}>

@@ -12,7 +12,14 @@ import { MessageImport } from './MessageImport'
 import { DisplaysSettings } from './DisplaysSettings'
 import { ShortcutsSettings } from './ShortcutsSettings'
 import { AppearanceSettings } from './AppearanceSettings'
-import { DisplayIcon, ImportIcon, ThemesIcon } from '../shared/icons'
+import {
+  DisplayIcon,
+  ImportIcon,
+  MessageIcon,
+  SermonIcon,
+  ShortcutsIcon,
+  ThemesIcon
+} from '../shared/icons'
 import type {
   BibleInstallProgress,
   BibleManifestEntry,
@@ -39,11 +46,11 @@ export interface SettingsModalProps {
 }
 
 const SECTIONS = [
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'bibles', label: 'Bibles' },
-  { id: 'displays', label: 'Displays' },
-  { id: 'shortcuts', label: 'Shortcuts' },
-  { id: 'message', label: 'Message' }
+  { id: 'appearance', label: 'Appearance', Icon: ThemesIcon },
+  { id: 'bibles', label: 'Bibles', Icon: SermonIcon },
+  { id: 'displays', label: 'Displays', Icon: DisplayIcon },
+  { id: 'shortcuts', label: 'Shortcuts', Icon: ShortcutsIcon },
+  { id: 'message', label: 'Message', Icon: MessageIcon }
 ] as const
 type SettingsSection = (typeof SECTIONS)[number]['id']
 
@@ -453,8 +460,7 @@ export function SettingsModal({
                   style={{ ...navItemStyle(section === s.id), gap: '8px' }}
                   onClick={() => setSection(s.id)}
                 >
-                  {s.id === 'appearance' && <ThemesIcon size={15} />}
-                  {s.id === 'displays' && <DisplayIcon size={15} />}
+                  <s.Icon size={15} />
                   {s.label}
                 </button>
               ))}
