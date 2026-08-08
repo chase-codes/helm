@@ -43,6 +43,23 @@ const supported =
 const sofficeRel =
   process.platform === 'win32' ? path.join('program', 'soffice.exe') : path.join('MacOS', 'soffice')
 
+// Written as the LAST statement of a successful run (after the smoke test +
+// Impress guard both pass). Gating the "already staged" skip on this — not on
+// sofficeRel merely existing — means a run that dies partway through (after
+// cpSync but before/during the smoke test) leaves no stamp, so the next
+// invocation re-vendors instead of silently reporting success on a tree that
+// can't actually convert anything. Bumping VERSION also invalidates it.
+const stampPath = path.join(dest, '.helm-vendor-ok')
+
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
+function stagedVersion() {
+  try {
+    return readFileSync(stampPath, 'utf8').trim()
+  } catch {
+    return null
+  }
+}
+
 // Paths that are safe to drop (docs/media/wizards); filters and libs stay.
 // rmSync force:true makes entries that don't exist on a platform no-ops.
 // Extend ONLY while the smoke test below still passes.
@@ -63,15 +80,35 @@ const PRUNE = [
   path.join('Resources', 'share', 'template'),
   path.join('Resources', 'share', 'wizards'),
   path.join('Resources', 'share', 'Scripts'),
-  // macOS-only fat: bundled Python (macro scripting, unused by --convert-to),
-  // spellcheck dictionaries + the nlpsolver Calc extension, and the Java
-  // bridge (macros/extensions). No win32 equivalent path, so these are no-ops
-  // there. Everything else in Frameworks/Resources is load-bearing per the
-  // smoke test below.
+  // macOS-only fat, no win32 equivalent path (no-ops there): bundled Python
+  // (macro scripting, unused by --convert-to), spellcheck dictionaries + the
+  // nlpsolver Calc extension, the Java bridge (macros/extensions), the PDF
+  // *import* filter's resource data (mediaImport.ts never routes .pdf through
+  // soffice — see the `isPdf` branch — so this is dead weight here), and the
+  // bundle's outer code-signature seal (stale by construction: soffice and
+  // every dylib get re-signed individually by resignMachOTree below, which
+  // makes the original bundle-level seal both wrong and unused).
   path.join('Frameworks', 'LibreOfficePython.framework'),
   path.join('Resources', 'extensions'),
-  path.join('Resources', 'java')
+  path.join('Resources', 'java'),
+  path.join('Resources', 'xpdfimport'),
+  '_CodeSignature'
 ]
+
+// What's NOT in PRUNE, and why — checked individually, not inferred from the
+// smoke test passing (a pass only shows what remains is sufficient, never
+// that it's required):
+//   - Frameworks/libmergedlo.dylib and libicudata.dylib.77: hard dyld
+//     dependencies of soffice — deleting either aborts it immediately with
+//     "Library not loaded", confirmed by temporarily removing each and
+//     running `soffice --version`. Genuinely required.
+//   - Resources/fonts: NOT a hard dependency (soffice converts fine without
+//     it, confirmed the same way) but kept deliberately — PPTX files commonly
+//     reference Office fonts (Calibri, Cambria, ...) that LibreOffice ships
+//     metric-compatible substitutes for, and dropping them risks visibly
+//     wrong text layout in imported slides. That's a rendering-fidelity
+//     concern the smoke test's plain-text probe wouldn't catch either way, so
+//     it's kept on purpose rather than because something failed without it.
 
 /** Recursively look for a filename containing `needle` (Impress lib guard). */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
@@ -139,7 +176,7 @@ async function main() {
     )
     return
   }
-  if (existsSync(path.join(dest, sofficeRel))) {
+  if (stagedVersion() === VERSION) {
     console.log('vendor-libreoffice: already staged, skipping.')
     return
   }
@@ -180,6 +217,16 @@ async function main() {
 
   for (const rel of PRUNE) rmSync(path.join(tree, rel), { recursive: true, force: true })
 
+  // GUI icon themes (Resources/config/images_*.zip) — headless conversion
+  // never draws a toolbar. Exact filenames vary by icon theme/point release,
+  // so match by pattern instead of hardcoding ~20 names into PRUNE.
+  const configDir = path.join(tree, 'Resources', 'config')
+  if (existsSync(configDir)) {
+    for (const name of readdirSync(configDir)) {
+      if (/^images_.*\.zip$/.test(name)) rmSync(path.join(configDir, name), { force: true })
+    }
+  }
+
   rmSync(dest, { recursive: true, force: true })
   cpSync(tree, dest, { recursive: true, verbatimSymlinks: true })
 
@@ -208,6 +255,8 @@ async function main() {
   if (!treeContains(dest, 'sdlo')) {
     throw new Error('Impress library (sdlo) missing after prune — check PRUNE list')
   }
+  // Last statement of a successful run — see stampPath comment above.
+  writeFileSync(stampPath, VERSION)
   console.log('vendor-libreoffice: staged OK')
 }
 
