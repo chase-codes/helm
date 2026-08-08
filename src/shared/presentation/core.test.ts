@@ -158,6 +158,19 @@ test('showLive that refuses the screen leaves the cue alone', () => {
   expect(st.liveKey).toBe('song:a:0')
   expect(st.cuedKey).toBe('song:a:0')
 })
+test("setOutput refuses 'live' with no live key — coerces to black (BUG-021)", () => {
+  // A logo toggle from a cold start used to produce output 'live' with liveKey null:
+  // a blank slide the badges call ANOTHER FLOW LIVE and a pre-service tap could seize.
+  const st = setOutput(initialPresentation(), 'live')
+  expect(st.output).toBe('black')
+})
+test("setOutput 'live' with a live key behind it restores that slide", () => {
+  let st = goLive(initialPresentation(), 'song:a:0', slide('V1'))
+  st = setOutput(st, 'logo')
+  st = setOutput(st, 'live')
+  expect(st.output).toBe('live')
+  expect(st.liveKey).toBe('song:a:0')
+})
 test('showLive fills a live-but-empty output (logo toggle can leave liveKey null)', () => {
   const st = showLive(
     { output: 'live', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null },

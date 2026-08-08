@@ -28,7 +28,8 @@ function harness(): {
     cue: (key, slide) => { calls.push({ m: 'cue', key, slide }); pres = applyCue(pres, key, slide); },
     goLive: (key, slide) => { calls.push({ m: 'goLive', key, slide }); pres = goLive(pres, key, slide); },
     show: (key, slide) => { calls.push({ m: 'show', key, slide }); pres = showLive(pres, key, slide); },
-    isLive: (key) => pres.output === 'live' && pres.liveKey === key
+    isLive: (key) => pres.output === 'live' && pres.liveKey === key,
+    setOutput: (mode) => { pres = setOutput(pres, mode); }
   };
   const engine = createPreserviceEngine(repo, sink);
   return {
@@ -273,11 +274,65 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toMatch(/^pre:/);
     });
 
+    it('deleting a card before the live one keeps the audience on the same card (BUG-019)', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showCard(2);
+      engine.showNow();
+      const live = repo.list()[2];
+      expect(presentation().liveKey).toBe('pre:' + live.id);
+      engine.removeCard(repo.list()[0].id); // a card BEFORE the live one
+      expect(presentation().liveKey).toBe('pre:' + live.id); // audience untouched
+      expect(engine.getState().idx).toBe(1); // selection follows the card, not the position
+    });
+
+    it('deleting a card before an armed selection keeps the same card selected (BUG-019)', () => {
+      const { engine, repo } = harness();
+      engine.showCard(2); // nothing live — tap only arms
+      const armed = repo.list()[2];
+      engine.removeCard(repo.list()[0].id);
+      expect(repo.list()[engine.getState().idx].id).toBe(armed.id);
+    });
+
     it('deleting a card never yanks the audience off a live song', () => {
       const { engine, presentation, repo, songGoesLive } = harness();
       engine.engage();
       songGoesLive();  // song takes the screen; tick has not yielded yet
       engine.removeCard(repo.list()[3].id);
+      expect(presentation().liveKey).toBe('song:abc:0');
+    });
+
+    it('deleting a card after the live one leaves the audience and selection untouched (BUG-019)', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showCard(1);
+      engine.showNow();
+      const live = repo.list()[1];
+      engine.removeCard(repo.list()[3].id); // a card AFTER the live one
+      expect(presentation().liveKey).toBe('pre:' + live.id);
+      expect(engine.getState().idx).toBe(1);
+    });
+
+    it('emptying the rail after a take-down leaves the output alone (BUG-020)', () => {
+      const { engine, presentation, takeDown, repo } = harness();
+      engine.showNow();
+      takeDown(); // output black, liveKey still the stale pre: key
+      for (const c of repo.list()) engine.removeCard(c.id);
+      expect(engine.getState().cards.length).toBe(0);
+      expect(presentation().output).toBe('black'); // never re-blacked, never resurrected
+    });
+
+    it('deleting the last card takes the screen down (BUG-020)', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showNow(); // card 0 goes live
+      for (const c of repo.list()) engine.removeCard(c.id);
+      expect(engine.getState().cards.length).toBe(0);
+      expect(presentation().output).toBe('black'); // deleted card must leave the screen
+    });
+
+    it('emptying the rail while a song is live leaves the song alone (BUG-020)', () => {
+      const { engine, presentation, repo, songGoesLive } = harness();
+      songGoesLive();
+      for (const c of repo.list()) engine.removeCard(c.id);
+      expect(presentation().output).toBe('live');
       expect(presentation().liveKey).toBe('song:abc:0');
     });
 

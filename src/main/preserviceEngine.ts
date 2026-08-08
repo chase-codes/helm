@@ -1,4 +1,4 @@
-import type { PreCard, PreState, Slide } from '../shared/types';
+import type { OutputMode, PreCard, PreState, Slide } from '../shared/types';
 import type { PreCardsRepo } from './preCardsRepo';
 import { preSlideFor, nextEnabledIdx } from '../shared/preservice/cards';
 
@@ -7,6 +7,7 @@ export interface PresentationSink {
   goLive(key: string, slide: Slide): void;
   show(key: string, slide: Slide): void;
   isLive(key: string): boolean;
+  setOutput(mode: OutputMode): void;
 }
 export type { PreState };
 export interface PreserviceEngine {
@@ -108,13 +109,31 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     // must not yank the audience off whatever actually holds the screen, and deleting a card
     // must never be the thing that starts projecting.
     //
-    // ⚠️ Two measured defects remain here, both pre-existing and both logged rather than
-    // fixed in the BUG-018 change: `clampIdx` only handles overflow, so deleting a card
-    // BEFORE the live one shifts the audience onto an untouched card (BUG-019); and deleting
-    // the LAST card leaves it projected with a dangling liveKey, since pushShow early-returns
-    // when there is no card to show (BUG-020). Do not read this line as guaranteeing that a
-    // deleted card leaves the screen — it does not.
-    removeCard(id) { cards = repo.remove(id); clampIdx(); pushShow(); emit(); },
+    // The selection is remembered by card *id*, not position: deleting a card before the
+    // selected one shifts the list under `idx`, and a positional clamp alone would move the
+    // audience onto a card nobody chose (BUG-019). Positional fallback applies only when the
+    // selected card itself is the one deleted.
+    //
+    // Deleting the LAST card while it holds the screen takes the output down (BUG-020):
+    // pushShow has nothing to replace it with, and leaving it up would strand the audience
+    // on a card that no longer exists with an empty rail — no tap could ever clear it.
+    // Guarded by isLive so emptying the rail never touches a screen another flow owns —
+    // and equally skips the call when pre-service's own screen was already taken down
+    // (output black with a stale pre: key), where blacking again would claim an action
+    // the operator didn't take.
+    removeCard(id) {
+      const selectedId = cards[idx]?.id;
+      const deletedWasLive = sink.isLive(preKey(id));
+      cards = repo.remove(id);
+      if (selectedId !== undefined && selectedId !== id) {
+        const i = cards.findIndex((c) => c.id === selectedId);
+        if (i >= 0) idx = i;
+      }
+      clampIdx();
+      if (cards.length === 0) { if (deletedWasLive) sink.setOutput('black'); }
+      else pushShow();
+      emit();
+    },
     tick, dispose() { stopTimer(); subs.clear(); }
   };
 }

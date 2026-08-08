@@ -188,7 +188,8 @@ app.whenReady().then(() => {
     cue: (k, s) => presentation.cue(k, s),
     goLive: (k, s) => presentation.goLive(k, s),
     show: (k, s) => presentation.show(k, s),
-    isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k }
+    isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k },
+    setOutput: (m) => presentation.setOutput(m)
   })
   preserviceEngine.onChange((s) => {
     for (const w of BrowserWindow.getAllWindows())
