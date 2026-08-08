@@ -112,11 +112,10 @@ export function SermonCenter({
     fontWeight: 500
   };
   const verseCols = cols ?? [];
-  const verseColMax = verseCols.length > 1 ? '50%' : '100%';
   const verseVerStyle: CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', letterSpacing: '0.14em', color: T.faint, marginBottom: '8px' };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
-    fontSize: verseCols.length > 1 ? '21.0px' : 'clamp(26.0px, 2.70vw, 38.0px)',
+    fontSize: 'clamp(26.0px, 2.70vw, 38.0px)',
     lineHeight: 1.4,
     color: T.text,
     fontWeight: 400
@@ -207,9 +206,9 @@ export function SermonCenter({
             <div style={{ margin: 'auto', width: '100%', maxWidth: '680px', textAlign: 'center', padding: '22px 30px' }}>
               <div style={heroLabelStyle}>{heroLabel}</div>
               {verseCols.length ? (
-                <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', textAlign: 'left', marginTop: '18px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '26px', textAlign: 'left', marginTop: '18px' }}>
                   {verseCols.map((c, i) => (
-                    <div key={i} style={{ flex: 1, maxWidth: verseColMax }}>
+                    <div key={i} style={{ width: '100%' }}>
                       <div style={verseVerStyle}>{c.version}</div>
                       <div style={verseTextStyle}>{c.text}</div>
                     </div>

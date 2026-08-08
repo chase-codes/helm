@@ -49,6 +49,28 @@ test('scripture version label scales with the fitted size (0.47x the verse), flo
   expect(version.style.fontSize).not.toContain('clamp');
 });
 
+test('two versions stack vertically, each full-width and centered', () => {
+  render(
+    <SlideCanvas
+      slide={{
+        kind: 'scripture',
+        ref: 'John 3:16',
+        columns: [
+          { version: 'KJV', text: 'For God so loved the world' },
+          { version: 'NKJV', text: 'For God so loved the world, that He gave' }
+        ]
+      }}
+    />
+  );
+  const block = (screen.getByText('KJV') as HTMLElement).parentElement as HTMLElement;
+  const stack = block.parentElement as HTMLElement;
+  expect(stack.style.flexDirection).toBe('column');
+  expect(block.style.maxWidth).toBe('86%');
+  expect(block.style.textAlign).toBe('center');
+  const other = (screen.getByText('NKJV') as HTMLElement).parentElement as HTMLElement;
+  expect(other.style.maxWidth).toBe('86%');
+});
+
 test('both parallel versions render at one size', () => {
   render(
     <SlideCanvas

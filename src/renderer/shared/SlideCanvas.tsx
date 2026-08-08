@@ -89,7 +89,6 @@ export function SlideCanvas({
     whiteSpace: 'nowrap'
   };
 
-  const single = (s.columns || []).length <= 1;
   const scriptureWrap: CSSProperties = {
     position: 'relative',
     zIndex: 2,
@@ -114,20 +113,23 @@ export function SlideCanvas({
     color: accent,
     fontWeight: 500
   };
+  // Versions stack vertically (never side by side): two columns sharing the width were
+  // too cramped to read from the congregation — each version gets the full slide width.
   const colsStyle: CSSProperties = {
     display: 'flex',
-    gap: '5cqmin',
+    flexDirection: 'column',
+    gap: '4cqmin',
     width: '100%',
     justifyContent: 'center',
-    alignItems: 'flex-start'
+    alignItems: 'center'
   };
   const columnStyle: CSSProperties = {
-    flex: 1,
-    maxWidth: single ? '86%' : '47%',
+    width: '100%',
+    maxWidth: '86%',
     display: 'flex',
     flexDirection: 'column',
     gap: '1.8cqmin',
-    textAlign: single ? 'center' : 'left'
+    textAlign: 'center'
   };
   const versionStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
