@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
-import { themeFor } from '../../shared/theme';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
 import { dispatchModeKey } from './keyDispatch';
@@ -8,11 +7,12 @@ import { SermonMode } from './SermonMode';
 import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
+import { useAppearance } from './useAppearance';
 import { sanitizeOverrides, type AppActionId, type HotkeyOverrides } from '../../shared/hotkeys/actions';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
-export type ThemeMode = 'dark' | 'light';
+export type { ThemeMode } from '../../shared/theme';
 
 /**
  * Delegate interface a mode registers on `keyHandlerRef` so the global
@@ -51,9 +51,7 @@ export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
 
 function App(): JSX.Element {
   const [mode, setMode] = useState<Mode>('songs');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
-  const theme = themeFor(themeMode);
-  const toggleTheme = (): void => setThemeMode((m) => (m === 'dark' ? 'light' : 'dark'));
+  const { mode: themeMode, theme, toggleMode: toggleTheme, family, setFamily } = useAppearance();
 
   // Settings is app-level (not owned by any mode) — it can be opened from the header
   // gear regardless of which mode is active, so its state lives here rather than in
@@ -139,7 +137,7 @@ function App(): JSX.Element {
   return (
     <ThemeCtx.Provider value={theme}>
       <div style={rootStyle}>
-        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
+        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} family={family} setFamily={setFamily} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
           {mode === 'pre' && <PreServiceMode themeMode={themeMode} active={mode === 'pre'} />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator

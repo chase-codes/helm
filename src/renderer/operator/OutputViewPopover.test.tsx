@@ -94,7 +94,7 @@ function StatefulPopoverHarness(): ReactNode {
 
 const renderPopover = (onClose = vi.fn()): ReturnType<typeof render> =>
   render(
-    <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <PopoverWithContainer onClose={onClose} />
     </ThemeCtx.Provider>
   )
@@ -152,7 +152,7 @@ describe('OutputViewPopover', () => {
   it('chip toggle closes popover without reopen flicker (mousedown in container)', async () => {
     installHelmStub()
     const r = render(
-      <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <StatefulPopoverHarness />
       </ThemeCtx.Provider>
     )

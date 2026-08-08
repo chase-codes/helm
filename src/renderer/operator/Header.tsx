@@ -3,21 +3,27 @@ import type { Mode, ThemeMode } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
+import { ThemePopover } from './ThemePopover'
 import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
+import type { IconProps } from '../shared/icons'
+import { MoonIcon, PreServiceIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon, ThemesIcon } from '../shared/icons'
+import type { ThemeFamily } from '../../shared/theme'
 
 export interface HeaderProps {
   mode: Mode
   setMode: (m: Mode) => void
   themeMode: ThemeMode
   toggleTheme: () => void
+  family: ThemeFamily
+  setFamily: (f: ThemeFamily) => void
   onOpenSettings: () => void
 }
 
-const MODE_TABS: Array<{ id: Mode; label: string }> = [
-  { id: 'pre', label: 'Pre-service' },
-  { id: 'songs', label: 'Songs' },
-  { id: 'sermon', label: 'Sermon' }
+const MODE_TABS: Array<{ id: Mode; label: string; Icon: (p: IconProps) => JSX.Element }> = [
+  { id: 'pre', label: 'Pre-service', Icon: PreServiceIcon },
+  { id: 'songs', label: 'Songs', Icon: SongsIcon },
+  { id: 'sermon', label: 'Sermon', Icon: SermonIcon }
 ]
 
 export function Header({
@@ -25,6 +31,8 @@ export function Header({
   setMode,
   themeMode,
   toggleTheme,
+  family,
+  setFamily,
   onOpenSettings
 }: HeaderProps): JSX.Element {
   const T = useContext(ThemeCtx)
@@ -33,6 +41,8 @@ export function Header({
   const clock = useClock()
   const [viewsOpen, setViewsOpen] = useState(false)
   const outputsContainerRef = useRef<HTMLDivElement | null>(null)
+  const [themesOpen, setThemesOpen] = useState(false)
+  const themesContainerRef = useRef<HTMLDivElement | null>(null)
 
   const isLive = output === 'live'
   const snapLbl = liveSnap ? (liveSnap.label ?? liveSnap.ref ?? liveSnap.title ?? '') : ''
@@ -66,6 +76,9 @@ export function Header({
     borderRadius: '11px'
   }
   const modeTabStyle = (active: boolean): CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '7px',
     padding: '7px 16px',
     borderRadius: '8px',
     fontSize: '13.5px',
@@ -135,6 +148,7 @@ export function Header({
       <div style={modeWrapStyle}>
         {MODE_TABS.map((t) => (
           <button key={t.id} style={modeTabStyle(mode === t.id)} onClick={() => setMode(t.id)}>
+            <t.Icon size={15} />
             {t.label}
           </button>
         ))}
@@ -171,11 +185,24 @@ export function Header({
         {isLive && <span style={takeDownChipStyle}>✕ TAKE DOWN</span>}
       </button>
       <UpdatePill />
-      <button style={themeBtnStyle} onClick={toggleTheme}>
-        {themeMode === 'dark' ? '☀' : '☾'}
+      <button style={themeBtnStyle} onClick={toggleTheme} title="Light/dark">
+        {themeMode === 'dark' ? <SunIcon size={17} /> : <MoonIcon size={17} />}
       </button>
+      <div ref={themesContainerRef} style={{ position: 'relative' }}>
+        <button style={themeBtnStyle} onClick={() => setThemesOpen((o) => !o)} title="Theme">
+          <ThemesIcon size={17} />
+        </button>
+        {themesOpen && (
+          <ThemePopover
+            family={family}
+            onSelect={setFamily}
+            onClose={() => setThemesOpen(false)}
+            containRef={themesContainerRef}
+          />
+        )}
+      </div>
       <button style={themeBtnStyle} onClick={onOpenSettings} title="Settings">
-        ⚙
+        <SettingsIcon size={17} />
       </button>
       <div
         style={{

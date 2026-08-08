@@ -70,7 +70,7 @@ function installHelmStub(): {
 
 const renderPane = (): ReturnType<typeof render> =>
   render(
-    <ThemeCtx.Provider value={themeFor('dark', 'Warm')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <DisplaysSettings />
     </ThemeCtx.Provider>
   )

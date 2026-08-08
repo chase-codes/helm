@@ -11,7 +11,7 @@ const rows: SongRow[] = [
 ]
 
 const baseProps = {
-  theme: themeFor('dark'),
+  theme: themeFor('classic', 'dark'),
   dark: true,
   width: 250,
   q: '',
@@ -65,7 +65,7 @@ describe('SongSearchRail', () => {
   it('renders the import row above the song list and fires onImportSongs', () => {
     const onImportSongs = vi.fn()
     render(<SongSearchRail {...baseProps} onImportSongs={onImportSongs} />)
-    const imp = screen.getByText('↓ Import a song library')
+    const imp = screen.getByText('Import a song library')
     fireEvent.click(imp)
     expect(onImportSongs).toHaveBeenCalledTimes(1)
     // Import row must precede the first song row in DOM order (fixed header, not list bottom).

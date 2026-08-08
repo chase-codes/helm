@@ -33,7 +33,7 @@ function installHelm(
 
 const renderModal = (onImported = vi.fn()): ReturnType<typeof render> =>
   render(
-    <ThemeCtx.Provider value={themeFor('dark')}>
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
       <SongImport open onClose={vi.fn()} onImported={onImported} />
     </ThemeCtx.Provider>
   );
@@ -108,7 +108,7 @@ describe('SongImport', () => {
     );
     const onClose = vi.fn();
     const { container } = render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <SongImport open onClose={onClose} onImported={vi.fn()} />
       </ThemeCtx.Provider>
     );
@@ -133,7 +133,7 @@ describe('SongImport', () => {
   it('renders nothing when closed', () => {
     installHelm({ token: 't', rows: ROWS });
     const { container } = render(
-      <ThemeCtx.Provider value={themeFor('dark')}>
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
         <SongImport open={false} onClose={vi.fn()} onImported={vi.fn()} />
       </ThemeCtx.Provider>
     );
