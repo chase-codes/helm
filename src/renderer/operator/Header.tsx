@@ -4,6 +4,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
 import { UpdatePill } from './UpdatePill'
+import { HelmMark } from '../shared/HelmMark'
 
 export interface HeaderProps {
   mode: Mode
@@ -56,18 +57,6 @@ export function Header({
     padding: '0 16px',
     background: T.panel,
     borderBottom: '1px solid ' + T.hairline
-  }
-  const logoStyle: CSSProperties = {
-    width: '30px',
-    height: '30px',
-    borderRadius: '9px',
-    background: 'linear-gradient(150deg,#e7b95c,#cf8f33)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    color: '#1a1206',
-    fontSize: '17px'
   }
   const modeWrapStyle: CSSProperties = {
     display: 'flex',
@@ -138,7 +127,7 @@ export function Header({
   return (
     <div style={headerStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
-        <div style={logoStyle}>H</div>
+        <HelmMark size={28} color={T.accent} />
         <div style={{ fontWeight: 700, fontSize: '16px', letterSpacing: '-0.01em' }}>
           Sunday Service
         </div>

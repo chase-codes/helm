@@ -1,3 +1,5 @@
+<img src="assets/github-banner.png" alt="Helm — run the service from one seat." width="100%">
+
 # Helm
 
 A Mac + Windows desktop app for running a church service from one seat: congregational
@@ -92,6 +94,11 @@ npm run build && npx electron-builder --dir   # unpacked app in dist/
 - **Design source:** `docs/design/` — the vendored prototype (`Lectern.pretty.html`,
   `Lectern.dc.html`, `SlideCanvas.dc.html`) that the operator UI and output rendering
   are ported from pixel-for-pixel.
+- **Brand assets:** `assets/` — the helm-wheel mark (`helm-mark.svg`, `helm-mark-ink.svg`),
+  app icon (`app-icon/`, 16/32/48 px are hand-tuned and never regenerated), the UI icon
+  set (`icons/`, `currentColor` SVGs), and the GitHub banner. Rasters, `build/icon.*`,
+  and `resources/icon.png` are regenerated from the vectors with
+  `node scripts/generate-brand-assets.mjs`.
 
 In brief: the **main process** owns the SQLite database and the single source of truth
 for presentation state (what's cued, what's live) behind typed IPC. The **operator

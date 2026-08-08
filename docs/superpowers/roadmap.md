@@ -197,3 +197,26 @@ Several items below share these foundations — worth building once as reusable 
 - **Background choices for scripture (and similar) audience output.** A settings flow
   letting operators choose the background shown behind scripture text on the audience
   view, rather than a fixed look. (Found during Windows rehearsal testing, 2026-07-09.)
+
+---
+
+## Appearance / theming
+
+- **Named operator theme presets: Charcoal, Parchment, Helm (navy).** (Chase, 2026-08-07.)
+  Today the operator console has a two-state toggle in the header — `DARK` (a neutral
+  charcoal, `#0f1115`) and `LIGHT` (parchment) in `src/shared/theme.ts` — and the choice
+  isn't even persisted (`useState('dark')` in `App.tsx`, resets every launch). A `Tone`
+  system (Warm/Cool/Earthen accent variants) exists in `theme.ts` but is exposed nowhere:
+  `themeFor` is only ever called with the default tone.
+  The ask: replace the bare toggle with **named presets** —
+  - **Charcoal** — today's dark palette, under its own name;
+  - **Parchment** — today's light palette, checked against the brand's ink-on-parchment
+    pairing (`#16243E` on `#EFE9DC`);
+  - **Helm** — a navy preset drawn from the brand: navy surfaces (`#0B1322` app bg,
+    `#101B30` panels, `#16243E` raised), parchment text `#EFE9DC`, gold accent `#E0A341` —
+    the gold-on-navy pairing the app icon and banner already use (see `assets/` and the
+    Helm Brand design project).
+  The `Theme` interface is already a flat token record, so a preset is one more palette
+  object plus a picker (Settings pane or the existing header control) — and the choice
+  should persist across launches. Decide alongside it whether the dormant Tone variants
+  become part of the preset model or get folded away.
