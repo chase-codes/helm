@@ -349,9 +349,9 @@ describe('SermonMode — the Go live button does what its label says', () => {
     const { goLive, setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('■ Take down')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
 
-    fireEvent.click(screen.getByText('■ Take down'))
+    fireEvent.click(screen.getByText('Take down'))
     expect(setOutput).toHaveBeenCalledWith('black')
     expect(goLive).not.toHaveBeenCalled()
   })
@@ -364,9 +364,9 @@ describe('SermonMode — the Go live button does what its label says', () => {
 
     // Move the cursor off the live verse; the label flips back to "● Go live".
     fireEvent.click(verseCard(3))
-    await waitFor(() => expect(screen.getByText('● Go live')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Go live')).toBeTruthy())
 
-    fireEvent.click(screen.getByText('● Go live'))
+    fireEvent.click(screen.getByText('Go live'))
     expect(goLive).toHaveBeenCalled()
     expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
     expect(setOutput).not.toHaveBeenCalled()

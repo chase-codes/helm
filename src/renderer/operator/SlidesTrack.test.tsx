@@ -121,7 +121,7 @@ describe('SlidesTrack', () => {
     const { goLive } = installHelmStub()
     renderTrack()
     await screen.findByText('▤ Sermon.pptx')
-    const goLiveBtn = (await screen.findByText('● Go live')).closest('button') as HTMLButtonElement
+    const goLiveBtn = (await screen.findByText('Go live')).closest('button') as HTMLButtonElement
     fireEvent.click(goLiveBtn)
     expect(goLive).toHaveBeenCalledWith(expect.stringMatching(/^pres:/), expect.anything())
   })
@@ -224,7 +224,7 @@ describe('SlidesTrack', () => {
     renderTrack()
     const vidRow = (await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement
     fireEvent.click(vidRow)
-    const goLiveBtn = (await screen.findByText('● Go live')).closest('button') as HTMLButtonElement
+    const goLiveBtn = (await screen.findByText('Go live')).closest('button') as HTMLButtonElement
     fireEvent.click(goLiveBtn)
     await waitFor(() => expect(window.helm.video.pause).toHaveBeenCalled())
     expect(window.helm.presentation.goLive).toHaveBeenCalledWith('pres:vid1:0', expect.anything())

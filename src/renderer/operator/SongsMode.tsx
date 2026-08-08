@@ -15,6 +15,7 @@ import { SongImport } from './SongImport';
 import { useContextMenu } from './useContextMenu';
 import { usePanelWidth } from './usePanelWidth';
 import { PanelDivider } from './PanelDivider';
+import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 
 export interface SongsModeProps {
   themeMode: ThemeMode;
@@ -616,12 +617,19 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
           </button>
           <div style={{ flex: 1 }} />
           {armed && (
-            <button style={{ ...goLiveStyle, background: T.live }} onClick={takeDown}>
-              ■ Take down
+            <button
+              style={{ ...goLiveStyle, background: T.live, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              onClick={takeDown}
+            >
+              <ScreenBlackIcon size={14} /> Take down
             </button>
           )}
-          <button style={goLiveStyle} onClick={armed ? commitSwitch : goLive}>
-            {armed ? `⇄ Switch to ${armed.title}` : cuedIsLive ? '■ Take down' : '● Go live'}
+          <button
+            style={{ ...goLiveStyle, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            onClick={armed ? commitSwitch : goLive}
+          >
+            {!armed && (cuedIsLive ? <ScreenBlackIcon size={14} /> : <GoLiveIcon size={14} />)}
+            {armed ? `⇄ Switch to ${armed.title}` : cuedIsLive ? 'Take down' : 'Go live'}
           </button>
           <button style={logoBtnStyle} onClick={toggleLogo}>
             {output === 'logo' ? 'Logo on screen' : 'Logo'}

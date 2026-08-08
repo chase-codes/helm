@@ -3,6 +3,7 @@ import type { Theme } from '../../shared/theme';
 import type { OutputMode, Slide, SlideColumn } from '../../shared/types';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
+import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 
 export interface SermonCenterProps {
   theme: Theme;
@@ -263,8 +264,12 @@ export function SermonCenter({
           {nextLabel}
         </button>
         <div style={{ flex: 1 }} />
-        <button style={goLiveStyle} onClick={onGoLive}>
-          {cuedIsLive ? '■ Take down' : '● Go live'}
+        <button
+          style={{ ...goLiveStyle, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          onClick={onGoLive}
+        >
+          {cuedIsLive ? <ScreenBlackIcon size={14} /> : <GoLiveIcon size={14} />}
+          {cuedIsLive ? 'Take down' : 'Go live'}
         </button>
         {versionPicker}
         <button style={logoBtnStyle} onClick={onToggleLogo}>

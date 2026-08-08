@@ -483,9 +483,9 @@ describe('SongsMode armed switching', () => {
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
-    expect(screen.getByText('■ Take down')).toBeTruthy();
+    expect(screen.getByText('Take down')).toBeTruthy();
     expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
-    fireEvent.click(screen.getByText('■ Take down'));
+    fireEvent.click(screen.getByText('Take down'));
     expect(setOutput).toHaveBeenCalledWith('black');
   });
 
