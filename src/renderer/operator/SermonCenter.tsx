@@ -203,7 +203,7 @@ export function SermonCenter({
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={heroCardStyle}>
           {variant === 'verse' ? (
-            <div style={{ margin: 'auto', width: '100%', maxWidth: '680px', textAlign: 'center', padding: '22px 30px' }}>
+            <div style={{ margin: 'auto', width: '100%', maxWidth: '92%', textAlign: 'center', padding: '22px 30px' }}>
               <div style={heroLabelStyle}>{heroLabel}</div>
               {verseCols.length ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '26px', textAlign: 'left', marginTop: '18px' }}>
