@@ -5,6 +5,8 @@ import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
 import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
+import type { IconProps } from '../shared/icons'
+import { MoonIcon, PreServiceIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
 
 export interface HeaderProps {
   mode: Mode
@@ -14,10 +16,10 @@ export interface HeaderProps {
   onOpenSettings: () => void
 }
 
-const MODE_TABS: Array<{ id: Mode; label: string }> = [
-  { id: 'pre', label: 'Pre-service' },
-  { id: 'songs', label: 'Songs' },
-  { id: 'sermon', label: 'Sermon' }
+const MODE_TABS: Array<{ id: Mode; label: string; Icon: (p: IconProps) => JSX.Element }> = [
+  { id: 'pre', label: 'Pre-service', Icon: PreServiceIcon },
+  { id: 'songs', label: 'Songs', Icon: SongsIcon },
+  { id: 'sermon', label: 'Sermon', Icon: SermonIcon }
 ]
 
 export function Header({
@@ -66,6 +68,9 @@ export function Header({
     borderRadius: '11px'
   }
   const modeTabStyle = (active: boolean): CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '7px',
     padding: '7px 16px',
     borderRadius: '8px',
     fontSize: '13.5px',
@@ -135,6 +140,7 @@ export function Header({
       <div style={modeWrapStyle}>
         {MODE_TABS.map((t) => (
           <button key={t.id} style={modeTabStyle(mode === t.id)} onClick={() => setMode(t.id)}>
+            <t.Icon size={15} />
             {t.label}
           </button>
         ))}
@@ -171,11 +177,11 @@ export function Header({
         {isLive && <span style={takeDownChipStyle}>✕ TAKE DOWN</span>}
       </button>
       <UpdatePill />
-      <button style={themeBtnStyle} onClick={toggleTheme}>
-        {themeMode === 'dark' ? '☀' : '☾'}
+      <button style={themeBtnStyle} onClick={toggleTheme} title="Light/dark">
+        {themeMode === 'dark' ? <SunIcon size={17} /> : <MoonIcon size={17} />}
       </button>
       <button style={themeBtnStyle} onClick={onOpenSettings} title="Settings">
-        ⚙
+        <SettingsIcon size={17} />
       </button>
       <div
         style={{
