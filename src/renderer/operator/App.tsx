@@ -51,7 +51,7 @@ export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
 
 function App(): JSX.Element {
   const [mode, setMode] = useState<Mode>('songs');
-  const { mode: themeMode, theme, toggleMode: toggleTheme, family, setFamily } = useAppearance();
+  const { mode: themeMode, theme, toggleMode: toggleTheme, family, setFamily, setMode: setThemeMode } = useAppearance();
 
   // Settings is app-level (not owned by any mode) — it can be opened from the header
   // gear regardless of which mode is active, so its state lives here rather than in
@@ -166,6 +166,10 @@ function App(): JSX.Element {
             onBiblesChanged={() => setBiblesRevision((r) => r + 1)}
             hotkeyOverrides={hotkeyOverrides}
             onHotkeyOverridesChange={saveHotkeyOverrides}
+            family={family}
+            setFamily={setFamily}
+            themeMode={themeMode}
+            setThemeMode={setThemeMode}
           />
         )}
       </div>
