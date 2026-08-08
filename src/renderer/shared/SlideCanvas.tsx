@@ -14,7 +14,14 @@ import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
 // force a synchronous re-measure) even when nothing fit-relevant changed, e.g. once a
 // second from the stage variant's ticking clock prop.
 const LYRICS_BAND = bandCandidates(10.5, 3.5);
-const SCRIPTURE_BAND = bandCandidates(10, 3);
+// Scripture's floor sits at 1.5, not 3: versions stack vertically, so two long verses
+// need roughly double the height the old side-by-side layout did, and fitFontSize
+// degrades to the smallest candidate when nothing fits — with a 3cqmin floor the walk
+// gave up and the slide clipped (no scrolling exists on the output) in any
+// narrower-than-16:9 window. The walk is descending and stops at the first fit, so the
+// extra candidates cost nothing unless the content actually needs them. Exported for
+// the test that pins the floor.
+export const SCRIPTURE_BAND = bandCandidates(10, 1.5);
 
 export interface SlideCanvasProps {
   slide: Slide;

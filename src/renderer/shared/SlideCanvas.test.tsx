@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, cleanup } from '@testing-library/react';
 import { afterEach, expect, test } from 'vitest';
-import { SlideCanvas } from './SlideCanvas';
+import { SlideCanvas, SCRIPTURE_BAND } from './SlideCanvas';
 
 afterEach(cleanup);
 
@@ -47,6 +47,14 @@ test('scripture version label scales with the fitted size (0.47x the verse), flo
   const version = screen.getByText('KJV') as HTMLElement;
   expect(version.style.fontSize).toBe('max(7px, calc(var(--helm-fit-size, 4.7cqmin) * 0.47))');
   expect(version.style.fontSize).not.toContain('clamp');
+});
+
+test('the scripture fit band reaches low enough for two stacked long verses', () => {
+  // Stacked versions need roughly double the height side-by-side did, and fitFontSize
+  // degrades to the smallest candidate when nothing fits — with the old 3cqmin floor,
+  // two long verses (Esther 8:9 in two translations) clipped in any narrower-than-16:9
+  // output window. The floor must sit at 1.5cqmin so the walk can keep shrinking.
+  expect(SCRIPTURE_BAND[SCRIPTURE_BAND.length - 1]).toBe(1.5);
 });
 
 test('two versions stack vertically, each full-width and centered', () => {
