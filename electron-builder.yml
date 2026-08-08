@@ -10,6 +10,14 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # resources/libreoffice ships solely via extraResources below (read at runtime
+  # from process.resourcesPath, never from app.asar/app.asar.unpacked — see
+  # bundledSofficeCandidates in src/main/mediaImport.ts). Without this exclusion
+  # the tree also gets packed as app files and duplicated under
+  # resources/app.asar.unpacked/resources/libreoffice, doubling installer size
+  # for a copy the app never reads.
+  - '!resources/libreoffice'
+  - '!resources/libreoffice/**'
 asarUnpack:
   - resources/**
 # resources/libreoffice is a vendored, per-OS LibreOffice-headless tree kept OUTSIDE git

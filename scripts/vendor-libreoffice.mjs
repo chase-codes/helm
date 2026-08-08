@@ -71,6 +71,13 @@ const PRUNE = [
   path.join('share', 'wizards'),
   path.join('share', 'Scripts'),
   path.join('program', 'wizards'),
+  // win32 equivalents of the macOS-only cuts below: bundled extensions
+  // (spellcheck dictionaries, nlpsolver — same as Resources/extensions) and
+  // the Java UNO bridge jars (same as Resources/java). The bundled Python
+  // interpreter's win32 equivalent (program/python-core-<ver>/) is pruned
+  // separately below by pattern, since its directory name is version-suffixed.
+  path.join('share', 'extensions'),
+  path.join('program', 'classes'),
   path.join('Resources', 'help'),
   path.join('Resources', 'gallery'),
   path.join('Resources', 'template'),
@@ -227,10 +234,26 @@ async function main() {
   console.log('vendor-libreoffice: phase=prune')
   for (const rel of PRUNE) rmSync(path.join(tree, rel), { recursive: true, force: true })
 
-  // GUI icon themes (Resources/config/images_*.zip) — headless conversion
-  // never draws a toolbar. Exact filenames vary by icon theme/point release,
-  // so match by pattern instead of hardcoding ~20 names into PRUNE.
-  const configDir = path.join(tree, 'Resources', 'config')
+  // Windows-only: bundled Python interpreter (program/python-core-<ver>/), the
+  // win32 equivalent of macOS's Frameworks/LibreOfficePython.framework — same
+  // justification (macro scripting, unused by --convert-to). The directory
+  // name is version-suffixed, so match by pattern instead of hardcoding it.
+  if (process.platform === 'win32') {
+    const programDir = path.join(tree, 'program')
+    if (existsSync(programDir)) {
+      for (const name of readdirSync(programDir)) {
+        if (/^python-core-/.test(name)) {
+          rmSync(path.join(programDir, name), { recursive: true, force: true })
+        }
+      }
+    }
+  }
+
+  // GUI icon themes (images_*.zip) — headless conversion never draws a
+  // toolbar. Exact filenames vary by icon theme/point release, so match by
+  // pattern instead of hardcoding ~20 names into PRUNE. Lives at
+  // Resources/config on macOS, share/config on Windows.
+  const configDir = path.join(tree, process.platform === 'win32' ? 'share' : 'Resources', 'config')
   if (existsSync(configDir)) {
     for (const name of readdirSync(configDir)) {
       if (/^images_.*\.zip$/.test(name)) rmSync(path.join(configDir, name), { force: true })
