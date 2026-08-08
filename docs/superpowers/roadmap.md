@@ -23,8 +23,9 @@ The open items formerly logged here:
 | [#10](https://github.com/chase-codes/helm/issues/10) | Background choices for scripture (and similar) audience output |
 | [#11](https://github.com/chase-codes/helm/issues/11) | Named operator theme presets: Charcoal, Parchment, Helm (navy) |
 
-The pre-service single-click verb swap ("decided, smaller than it looked") is
-tracked as bug [#25](https://github.com/chase-codes/helm/issues/25) (BUG-018).
+The pre-service single-click verb swap ("decided, smaller than it looked") was
+tracked as bug [#25](https://github.com/chase-codes/helm/issues/25) (BUG-018) —
+fixed (`c687062`) and closed; see the Shipped log below.
 
 ---
 
@@ -76,6 +77,16 @@ Roadmap items that shipped before the migration, kept for their design pointers.
   carries `● ARMED` (accent ring, no fill), visually distinct from `● ON SCREEN`
   (filled, live). Landed alongside the BUG-008 fix, which also added **Show this
   card** as the deliberate single-card takeover. See `bugs.md` BUG-008.
+- **Single click on a card selects; only Start loop / Show this card project.** ✅
+  (`c687062`) — switching what is already on screen is free; starting to project is not.
+  The rule turned out to be an existing primitive: `shared/presentation/core.ts` offers
+  `showLive` ("no-op unless output is live, then switch freely") next to `goLive`
+  ("start projecting"), and pre-service was the only mode routing a *tap* through
+  `goLive`. Landed as a verb swap in `preserviceEngine` (`pushLive` split into
+  `pushLive`/`pushShow`); `ownsScreen()` did not survive it. See `bugs.md` BUG-018;
+  residuals tracked as [#27](https://github.com/chase-codes/helm/issues/27),
+  [#28](https://github.com/chase-codes/helm/issues/28),
+  [#29](https://github.com/chase-codes/helm/issues/29).
 
 ### Sermon / Scripture
 
