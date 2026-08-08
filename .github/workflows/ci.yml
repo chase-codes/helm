@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,6 +41,15 @@ jobs:
       - name: Fetch bundled bibles
         if: steps.bibles.outputs.cache-hit != 'true'
         run: node scripts/fetch-bibles.mjs
+      - name: Cache bundled LibreOffice
+        id: libreoffice
+        uses: actions/cache@v4
+        with:
+          path: resources/libreoffice
+          key: libreoffice-${{ runner.os }}-${{ hashFiles('scripts/vendor-libreoffice.mjs') }}
+      - name: Vendor LibreOffice
+        if: steps.libreoffice.outputs.cache-hit != 'true'
+        run: node scripts/vendor-libreoffice.mjs
       - run: npm run build
       - run: npx electron-builder --win --publish never
       - uses: actions/upload-artifact@v4
