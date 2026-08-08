@@ -154,7 +154,8 @@ function resignMachOTree(dir) {
       resignMachOTree(full)
     } else if (e.isFile() && isMachO(full)) {
       execFileSync('codesign', ['--force', '-s', '-', full], {
-        stdio: ['ignore', 'ignore', 'inherit']
+        stdio: ['ignore', 'ignore', 'inherit'],
+        timeout: 5 * 60_000
       })
     }
   }
@@ -184,17 +185,24 @@ async function main() {
   const { url, sha256 } = ARTIFACTS[process.platform]
   mkdirSync(work, { recursive: true })
   const archive = path.join(work, path.basename(url))
+  console.log('vendor-libreoffice: phase=download')
   if (!existsSync(archive)) await download(url, archive)
+  console.log('vendor-libreoffice: phase=verify')
   const hash = createHash('sha256').update(readFileSync(archive)).digest('hex')
   if (hash !== sha256) throw new Error(`SHA256 mismatch for ${archive}: got ${hash}`)
 
   // Extract, then locate the dir that holds the soffice binary's parent tree.
+  console.log('vendor-libreoffice: phase=extract')
   let tree
   if (process.platform === 'win32') {
     const extract = path.join(work, 'extract')
     rmSync(extract, { recursive: true, force: true })
     // Administrative extract: unpacks payload, installs nothing, needs no admin.
-    execFileSync('msiexec', ['/a', archive, '/qn', `TARGETDIR=${extract}`], { stdio: 'inherit' })
+    execFileSync('msiexec', ['/a', archive, '/qn', `TARGETDIR=${extract}`], {
+      stdio: 'inherit',
+      timeout: 15 * 60_000
+    })
+    console.log('vendor-libreoffice: phase=locate')
     tree = findWinTree(extract)
     if (!tree) throw new Error('program/soffice.exe not found in extracted MSI')
   } else {
@@ -203,6 +211,7 @@ async function main() {
       stdio: 'inherit'
     })
     try {
+      console.log('vendor-libreoffice: phase=locate')
       tree = path.join(work, 'Contents')
       rmSync(tree, { recursive: true, force: true })
       // verbatimSymlinks keeps Frameworks' internal symlinks as symlinks.
@@ -215,6 +224,7 @@ async function main() {
     }
   }
 
+  console.log('vendor-libreoffice: phase=prune')
   for (const rel of PRUNE) rmSync(path.join(tree, rel), { recursive: true, force: true })
 
   // GUI icon themes (Resources/config/images_*.zip) — headless conversion
@@ -227,28 +237,41 @@ async function main() {
     }
   }
 
+  console.log('vendor-libreoffice: phase=stage')
   rmSync(dest, { recursive: true, force: true })
   cpSync(tree, dest, { recursive: true, verbatimSymlinks: true })
 
-  if (process.platform === 'darwin') resignMachOTree(dest)
+  if (process.platform === 'darwin') {
+    console.log('vendor-libreoffice: phase=resign')
+    resignMachOTree(dest)
+  }
 
   // Smoke test the STAGED tree: headless convert must actually produce a PDF.
-  // A hermetic profile dir keeps the run off any real user profile.
+  // A hermetic profile dir keeps the run off any real user profile. The URL
+  // must be a proper file:// URL (three slashes before a Windows drive
+  // letter, e.g. file:///D:/...) — file://D:/... parses "D:" as a host, which
+  // on Windows silently falls back to the default per-user profile path and
+  // risks soffice hitting the interactive first-run/registration dialog that
+  // a headless CI runner can never dismiss.
+  console.log('vendor-libreoffice: phase=smoke-test')
   const probe = path.join(work, 'probe.txt')
   writeFileSync(probe, 'helm vendor smoke test')
   rmSync(path.join(work, 'probe.pdf'), { force: true })
+  const profileDir = path.join(work, 'lo-profile').replace(/\\/g, '/')
+  const profileUrl = process.platform === 'win32' ? `file:///${profileDir}` : `file://${profileDir}`
   execFileSync(
     path.join(dest, sofficeRel),
     [
-      `-env:UserInstallation=file://${path.join(work, 'lo-profile').replace(/\\/g, '/')}`,
+      `-env:UserInstallation=${profileUrl}`,
       '--headless',
+      '--norestore',
       '--convert-to',
       'pdf',
       '--outdir',
       work,
       probe
     ],
-    { stdio: 'inherit' }
+    { stdio: 'inherit', timeout: 5 * 60_000 }
   )
   if (!existsSync(path.join(work, 'probe.pdf'))) throw new Error('headless convert produced no PDF')
   // Impress must survive the prune — PPTX conversion is the whole point.

@@ -49,6 +49,7 @@ jobs:
           key: libreoffice-${{ runner.os }}-${{ hashFiles('scripts/vendor-libreoffice.mjs') }}
       - name: Vendor LibreOffice
         if: steps.libreoffice.outputs.cache-hit != 'true'
+        timeout-minutes: 25
         run: node scripts/vendor-libreoffice.mjs
       - run: npm run build
       - run: npx electron-builder --win --publish never
