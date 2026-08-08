@@ -60,9 +60,10 @@ export function goLive(st: PresentationState, key: string, slide: Slide): Presen
  * or an arrow).
  *
  * The `sameKind` guard is what stops a scripture cursor moving in a background tab from
- * seizing a projector showing a song. `liveKey === null` while live is reachable
- * (SermonMode's logo toggle can leave output live having never gone live) and must still
- * be fillable, or the screen stays blank with no way to recover from the rail.
+ * seizing a projector showing a song. The `liveKey === null` allowance is defense in
+ * depth: `setOutput` now refuses 'live' with no key (BUG-021), so the state should be
+ * unreachable — but if some future path recreates it, a blank live screen must still be
+ * fillable from the rail, or it stays blank with no way to recover.
  *
  * When it does take the screen, it also records the cue (leader tracks it). It must NOT
  * do so in the refusal paths above: showLive fires from background-tab cursors, and
@@ -73,7 +74,13 @@ export function showLive(st: PresentationState, key: string, slide: Slide): Pres
   if (!(st.liveKey === null || sameKind(st.liveKey, key))) return st
   return { ...st, liveKey: key, liveSnap: slide, cuedKey: key, cuedSnap: slide }
 }
+/** Going 'live' with no live key is refused and lands on 'black' instead: there is nothing
+ * to show, so the audience sees a dark screen either way — but 'live'+null is an incoherent
+ * state (badges read it as ANOTHER FLOW LIVE, and BUG-018's tap rule can't hold in it, see
+ * BUG-021). The logo toggles (Songs/Sermon/Message/Slides) all route through here, so the
+ * state can no longer be produced. */
 export function setOutput(st: PresentationState, mode: OutputMode): PresentationState {
+  if (mode === 'live' && st.liveKey === null) return { ...st, output: 'black' }
   return { ...st, output: mode }
 }
 export function outputPayload(
