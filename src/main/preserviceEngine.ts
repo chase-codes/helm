@@ -117,7 +117,10 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     // Deleting the LAST card while it holds the screen takes the output down (BUG-020):
     // pushShow has nothing to replace it with, and leaving it up would strand the audience
     // on a card that no longer exists with an empty rail — no tap could ever clear it.
-    // Guarded by isLive so emptying the rail never touches a screen another flow owns.
+    // Guarded by isLive so emptying the rail never touches a screen another flow owns —
+    // and equally skips the call when pre-service's own screen was already taken down
+    // (output black with a stale pre: key), where blacking again would claim an action
+    // the operator didn't take.
     removeCard(id) {
       const selectedId = cards[idx]?.id;
       const deletedWasLive = sink.isLive(preKey(id));

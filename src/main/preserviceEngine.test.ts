@@ -301,6 +301,25 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe('song:abc:0');
     });
 
+    it('deleting a card after the live one leaves the audience and selection untouched (BUG-019)', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showCard(1);
+      engine.showNow();
+      const live = repo.list()[1];
+      engine.removeCard(repo.list()[3].id); // a card AFTER the live one
+      expect(presentation().liveKey).toBe('pre:' + live.id);
+      expect(engine.getState().idx).toBe(1);
+    });
+
+    it('emptying the rail after a take-down leaves the output alone (BUG-020)', () => {
+      const { engine, presentation, takeDown, repo } = harness();
+      engine.showNow();
+      takeDown(); // output black, liveKey still the stale pre: key
+      for (const c of repo.list()) engine.removeCard(c.id);
+      expect(engine.getState().cards.length).toBe(0);
+      expect(presentation().output).toBe('black'); // never re-blacked, never resurrected
+    });
+
     it('deleting the last card takes the screen down (BUG-020)', () => {
       const { engine, presentation, repo } = harness();
       engine.showNow(); // card 0 goes live
