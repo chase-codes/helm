@@ -1,6 +1,7 @@
 import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
+import { ImportIcon, SearchIcon } from '../shared/icons';
 
 export interface SongRow {
   id: string;
@@ -157,7 +158,9 @@ export function SongSearchRail({
           <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>OPERATOR · FIND A SONG</span>
         </div>
         <div style={opSearchBoxStyle}>
-          <span style={{ fontSize: '15px', opacity: 0.5 }}>⌕</span>
+          <span style={{ display: 'inline-flex', opacity: 0.5 }}>
+            <SearchIcon size={15} />
+          </span>
           <input
             ref={inputRef}
             style={{ flex: 1, minWidth: 0, fontSize: '13.5px' }}
@@ -184,8 +187,8 @@ export function SongSearchRail({
             {q.trim() ? `+ Add “${q.trim()}” as a new song` : '+ Add a song'}
           </span>
         </button>
-        <button style={importRowStyle} onClick={onImportSongs}>
-          ↓ Import a song library
+        <button style={{ ...importRowStyle, display: 'inline-flex', alignItems: 'center', gap: '7px' }} onClick={onImportSongs}>
+          <ImportIcon size={14} /> Import a song library
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>

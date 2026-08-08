@@ -11,6 +11,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { MessageImport } from './MessageImport'
 import { DisplaysSettings } from './DisplaysSettings'
 import { ShortcutsSettings } from './ShortcutsSettings'
+import { DisplayIcon, ImportIcon } from '../shared/icons'
 import type {
   BibleInstallProgress,
   BibleManifestEntry,
@@ -441,11 +442,12 @@ export function SettingsModal({
               {SECTIONS.map((s) => (
                 <button
                   key={s.id}
-                  style={navItemStyle(section === s.id, s.enabled)}
                   disabled={!s.enabled}
+                  style={{ ...navItemStyle(section === s.id, s.enabled), display: 'flex', alignItems: 'center', gap: '8px' }}
                   title={s.enabled ? undefined : 'Coming with later slices'}
                   onClick={() => s.enabled && setSection(s.id)}
                 >
+                  {s.id === 'displays' && <DisplayIcon size={15} />}
                   {s.label}
                 </button>
               ))}
@@ -493,8 +495,11 @@ export function SettingsModal({
                     Import for now.
                   </div>
                   <div>
-                    <button style={ghostBtnStyle(false)} onClick={() => setMessageImportOpen(true)}>
-                      Import file…
+                    <button
+                      style={{ ...ghostBtnStyle(false), display: 'inline-flex', alignItems: 'center', gap: '7px' }}
+                      onClick={() => setMessageImportOpen(true)}
+                    >
+                      <ImportIcon size={14} /> Import file…
                     </button>
                   </div>
                 </>

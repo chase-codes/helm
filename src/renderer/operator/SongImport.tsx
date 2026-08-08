@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
+import { ImportIcon } from '../shared/icons';
 import type { ImportReviewRow, ImportSourceInfo, SongImportProgress, SongImportResult } from '../../shared/types';
 
 export interface SongImportProps {
@@ -269,8 +270,11 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
             {step.name === 'done' ? 'Close' : 'Cancel'}
           </button>
           {step.name === 'review' && newCount > 0 && (
-            <button style={primaryStyle} onClick={() => runImport(step.token, newCount)}>
-              Import {plural(newCount, 'song', 'songs')}
+            <button
+              style={{ ...primaryStyle, display: 'inline-flex', alignItems: 'center', gap: '7px' }}
+              onClick={() => runImport(step.token, newCount)}
+            >
+              <ImportIcon size={14} /> Import {plural(newCount, 'song', 'songs')}
             </button>
           )}
         </div>

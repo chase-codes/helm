@@ -138,7 +138,7 @@ describe('SongsMode', () => {
     await screen.findByText(/John Newton ·/);
     expect(keyHandlerRef.current?.isModalOpen()).toBe(false);
 
-    fireEvent.click(screen.getByText('↓ Import a song library'));
+    fireEvent.click(screen.getByText('Import a song library'));
     expect(await screen.findByText('Import songs')).toBeTruthy();
 
     expect(keyHandlerRef.current?.isModalOpen()).toBe(true);
@@ -182,7 +182,7 @@ describe('SongsMode', () => {
     renderMode(keyHandlerRef);
     await screen.findByText(/John Newton ·/);
 
-    fireEvent.click(screen.getByText('↓ Import a song library'));
+    fireEvent.click(screen.getByText('Import a song library'));
     fireEvent.click(await screen.findByText('EasyWorship'));
     fireEvent.click(await screen.findByText(/Import 1 song/));
     await screen.findByText(/Importing…/);
@@ -235,7 +235,7 @@ describe('SongsMode', () => {
     fireEvent.change(input, { target: { value: 'amazing' } });
     await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByText('↓ Import a song library'));
+    fireEvent.click(screen.getByText('Import a song library'));
     fireEvent.click(await screen.findByText('EasyWorship'));
     fireEvent.click(await screen.findByText(/Import 1 song/));
     await screen.findByText(/Imported 1 song/);
