@@ -279,10 +279,88 @@ expected case rather than the edge case.
 shape (`SongsMode.tsx:176`) — pre-existing, but this feature makes a very large `library`
 reachable for the first time, so the two are worth solving together.
 
+### BUG-019 — Deleting a card moves the audience onto a card nobody selected · **SEV 3**
+**Status:** Open · **Area:** Pre-service (`preserviceEngine.ts` `removeCard`, `clampIdx`)
+
+**Repro:**
+1. Pre-service is projecting "Announcements" (index 2) via **Show this card**.
+2. Delete a card that sits *earlier* in the list — e.g. "Welcome" (index 0). The ✎ edit chip
+   calls `stopPropagation`, so opening another card's editor does not move the selection;
+   deleting from there is the ordinary way to hit this.
+
+**Expected:** the screen keeps showing "Announcements" — it still exists and was not touched.
+**Actual:** the audience jumps to "Prayer Requests".
+
+**Root cause (measured):** `removeCard` never remaps `idx` when the deleted card precedes it;
+`clampIdx()` only handles overflow. `idx` stays 2 while the list shifts under it, then
+`pushShow()` projects whatever now sits at 2. Measured against the real engine + real
+presentation reducer: `idx=2 liveTitle='Prayer Requests' intendedStillExists=true`.
+
+**Fix candidates:** remember the selected card's *id* across the mutation and restore `idx`
+from it; only fall back to positional clamping when that id is the one deleted.
+
+**Notes:** Pre-existing — the pre-BUG-018 `ownsScreen()` + `pushLive()` path did the same and
+could additionally start projecting from a dark screen. Surfaced 2026-08-05 in the BUG-018
+code review. Shares a fix with BUG-020.
+
+### BUG-020 — Deleting the last card leaves it projected forever · **SEV 2**
+**Status:** Open · **Area:** Pre-service (`preserviceEngine.ts` `removeCard`, `pushShow`)
+
+**Repro:** with a pre-service card live, delete cards until the last one is deleted.
+
+**Expected:** a deleted card leaves the audience screen.
+**Actual:** it stays projected. Measured: `output=live liveKey=pre:<deleted-id> cards=0` —
+a dangling key pointing at a card that no longer exists, and an empty rail, so **no tap can
+replace it**. Recovery is ✕ Take down or another mode; nothing in pre-service can clear it.
+
+**Root cause (measured):** `pushShow()` early-returns on `cards[idx] === undefined`, so with
+no cards left nothing is sent and the previous slide simply stays on screen.
+
+**Fix candidates:** needs a decision before code — when the last card goes, should the screen
+go black, fall back to the logo, or refuse the delete? The engine's sink has no `setOutput`
+today, so whichever is chosen adds a member to `PresentationSink`. **Worth asking the operator.**
+
+**Notes:** Pre-existing; surfaced 2026-08-05 in the BUG-018 code review. SEV 2 rather than 3
+because the projector is stuck on stale content with no in-mode recovery.
+
+### BUG-021 — A pre-service tap can still start projecting when output is live with no live key · **SEV 3**
+**Status:** Open · **Area:** Pre-service tap path + `shared/presentation/core.ts` `showLive`
+
+**Repro:**
+1. From a cold start (nothing has been live), in Songs or Sermon press **Logo**, then press it
+   again. `toggleLogo` (`SongsMode.tsx:224`, `SermonMode.tsx:313`) is a plain always-enabled
+   button that does `setOutput(output === 'logo' ? 'live' : 'logo')`, so output is now `'live'`
+   with `liveKey === null` — a blank slide.
+2. Go to Pre-service and tap a card.
+
+**Expected (BUG-018's rule):** a tap only selects; starting to project needs Start loop or
+Show this card. **Actual:** the card goes straight to the congregation screen.
+
+**Root cause (verified):** `showLive` deliberately allows `st.liveKey === null` while live
+(`core.ts:45`) — and that allowance is load-bearing elsewhere: its own comment records that
+SermonMode's logo toggle can leave output live having never gone live, and that the state
+"must still be fillable, or the screen stays blank with no way to recover from the rail." So
+BUG-018's guarantee holds for every state except this one, where scripture's recovery path and
+pre-service's tap rule want opposite things.
+
+**Making it worse:** in exactly this state the pre-service header reads **ANOTHER FLOW LIVE**
+(`PreServiceMode.tsx:170`, since `output === 'live'` and the key isn't `pre:`) — so the view
+tells the operator someone else owns the screen at the moment a tap will seize it.
+
+**Fix candidates:** none obviously right — narrowing `showLive`'s null allowance would break
+the documented scripture recovery. Options: give pre-service a stricter tap guard of its own
+(`liveKey !== null && sameKind`), or fix the upstream oddity that output can be `'live'` with
+no key at all. Needs a design pass, not a patch.
+
+**Notes:** Found 2026-08-05 in the BUG-018 code review. Narrow but real: it is BUG-018's exact
+complaint surviving in one reachable state.
+
 ---
 
+## Fixed
+
 ### BUG-018 — A single click on a pre-service card projects it with no chance to edit first · **SEV 3**
-**Status:** Open · **Area:** Pre-service (`PreServiceMode.tsx:271`, `preserviceEngine.ts` `showCard`)
+**Status:** Fixed (`c687062`) · **Area:** Pre-service (`PreServiceMode.tsx:271`, `preserviceEngine.ts` `showCard`)
 
 **Repro:**
 1. Be in Pre-service with **nothing live yet** (`liveKey === null`), or with pre-service
@@ -298,7 +376,10 @@ for exactly that (`showNow()`, added by BUG-008).
 the operator has had any opportunity to review or correct it. There is no undo — the only
 recovery is to take it down or click something else, both of which the room sees.
 
-**Root cause (verified by reading, not measured):** the row's only handler is
+**Root cause (measured — an existing test asserted the defect as intended behaviour):** the
+`preserviceEngine` suite pinned `showCard(2)` with nothing live producing `output: 'live'`
+against the real presentation reducer, which is precisely the operator's complaint. The row's
+only handler is
 `onClick={() => window.helm.preservice.showCard(i)}` (`PreServiceMode.tsx:271`). After the
 BUG-008 fix, `showCard` takes the screen whenever `ownsScreen()` is true — which includes the
 `liveKey === null` case. Editing is reachable only via smaller nested controls on the row that
@@ -341,29 +422,51 @@ navigation goes through `show` — `SermonMode.tsx:245` even documents it: *"mai
 no-ops unless output is live."* **Pre-service is the only mode that routes a tap through
 `goLive`** (`preserviceEngine.ts:44`), which is the whole bug.
 
-**Shape of the fix:** `pushLive()` is shared by five callers with two different intents —
-`engage()` (Start loop) and `showNow()` (Show this card) are deliberate takeovers and must keep
-`goLive`; the loop tick, `showCard()` and `step()` are navigation and want `show`. Split it
-(e.g. `pushLive()` / `pushShow()`) and let each caller pick. `PreserviceSink` gains a `show`
-member alongside `goLive`/`cue`/`isLive`; `stateStore.show` already exists (`stateStore.ts:16`)
-and `presGoLive`'s sibling channel is already wired.
+**Fix:** `pushLive()` was shared by five callers with two different intents. It is now split:
+`pushLive()` (goLive, deliberate — `engage()` / `showNow()`) and `pushShow()` (`showLive`,
+navigation — the loop tick, `showCard()`, `step()`, `removeCard()`). `PresentationSink` gained a
+`show` member wired to the already-existing `stateStore.show` (`stateStore.ts:16`).
 
-This also **subsumes `ownsScreen()`** for the navigation path: `showLive`'s `output !== 'live'`
-guard is a stricter and simpler expression of BUG-008's "a blacked-out screen is not free real
-estate" than the current `liveKey` test, because it refuses a blacked-out screen outright rather
-than reasoning about who owns it. Check whether `ownsScreen()` survives at all once
-`showCard`/`step` route through `show`.
+`ownsScreen()` did **not** survive — every caller that used it now routes through `pushShow`, so
+it and `PresentationSink.liveKey` were deleted. `showLive`'s two guards express BUG-008's rule
+more strictly than the `liveKey` test did: `output !== 'live'` refuses a dark screen outright
+(including one pre-service itself took down — a behaviour change, see below), and `sameKind`
+refuses another flow's screen.
 
-The view's hint text (`PreServiceMode.tsx:22,195`) promises "tap a card to show it now"
-unconditionally and must be reworded to match.
+`removeCard` was included deliberately: it carried the same defect, since deleting a card while
+nothing was live would start projecting the next one.
+
+**Known limits of the guarantee, all logged rather than papered over:** the "a tap never starts
+projecting" rule holds in every state except `output === 'live'` with `liveKey === null`, which
+`showLive` allows on purpose for scripture's benefit (**BUG-021**). And `removeCard` still has
+two pre-existing defects this change moved but did not cure — a delete before the live card
+shifts the audience onto an untouched one (**BUG-019**), and deleting the last card leaves it
+projected with nothing left to replace it (**BUG-020**).
+
+**Behaviour change worth knowing:** a screen pre-service took down is no longer treated as
+unowned. Under BUG-008 a tap after ✕ Take down brought the card back up; now it only selects,
+and **Show this card** / **Start loop** bring it back. This follows from the decided rule —
+that tap *starts* projecting — and both hint texts (`PreServiceMode.tsx:22,195`) were reworded
+to promise exactly what the engine now does.
+
+**Proof:** 27 engine cases + 8 renderer cases (`npm test`, **579 passing**), typecheck clean.
+The four cases that reproduce the bug failed first with `expected 'live' to be 'black'` against
+the real presentation reducer, then passed. Verified in the running app end-to-end
+(`scratch/verify-bug018.mjs`, **14/14**) across renderer → preload → main → engine →
+presentation: a tap with nothing live leaves `output=black liveKey=null` while the card reads
+● ARMED; Show this card and Start loop both still take the screen; a tap switches cards freely
+once pre-service is projecting; a tap after take-down does not resurrect the screen; and a tap
+still never interrupts a live song (BUG-008 regression).
+
+Three existing tests asserted the old rule and were rewritten rather than kept: the two that
+pinned "showCard/step puts the card up immediately when nothing is live", and the one that
+pinned tapping back a screen pre-service took down. A fourth asserted the rotation calls
+`goLive` specifically — it now asserts the resulting presentation state instead, which is what
+the audience actually sees and is indifferent to which verb delivers it.
 
 **Notes:** Reported 2026-08-04 from live use. Worth checking whether the same "big target is
 the live action" shape exists elsewhere — `SongsMode`'s section rail and the sermon list are
 the obvious places to look.
-
----
-
-## Fixed
 
 ### BUG-008 — Pre-service card tap silently did nothing while a song was live
 **Status:** Fixed (`c59565d`, `56c67e7`, `31870e6`) · **Area:** Pre-service (`preserviceEngine.ts`, `PreServiceMode.tsx`)

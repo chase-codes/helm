@@ -5,7 +5,7 @@ import { preSlideFor, nextEnabledIdx } from '../shared/preservice/cards';
 export interface PresentationSink {
   cue(key: string, slide: Slide): void;
   goLive(key: string, slide: Slide): void;
-  liveKey(): string | null;
+  show(key: string, slide: Slide): void;
   isLive(key: string): boolean;
 }
 export type { PreState };
@@ -34,6 +34,8 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
   const slideFor = (i: number): Slide => preSlideFor(cards[i] ?? cards[0]);
   const clampIdx = (): void => { if (idx >= cards.length) idx = Math.max(0, cards.length - 1); };
 
+  // Deliberate takeover: starts projecting from any state. Only `engage()` (Start loop) and
+  // `showNow()` (Show this card) may use it — see `pushShow` for why.
   const pushLive = (): void => {
     const c = cards[idx]; if (!c) return;
     const key = preKey(c.id);
@@ -44,21 +46,20 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     else sink.goLive(key, slideFor(idx));
   };
 
-  // True when putting a card up would interrupt nobody: nothing has been on screen at all,
-  // or pre-service is what put the current content there. Selection (showCard/step) may
-  // take the screen freely in that case — matching the view's "tap a card to show it now"
-  // promise — but must never interrupt another flow.
+  // Navigation's route to the screen — taps, steps, the loop's own rotation. Switching what
+  // is ALREADY on screen is free; STARTING to project is not, because that is the change the
+  // room notices and it must come from a control the operator meant to press. `showLive`
+  // encodes exactly that: it returns the state untouched unless output is already live, then
+  // updates freely within the same kind of content. See BUG-018.
   //
-  // Deliberately keyed on `liveKey` rather than output mode: a blacked-out screen is NOT
-  // free real estate. Mid-sermon the operator blanks the screen and browses pre-service to
-  // check a card; a row click is the only way to select one, and under an output-mode test
-  // that click would project it to the congregation. `liveKey` still names the flow that
-  // parked the screen, so a blackout keeps taps in arm-only mode until the song or reading
-  // is genuinely done with it. Taking over is deliberate only: `engage()` (Start loop) or
-  // `showNow()` (Show this card). See BUG-008.
-  const ownsScreen = (): boolean => {
-    const k = sink.liveKey();
-    return k === null || k.startsWith('pre:');
+  // This subsumes the `ownsScreen()` test it replaced (BUG-008): that gate asked who last
+  // owned `liveKey` so a blackout mid-song would keep taps in arm-only mode, but it still let
+  // a tap start projecting from a cold screen — the ordinary pre-service state, and the whole
+  // of BUG-018. `showLive`'s `output !== 'live'` guard refuses a dark screen outright, and its
+  // `sameKind` guard refuses another flow's screen, so both cases fall out of one rule.
+  const pushShow = (): void => {
+    const c = cards[idx]; if (!c) return;
+    sink.show(preKey(c.id), slideFor(idx));
   };
 
   const startTimer = (): void => { if (!timer) timer = setInterval(() => tick(), 1000); };
@@ -76,7 +77,7 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     if (!c || !sink.isLive(preKey(c.id))) { engaged = false; loopT = 0; stopTimer(); emit(); return; }
     if (!loopOn) return;
     loopT += 1;
-    if (loopT >= dwellS) { idx = nextEnabledIdx(cards, idx, 1); loopT = 0; pushLive(); emit(); }
+    if (loopT >= dwellS) { idx = nextEnabledIdx(cards, idx, 1); loopT = 0; pushShow(); emit(); }
   }
 
   return {
@@ -84,8 +85,8 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     onChange(cb) { subs.add(cb); return () => subs.delete(cb); },
     engage() { engaged = true; loopT = 0; clampIdx(); pushLive(); startTimer(); emit(); },
     disengage() { engaged = false; loopT = 0; stopTimer(); emit(); },
-    showCard(i) { if (i >= 0 && i < cards.length) { idx = i; loopT = 0; if (ownsScreen()) pushLive(); emit(); } },
-    step(dir) { idx = nextEnabledIdx(cards, idx, dir); loopT = 0; if (ownsScreen()) pushLive(); emit(); },
+    showCard(i) { if (i >= 0 && i < cards.length) { idx = i; loopT = 0; pushShow(); emit(); } },
+    step(dir) { idx = nextEnabledIdx(cards, idx, dir); loopT = 0; pushShow(); emit(); },
     // Deliberate takeover for a single card. Stops the loop rather than merely leaving it
     // alone: the button is reachable while `engaged` is still true (take down the screen and
     // the engine stays engaged until the next tick yields), and without this the card the
@@ -103,10 +104,17 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
       if (i >= 0 && sink.isLive(preKey(cards[i].id))) { idx = i; pushLive(); }
       emit();
     },
-    // Gated on ownsScreen(), not `engaged`: a card put up by showNow() must not stay
-    // projected after it's deleted, and a delete during the engaged-but-yielded window
-    // must not yank the audience off whatever actually holds the screen.
-    removeCard(id) { cards = repo.remove(id); clampIdx(); if (ownsScreen()) pushLive(); emit(); },
+    // Routed through pushShow, not `engaged`: a delete during the engaged-but-yielded window
+    // must not yank the audience off whatever actually holds the screen, and deleting a card
+    // must never be the thing that starts projecting.
+    //
+    // ⚠️ Two measured defects remain here, both pre-existing and both logged rather than
+    // fixed in the BUG-018 change: `clampIdx` only handles overflow, so deleting a card
+    // BEFORE the live one shifts the audience onto an untouched card (BUG-019); and deleting
+    // the LAST card leaves it projected with a dangling liveKey, since pushShow early-returns
+    // when there is no card to show (BUG-020). Do not read this line as guaranteeing that a
+    // deleted card leaves the screen — it does not.
+    removeCard(id) { cards = repo.remove(id); clampIdx(); pushShow(); emit(); },
     tick, dispose() { stopTimer(); subs.clear(); }
   };
 }
