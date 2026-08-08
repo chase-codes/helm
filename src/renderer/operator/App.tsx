@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
-import { themeFor, type ThemeMode } from '../../shared/theme';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
 import { dispatchModeKey } from './keyDispatch';
@@ -8,6 +7,7 @@ import { SermonMode } from './SermonMode';
 import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
+import { useAppearance } from './useAppearance';
 import { sanitizeOverrides, type AppActionId, type HotkeyOverrides } from '../../shared/hotkeys/actions';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
@@ -51,9 +51,7 @@ export type ModeKeyHandlerRef = MutableRefObject<ModeKeyHandler | null>;
 
 function App(): JSX.Element {
   const [mode, setMode] = useState<Mode>('songs');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
-  const theme = themeFor('classic', themeMode);
-  const toggleTheme = (): void => setThemeMode((m) => (m === 'dark' ? 'light' : 'dark'));
+  const { mode: themeMode, theme, toggleMode: toggleTheme } = useAppearance();
 
   // Settings is app-level (not owned by any mode) — it can be opened from the header
   // gear regardless of which mode is active, so its state lives here rather than in
