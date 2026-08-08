@@ -73,10 +73,10 @@ test('two versions stack vertically, each full-width and centered', () => {
   const block = (screen.getByText('KJV') as HTMLElement).parentElement as HTMLElement;
   const stack = block.parentElement as HTMLElement;
   expect(stack.style.flexDirection).toBe('column');
-  expect(block.style.maxWidth).toBe('86%');
+  expect(block.style.maxWidth).toBe('94%');
   expect(block.style.textAlign).toBe('center');
   const other = (screen.getByText('NKJV') as HTMLElement).parentElement as HTMLElement;
-  expect(other.style.maxWidth).toBe('86%');
+  expect(other.style.maxWidth).toBe('94%');
 });
 
 test('both parallel versions render at one size', () => {

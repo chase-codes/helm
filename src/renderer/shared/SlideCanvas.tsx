@@ -104,7 +104,11 @@ export function SlideCanvas({
     alignItems: 'center',
     gap: '4cqmin',
     width: '100%',
-    padding: '6cqmin',
+    // Tighter side padding than the 6cqmin this launched with: stacked versions live or
+    // die by line length — every cqmin of margin costs wrapped lines, which costs font
+    // size. 3.5cqmin keeps a visible safe area (projectors overscan) without starving
+    // the text run; columnStyle's 94% cap provides the rest of the breathing room.
+    padding: '5cqmin 3.5cqmin',
     boxSizing: 'border-box'
   };
   const refStyle: CSSProperties = {
@@ -132,7 +136,7 @@ export function SlideCanvas({
   };
   const columnStyle: CSSProperties = {
     width: '100%',
-    maxWidth: '86%',
+    maxWidth: '94%',
     display: 'flex',
     flexDirection: 'column',
     gap: '1.8cqmin',
