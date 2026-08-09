@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { dialog } from 'electron';
-import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport } from './mediaImport';
+import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport, assertConverted } from './mediaImport';
 import type { MediaRepo, MediaItem } from './mediaRepo';
 import type { MediaImportProgress } from '../shared/types';
 
@@ -93,6 +93,28 @@ describe('findSoffice', () => {
     const cands = bundledSofficeCandidates('/app/resources');
     expect(cands.length).toBeGreaterThan(0);
     expect(cands.every((c) => c.startsWith(join('/app/resources')))).toBe(true);
+  });
+});
+
+describe('assertConverted', () => {
+  it('does not throw when the PDF exists and is non-empty', () => {
+    expect(() => assertConverted('/out/deck.pdf', 'soffice --convert-to pdf', () => 1234)).not.toThrow();
+  });
+
+  it('throws a descriptive error naming the soffice invocation when the PDF is missing', () => {
+    expect(() => assertConverted('/out/deck.pdf', 'soffice --convert-to pdf /d/Deck.pptx', () => null)).toThrow(
+      /soffice --convert-to pdf \/d\/Deck\.pptx/
+    );
+  });
+
+  it('throws when the PDF exists but is zero bytes', () => {
+    expect(() => assertConverted('/out/deck.pdf', 'soffice --convert-to pdf /d/Deck.pptx', () => 0)).toThrow(
+      /empty PDF/
+    );
+  });
+
+  it('mentions the missing path in the error message', () => {
+    expect(() => assertConverted('/out/deck.pdf', 'invocation', () => null)).toThrow(/\/out\/deck\.pdf/);
   });
 });
 
