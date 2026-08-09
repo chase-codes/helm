@@ -8,12 +8,22 @@ on:
       - '.github/workflows/vendor-mac.yml'
       - '.github/actions/**'
 
+permissions:
+  contents: read
+
 jobs:
   vendor:
     # The darwin vendor path (hdiutil attach/detach, prune, ad-hoc codesign,
     # Impress smoke test) otherwise has zero CI coverage before a release tag —
     # ci.yml and release.yml's installer/release jobs only exercise Windows.
     # This proves it on every PR that touches the vendor script or its fixture.
+    #
+    # Deliberately does NOT use the cache-gated vendor-deps composite action (or
+    # a libreoffice cache step) here: the whole point of this job is to actually
+    # exercise hdiutil/prune/resign/smoke-test on every run. A cache hit would
+    # let a re-run, or a PR that only touches an unrelated action file matched by
+    # the paths filter, go green without vendoring anything at all — defeating
+    # the job's purpose. It runs the vendor script directly instead.
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +32,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Vendor bundled deps (bibles + LibreOffice)
-        uses: ./.github/actions/vendor-deps
+      - name: Vendor LibreOffice
         timeout-minutes: 25
+        run: node scripts/vendor-libreoffice.mjs
