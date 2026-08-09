@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Helm — run the service from one seat</title>
+    <meta
+      name="description"
+      content="A Mac and Windows app for running a church service from one seat: songs, scripture, sermon quotes, and a pre-service loop — searched, cued, and put on the projector."
+    />
+    <link rel="icon" href="assets/helm-mark.svg" type="image/svg+xml" />
+    <link rel="canonical" href="https://chase-codes.github.io/helm/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Helm — run the service from one seat" />
+    <meta
+      property="og:description"
+      content="Songs, scripture, sermon quotes, and a pre-service loop — searched, cued, and put on the projector. Free, offline, Mac and Windows."
+    />
+    <meta property="og:url" content="https://chase-codes.github.io/helm/" />
+    <meta property="og:image" content="https://chase-codes.github.io/helm/assets/banner.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="assets/fonts/hanken-grotesk-latin-800-normal.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="assets/fonts/hanken-grotesk-latin-400-normal.woff2"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <a class="skip" href="#download">Skip to download</a>
+
+    <header class="masthead">
+      <div class="masthead-inner">
+        <a class="wordmark" href="#top" aria-label="Helm, home">
+          <svg
+            class="wordmark-mark"
+            viewBox="0 0 96 96"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="6.5"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="48" cy="48" r="27" />
+            <circle cx="48" cy="48" r="9.5" />
+            <path
+              d="M48 36V4M48 60v32M36 48H4M60 48h32M39.5 39.5 20.1 20.1M56.5 56.5 75.9 75.9M56.5 39.5 75.9 20.1M39.5 56.5 20.1 75.9"
+            />
+          </svg>
+          <span>Helm</span>
+        </a>
+        <nav class="masthead-nav">
+          <a href="https://github.com/chase-codes/helm">Source</a>
+          <a class="masthead-cta" href="#download">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- ================= HERO ================= -->
+      <section class="hero">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">Church presentation · Mac &amp; Windows</p>
+            <h1>Run the service<br />from one seat.</h1>
+            <p class="lede">
+              Songs, scripture, sermon quotes, and the loop that plays while people arrive —
+              searched by half-remembered lyric or typed reference, cued, and put on the projector.
+              It all runs from your machine.
+            </p>
+
+            <div class="download" data-download-block>
+              <a
+                class="btn btn-primary"
+                data-download-primary
+                href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
+              >
+                Download for macOS
+              </a>
+              <p class="download-meta" data-download-meta>v0.3.0 · Apple silicon · 291 MB</p>
+              <p class="download-alt">
+                <a
+                  data-download-secondary
+                  href="https://github.com/chase-codes/helm/releases/latest/download/Helm-Setup.exe"
+                >
+                  Windows installer
+                </a>
+                <span class="download-alt-meta" data-download-secondary-meta>320 MB</span>
+              </p>
+            </div>
+
+            <p class="note">
+              Helm isn't code-signed yet, so your computer will ask you to confirm the first time
+              you open it. <a href="#download">What you'll see, and what to click.</a>
+            </p>
+          </div>
+
+          <!-- The signature: one live state, photographed twice. The projector shot and the
+               console shot below it were captured in the same instant of the same running
+               app — the lyric on the wall is the lyric in the operator's preview. -->
+          <figure class="stage-output">
+            <figcaption class="tally" data-tally aria-hidden="true">
+              <span class="tally-lamp"></span>
+              <span class="tally-word" data-tally-word>Cued</span>
+            </figcaption>
+            <img
+              src="assets/shots/output-slide.webp"
+              width="1600"
+              height="900"
+              alt="What the projector shows: the four lines of Amazing Grace verse one, in large white type on a dark screen."
+            />
+            <p class="stage-output-label">On the wall</p>
+          </figure>
+        </div>
+
+        <figure class="stage-console">
+          <figcaption class="stage-caption">
+            <span class="stage-caption-label">One state, two screens</span>
+            The preview in front of the operator and the picture on the wall are the same render.
+            What you see is what the room sees.
+          </figcaption>
+          <img
+            src="assets/shots/console-songs.webp"
+            width="2200"
+            height="1375"
+            alt="Helm's operator console with that same song live. The header reads LIVE — AMAZING GRACE, VERSE 1; the song library sits on the left, the current verse fills the preview in the middle, and every verse of the song is listed on the right with verse one marked LIVE."
+          />
+        </figure>
+      </section>
+
+      <!-- ================= ORDER OF SERVICE ================= -->
+      <section class="order">
+        <div class="section-head">
+          <p class="eyebrow">The order of service</p>
+          <h2>Four tracks, in the order Sunday uses them.</h2>
+          <p class="lede">
+            Helm is built around the shape of a service rather than a pile of slide decks. Each
+            track is a tab, and you move along as the morning moves.
+          </p>
+        </div>
+
+        <div class="run-sheet">
+          <article class="run-row">
+            <div class="run-text">
+              <p class="run-when">Before the service</p>
+              <h3>
+                <svg
+                  class="run-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 10a6 6 0 0 1 6-6h3.5" />
+                  <path d="M11.8 1.8 14 4l-2.2 2.2" />
+                  <path d="M16 10a6 6 0 0 1-6 6H6.5" />
+                  <path d="M8.7 13.8 6.5 16l2.2 2.2" />
+                </svg>
+                The pre-service loop
+              </h3>
+              <p>
+                A welcome card, a verse, the announcements, prayer requests — rotating on a dwell
+                timer while people find their seats. Tap any card to switch to it straight away.
+                Verse cards pull their text from the installed Bible by reference, so nobody retypes
+                Psalm 122 into a text box.
+              </p>
+            </div>
+            <div class="run-visual">
+              <img
+                src="assets/shots/console-pre.webp"
+                width="2200"
+                height="1375"
+                loading="lazy"
+                alt="The Pre-service tab. Five cards — Welcome, Psalm 122:1, Announcements, Prayer requests, and Logo — are listed down the left with in-loop badges, and the Welcome card is previewed on the right above a twelve-seconds-per-card timer."
+              />
+            </div>
+          </article>
+
+          <article class="run-row">
+            <div class="run-text">
+              <p class="run-when">When the singing starts</p>
+              <h3>
+                <svg
+                  class="run-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M7.5 15.5V5l7-1.5V13" />
+                  <circle cx="5.5" cy="15.5" r="2" />
+                  <circle cx="12.5" cy="13" r="2" />
+                </svg>
+                Songs
+              </h3>
+              <p>
+                Search the library by title or by a line you can only half remember. Enter cues the
+                verse, Enter again puts it on the screen, and the arrow keys walk the stanzas — so
+                the whole song can be run without looking down at the keyboard.
+              </p>
+            </div>
+            <div class="run-visual">
+              <blockquote class="pull">
+                <p>I once was lost, but now am found,<br />Was blind, but now I see.</p>
+                <cite>Searched on “was blind” · Amazing Grace, verse 1</cite>
+              </blockquote>
+            </div>
+          </article>
+
+          <article class="run-row">
+            <div class="run-text">
+              <p class="run-when">When the text is read</p>
+              <h3>
+                <svg
+                  class="run-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M10 5.2C8.5 4 6.5 3.4 4 3.4V15c2.5 0 4.5.6 6 1.8 1.5-1.2 3.5-1.8 6-1.8V3.4c-2.5 0-4.5.6-6 1.8v11.6"
+                  />
+                </svg>
+                Scripture
+              </h3>
+              <p>
+                Type <span class="ref">john 3:16</span> and press Enter. The verse is on the wall
+                before the preacher finishes saying it, with the rest of the chapter in a rail
+                alongside for when he keeps reading. KJV is installed out of the box; add more
+                translations to compare them side by side.
+              </p>
+            </div>
+            <div class="run-visual">
+              <img
+                src="assets/shots/console-sermon.webp"
+                width="2200"
+                height="1375"
+                loading="lazy"
+                alt="The Sermon tab with John 3:16 live. The typed reference sits top left, the verse fills the preview in a serif face, and the rest of John chapter three runs down a rail on the right."
+              />
+            </div>
+          </article>
+
+          <article class="run-row">
+            <div class="run-text">
+              <p class="run-when">Through the preaching</p>
+              <h3>
+                <svg
+                  class="run-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="2.5" y="5" width="15" height="10" rx="1.5" />
+                  <circle cx="7" cy="10" r="1.7" />
+                  <circle cx="13" cy="10" r="1.7" />
+                  <path d="M8.7 10h2.6" />
+                </svg>
+                The Message
+              </h3>
+              <p>
+                Sermon tapes with full-text search that works offline — find a tape, find a quote by
+                the phrase you remember, or search inside the tape you're already in. Put any
+                paragraph on the screen as a quote slide. Transcripts the church already has can be
+                imported from <span class="ref">.txt</span> or <span class="ref">.pdf</span>.
+              </p>
+            </div>
+            <div class="run-visual">
+              <blockquote class="pull">
+                <p>Searched offline, quoted by paragraph, on the screen in two keystrokes.</p>
+                <cite>Message track · tape, quote, and within-tape search</cite>
+              </blockquote>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= FACTS ================= -->
+      <section class="facts">
+        <ul class="facts-list">
+          <li>
+            <p class="fact-label">No internet on Sunday</p>
+            <p>
+              Search, cueing, and projection all run locally. A dropped connection in the building
+              doesn't touch the service.
+            </p>
+          </li>
+          <li>
+            <p class="fact-label">Your library, your machine</p>
+            <p>
+              Songs, Bibles, and sermons live in a database file on your own disk. No account, no
+              subscription, nothing to sign into.
+            </p>
+          </li>
+          <li>
+            <p class="fact-label">Plug in whenever</p>
+            <p>
+              Connect the projector before or after launching — the output window finds the second
+              display and attaches itself.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ================= DOWNLOAD ================= -->
+      <section class="downloads" id="download">
+        <div class="section-head">
+          <p class="eyebrow">Download</p>
+          <h2>Get Helm on the machine at the back.</h2>
+          <p class="lede">Free to download. <span data-release-line>Version 0.3.0.</span></p>
+        </div>
+
+        <div class="platforms">
+          <article class="platform" data-platform="mac">
+            <h3>macOS</h3>
+            <p class="platform-meta" data-mac-meta>Apple silicon · 291 MB</p>
+            <a
+              class="btn btn-primary"
+              data-mac-link
+              href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
+            >
+              Download the .dmg
+            </a>
+            <p class="platform-note">
+              <span class="note-label">On first launch</span>
+              macOS will say Helm is from an unidentified developer. Right-click Helm in
+              Applications, choose <strong>Open</strong>, then confirm. You only do this once.
+            </p>
+          </article>
+
+          <article class="platform" data-platform="win">
+            <h3>Windows</h3>
+            <p class="platform-meta" data-win-meta>64-bit · 320 MB</p>
+            <a
+              class="btn btn-primary"
+              data-win-link
+              href="https://github.com/chase-codes/helm/releases/latest/download/Helm-Setup.exe"
+            >
+              Download the installer
+            </a>
+            <p class="platform-note">
+              <span class="note-label">On first launch</span>
+              Windows will show “Windows protected your PC”. Choose <strong>More info</strong>, then
+              <strong>Run anyway</strong>. Helm installs for your user only — no admin password
+              needed.
+            </p>
+          </article>
+        </div>
+
+        <div class="signing-note">
+          <p>
+            Both warnings appear because Helm's code-signing certificate isn't in place yet. It's on
+            the way; until then this is what a new, unsigned app looks like on both systems.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="colophon">
+      <div class="colophon-inner">
+        <p class="colophon-brand">
+          <svg
+            class="wordmark-mark"
+            viewBox="0 0 96 96"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="6.5"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="48" cy="48" r="27" />
+            <circle cx="48" cy="48" r="9.5" />
+            <path
+              d="M48 36V4M48 60v32M36 48H4M60 48h32M39.5 39.5 20.1 20.1M56.5 56.5 75.9 75.9M56.5 39.5 75.9 20.1M39.5 56.5 20.1 75.9"
+            />
+          </svg>
+          Helm
+        </p>
+        <nav class="colophon-nav">
+          <a href="https://github.com/chase-codes/helm">Source</a>
+          <a href="https://github.com/chase-codes/helm/releases">Releases</a>
+          <a href="https://github.com/chase-codes/helm/issues">Report a problem</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script src="download.js" defer></script>
+  </body>
+</html>

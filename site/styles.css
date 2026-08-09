@@ -1,0 +1,726 @@
+/* ============================================================================
+   Helm — landing page
+
+   Colour and type are Helm's existing brand values, lifted from
+   scripts/generate-brand-assets.mjs so the page, the banner, and the app agree.
+
+   One typographic rule runs through the page: Newsreader italic is reserved for
+   words that belong to the room — the lyric and the quote the congregation would
+   be reading. Nothing else on the page uses it.
+   ========================================================================== */
+
+/* ---------- fonts ---------- */
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('assets/fonts/hanken-grotesk-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('assets/fonts/hanken-grotesk-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('assets/fonts/hanken-grotesk-latin-800-normal.woff2') format('woff2');
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Newsreader';
+  src: url('assets/fonts/newsreader-latin-400-italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('assets/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+
+/* ---------- tokens ---------- */
+:root {
+  --ink-deep: #0b1322;
+  --ink: #16243e;
+  --ink-raised: #1a2a4a;
+  --amber: #e0a341;
+  --cream: #efe9dc;
+  --parchment: #c4bba6;
+  --slate: #8b93a5;
+
+  --rule: rgb(239 233 220 / 0.11);
+  --rule-strong: rgb(239 233 220 / 0.2);
+
+  --sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --serif: 'Newsreader', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --gutter: clamp(1.25rem, 5vw, 3rem);
+  --measure: 1140px;
+  --section-y: clamp(5rem, 11vw, 9rem);
+}
+
+/* ---------- base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--ink-deep);
+  color: var(--cream);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.028em;
+  line-height: 1.05;
+}
+
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1.25rem;
+  background: var(--amber);
+  color: var(--ink-deep);
+  font-weight: 600;
+  text-decoration: none;
+}
+.skip:focus {
+  left: 0;
+}
+
+/* ---------- shared type ---------- */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.lede {
+  color: var(--parchment);
+  font-size: clamp(1.0625rem, 1.3vw, 1.1875rem);
+  line-height: 1.6;
+  max-width: 46ch;
+}
+
+.ref {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.section-head {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+}
+
+.section-head h2 {
+  font-size: clamp(1.75rem, 3.6vw, 2.6rem);
+  margin: 0.85rem 0 1.1rem;
+  max-width: 18ch;
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-block;
+  padding: 0.9rem 1.6rem;
+  border-radius: 7px;
+  font-weight: 600;
+  font-size: 1.0625rem;
+  text-decoration: none;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.btn-primary {
+  background: var(--amber);
+  color: #241703;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.22) inset;
+}
+
+.btn-primary:hover {
+  background: #eab258;
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ---------- masthead ---------- */
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgb(11 19 34 / 0.86);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.masthead-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0.85rem var(--gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 800;
+  font-size: 1.0625rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.wordmark-mark {
+  width: 24px;
+  height: 24px;
+  color: var(--amber);
+  flex: none;
+}
+
+.masthead-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 0.9375rem;
+}
+
+.masthead-nav a {
+  color: var(--parchment);
+  text-decoration: none;
+}
+
+.masthead-nav a:hover {
+  color: var(--cream);
+}
+
+.masthead-cta {
+  color: var(--amber) !important;
+  font-weight: 600;
+}
+
+/* ---------- hero ---------- */
+.hero {
+  padding-block: clamp(3.5rem, 8vw, 6.5rem) var(--section-y);
+  /* A single warm bloom behind the console, so the screenshot sits in light rather
+     than floating on flat navy. */
+  background:
+    radial-gradient(120% 90% at 78% 22%, rgb(224 163 65 / 0.09), transparent 62%),
+    linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 68%);
+}
+
+.hero-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+  display: grid;
+  gap: clamp(2.5rem, 6vw, 4rem);
+  align-items: center;
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 5.2vw, 3.75rem);
+  line-height: 1;
+  letter-spacing: -0.038em;
+  margin: 1rem 0 1.35rem;
+}
+
+.hero .lede {
+  max-width: 42ch;
+}
+
+/* ---------- download block ---------- */
+.download {
+  margin-top: 2rem;
+}
+
+.download-meta {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-top: 0.85rem;
+}
+
+.download-alt {
+  margin-top: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.download-alt a {
+  color: var(--parchment);
+  text-underline-offset: 3px;
+  text-decoration-color: var(--rule-strong);
+}
+
+.download-alt a:hover {
+  color: var(--cream);
+}
+
+.download-alt-meta {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--slate);
+  margin-left: 0.5rem;
+}
+
+.note {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.9375rem;
+  color: var(--slate);
+  max-width: 44ch;
+}
+
+.note a {
+  color: var(--parchment);
+  text-underline-offset: 3px;
+}
+
+/* ---------- the stage: projector beside the copy, console full width below ---------- */
+
+/* The projector is the emotional image and survives any size, so it sits next to the
+   headline. The console needs width to stay legible, so it gets the full container
+   underneath — both shot in the same instant. */
+.stage-output {
+  position: relative;
+  margin: 0;
+}
+
+.stage-output img {
+  border-radius: 8px;
+  border: 1px solid rgb(224 163 65 / 0.3);
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.5),
+    0 28px 60px -16px rgb(0 0 0 / 0.85);
+}
+
+.stage-output-label {
+  margin-top: 0.9rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--slate);
+  text-align: right;
+}
+
+.stage-console {
+  max-width: var(--measure);
+  margin: clamp(3rem, 6vw, 4.5rem) auto 0;
+  padding-inline: var(--gutter);
+}
+
+.stage-console img {
+  border-radius: 10px;
+  border: 1px solid var(--rule-strong);
+  box-shadow:
+    0 2px 8px rgb(0 0 0 / 0.4),
+    0 30px 70px -20px rgb(0 0 0 / 0.7);
+}
+
+.stage-caption {
+  max-width: 60ch;
+  margin-bottom: 1.75rem;
+  font-size: 0.9375rem;
+  color: var(--slate);
+}
+
+.stage-caption-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 0.5rem;
+}
+
+/* The tally: the one loud element on the page. It reads CUED on load, then flips to
+   LIVE a beat later — the same two states the operator moves between. */
+.tally {
+  position: absolute;
+  top: -0.85rem;
+  left: -0.85rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: var(--ink);
+  border: 1px solid var(--rule-strong);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--slate);
+  transition:
+    color 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.tally-lamp {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--slate);
+  transition:
+    background-color 0.4s ease,
+    box-shadow 0.4s ease;
+}
+
+.tally[data-state='live'] {
+  color: var(--amber);
+  border-color: rgb(224 163 65 / 0.45);
+}
+
+.tally[data-state='live'] .tally-lamp {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgb(224 163 65 / 0.16);
+}
+
+/* ---------- order of service ---------- */
+.order {
+  padding-block: var(--section-y);
+  border-top: 1px solid var(--rule);
+}
+
+.run-sheet {
+  max-width: var(--measure);
+  margin: clamp(2.5rem, 5vw, 4rem) auto 0;
+  padding-inline: var(--gutter);
+}
+
+/* Hairlines between entries, so the block reads as a run sheet rather than a
+   feature grid. Order carries meaning here: it's the order of a service. */
+.run-row {
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3.5rem);
+  align-items: center;
+  padding-block: clamp(2.5rem, 5vw, 3.75rem);
+  border-top: 1px solid var(--rule);
+}
+
+.run-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.run-when {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.run-text h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.5rem;
+  margin: 0.75rem 0 0.85rem;
+}
+
+.run-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--slate);
+}
+
+.run-text p:not(.run-when) {
+  color: var(--parchment);
+  max-width: 48ch;
+}
+
+.run-visual img {
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  box-shadow: 0 20px 44px -18px rgb(0 0 0 / 0.8);
+}
+
+/* Newsreader italic appears only here and in the hero: the words of the room. */
+.pull {
+  margin: 0;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-left: 2px solid var(--amber);
+  background: linear-gradient(100deg, rgb(26 42 74 / 0.55), rgb(22 36 62 / 0.15));
+  border-radius: 0 8px 8px 0;
+}
+
+.pull p {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+  line-height: 1.45;
+  color: var(--cream);
+}
+
+.pull cite {
+  display: block;
+  margin-top: 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+/* ---------- facts ---------- */
+.facts {
+  padding-block: var(--section-y);
+  border-top: 1px solid var(--rule);
+  background: linear-gradient(180deg, transparent, rgb(22 36 62 / 0.4));
+}
+
+.facts-list {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+  list-style: none;
+  display: grid;
+  gap: clamp(2rem, 4vw, 3rem);
+}
+
+.facts-list li {
+  border-top: 1px solid var(--rule-strong);
+  padding-top: 1.1rem;
+}
+
+.facts-list p:not(.fact-label) {
+  color: var(--parchment);
+  font-size: 0.9375rem;
+}
+
+.fact-label {
+  font-weight: 600;
+  font-size: 1.0625rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.015em;
+}
+
+/* ---------- downloads ---------- */
+.downloads {
+  padding-block: var(--section-y);
+  border-top: 1px solid var(--rule);
+}
+
+.platforms {
+  max-width: var(--measure);
+  margin: clamp(2.5rem, 5vw, 3.5rem) auto 0;
+  padding-inline: var(--gutter);
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.platform {
+  padding: clamp(1.75rem, 3.5vw, 2.25rem);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: linear-gradient(165deg, rgb(26 42 74 / 0.55), rgb(11 19 34 / 0.3));
+}
+
+.platform h3 {
+  font-size: 1.375rem;
+}
+
+.platform-meta {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin: 0.6rem 0 1.5rem;
+}
+
+.platform-note {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.9375rem;
+  color: var(--parchment);
+}
+
+.platform-note strong {
+  color: var(--cream);
+  font-weight: 600;
+}
+
+.note-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 0.5rem;
+}
+
+.signing-note {
+  max-width: var(--measure);
+  margin: clamp(2rem, 4vw, 2.75rem) auto 0;
+  padding-inline: var(--gutter);
+}
+
+.signing-note p {
+  max-width: 62ch;
+  font-size: 0.9375rem;
+  color: var(--slate);
+}
+
+/* ---------- colophon ---------- */
+.colophon {
+  border-top: 1px solid var(--rule);
+  padding-block: 2.5rem;
+}
+
+.colophon-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.colophon-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.colophon-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  font-size: 0.9375rem;
+}
+
+.colophon-nav a {
+  color: var(--slate);
+  text-decoration: none;
+}
+
+.colophon-nav a:hover {
+  color: var(--cream);
+}
+
+/* ============================================================================
+   Wider viewports
+   ========================================================================== */
+/* One breakpoint for the whole page: below it everything is a single column. */
+@media (min-width: 720px) {
+  .hero-inner {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: center;
+  }
+
+  .facts-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .platforms {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .run-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* A screenshot needs more width than the paragraph beside it to stay legible; a
+     pull quote doesn't. Rows split evenly unless they carry an image. */
+  .run-row:has(.run-visual img) {
+    grid-template-columns: 0.82fr 1.18fr;
+  }
+
+  /* Alternate which side the visual falls on, so the sheet has a rhythm rather
+     than a column of identical rows. */
+  .run-row:nth-child(even) .run-text {
+    order: 2;
+  }
+}
+
+/* ============================================================================
+   Motion — the tally is the page's one orchestrated moment. Nothing else moves
+   on scroll: content is never hidden waiting on a script to reveal it.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
