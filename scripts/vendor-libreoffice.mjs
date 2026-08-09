@@ -65,15 +65,19 @@ const sofficeRel =
 // invocation re-vendors instead of silently reporting success on a tree that
 // can't actually convert anything. Bumping VERSION also invalidates it.
 //
-// The stamp content is `${VERSION}:${sha256 of this script's own source}`, not
-// just VERSION. CI's cache key already hashes this script (so a cache miss
-// re-vendors there), but a local dev tree has no such cache: without the
-// script hash baked into the stamp, editing e.g. the PRUNE list and re-running
-// locally would silently skip — "already staged" — against a tree pruned by
-// the OLD script. Hashing the script closes that hole for both paths.
+// The stamp content is `${VERSION}:${sha256 of this script's source}:${sha256 of
+// the smoke-test fixture}`, not just VERSION. CI's cache key already hashes both
+// files (`hashFiles('scripts/vendor-libreoffice.mjs', 'scripts/fixtures/smoke.pptx')`,
+// so a cache miss re-vendors there), but a local dev tree has no such cache:
+// without both hashes baked into the stamp, editing e.g. the PRUNE list — or
+// swapping the smoke-test fixture — and re-running locally would silently skip
+// — "already staged" — against a tree pruned/tested by the OLD inputs. Hashing
+// both closes that hole for local dev, matching what the CI cache key covers.
 const stampPath = path.join(dest, '.helm-vendor-ok')
+const smokeFixturePath = path.join(root, 'scripts', 'fixtures', 'smoke.pptx')
 const scriptHash = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex')
-const expectedStamp = `${VERSION}:${scriptHash}`
+const fixtureHash = createHash('sha256').update(readFileSync(smokeFixturePath)).digest('hex')
+const expectedStamp = `${VERSION}:${scriptHash}:${fixtureHash}`
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
 function stagedStamp() {
@@ -310,7 +314,7 @@ async function main() {
     // .msi (msiexec's own admin-image artifact, not a real installer) sitting inside
     // the extracted tree next to program/. Make sure it can never get copied into
     // dest by cpSync below.
-    rmSync(path.join(tree, path.basename(archive)), { force: true })
+    rmSync(path.join(tree, path.basename(archive)), { recursive: true, force: true })
   } else {
     const mount = path.join(work, 'mnt')
     execFileSync('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mount, archive], {
@@ -389,7 +393,7 @@ async function main() {
   // CI runner can never dismiss. pathToFileURL also percent-encodes spaces
   // correctly, which naive string concatenation does not (see the msiexec
   // TARGETDIR fix above for the sibling spaced-path hazard on Windows).
-  const fixture = path.join(root, 'scripts', 'fixtures', 'smoke.pptx')
+  const fixture = smokeFixturePath
   const outPdf = path.join(work, 'smoke.pdf')
   rmSync(outPdf, { force: true })
   const profileDir = path.join(work, 'lo-profile')
