@@ -52,8 +52,11 @@ publish:
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
-  # Unsigned app with no mac auto-update — the default (dmg+zip, plus a
-  # latest-mac.yml auto-update manifest) is clutter with nothing to consume it.
+  # Mac auto-update is impossible while the app is unsigned (autoUpdater in
+  # src/main/index.ts still wires up for packaged builds and would poll for
+  # latest-mac.yml — harmless 404s, but nothing can apply an update anyway).
+  # dmg-only avoids publishing the zip + latest-mac.yml metadata for an
+  # update flow the unsigned app could never actually apply.
   target:
     - dmg
 dmg:
