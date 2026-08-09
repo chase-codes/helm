@@ -245,8 +245,12 @@ export function assertConverted(
   sizeOf: (p: string) => number | null = (p) => {
     try {
       return statSync(p).size;
-    } catch {
-      return null;
+    } catch (err) {
+      // Only a missing file means "soffice didn't produce a PDF". Any other stat
+      // failure (EACCES, EPERM, ...) is a different, more specific problem — surface
+      // it as-is rather than misreporting it as a missing/no-op conversion.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
     }
   }
 ): void {
@@ -285,7 +289,16 @@ async function convertToPdfProd(soffice: string, src: string, outDir: string): P
   try {
     await runExternal(soffice, args);
   } finally {
-    rmSync(profileDir, { recursive: true, force: true });
+    // Cleanup must never mask the conversion result: a lingering soffice.bin lock
+    // (or AV scanner hold, common on Windows) can make this rmSync itself throw
+    // (EBUSY/EPERM) even with force:true, which only swallows ENOENT. Retry briefly,
+    // then warn-only on failure rather than letting a leftover tmpdir replace a real
+    // soffice error or fail an otherwise-successful conversion.
+    try {
+      rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch (err) {
+      console.error(`mediaImport: failed to clean up soffice profile dir ${profileDir}: ${String(err)}`);
+    }
   }
   const pdfPath = join(outDir, `${basename(src, extname(src))}.pdf`);
   assertConverted(pdfPath, `${soffice} ${args.join(' ')}`);
