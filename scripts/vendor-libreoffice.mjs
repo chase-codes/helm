@@ -21,7 +21,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const VERSION = '25.8.7'
 // download.documentfoundation.org/stable/<VERSION>/... only serves the current point
@@ -64,10 +64,19 @@ const sofficeRel =
 // cpSync but before/during the smoke test) leaves no stamp, so the next
 // invocation re-vendors instead of silently reporting success on a tree that
 // can't actually convert anything. Bumping VERSION also invalidates it.
+//
+// The stamp content is `${VERSION}:${sha256 of this script's own source}`, not
+// just VERSION. CI's cache key already hashes this script (so a cache miss
+// re-vendors there), but a local dev tree has no such cache: without the
+// script hash baked into the stamp, editing e.g. the PRUNE list and re-running
+// locally would silently skip — "already staged" — against a tree pruned by
+// the OLD script. Hashing the script closes that hole for both paths.
 const stampPath = path.join(dest, '.helm-vendor-ok')
+const scriptHash = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex')
+const expectedStamp = `${VERSION}:${scriptHash}`
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
-function stagedVersion() {
+function stagedStamp() {
   try {
     return readFileSync(stampPath, 'utf8').trim()
   } catch {
@@ -205,6 +214,35 @@ async function download(urls, toFile) {
   throw lastErr
 }
 
+/**
+ * Detach the mounted DMG, tolerating a busy mount (e.g. Spotlight/quicklook still
+ * indexing it right after `hdiutil attach`). Tries a plain detach, then one more
+ * plain retry after a short pause, then `-force`. A detach failure must never
+ * replace whatever error is already propagating out of the try block above (or
+ * fail an otherwise fully-successful run) — it's a leftover mount, not a build
+ * failure — so on exhausting retries this only warns, never throws.
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
+async function detachDmg(mount) {
+  const attempts = [
+    () => execFileSync('hdiutil', ['detach', mount], { stdio: 'inherit' }),
+    () => execFileSync('hdiutil', ['detach', mount], { stdio: 'inherit' }),
+    () => execFileSync('hdiutil', ['detach', '-force', mount], { stdio: 'inherit' })
+  ]
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      attempts[i]()
+      return
+    } catch (err) {
+      if (i === attempts.length - 1) {
+        console.error(`vendor-libreoffice: WARNING hdiutil detach ${mount} failed after retries: ${err.message}`)
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
 async function main() {
   if (!supported) {
@@ -213,7 +251,7 @@ async function main() {
     )
     return
   }
-  if (stagedVersion() === VERSION) {
+  if (stagedStamp() === expectedStamp) {
     console.log('vendor-libreoffice: already staged, skipping.')
     return
   }
@@ -224,8 +262,20 @@ async function main() {
   console.log('vendor-libreoffice: phase=download')
   if (!existsSync(archive)) await download([url, archiveUrl], archive)
   console.log('vendor-libreoffice: phase=verify')
-  const hash = createHash('sha256').update(readFileSync(archive)).digest('hex')
-  if (hash !== sha256) throw new Error(`SHA256 mismatch for ${archive}: got ${hash}`)
+  let hash = createHash('sha256').update(readFileSync(archive)).digest('hex')
+  if (hash !== sha256) {
+    // A cached archive (CI cache restore, or a leftover dist/lo-vendor from a prior
+    // local run) that fails the hash check is most often corruption from an
+    // interrupted download, not a moved-target attack — treating it as permanently
+    // fatal would wedge every future run on the same machine/cache. Delete it and
+    // retry the full [primary, archive-host] download chain exactly once; only a
+    // fresh download that STILL mismatches is treated as fatal.
+    console.log(`vendor-libreoffice: SHA256 mismatch for ${archive} (got ${hash}), re-downloading once...`)
+    rmSync(archive, { force: true })
+    await download([url, archiveUrl], archive)
+    hash = createHash('sha256').update(readFileSync(archive)).digest('hex')
+    if (hash !== sha256) throw new Error(`SHA256 mismatch for ${archive} after re-download: got ${hash}`)
+  }
 
   // Extract, then locate the dir that holds the soffice binary's parent tree.
   console.log('vendor-libreoffice: phase=extract')
@@ -234,13 +284,33 @@ async function main() {
     const extract = path.join(work, 'extract')
     rmSync(extract, { recursive: true, force: true })
     // Administrative extract: unpacks payload, installs nothing, needs no admin.
-    execFileSync('msiexec', ['/a', archive, '/qn', `TARGETDIR=${extract}`], {
-      stdio: 'inherit',
-      timeout: 15 * 60_000
-    })
+    //
+    // msiexec parses `PROPERTY=value` as a single token and expects any embedded
+    // spaces to be quoted around the *value only* (`TARGETDIR="C:\path with
+    // spaces"`), not around the whole `PROPERTY=value` token. Node's default
+    // Windows argv quoting (execFileSync without windowsVerbatimArguments) does the
+    // latter — if `extract` contains a space it emits `"TARGETDIR=C:\path with
+    // spaces"`, which msiexec misparses as an unknown property. windowsVerbatimArguments
+    // hands the argv string to CreateProcess unescaped, so we build each token's
+    // quoting ourselves: quote a path only if it contains whitespace, and for
+    // TARGETDIR quote just the value, matching msiexec's own expectation. This is a
+    // no-op on non-Windows (windowsVerbatimArguments is ignored there) and a no-op
+    // here whenever no path contains a space (the common case, incl. CI runners).
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
+    const quoteWin = (s) => (/\s/.test(s) ? `"${s}"` : s)
+    execFileSync(
+      'msiexec',
+      ['/a', quoteWin(archive), '/qn', `TARGETDIR=${quoteWin(extract)}`],
+      { stdio: 'inherit', timeout: 15 * 60_000, windowsVerbatimArguments: true }
+    )
     console.log('vendor-libreoffice: phase=locate')
     tree = findWinTree(extract)
     if (!tree) throw new Error('program/soffice.exe not found in extracted MSI')
+    // Defense in depth: a future flat MSI layout could leave the payload-stripped
+    // .msi (msiexec's own admin-image artifact, not a real installer) sitting inside
+    // the extracted tree next to program/. Make sure it can never get copied into
+    // dest by cpSync below.
+    rmSync(path.join(tree, path.basename(archive)), { force: true })
   } else {
     const mount = path.join(work, 'mnt')
     execFileSync('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mount, archive], {
@@ -256,7 +326,7 @@ async function main() {
         verbatimSymlinks: true
       })
     } finally {
-      execFileSync('hdiutil', ['detach', mount], { stdio: 'inherit' })
+      await detachDmg(mount)
     }
   }
 
@@ -311,16 +381,19 @@ async function main() {
   // into a PDF via the Impress import/export path — a plain-text probe would only
   // ever exercise Writer, never proving Impress conversion (the whole point of
   // vendoring LibreOffice) actually works. A hermetic profile dir keeps the run
-  // off any real user profile. The URL must be a proper file:// URL (three
-  // slashes before a Windows drive letter, e.g. file:///D:/...) — file://D:/...
-  // parses "D:" as a host, which on Windows silently falls back to the default
-  // per-user profile path and risks soffice hitting the interactive
-  // first-run/registration dialog that a headless CI runner can never dismiss.
+  // off any real user profile. The URL is built with pathToFileURL rather than by
+  // hand-concatenating `file://` + path: a malformed URL (e.g. the two-slash
+  // `file://D:/...`, which on Windows parses "D:" as a host instead of a drive
+  // letter) silently falls back to the default per-user profile path and risks
+  // soffice hitting the interactive first-run/registration dialog that a headless
+  // CI runner can never dismiss. pathToFileURL also percent-encodes spaces
+  // correctly, which naive string concatenation does not (see the msiexec
+  // TARGETDIR fix above for the sibling spaced-path hazard on Windows).
   const fixture = path.join(root, 'scripts', 'fixtures', 'smoke.pptx')
   const outPdf = path.join(work, 'smoke.pdf')
   rmSync(outPdf, { force: true })
-  const profileDir = path.join(work, 'lo-profile').replace(/\\/g, '/')
-  const profileUrl = process.platform === 'win32' ? `file:///${profileDir}` : `file://${profileDir}`
+  const profileDir = path.join(work, 'lo-profile')
+  const profileUrl = pathToFileURL(profileDir).href
   execFileSync(
     path.join(dest, sofficeRel),
     [
@@ -340,7 +413,7 @@ async function main() {
   if (outSize <= 1024) throw new Error(`smoke-test PDF is suspiciously small (${outSize} bytes)`)
 
   // Last statement of a successful run — see stampPath comment above.
-  writeFileSync(stampPath, VERSION)
+  writeFileSync(stampPath, expectedStamp)
   console.log('vendor-libreoffice: staged OK')
 }
 
