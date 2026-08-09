@@ -945,9 +945,19 @@ UPDATE (needs a second release)
 
 Anything that fails becomes a GitHub issue (the templates exist now) and gets fixed before the LibreOffice task — the core pipeline must be trustworthy first.
 
+- [ ] Windows box, NO LibreOffice installed: install Helm-Setup.exe, import a `.pptx`,
+      slides render on the projector (bundled-soffice leg).
+- [ ] Mac (arm64), browser-downloaded DMG: right-click-open Helm, import a `.pptx`.
+      If macOS blocks the bundled soffice (quarantine on first spawn), record the exact
+      dialog and apply the spec's fallback (ad-hoc sign the tree at vendor time, or
+      documented `xattr -dr com.apple.quarantine` guidance) as a follow-up fix.
+
 ---
 
 ### Task 11: LibreOffice vendoring — PPTX import in shipped builds
+
+> **Superseded 2026-08-08** by `docs/superpowers/plans/2026-08-08-bundled-libreoffice.md`
+> (adds the macOS arm64 leg; same Windows approach). Tracked and executed there.
 
 **Files:**
 - Create: `scripts/vendor-libreoffice.mjs`

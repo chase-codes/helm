@@ -18,12 +18,20 @@ files:
   # for a copy the app never reads.
   - '!resources/libreoffice'
   - '!resources/libreoffice/**'
+  # resources/bibles ships solely via extraResources below (read at runtime
+  # from process.resourcesPath via bundledKjvPath in src/main/bibleSource.ts,
+  # never from app.asar/app.asar.unpacked). Without this exclusion the tree
+  # also gets packed as app files and duplicated under
+  # resources/app.asar.unpacked/resources/bibles, doubling installer size
+  # for a copy the app never reads.
+  - '!resources/bibles'
+  - '!resources/bibles/**'
 asarUnpack:
   - resources/**
 # resources/libreoffice is a vendored, per-OS LibreOffice-headless tree kept OUTSIDE git
-# (large). It MUST be staged on the build machine before build:win / build:mac. If the
-# folder is absent the build still succeeds but PPTX import degrades to the
-# no-libreoffice fallback modal at runtime.
+# (large). Stage it with `node scripts/vendor-libreoffice.mjs` (win x64 / mac arm64; CI
+# does this automatically). If the folder is absent the build still succeeds but PPTX
+# import degrades to the no-libreoffice fallback modal at runtime.
 extraResources:
   - from: resources/bibles
     to: bibles
