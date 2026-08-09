@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,15 +32,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Cache bundled bibles
-        id: bibles
-        uses: actions/cache@v4
-        with:
-          path: resources/bibles
-          key: bibles-${{ hashFiles('scripts/fetch-bibles.mjs') }}
-      - name: Fetch bundled bibles
-        if: steps.bibles.outputs.cache-hit != 'true'
-        run: node scripts/fetch-bibles.mjs
+      - name: Vendor bundled deps (bibles + LibreOffice)
+        uses: ./.github/actions/vendor-deps
+        timeout-minutes: 25
       - run: npm run build
       - run: npx electron-builder --win --publish never
       - uses: actions/upload-artifact@v4

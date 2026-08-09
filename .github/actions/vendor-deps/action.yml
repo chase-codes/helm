@@ -1,0 +1,32 @@
+name: Vendor bundled deps
+description: >
+  Cache-or-fetch resources/bibles and cache-or-vendor resources/libreoffice,
+  shared by ci.yml's installer job and release.yml's release + release-mac jobs
+  (and vendor-mac.yml) so the cache keys and fetch/vendor commands can't drift
+  between them.
+runs:
+  using: composite
+  steps:
+    - name: Cache bundled bibles
+      id: bibles
+      uses: actions/cache@v4
+      with:
+        path: resources/bibles
+        key: bibles-${{ hashFiles('scripts/fetch-bibles.mjs') }}
+    - name: Fetch bundled bibles
+      if: steps.bibles.outputs.cache-hit != 'true'
+      shell: bash
+      run: node scripts/fetch-bibles.mjs
+    - name: Cache bundled LibreOffice
+      id: libreoffice
+      uses: actions/cache@v4
+      with:
+        path: resources/libreoffice
+        key: libreoffice-${{ runner.os }}-${{ hashFiles('scripts/vendor-libreoffice.mjs', 'scripts/fixtures/smoke.pptx') }}
+    # No timeout-minutes here — composite action steps don't support it. The
+    # calling workflow puts `timeout-minutes: 25` on the step that does
+    # `uses: ./.github/actions/vendor-deps` instead, bounding this whole action.
+    - name: Vendor LibreOffice
+      if: steps.libreoffice.outputs.cache-hit != 'true'
+      shell: bash
+      run: node scripts/vendor-libreoffice.mjs

@@ -70,6 +70,9 @@ absent the build still succeeds, but PPTX import degrades to the "PowerPoint imp
 unavailable" modal at runtime. Windows layout expected by `bundledSofficeCandidates`:
 `resources/libreoffice/program/soffice.exe`.
 
+Staging is now automated: `node scripts/vendor-libreoffice.mjs` (CI runs it for
+installer and release builds — see `docs/superpowers/plans/2026-08-08-bundled-libreoffice.md`).
+
 ### A4 · [Win] One-time toolchain (do the dry-run EARLY)
 1. **Node.js LTS 22.x** from nodejs.org — during install, **check "Tools for Native Modules"** (installs Python + Visual Studio Build Tools via Chocolatey). This is what makes `better-sqlite3` compile if no prebuilt exists. Do **not** use Node 26 on the box; stick to LTS for native-build reliability.
 2. **Git for Windows** (git-scm.com).

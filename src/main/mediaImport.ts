@@ -1,8 +1,10 @@
 import { dialog } from 'electron';
-import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync } from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import { tmpdir } from 'os';
 import { basename, dirname, extname, join } from 'path';
+import { pathToFileURL } from 'url';
 import type { MediaRepo, MediaItem } from './mediaRepo';
 import type { MediaImportProgress, MediaImportResult } from '../shared/types';
 
@@ -228,12 +230,79 @@ function runExternal(cmd: string, args: string[]): Promise<void> {
 }
 
 /**
+ * Throws if `soffice --convert-to pdf` didn't actually produce a usable PDF.
+ * Injectable `sizeOf` (defaults to real `fs.statSync`) returns the file size in
+ * bytes, or `null` if the path doesn't exist — matching the file's other
+ * injectable-predicate seams (e.g. `findSoffice`'s `exists`). Kept near-pure and
+ * exported so the guard is testable without spawning soffice: a missing or
+ * zero-byte PDF here means the conversion silently failed (or was hijacked by a
+ * conflicting profile) upstream, and would otherwise surface as an opaque ENOENT
+ * deep in rasterization instead of a diagnosable error naming the soffice call.
+ */
+export function assertConverted(
+  pdfPath: string,
+  invocation: string,
+  sizeOf: (p: string) => number | null = (p) => {
+    try {
+      return statSync(p).size;
+    } catch (err) {
+      // Only a missing file means "soffice didn't produce a PDF". Any other stat
+      // failure (EACCES, EPERM, ...) is a different, more specific problem — surface
+      // it as-is rather than misreporting it as a missing/no-op conversion.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+  }
+): void {
+  const size = sizeOf(pdfPath);
+  if (size === null) {
+    throw new Error(`soffice did not produce the expected PDF at ${pdfPath}\n  ran: ${invocation}`);
+  }
+  if (size === 0) {
+    throw new Error(`soffice produced an empty PDF at ${pdfPath}\n  ran: ${invocation}`);
+  }
+}
+
+/**
  * Convert a .pptx/.ppt/.odp to a PDF in `outDir` via headless LibreOffice, returning
  * the produced PDF's absolute path. soffice names the output `<basename>.pdf`.
+ *
+ * Runs against a per-invocation, hermetic `-env:UserInstallation` profile — a fresh
+ * tmpdir, removed afterward — instead of the caller's real LibreOffice profile.
+ * Without this, a user's own running desktop LibreOffice (which locks the real
+ * profile) or leftover crash-recovery state in it can hijack or silently no-op the
+ * conversion. `--norestore` additionally suppresses the "recover documents?" prompt
+ * a stale profile could otherwise trigger, which would hang a headless run forever.
  */
 async function convertToPdfProd(soffice: string, src: string, outDir: string): Promise<string> {
-  await runExternal(soffice, ['--headless', '--convert-to', 'pdf', '--outdir', outDir, src]);
-  return join(outDir, `${basename(src, extname(src))}.pdf`);
+  const profileDir = mkdtempSync(join(tmpdir(), 'helm-soffice-'));
+  const args = [
+    `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
+    '--headless',
+    '--norestore',
+    '--convert-to',
+    'pdf',
+    '--outdir',
+    outDir,
+    src
+  ];
+  try {
+    await runExternal(soffice, args);
+  } finally {
+    // Cleanup must never mask the conversion result: a lingering soffice.bin lock
+    // (or AV scanner hold, common on Windows) can make this rmSync itself throw
+    // (EBUSY/EPERM) even with force:true, which only swallows ENOENT. Retry briefly,
+    // then warn-only on failure rather than letting a leftover tmpdir replace a real
+    // soffice error or fail an otherwise-successful conversion.
+    try {
+      rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch (err) {
+      console.error(`mediaImport: failed to clean up soffice profile dir ${profileDir}: ${String(err)}`);
+    }
+  }
+  const pdfPath = join(outDir, `${basename(src, extname(src))}.pdf`);
+  assertConverted(pdfPath, `${soffice} ${args.join(' ')}`);
+  return pdfPath;
 }
 
 /**
