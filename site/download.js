@@ -1,15 +1,17 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type -- plain JS, browser */
 /* ============================================================================
    Helm — landing page behaviour
 
    Two small jobs, each of which the page survives without:
 
    1. The tally flips from CUED to LIVE once, a beat after load.
-   2. The download block is upgraded from the release API — live version, real
-      file sizes, and the visitor's platform promoted to the primary button.
+   2. The visitor's own platform is promoted to the filled download button, and
+      the version and file sizes are refreshed from the release API.
 
-   The markup already contains working download links and honest sizes for the
-   release that was current when the page was built, so a failed or rate-limited
-   fetch leaves a page that still downloads the right file.
+   Only the second half of job 2 needs the network. Promotion runs immediately
+   from navigator alone, so a rate-limited or blocked api.github.com still leaves
+   a page with one clear button — the markup carries the version and sizes that
+   were current when it was built, and the fetch only refines them.
    ========================================================================== */
 
 const REPO = 'chase-codes/helm'
@@ -19,7 +21,7 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').match
 const tally = document.querySelector('[data-tally]')
 const tallyWord = document.querySelector('[data-tally-word]')
 
-const goLive = () => {
+function goLive() {
   if (!tally || !tallyWord) return
   tally.dataset.state = 'live'
   tallyWord.textContent = 'Live'
@@ -28,38 +30,94 @@ const goLive = () => {
 if (reduceMotion) goLive()
 else window.setTimeout(goLive, 1100)
 
-/* ---------- 2. the live release ---------- */
-
-// Sizes are quoted the way a download manager quotes them (decimal MB), so the
-// number on the page matches the number the browser shows while downloading.
-const formatSize = (bytes) => `${Math.round(bytes / 1e6)} MB`
+/* ---------- 2. platform + release ---------- */
 
 const PLATFORMS = {
   win: {
     match: (asset) => asset.name.endsWith('.exe'),
-    detail: '64-bit',
     short: 'Windows',
-    hero: '[data-hero-win]'
+    hero: '[data-hero-win]',
+    cardLink: '[data-win-link]',
+    cardMeta: '[data-win-meta]'
   },
   mac: {
     // arm64 is the only Mac artifact electron-builder publishes today.
     match: (asset) => asset.name.endsWith('.dmg'),
-    detail: 'Apple silicon',
     short: 'macOS',
-    hero: '[data-hero-mac]'
+    hero: '[data-hero-mac]',
+    cardLink: '[data-mac-link]',
+    cardMeta: '[data-mac-meta]'
   }
 }
 
-const detectPlatform = () => {
-  const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent
+function el(selector) {
+  return document.querySelector(selector)
+}
+
+// Sizes are quoted the way a download manager quotes them (decimal MB), so the
+// number on the page matches the number the browser shows while downloading.
+function formatSize(bytes) {
+  return `${Math.round(bytes / 1e6)} MB`
+}
+
+function detectPlatform() {
+  const ua = navigator.userAgent || ''
+  const platform = navigator.userAgentData?.platform || navigator.platform || ua
+
+  // iPadOS reports "MacIntel", so iOS has to be ruled out before the Mac test —
+  // otherwise an iPhone is offered a disk image it cannot open. Helm publishes no
+  // build for iOS or Linux, so those promote nothing and both buttons stay equal.
+  if (/iphone|ipad|ipod/i.test(ua)) return null
+  if (/mac/i.test(platform) && navigator.maxTouchPoints > 1) return null
+
   if (/win/i.test(platform)) return 'win'
-  if (/mac|iphone|ipad|ipod/i.test(platform)) return 'mac'
-  // Linux, or anything unrecognised. Helm publishes no build for it, so promote
-  // neither button and leave both offered on equal terms.
+  if (/mac/i.test(platform)) return 'mac'
   return null
 }
 
-const el = (selector) => document.querySelector(selector)
+const detected = detectPlatform()
+
+// The build-time facts live in the markup (data-detail / data-size / data-version)
+// so this file has no copy of them to drift out of step.
+function readBuiltIn() {
+  const block = el('[data-download-block]')
+  const info = { version: block?.dataset.version || '' }
+  for (const [key, platform] of Object.entries(PLATFORMS)) {
+    const button = el(platform.hero)
+    if (button) info[key] = { detail: button.dataset.detail, size: button.dataset.size }
+  }
+  return info
+}
+
+function renderHero(info) {
+  const meta = el('[data-download-meta]')
+  const version = info.version ? `v${info.version}` : null
+
+  if (detected && info[detected]) {
+    const button = el(PLATFORMS[detected].hero)
+    if (button) {
+      button.classList.remove('btn-outline')
+      button.classList.add('btn-primary')
+    }
+    if (meta) {
+      meta.textContent = [version, info[detected].detail, info[detected].size]
+        .filter(Boolean)
+        .join(' · ')
+    }
+    return
+  }
+
+  // Nothing to promote — show both sizes rather than picking on their behalf.
+  if (meta) {
+    const both = Object.entries(PLATFORMS)
+      .filter(([key]) => info[key])
+      .map(([key, platform]) => `${platform.short} ${info[key].size}`)
+    meta.textContent = [version, ...both].filter(Boolean).join(' · ')
+  }
+}
+
+// Runs before any network call, so the hero is never left without a filled button.
+renderHero(readBuiltIn())
 
 async function loadRelease() {
   const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
@@ -80,56 +138,34 @@ async function loadRelease() {
   }
   if (!found.mac && !found.win) throw new Error('no installers on the latest release')
 
-  // --- the platform cards ---
-  if (found.mac) {
-    const link = el('[data-mac-link]')
-    const meta = el('[data-mac-meta]')
-    if (link) link.href = found.mac.browser_download_url
-    if (meta) meta.textContent = `Apple silicon · ${formatSize(found.mac.size)}`
-  }
-  if (found.win) {
-    const link = el('[data-win-link]')
-    const meta = el('[data-win-meta]')
-    if (link) link.href = found.win.browser_download_url
-    if (meta) meta.textContent = `64-bit · ${formatSize(found.win.size)}`
+  const info = readBuiltIn()
+  if (version) info.version = version
+
+  for (const [key, platform] of Object.entries(PLATFORMS)) {
+    if (!found[key]) continue
+    const size = formatSize(found[key].size)
+    const url = found[key].browser_download_url
+    info[key] = { detail: info[key]?.detail, size }
+
+    const hero = el(platform.hero)
+    if (hero) {
+      hero.href = url
+      hero.dataset.size = size
+    }
+    const cardLink = el(platform.cardLink)
+    if (cardLink) cardLink.href = url
+    const cardMeta = el(platform.cardMeta)
+    if (cardMeta && info[key].detail) cardMeta.textContent = `${info[key].detail} · ${size}`
   }
 
   const releaseLine = el('[data-release-line]')
   if (releaseLine && version) releaseLine.textContent = `Version ${version}.`
 
-  // --- the hero buttons: both stay real links; the visitor's own platform is the
-  // one that gets filled in. ---
-  for (const [key, platform] of Object.entries(PLATFORMS)) {
-    const button = el(platform.hero)
-    if (button && found[key]) button.href = found[key].browser_download_url
-  }
-
-  const detected = detectPlatform()
-  const meta = el('[data-download-meta]')
-
-  if (detected && found[detected]) {
-    const button = el(PLATFORMS[detected].hero)
-    if (button) {
-      button.classList.remove('btn-outline')
-      button.classList.add('btn-primary')
-    }
-    if (meta) {
-      const parts = [PLATFORMS[detected].detail, formatSize(found[detected].size)]
-      if (version) parts.unshift(`v${version}`)
-      meta.textContent = parts.join(' · ')
-    }
-  } else if (meta) {
-    // Nothing to promote — keep both sizes on show rather than picking for them.
-    const parts = Object.entries(PLATFORMS)
-      .filter(([key]) => found[key])
-      .map(([key, platform]) => `${platform.short} ${formatSize(found[key].size)}`)
-    if (version) parts.unshift(`v${version}`)
-    meta.textContent = parts.join(' · ')
-  }
+  renderHero(info)
 }
 
 loadRelease().catch((error) => {
-  // The static markup is already correct for the release the page shipped with;
-  // log for anyone looking, and change nothing on screen.
+  // The markup is already correct for the release the page shipped with, and the
+  // platform has already been promoted — log for anyone looking, change nothing.
   console.warn('Helm: keeping the built-in download links —', error.message)
 })

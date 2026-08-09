@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type -- plain JS script */
 // Captures the product screenshots used by the landing page (site/) from the real app.
 // Same launch pattern as the scratch/verify-*.mjs harnesses: playwright-core drives a
 // packaged-layout Electron against an isolated --user-data-dir so a developer's real
@@ -18,7 +19,9 @@ const electronBin = path.join(
   APP_DIR,
   'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
 )
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 // The console shots are taken at 2x on a 1360x850 window: wide enough that the search
 // pane, the cue list, and the preview all read at the sizes the page renders them.
@@ -37,15 +40,19 @@ await sleep(6_000)
 const op = app.windows().find((w) => w.url().includes('operator')) ?? (await app.firstWindow())
 
 // deviceScaleFactor is fixed at launch, so the retina shots come from resizing the real
-// window rather than a viewport override (Electron ignores setViewportSize).
+// window rather than a viewport override (Electron ignores setViewportSize). The operator
+// window is picked by URL, not by index: displays.ts auto-attaches an output window to
+// every non-operator display, so on a machine with a projector already plugged in,
+// getAllWindows()[0] is not necessarily the console being photographed.
 await app.evaluate(({ BrowserWindow }, size) => {
-  const [w] = BrowserWindow.getAllWindows()
+  const w = BrowserWindow.getAllWindows().find((b) => b.webContents.getURL().includes('operator'))
+  if (!w) throw new Error('no operator window to resize')
   w.setContentSize(size.width, size.height)
   w.center()
 }, CONSOLE)
 await sleep(1_200)
 
-const shot = async (page, name) => {
+async function shot(page, name) {
   await page.screenshot({ path: path.join(SHOT_DIR, `${name}.png`) })
   console.log(`  ${name}.png`)
 }
@@ -68,7 +75,7 @@ if (out) {
 // The button renders as "⊙ Go live", so match on the words and let Playwright's
 // substring matching handle the icon.
 const goLive = op.locator('button', { hasText: 'Go live' }).locator('visible=true').first()
-const takeLive = async (label) => {
+async function takeLive(label) {
   if ((await goLive.count()) !== 1) {
     console.log(`  WARN: no Go live button on ${label} — shot will show nothing on screen`)
     return

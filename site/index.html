@@ -84,11 +84,13 @@
             <!-- Both platforms are offered equally in the markup. Without JavaScript
                  neither is a guess; with it, the visitor's own platform is promoted to
                  the filled button and the other steps back. -->
-            <div class="download" data-download-block>
+            <div class="download" data-download-block data-version="0.3.0">
               <div class="download-buttons">
                 <a
                   class="btn btn-outline"
                   data-hero-win
+                  data-detail="64-bit"
+                  data-size="320 MB"
                   href="https://github.com/chase-codes/helm/releases/latest/download/Helm-Setup.exe"
                 >
                   Download for Windows
@@ -96,6 +98,8 @@
                 <a
                   class="btn btn-outline"
                   data-hero-mac
+                  data-detail="Apple silicon"
+                  data-size="291 MB"
                   href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
                 >
                   Download for macOS
