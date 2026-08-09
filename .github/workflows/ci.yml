@@ -32,25 +32,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Cache bundled bibles
-        id: bibles
-        uses: actions/cache@v4
-        with:
-          path: resources/bibles
-          key: bibles-${{ hashFiles('scripts/fetch-bibles.mjs') }}
-      - name: Fetch bundled bibles
-        if: steps.bibles.outputs.cache-hit != 'true'
-        run: node scripts/fetch-bibles.mjs
-      - name: Cache bundled LibreOffice
-        id: libreoffice
-        uses: actions/cache@v4
-        with:
-          path: resources/libreoffice
-          key: libreoffice-${{ runner.os }}-${{ hashFiles('scripts/vendor-libreoffice.mjs', 'scripts/fixtures/smoke.pptx') }}
-      - name: Vendor LibreOffice
-        if: steps.libreoffice.outputs.cache-hit != 'true'
+      - name: Vendor bundled deps (bibles + LibreOffice)
+        uses: ./.github/actions/vendor-deps
         timeout-minutes: 25
-        run: node scripts/vendor-libreoffice.mjs
       - run: npm run build
       - run: npx electron-builder --win --publish never
       - uses: actions/upload-artifact@v4

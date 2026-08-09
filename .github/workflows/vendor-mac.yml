@@ -1,0 +1,27 @@
+name: vendor-mac
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/vendor-libreoffice.mjs'
+      - 'scripts/fixtures/**'
+      - '.github/workflows/vendor-mac.yml'
+      - '.github/actions/**'
+
+jobs:
+  vendor:
+    # The darwin vendor path (hdiutil attach/detach, prune, ad-hoc codesign,
+    # Impress smoke test) otherwise has zero CI coverage before a release tag —
+    # ci.yml and release.yml's installer/release jobs only exercise Windows.
+    # This proves it on every PR that touches the vendor script or its fixture.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vendor bundled deps (bibles + LibreOffice)
+        uses: ./.github/actions/vendor-deps
+        timeout-minutes: 25
