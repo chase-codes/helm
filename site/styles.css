@@ -171,6 +171,9 @@ p {
   display: inline-block;
   padding: 0.9rem 1.6rem;
   border-radius: 7px;
+  /* Transparent by default so a filled button and an outlined one are the same
+     height when they sit side by side. */
+  border: 1px solid transparent;
   font-weight: 600;
   font-size: 1.0625rem;
   text-decoration: none;
@@ -192,6 +195,19 @@ p {
 
 .btn-primary:active {
   transform: translateY(0);
+}
+
+/* The neutral state both hero buttons start in, before the page knows which
+   machine it's talking to. */
+.btn-outline {
+  border: 1px solid rgb(224 163 65 / 0.5);
+  color: var(--amber);
+}
+
+.btn-outline:hover {
+  border-color: var(--amber);
+  background: rgb(224 163 65 / 0.1);
+  transform: translateY(-1px);
 }
 
 /* ---------- masthead ---------- */
@@ -287,6 +303,12 @@ p {
   margin-top: 2rem;
 }
 
+.download-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .download-meta {
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -294,29 +316,6 @@ p {
   text-transform: uppercase;
   color: var(--slate);
   margin-top: 0.85rem;
-}
-
-.download-alt {
-  margin-top: 0.5rem;
-  font-size: 0.9375rem;
-}
-
-.download-alt a {
-  color: var(--parchment);
-  text-underline-offset: 3px;
-  text-decoration-color: var(--rule-strong);
-}
-
-.download-alt a:hover {
-  color: var(--cream);
-}
-
-.download-alt-meta {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  color: var(--slate);
-  margin-left: 0.5rem;
 }
 
 .note {

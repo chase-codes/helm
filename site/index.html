@@ -81,23 +81,28 @@
               It all runs from your machine.
             </p>
 
+            <!-- Both platforms are offered equally in the markup. Without JavaScript
+                 neither is a guess; with it, the visitor's own platform is promoted to
+                 the filled button and the other steps back. -->
             <div class="download" data-download-block>
-              <a
-                class="btn btn-primary"
-                data-download-primary
-                href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
-              >
-                Download for macOS
-              </a>
-              <p class="download-meta" data-download-meta>v0.3.0 · Apple silicon · 291 MB</p>
-              <p class="download-alt">
+              <div class="download-buttons">
                 <a
-                  data-download-secondary
+                  class="btn btn-outline"
+                  data-hero-win
                   href="https://github.com/chase-codes/helm/releases/latest/download/Helm-Setup.exe"
                 >
-                  Windows installer
+                  Download for Windows
                 </a>
-                <span class="download-alt-meta" data-download-secondary-meta>320 MB</span>
+                <a
+                  class="btn btn-outline"
+                  data-hero-mac
+                  href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
+                >
+                  Download for macOS
+                </a>
+              </div>
+              <p class="download-meta" data-download-meta>
+                v0.3.0 · Windows 320 MB · Apple silicon 291 MB
               </p>
             </div>
 
@@ -337,23 +342,6 @@
         </div>
 
         <div class="platforms">
-          <article class="platform" data-platform="mac">
-            <h3>macOS</h3>
-            <p class="platform-meta" data-mac-meta>Apple silicon · 291 MB</p>
-            <a
-              class="btn btn-primary"
-              data-mac-link
-              href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
-            >
-              Download the .dmg
-            </a>
-            <p class="platform-note">
-              <span class="note-label">On first launch</span>
-              macOS will say Helm is from an unidentified developer. Right-click Helm in
-              Applications, choose <strong>Open</strong>, then confirm. You only do this once.
-            </p>
-          </article>
-
           <article class="platform" data-platform="win">
             <h3>Windows</h3>
             <p class="platform-meta" data-win-meta>64-bit · 320 MB</p>
@@ -369,6 +357,32 @@
               Windows will show “Windows protected your PC”. Choose <strong>More info</strong>, then
               <strong>Run anyway</strong>. Helm installs for your user only — no admin password
               needed.
+            </p>
+            <p class="platform-note">
+              <span class="note-label">Updates</span>
+              Helm checks for new versions and updates itself.
+            </p>
+          </article>
+
+          <article class="platform" data-platform="mac">
+            <h3>macOS</h3>
+            <p class="platform-meta" data-mac-meta>Apple silicon · 291 MB</p>
+            <a
+              class="btn btn-primary"
+              data-mac-link
+              href="https://github.com/chase-codes/helm/releases/download/v0.3.0/Helm-0.3.0-arm64.dmg"
+            >
+              Download the .dmg
+            </a>
+            <p class="platform-note">
+              <span class="note-label">On first launch</span>
+              macOS will say Helm is from an unidentified developer. Right-click Helm in
+              Applications, choose <strong>Open</strong>, then confirm. You only do this once.
+            </p>
+            <p class="platform-note">
+              <span class="note-label">Updates</span>
+              Download the new <span class="ref">.dmg</span> from here. Self-updating on macOS needs
+              the signing certificate too.
             </p>
           </article>
         </div>

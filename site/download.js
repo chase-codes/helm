@@ -35,20 +35,18 @@ else window.setTimeout(goLive, 1100)
 const formatSize = (bytes) => `${Math.round(bytes / 1e6)} MB`
 
 const PLATFORMS = {
+  win: {
+    match: (asset) => asset.name.endsWith('.exe'),
+    detail: '64-bit',
+    short: 'Windows',
+    hero: '[data-hero-win]'
+  },
   mac: {
     // arm64 is the only Mac artifact electron-builder publishes today.
     match: (asset) => asset.name.endsWith('.dmg'),
-    label: 'Download for macOS',
-    cardLabel: 'Download the .dmg',
     detail: 'Apple silicon',
-    short: 'macOS'
-  },
-  win: {
-    match: (asset) => asset.name.endsWith('.exe'),
-    label: 'Download for Windows',
-    cardLabel: 'Download the installer',
-    detail: '64-bit',
-    short: 'Windows'
+    short: 'macOS',
+    hero: '[data-hero-mac]'
   }
 }
 
@@ -56,9 +54,9 @@ const detectPlatform = () => {
   const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent
   if (/win/i.test(platform)) return 'win'
   if (/mac|iphone|ipad|ipod/i.test(platform)) return 'mac'
-  // Linux and anything unrecognised: Helm publishes no build for them, so lead
-  // with macOS rather than guessing, and leave both links visible.
-  return 'mac'
+  // Linux, or anything unrecognised. Helm publishes no build for it, so promote
+  // neither button and leave both offered on equal terms.
+  return null
 }
 
 const el = (selector) => document.querySelector(selector)
@@ -99,30 +97,34 @@ async function loadRelease() {
   const releaseLine = el('[data-release-line]')
   if (releaseLine && version) releaseLine.textContent = `Version ${version}.`
 
-  // --- the hero block, led by the visitor's own platform ---
-  const primaryKey = found[detectPlatform()] ? detectPlatform() : found.mac ? 'mac' : 'win'
-  const secondaryKey = primaryKey === 'mac' ? 'win' : 'mac'
-
-  const primary = el('[data-download-primary]')
-  const primaryMeta = el('[data-download-meta]')
-  if (primary && found[primaryKey]) {
-    primary.href = found[primaryKey].browser_download_url
-    primary.textContent = PLATFORMS[primaryKey].label
+  // --- the hero buttons: both stay real links; the visitor's own platform is the
+  // one that gets filled in. ---
+  for (const [key, platform] of Object.entries(PLATFORMS)) {
+    const button = el(platform.hero)
+    if (button && found[key]) button.href = found[key].browser_download_url
   }
-  if (primaryMeta && found[primaryKey]) {
-    const parts = [PLATFORMS[primaryKey].detail, formatSize(found[primaryKey].size)]
+
+  const detected = detectPlatform()
+  const meta = el('[data-download-meta]')
+
+  if (detected && found[detected]) {
+    const button = el(PLATFORMS[detected].hero)
+    if (button) {
+      button.classList.remove('btn-outline')
+      button.classList.add('btn-primary')
+    }
+    if (meta) {
+      const parts = [PLATFORMS[detected].detail, formatSize(found[detected].size)]
+      if (version) parts.unshift(`v${version}`)
+      meta.textContent = parts.join(' · ')
+    }
+  } else if (meta) {
+    // Nothing to promote — keep both sizes on show rather than picking for them.
+    const parts = Object.entries(PLATFORMS)
+      .filter(([key]) => found[key])
+      .map(([key, platform]) => `${platform.short} ${formatSize(found[key].size)}`)
     if (version) parts.unshift(`v${version}`)
-    primaryMeta.textContent = parts.join(' · ')
-  }
-
-  const secondary = el('[data-download-secondary]')
-  const secondaryMeta = el('[data-download-secondary-meta]')
-  if (secondary && found[secondaryKey]) {
-    secondary.href = found[secondaryKey].browser_download_url
-    secondary.textContent = `${PLATFORMS[secondaryKey].short} installer`
-  }
-  if (secondaryMeta && found[secondaryKey]) {
-    secondaryMeta.textContent = formatSize(found[secondaryKey].size)
+    meta.textContent = parts.join(' · ')
   }
 }
 
