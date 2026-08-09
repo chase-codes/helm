@@ -52,8 +52,12 @@ publish:
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
+  # Unsigned app with no mac auto-update — the default (dmg+zip, plus a
+  # latest-mac.yml auto-update manifest) is clutter with nothing to consume it.
+  target:
+    - dmg
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: Helm-${version}-arm64.${ext}
 linux:
   target:
     - AppImage

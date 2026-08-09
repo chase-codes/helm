@@ -350,7 +350,7 @@ Expected: `Cache bundled LibreOffice` reports a cache hit and `Vendor LibreOffic
 
 **Interfaces:**
 - Consumes: the exact cache+vendor block from Task 3; `node scripts/vendor-libreoffice.mjs` on `macos-14` (arm64 runner → darwin path).
-- Produces: a release pipeline whose next tag build publishes `Helm-Setup.exe` + `Helm-<version>-arm64.dmg` (name per existing `dmg.artifactName`: `${name}-${version}.${ext}`), both self-contained, into one draft release.
+- Produces: a release pipeline whose next tag build publishes `Helm-Setup.exe` + `Helm-<version>-arm64.dmg` (name per `dmg.artifactName`: `Helm-${version}-arm64.${ext}`), both self-contained, into one draft release.
 
 - [ ] **Step 1: Edit `release.yml`**
 
