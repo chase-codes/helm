@@ -17,19 +17,34 @@ import {
   readSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const VERSION = '25.8.7'
+// download.documentfoundation.org/stable/<VERSION>/... only serves the current point
+// release; once a newer one ships, <VERSION> moves to the archive host and the stable
+// URL 404s, breaking every future build that still pins this VERSION. TDF's archive
+// mirrors each stable build the moment it releases (not just after rotation), but under
+// a *build-numbered* path/filename — old/<VERSION>.<N>/... — where N is a rebuild
+// counter that isn't derivable from VERSION alone. ARCHIVE_VERSION below is the exact
+// build that was probed and confirmed (via the archive host's SHA-256 response header)
+// to be byte-identical to the pinned stable artifact for this VERSION. When VERSION is
+// bumped, re-probe old/<VERSION>.1/, .2/, .3/, ... on downloadarchive until one serves a
+// `digest: SHA-256=...` header matching the new pinned hash, and update ARCHIVE_VERSION
+// to match (it may not exist yet if the new VERSION hasn't been superseded on "stable").
+const ARCHIVE_VERSION = '25.8.7.3'
 const ARTIFACTS = {
   win32: {
     url: `https://download.documentfoundation.org/libreoffice/stable/${VERSION}/win/x86_64/LibreOffice_${VERSION}_Win_x86-64.msi`,
+    archiveUrl: `https://downloadarchive.documentfoundation.org/libreoffice/old/${ARCHIVE_VERSION}/win/x86_64/LibreOffice_${ARCHIVE_VERSION}_Win_x86-64.msi`,
     sha256: 'ecdb65e76f5e91dc198b8c8dce5b5d6e1eb12fea6023553e52b591afd10b619d'
   },
   darwin: {
     url: `https://download.documentfoundation.org/libreoffice/stable/${VERSION}/mac/aarch64/LibreOffice_${VERSION}_MacOS_aarch64.dmg`,
+    archiveUrl: `https://downloadarchive.documentfoundation.org/libreoffice/old/${ARCHIVE_VERSION}/mac/aarch64/LibreOffice_${ARCHIVE_VERSION}_MacOS_aarch64.dmg`,
     sha256: 'e7556aa61e282f89578ebaf35afdb09c94dcf9d6ee7c137004377bee81a6e900'
   }
 }
@@ -168,12 +183,26 @@ function resignMachOTree(dir) {
   }
 }
 
+// Tries each URL in order (primary "stable" host, then archive fallback), falling
+// through to the next on a non-OK response or a network failure. The same pinned
+// SHA256 is checked by the caller regardless of which URL wins, so integrity is
+// unaffected by which source actually served the bytes.
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
-async function download(url, toFile) {
-  console.log(`Downloading ${url} ...`)
-  const res = await fetch(url, { signal: AbortSignal.timeout(600_000) })
-  if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`)
-  writeFileSync(toFile, Buffer.from(await res.arrayBuffer()))
+async function download(urls, toFile) {
+  let lastErr
+  for (const url of urls) {
+    console.log(`Downloading ${url} ...`)
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(600_000) })
+      if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`)
+      writeFileSync(toFile, Buffer.from(await res.arrayBuffer()))
+      return
+    } catch (err) {
+      lastErr = err
+      console.log(`vendor-libreoffice: download from ${url} failed (${err.message})`)
+    }
+  }
+  throw lastErr
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
@@ -189,11 +218,11 @@ async function main() {
     return
   }
 
-  const { url, sha256 } = ARTIFACTS[process.platform]
+  const { url, archiveUrl, sha256 } = ARTIFACTS[process.platform]
   mkdirSync(work, { recursive: true })
   const archive = path.join(work, path.basename(url))
   console.log('vendor-libreoffice: phase=download')
-  if (!existsSync(archive)) await download(url, archive)
+  if (!existsSync(archive)) await download([url, archiveUrl], archive)
   console.log('vendor-libreoffice: phase=verify')
   const hash = createHash('sha256').update(readFileSync(archive)).digest('hex')
   if (hash !== sha256) throw new Error(`SHA256 mismatch for ${archive}: got ${hash}`)
@@ -269,17 +298,27 @@ async function main() {
     resignMachOTree(dest)
   }
 
-  // Smoke test the STAGED tree: headless convert must actually produce a PDF.
-  // A hermetic profile dir keeps the run off any real user profile. The URL
-  // must be a proper file:// URL (three slashes before a Windows drive
-  // letter, e.g. file:///D:/...) — file://D:/... parses "D:" as a host, which
-  // on Windows silently falls back to the default per-user profile path and
-  // risks soffice hitting the interactive first-run/registration dialog that
-  // a headless CI runner can never dismiss.
   console.log('vendor-libreoffice: phase=smoke-test')
-  const probe = path.join(work, 'probe.txt')
-  writeFileSync(probe, 'helm vendor smoke test')
-  rmSync(path.join(work, 'probe.pdf'), { force: true })
+  // Fast pre-check, run before the real (slower) conversion below: Impress must
+  // survive the prune — PPTX conversion is the whole point of vendoring this at
+  // all. Failing here first gives a clear cause instead of an opaque soffice
+  // error if some future PRUNE edit accidentally deletes the Impress library.
+  if (!treeContains(dest, 'sdlo')) {
+    throw new Error('Impress library (sdlo) missing after prune — check PRUNE list')
+  }
+
+  // Smoke test the STAGED tree: headless convert must actually turn a real PPTX
+  // into a PDF via the Impress import/export path — a plain-text probe would only
+  // ever exercise Writer, never proving Impress conversion (the whole point of
+  // vendoring LibreOffice) actually works. A hermetic profile dir keeps the run
+  // off any real user profile. The URL must be a proper file:// URL (three
+  // slashes before a Windows drive letter, e.g. file:///D:/...) — file://D:/...
+  // parses "D:" as a host, which on Windows silently falls back to the default
+  // per-user profile path and risks soffice hitting the interactive
+  // first-run/registration dialog that a headless CI runner can never dismiss.
+  const fixture = path.join(root, 'scripts', 'fixtures', 'smoke.pptx')
+  const outPdf = path.join(work, 'smoke.pdf')
+  rmSync(outPdf, { force: true })
   const profileDir = path.join(work, 'lo-profile').replace(/\\/g, '/')
   const profileUrl = process.platform === 'win32' ? `file:///${profileDir}` : `file://${profileDir}`
   execFileSync(
@@ -292,15 +331,14 @@ async function main() {
       'pdf',
       '--outdir',
       work,
-      probe
+      fixture
     ],
     { stdio: 'inherit', timeout: 5 * 60_000 }
   )
-  if (!existsSync(path.join(work, 'probe.pdf'))) throw new Error('headless convert produced no PDF')
-  // Impress must survive the prune — PPTX conversion is the whole point.
-  if (!treeContains(dest, 'sdlo')) {
-    throw new Error('Impress library (sdlo) missing after prune — check PRUNE list')
-  }
+  if (!existsSync(outPdf)) throw new Error('headless convert (Impress) produced no PDF')
+  const outSize = statSync(outPdf).size
+  if (outSize <= 1024) throw new Error(`smoke-test PDF is suspiciously small (${outSize} bytes)`)
+
   // Last statement of a successful run — see stampPath comment above.
   writeFileSync(stampPath, VERSION)
   console.log('vendor-libreoffice: staged OK')

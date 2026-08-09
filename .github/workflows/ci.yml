@@ -46,7 +46,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: resources/libreoffice
-          key: libreoffice-${{ runner.os }}-${{ hashFiles('scripts/vendor-libreoffice.mjs') }}
+          key: libreoffice-${{ runner.os }}-${{ hashFiles('scripts/vendor-libreoffice.mjs', 'scripts/fixtures/smoke.pptx') }}
       - name: Vendor LibreOffice
         if: steps.libreoffice.outputs.cache-hit != 'true'
         timeout-minutes: 25
