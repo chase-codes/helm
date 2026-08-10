@@ -33,9 +33,12 @@ export function AppearanceSettings({
     color: T.dim,
     margin: '18px 0 10px'
   }
-  const cardsRowStyle: CSSProperties = { display: 'flex', gap: '12px' }
+  const cardsRowStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '12px'
+  }
   const cardStyle = (active: boolean): CSSProperties => ({
-    flex: 1,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-start',
@@ -91,6 +94,7 @@ export function AppearanceSettings({
             >
               <span style={swatchRowStyle}>
                 <span style={swatchStyle(fam[themeMode].appBg)} />
+                <span style={swatchStyle(fam[themeMode].panel2)} />
                 <span style={swatchStyle(fam[themeMode].accent)} />
               </span>
               <span style={{ fontSize: '13.5px', fontWeight: 700, color: T.text }}>

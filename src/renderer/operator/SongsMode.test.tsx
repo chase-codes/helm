@@ -66,7 +66,7 @@ function installHelmStub(searchImpl?: (q: string, field: string) => Promise<Song
 const renderMode = (keyHandlerRef: ModeKeyHandlerRef): ReturnType<typeof render> =>
   render(
     <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
-      <SongsMode themeMode="dark" keyHandlerRef={keyHandlerRef} active />
+      <SongsMode keyHandlerRef={keyHandlerRef} active />
     </ThemeCtx.Provider>
   );
 

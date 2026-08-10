@@ -1,5 +1,4 @@
 import { useContext, useState, type CSSProperties, type JSX } from 'react';
-import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePreState, usePresentationState } from './useHelm';
 import { preSlideFor } from '../../shared/preservice/cards';
@@ -8,7 +7,6 @@ import { PreCardEditor } from './PreCardEditor';
 import type { PreCard } from '../../shared/types';
 
 export interface PreServiceModeProps {
-  themeMode: ThemeMode;
   active: boolean;
 }
 
@@ -40,10 +38,11 @@ function snippetFor(card: PreCard): string {
 // `active` isn't used yet: per the brief, pre-service needs no keep-alive (App only
 // mounts this component while mode === 'pre', and engine state lives in main and is
 // re-read on mount) — kept in the prop list to match App's mount call and leave room
-// for a future keyboard delegate.
-export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element {
+// for a future keyboard delegate. It is now the only prop, since the live-card fill
+// reads T.selBg from the theme instead of branching on the mode.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
-  const dark = themeMode === 'dark';
   const { engaged, dwellS, idx, cards } = usePreState();
   // Badges below read from the REAL presentation state, never from `engaged`. The engine
   // flag says "the loop intends to run"; only output/liveKey say what the congregation is
@@ -212,7 +211,7 @@ export function PreServiceMode({ themeMode }: PreServiceModeProps): JSX.Element 
               opacity: card.enabled || isShowing || isArmed ? 1 : 0.55,
               // Live gets the filled treatment; armed gets the ring only — the operator
               // must be able to tell "this is on the screen" from "this is queued up".
-              background: isShowing ? (dark ? '#221d10' : '#fbf1da') : T.panel2,
+              background: isShowing ? T.selBg : T.panel2,
               boxShadow: isShowing
                 ? `inset 0 0 0 1.5px ${T.accent}88`
                 : isArmed

@@ -85,7 +85,7 @@ export function ParagraphRail({
     fontSize: '12.5px',
     lineHeight: 1.42,
     fontWeight: 500,
-    color: cued ? T.text : planned ? (dark ? '#b4b1aa' : '#5f5848') : T.dim,
+    color: cued ? T.text : planned ? T.lineDim : T.dim,
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',

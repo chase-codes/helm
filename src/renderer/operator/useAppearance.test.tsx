@@ -19,6 +19,13 @@ describe('sanitizeAppearance', () => {
   it('passes valid values through', () => {
     expect(sanitizeAppearance({ family: 'helm', mode: 'light' })).toEqual({ family: 'helm', mode: 'light' })
   })
+  it('round-trips every family, including the ones added after Classic/Helm', () => {
+    // Without a FAMILIES membership check, picking Grove persisted and then
+    // reverted to Classic on relaunch.
+    expect(sanitizeAppearance({ family: 'grove', mode: 'light' })).toEqual({ family: 'grove', mode: 'light' })
+    expect(sanitizeAppearance({ family: 'sanctuary', mode: 'dark' })).toEqual({ family: 'sanctuary', mode: 'dark' })
+    expect(sanitizeAppearance({ family: 'contrast', mode: 'light' })).toEqual({ family: 'contrast', mode: 'light' })
+  })
   it('falls back per-field on garbage', () => {
     expect(sanitizeAppearance({ family: 'neon', mode: 42 })).toEqual({ family: 'classic', mode: 'dark' })
     expect(sanitizeAppearance(null)).toEqual({ family: 'classic', mode: 'dark' })

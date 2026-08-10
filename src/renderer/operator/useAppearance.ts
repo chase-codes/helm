@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { themeFor, type Theme, type ThemeFamily, type ThemeMode } from '../../shared/theme';
+import { FAMILIES, themeFor, type Theme, type ThemeFamily, type ThemeMode } from '../../shared/theme';
 
 export interface Appearance {
   family: ThemeFamily;
@@ -12,7 +12,7 @@ const DEFAULT_APPEARANCE: Appearance = { family: 'classic', mode: 'dark' };
 export function sanitizeAppearance(v: unknown): Appearance {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
   return {
-    family: o.family === 'helm' ? 'helm' : 'classic',
+    family: typeof o.family === 'string' && o.family in FAMILIES ? (o.family as ThemeFamily) : 'classic',
     mode: o.mode === 'light' ? 'light' : 'dark'
   };
 }

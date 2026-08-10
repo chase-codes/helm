@@ -155,7 +155,7 @@ export function ChapterRail({
     fontSize: `${verseFont}px`,
     lineHeight: 1.42,
     fontWeight: 500,
-    color: isCued ? T.text : planned ? (dark ? '#b4b1aa' : '#5f5848') : T.dim,
+    color: isCued ? T.text : planned ? T.lineDim : T.dim,
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',

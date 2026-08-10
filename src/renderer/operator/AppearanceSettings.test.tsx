@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppearanceSettings } from './AppearanceSettings'
 import { ThemeCtx } from './ThemeCtx'
-import { themeFor, type ThemeFamily, type ThemeMode } from '../../shared/theme'
+import { FAMILIES, themeFor, type ThemeFamily, type ThemeMode } from '../../shared/theme'
 
 afterEach(cleanup)
 
@@ -27,14 +27,24 @@ function renderAppearance(
 }
 
 describe('AppearanceSettings', () => {
-  it('renders both family cards with the active one marked', () => {
+  it('renders a card per family with the active one marked', () => {
     renderAppearance('helm')
+    for (const f of Object.keys(FAMILIES)) {
+      expect(screen.getByTestId(`family-${f}`)).toBeTruthy()
+    }
     const helm = screen.getByTestId('family-helm')
     const classic = screen.getByTestId('family-classic')
     expect(helm.textContent).toContain('Helm')
     expect(helm.textContent).toContain('✓')
     expect(classic.textContent).toContain('Classic')
     expect(classic.textContent).not.toContain('✓')
+  })
+
+  it('offers the three families added alongside Classic and Helm', () => {
+    const { onFamilyChange } = renderAppearance('classic', 'light')
+    expect(screen.getByTestId('family-grove').textContent).toContain('Sage')
+    fireEvent.click(screen.getByTestId('family-grove'))
+    expect(onFamilyChange).toHaveBeenCalledWith('grove')
   })
 
   it('shows the preset name for the current mode', () => {

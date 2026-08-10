@@ -21,7 +21,6 @@ const FIELD_TABS: Array<{ id: SearchField; label: string }> = [
 
 export interface SongSearchRailProps {
   theme: Theme;
-  dark: boolean;
   width: number;
   q: string;
   setQ: (q: string) => void;
@@ -41,7 +40,6 @@ export interface SongSearchRailProps {
 
 export function SongSearchRail({
   theme: T,
-  dark,
   width,
   q,
   setQ,
@@ -105,7 +103,7 @@ export function SongSearchRail({
     borderRadius: '10px',
     cursor: 'pointer',
     marginBottom: '2px',
-    background: active ? (dark ? '#221d10' : '#f3e6cd') : 'transparent',
+    background: active ? T.selBg : 'transparent',
     boxShadow: active ? `inset 0 0 0 1px ${T.accent}66` : 'none'
   });
   const snippetStyle: CSSProperties = {
