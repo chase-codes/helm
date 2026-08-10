@@ -170,7 +170,7 @@ export function SermonCenter({
     height: '46px',
     padding: '0 20px',
     borderRadius: '11px',
-    background: cuedIsLive ? T.live : '#2f9e5b',
+    background: cuedIsLive ? T.live : T.go,
     color: '#fff',
     fontSize: '14.5px',
     fontWeight: 700,

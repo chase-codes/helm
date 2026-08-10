@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
-import type { ModeKeyHandlerRef, ThemeMode } from './App';
+import type { ModeKeyHandlerRef } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { keyForSong, parseSongKey } from '../../shared/presentation/core';
@@ -18,7 +18,6 @@ import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 
 export interface SongsModeProps {
-  themeMode: ThemeMode;
   keyHandlerRef: ModeKeyHandlerRef;
   active: boolean;
 }
@@ -57,9 +56,8 @@ function toRow(song: Song, snippet: string, activeSongId: string | null, armedId
   };
 }
 
-export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps): JSX.Element {
+export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
-  const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
   const contextMenu = useContextMenu();
 
@@ -511,7 +509,7 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     height: '46px',
     padding: '0 20px',
     borderRadius: '11px',
-    background: !armed && cuedIsLive ? T.live : '#2f9e5b',
+    background: !armed && cuedIsLive ? T.live : T.go,
     color: '#fff',
     fontSize: '14.5px',
     fontWeight: 700,
@@ -537,7 +535,6 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
     <div style={rootStyle}>
       <SongSearchRail
         theme={T}
-        dark={dark}
         width={listPanel.width}
         q={q}
         setQ={setQ}
@@ -599,7 +596,6 @@ export function SongsMode({ themeMode, keyHandlerRef, active }: SongsModeProps):
 
           <SectionRail
             theme={T}
-            dark={dark}
             width={sectionPanel.width}
             sections={activeSong?.sections ?? []}
             cuedIndex={clampedSection}

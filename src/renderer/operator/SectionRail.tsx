@@ -4,7 +4,6 @@ import type { SongSection } from '../../shared/types';
 
 export interface SectionRailProps {
   theme: Theme;
-  dark: boolean;
   width: number;
   sections: SongSection[];
   cuedIndex: number;
@@ -12,7 +11,7 @@ export interface SectionRailProps {
   onSelect: (i: number) => void;
 }
 
-export function SectionRail({ theme: T, dark, width, sections, cuedIndex, isSectionLive, onSelect }: SectionRailProps): JSX.Element {
+export function SectionRail({ theme: T, width, sections, cuedIndex, isSectionLive, onSelect }: SectionRailProps): JSX.Element {
   const secFont = Math.round(Math.max(13, Math.min(18, width / 24)) * 10) / 10;
 
   const sectionPanelStyle: CSSProperties = {
@@ -29,7 +28,7 @@ export function SectionRail({ theme: T, dark, width, sections, cuedIndex, isSect
     padding: '11px 13px',
     borderRadius: '11px',
     cursor: 'pointer',
-    background: isLive ? (dark ? '#221d10' : '#fbf1da') : T.panel2,
+    background: isLive ? T.selBg : T.panel2,
     boxShadow: isLive
       ? `inset 0 0 0 2px ${T.accent}`
       : isCued
@@ -58,7 +57,7 @@ export function SectionRail({ theme: T, dark, width, sections, cuedIndex, isSect
     fontSize: `${secFont}px`,
     lineHeight: 1.45,
     fontWeight: 500,
-    color: isCued ? T.text : dark ? '#b4b1aa' : '#5f5848',
+    color: isCued ? T.text : T.lineDim,
     textWrap: 'pretty'
   });
 

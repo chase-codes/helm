@@ -139,14 +139,14 @@ function App(): JSX.Element {
       <div style={rootStyle}>
         <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
-          {mode === 'pre' && <PreServiceMode themeMode={themeMode} active={mode === 'pre'} />}
+          {mode === 'pre' && <PreServiceMode active={mode === 'pre'} />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
               state — cued song/section, sermon reading, schedule — survives tab switches.
               The inactive one is hidden via `display:none`; `display:contents` while active
               keeps it transparent to mainStyle's flex layout. Each receives `active` and
               only registers its keyboard delegate while it's the one on screen. */}
           <div style={{ display: mode === 'songs' ? 'contents' : 'none' }}>
-            <SongsMode themeMode={themeMode} keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
+            <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
           </div>
           <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>
             <SermonMode
