@@ -173,6 +173,16 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const clampedSection = activeSong ? Math.max(0, Math.min(section, activeSong.sections.length - 1)) : 0;
   const currentSectionObj = activeSong ? activeSong.sections[clampedSection] : undefined;
 
+  // Tracks clampedSection for onSongSaved's re-cue (see saveSection below): a save's
+  // window.helm.songs.update round-trip can outlast the operator moving the cue, so the
+  // resolve handler must read where they are NOW rather than the section captured at
+  // the keypress render. Refs may only be written outside of render (react-hooks/refs),
+  // so this syncs via effect rather than during the render body.
+  const sectionRef = useRef(clampedSection);
+  useEffect(() => {
+    sectionRef.current = clampedSection;
+  }, [clampedSection]);
+
   // Live lock (spec §1): while a song is live, the center is bound to it and list clicks
   // arm instead of selecting. parseSongKey is null for scripture/media keys, so a
   // cross-kind live screen leaves the Songs list in its normal select-to-cue behavior.
@@ -304,7 +314,9 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
       }
     }
     if (song.id === activeSongId && song.sections.length) {
-      const idx = Math.max(0, Math.min(clampedSection, song.sections.length - 1));
+      // Read the live ref, not the closed-over clampedSection: the save this callback
+      // resolves for may have been in flight while the operator moved the cue.
+      const idx = Math.max(0, Math.min(sectionRef.current, song.sections.length - 1));
       window.helm.presentation.cue(keyForSong(song.id, idx), slideFor(song, song.sections[idx]));
     }
   };
@@ -315,7 +327,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     ]);
   };
 
+  // Guards against a second Enter firing a duplicate update while the first
+  // songs:update round-trip is still in flight.
+  const savingSectionRef = useRef(false);
+
   const saveSection = (i: number, rawLines: string[]): void => {
+    if (savingSectionRef.current) return;
     const song = activeSong;
     const prev = song?.sections[i];
     if (!song || !prev) {
@@ -332,20 +349,25 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     const input: UpdateSongInput = { title: song.title, sections };
     if (song.author) input.author = song.author;
     if (song.key) input.key = song.key;
+    savingSectionRef.current = true;
     window.helm.songs.update(song.id, input).then(
       (saved) => {
+        savingSectionRef.current = false;
         setEditingSection(null);
         setEditError(false);
         onSongSaved(saved);
       },
-      () => setEditError(true)
+      () => {
+        savingSectionRef.current = false;
+        setEditError(true);
+      }
     );
   };
 
-  const [editSongId, setEditSongId] = useState<string | null>(null);
-  const editTarget = editSongId ? (library.find((s) => s.id === editSongId) ?? null) : null;
+  const [editModalSongId, setEditModalSongId] = useState<string | null>(null);
+  const editTarget = editModalSongId ? (library.find((s) => s.id === editModalSongId) ?? null) : null;
 
-  const onEditSong = (id: string): void => setEditSongId(id);
+  const onEditSong = (id: string): void => setEditModalSongId(id);
 
   const onQuickAddSaved = (song: Song): void => {
     setLibrary((prev) => [...prev, song]);
@@ -487,8 +509,8 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           setImportOpen(false);
           return true;
         }
-        if (editSongId) {
-          setEditSongId(null);
+        if (editModalSongId) {
+          setEditModalSongId(null);
           return true;
         }
         // Progressive back-out (spec §3): after modals, undo the most recent intent
@@ -519,7 +541,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
       },
       onArrow: step,
       onGoLive: armed ? commitSwitch : goLive,
-      isModalOpen: () => quickAddOpen || importOpen || editSongId !== null,
+      isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null,
       onAction
     };
     return () => {
@@ -732,9 +754,9 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
         <QuickAdd
           open
           editSong={editTarget}
-          onClose={() => setEditSongId(null)}
+          onClose={() => setEditModalSongId(null)}
           onSaved={(song) => {
-            setEditSongId(null);
+            setEditModalSongId(null);
             onSongSaved(song);
           }}
         />
