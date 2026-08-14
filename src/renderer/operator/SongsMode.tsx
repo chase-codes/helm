@@ -1,4 +1,14 @@
-import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent
+} from 'react';
 import type { ModeKeyHandlerRef } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
@@ -7,7 +17,7 @@ import { stanzaLabel } from '../../shared/songs/stanza';
 import { secondaryLyricRows } from '../../shared/songs/secondaryLyric';
 import { chorusJump, labelJump, verseJump } from '../../shared/songs/sectionJump';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
-import type { SearchField, Slide, Song, SongSearchResult } from '../../shared/types';
+import type { SearchField, Slide, Song, SongSearchResult, UpdateSongInput } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
 import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
@@ -73,6 +83,8 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importInFlight, setImportInFlight] = useState(false);
+  const [editingSection, setEditingSection] = useState<number | null>(null);
+  const [editError, setEditError] = useState(false);
   const listPanel = usePanelWidth('helmSongListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
   const sectionPanel = usePanelWidth('helmSectionPanelW', { def: SECTION_W_DEFAULT, min: SECTION_W_MIN, max: SECTION_W_MAX, anchor: 'right' });
 
@@ -161,6 +173,16 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const clampedSection = activeSong ? Math.max(0, Math.min(section, activeSong.sections.length - 1)) : 0;
   const currentSectionObj = activeSong ? activeSong.sections[clampedSection] : undefined;
 
+  // Tracks clampedSection for onSongSaved's re-cue (see saveSection below): a save's
+  // window.helm.songs.update round-trip can outlast the operator moving the cue, so the
+  // resolve handler must read where they are NOW rather than the section captured at
+  // the keypress render. Refs may only be written outside of render (react-hooks/refs),
+  // so this syncs via effect rather than during the render body.
+  const sectionRef = useRef(clampedSection);
+  useEffect(() => {
+    sectionRef.current = clampedSection;
+  }, [clampedSection]);
+
   // Live lock (spec §1): while a song is live, the center is bound to it and list clicks
   // arm instead of selecting. parseSongKey is null for scripture/media keys, so a
   // cross-kind live screen leaves the Songs list in its normal select-to-cue behavior.
@@ -242,6 +264,17 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     }
   }
 
+  // A quick-edit in flight belongs to ONE song; if the selection moves (arrow keys,
+  // live-lock reconciliation, switch commit), the editor must not survive onto the
+  // next song's section at the same index. Same render-time-adjustment shape as
+  // `prevOutput` above.
+  const [editingSongId, setEditingSongId] = useState(activeSongId);
+  if (editingSongId !== activeSongId) {
+    setEditingSongId(activeSongId);
+    if (editingSection !== null) setEditingSection(null);
+    if (editError) setEditError(false);
+  }
+
   const selectSong = (id: string): void => {
     if (locked && liveParsed) {
       if (id === liveParsed.songId) {
@@ -263,13 +296,78 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     setSection(0);
   };
 
-  // Stub for the Songs quick-edit follow-up. The context menu is the deliverable here;
-  // this just proves the wiring by surfacing the intent and selecting the row. Replace
-  // with the real in-preview quick-edit when that feature lands.
-  const onEditSong = (id: string): void => {
-    selectSong(id);
-    console.info('[songs] quick-edit requested for', id);
+  // One post-save path for both editors (spec §4): refresh the library row, keep an
+  // active search honest, and re-cue so the leader — and, via applyCue's same-flow
+  // swap, a live projector — shows the corrected text. cue, never goLive: goLive on
+  // the already-live key means take-down.
+  const onSongSaved = (song: Song): void => {
+    setLibrary((prev) => prev.map((s) => (s.id === song.id ? song : s)));
+    const query = q.trim();
+    if (query) {
+      void window.helm.songs.search(query, field).then((r) => {
+        if (mountedRef.current) setResults(r);
+      }).catch(console.error);
+      if (field === 'title') {
+        void window.helm.songs.search(query, 'lyric').then((r) => {
+          if (mountedRef.current) setLyricHint(r);
+        }).catch(console.error);
+      }
+    }
+    if (song.id === activeSongId && song.sections.length) {
+      // Read the live ref, not the closed-over clampedSection: the save this callback
+      // resolves for may have been in flight while the operator moved the cue.
+      const idx = Math.max(0, Math.min(sectionRef.current, song.sections.length - 1));
+      window.helm.presentation.cue(keyForSong(song.id, idx), slideFor(song, song.sections[idx]));
+    }
   };
+
+  const onSectionContextMenu = (i: number, e: ReactMouseEvent): void => {
+    contextMenu.open(e, [
+      { label: 'Edit', onSelect: () => { setEditError(false); setEditingSection(i); } }
+    ]);
+  };
+
+  // Guards against a second Enter firing a duplicate update while the first
+  // songs:update round-trip is still in flight.
+  const savingSectionRef = useRef(false);
+
+  const saveSection = (i: number, rawLines: string[]): void => {
+    if (savingSectionRef.current) return;
+    const song = activeSong;
+    const prev = song?.sections[i];
+    if (!song || !prev) {
+      setEditingSection(null);
+      return;
+    }
+    const lines = rawLines.map((l) => l.trim()).filter(Boolean);
+    // Blank or unchanged drafts cancel — no half-saved state, no empty sections.
+    if (!lines.length || lines.join('\n') === prev.lines.join('\n')) {
+      setEditingSection(null);
+      return;
+    }
+    const sections = song.sections.map((s, j) => (j === i ? { ...s, lines } : s));
+    const input: UpdateSongInput = { title: song.title, sections };
+    if (song.author) input.author = song.author;
+    if (song.key) input.key = song.key;
+    savingSectionRef.current = true;
+    window.helm.songs.update(song.id, input).then(
+      (saved) => {
+        savingSectionRef.current = false;
+        setEditingSection(null);
+        setEditError(false);
+        onSongSaved(saved);
+      },
+      () => {
+        savingSectionRef.current = false;
+        setEditError(true);
+      }
+    );
+  };
+
+  const [editModalSongId, setEditModalSongId] = useState<string | null>(null);
+  const editTarget = editModalSongId ? (library.find((s) => s.id === editModalSongId) ?? null) : null;
+
+  const onEditSong = (id: string): void => setEditModalSongId(id);
 
   const onQuickAddSaved = (song: Song): void => {
     setLibrary((prev) => [...prev, song]);
@@ -411,10 +509,20 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           setImportOpen(false);
           return true;
         }
+        if (editModalSongId) {
+          setEditModalSongId(null);
+          return true;
+        }
         // Progressive back-out (spec §3): after modals, undo the most recent intent
-        // first (an armed switch), then leave a text field, and only then touch the
-        // screen. Order matters: a typing operator must never black the screen with a
-        // stray Escape, and disarming before blur means "undo my arm" always wins.
+        // first — a section quick-edit in flight, then an armed switch — then leave a
+        // text field, and only then touch the screen. Order matters: a typing operator
+        // must never black the screen with a stray Escape, and cancelling the edit (or
+        // disarming) before blur means "undo my in-progress action" always wins.
+        if (editingSection !== null) {
+          setEditingSection(null);
+          setEditError(false);
+          return true;
+        }
         if (armedNextId) {
           setArmedNextId(null);
           return true;
@@ -433,7 +541,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
       },
       onArrow: step,
       onGoLive: armed ? commitSwitch : goLive,
-      isModalOpen: () => quickAddOpen || importOpen,
+      isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null,
       onAction
     };
     return () => {
@@ -601,6 +709,11 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             cuedIndex={clampedSection}
             isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
             onSelect={setSection}
+            editingIndex={editingSection}
+            editError={editError}
+            onSectionContextMenu={onSectionContextMenu}
+            onEditSave={saveSection}
+            onEditCancel={() => { setEditingSection(null); setEditError(false); }}
           />
         </div>
 
@@ -636,6 +749,17 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
       {contextMenu.menu}
       {quickAddOpen && (
         <QuickAdd open={quickAddOpen} initialTitle={quickAddTitle} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />
+      )}
+      {editTarget && (
+        <QuickAdd
+          open
+          editSong={editTarget}
+          onClose={() => setEditModalSongId(null)}
+          onSaved={(song) => {
+            setEditModalSongId(null);
+            onSongSaved(song);
+          }}
+        />
       )}
       {importOpen && (
         <SongImport

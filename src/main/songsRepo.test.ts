@@ -47,3 +47,43 @@ test('add persists an optional musical key and round-trips it', () => {
   const without = repo.add({ title: 'No Key', text: 'Verse 1\nx' });
   expect(repo.get(without.id)?.key).toBeUndefined();
 });
+
+test('update rewrites title, author, key and sections', () => {
+  const s = repo.add({ title: 'Old Title', author: 'Old Author', text: 'Verse 1\nold line one', key: 'C' });
+  const updated = repo.update(s.id, {
+    title: 'New Title',
+    author: 'New Author',
+    key: 'G',
+    sections: [{ label: 'Verse 1', lines: ['new line one', 'new line two'] }],
+  });
+  expect(updated.title).toBe('New Title');
+  const got = repo.get(s.id);
+  expect(got?.title).toBe('New Title');
+  expect(got?.author).toBe('New Author');
+  expect(got?.key).toBe('G');
+  expect(got?.sections).toEqual([{ label: 'Verse 1', lines: ['new line one', 'new line two'] }]);
+});
+
+test('update preserves source and createdAt, and can clear the key', () => {
+  const s = repo.add({ title: 'T', text: 'Verse 1\nx', source: 'web', key: 'D' });
+  const updated = repo.update(s.id, { title: 'T', sections: s.sections });
+  expect(updated.source).toBe('web');
+  expect(updated.createdAt).toBe(s.createdAt);
+  expect(repo.get(s.id)?.key).toBeUndefined();
+});
+
+test('update reindexes FTS: new lyrics match, removed lyrics do not', () => {
+  const s = repo.add({ title: 'Findable', text: 'Verse 1\nwonderful unique zebra' });
+  repo.update(s.id, { title: 'Findable', sections: [{ label: 'Verse 1', lines: ['gracious mighty falcon'] }] });
+  expect(repo.search('falcon', 'lyric').map((r) => r.song.id)).toContain(s.id);
+  expect(repo.search('zebra', 'lyric').map((r) => r.song.id)).not.toContain(s.id);
+});
+
+test('update throws on unknown id and on empty sections', () => {
+  const s = repo.add({ title: 'T', text: 'Verse 1\nx' });
+  expect(() => repo.update('nope', { title: 'T', sections: s.sections })).toThrow('Song not found');
+  expect(() => repo.update(s.id, { title: 'T', sections: [] })).toThrow('Song has no content');
+  expect(() => repo.update(s.id, { title: 'T', sections: [{ label: 'Verse 1', lines: ['  '] }] })).toThrow('Song has no content');
+  // failed update leaves the row untouched
+  expect(repo.get(s.id)?.sections[0].lines).toEqual(['x']);
+});

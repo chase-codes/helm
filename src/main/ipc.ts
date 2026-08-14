@@ -10,6 +10,7 @@ import {
   type ScriptureReading,
   type SearchField,
   type Slide,
+  type UpdateSongInput,
 } from '../shared/types';
 import type { SongsRepo } from './songsRepo';
 import type { BiblesRepo } from './biblesRepo';
@@ -58,6 +59,7 @@ export function registerIpc(
   ipcMain.handle(CH.songsList, () => repo.list());
   ipcMain.handle(CH.songsGet, (_e, id: string) => repo.get(id));
   ipcMain.handle(CH.songsAdd, (_e, input: NewSongInput) => repo.add(input));
+  ipcMain.handle(CH.songsUpdate, (_e, id: string, input: UpdateSongInput) => repo.update(id, input));
   ipcMain.handle(CH.presGet, () => presentation.get());
   ipcMain.on(CH.presCue, (_e, key: string, slide: Slide) => presentation.cue(key, slide));
   ipcMain.on(CH.presGoLive, (_e, key: string, slide: Slide) => presentation.goLive(key, slide));

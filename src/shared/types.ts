@@ -11,6 +11,7 @@ export interface Song {
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
 export interface NewSongInput { title: string; author?: string; text: string; source?: string; key?: string }
+export interface UpdateSongInput { title: string; author?: string; key?: string; sections: SongSection[] }
 export interface SongWebCandidate {
   title: string; author: string;
   text: string;              // tidied + chorus-labeled — display-ready
@@ -168,7 +169,7 @@ export interface UpdateStatus { state: UpdateState; version: string | null }
 
 export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
-  songsGet: 'songs:get', songsAdd: 'songs:add',
+  songsGet: 'songs:get', songsAdd: 'songs:add', songsUpdate: 'songs:update',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presSetOutput: 'presentation:setOutput',
@@ -266,6 +267,7 @@ export interface HelmApi {
     list(): Promise<Song[]>;
     get(id: string): Promise<Song | null>;
     add(input: NewSongInput): Promise<Song>;
+    update(id: string, input: UpdateSongInput): Promise<Song>;
   };
   presentation: {
     get(): Promise<PresentationState>;
