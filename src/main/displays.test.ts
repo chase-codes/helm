@@ -64,6 +64,7 @@ import {
   initDisplays,
   resyncDisplays,
   setDisplayRole,
+  toggleOutputsReleased,
 } from './displays';
 import type { SettingsRepo } from './settingsRepo';
 
@@ -186,5 +187,44 @@ describe('off role (#51)', () => {
     initDisplays(() => null, memRepo({ 'displays:roles': { 'label:EXT2': 'off' } }).repo);
     resyncDisplays();
     expect(displayStatus().outputs).toBe(0);
+  });
+});
+
+describe('release / take (#51)', () => {
+  beforeEach(() => {
+    closeAllOutputs();
+    vi.mocked(screen.getAllDisplays).mockReturnValue([disp(1), disp(2), disp(3)]);
+    initDisplays(() => null, memRepo().repo);
+  });
+
+  it('release destroys every output and flags status; take restores them', () => {
+    expect(displayStatus().outputs).toBe(2);
+    expect(displayStatus().released).toBe(false);
+
+    toggleOutputsReleased();
+    expect(displayStatus().outputs).toBe(0);
+    expect(displayStatus().released).toBe(true);
+
+    toggleOutputsReleased();
+    expect(displayStatus().outputs).toBe(2);
+    expect(displayStatus().released).toBe(false);
+  });
+
+  it('a display plugged in while released is left alone until take', () => {
+    toggleOutputsReleased();
+    vi.mocked(screen.getAllDisplays).mockReturnValue([disp(1), disp(2), disp(3), disp(4)]);
+    resyncDisplays(); // what the display-added handler runs
+    expect(displayStatus().outputs).toBe(0);
+
+    toggleOutputsReleased();
+    expect(displayStatus().outputs).toBe(3);
+  });
+
+  it('released is transient: re-init starts un-released', () => {
+    toggleOutputsReleased();
+    expect(displayStatus().released).toBe(true);
+    initDisplays(() => null, memRepo().repo); // relaunch equivalent
+    expect(displayStatus().released).toBe(false);
+    expect(displayStatus().outputs).toBe(2);
   });
 });

@@ -30,6 +30,11 @@ let getOperator: () => BrowserWindow | null = () => null;
 let settings: SettingsRepo | null = null;
 let lastDisplays: DisplayInfo[] = [];
 
+// Transient release: while true, sync() plans nothing so every screen belongs to other
+// apps — including displays plugged in while released. Deliberately NOT persisted; a
+// relaunch always claims screens per saved roles (#51).
+let released = false;
+
 function loadOutput(win: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/output/index.html`);
   else win.loadFile(join(__dirname, '../renderer/output/index.html'));
@@ -87,7 +92,7 @@ function sync(): void {
   const snaps = screen.getAllDisplays().map(snapshot);
   const opId = operatorDisplayId();
   const roles = savedRoles();
-  const plan = planAttachments(snaps, opId, roles);
+  const plan = released ? [] : planAttachments(snaps, opId, roles);
   const plannedIds = new Set(plan.map((a) => a.displayId));
   const views = savedViews();
   const splits = savedSplits();
@@ -149,7 +154,14 @@ function sync(): void {
 
 export function displayStatus(): DisplayStatus {
   const liveTestOutputs = [...testOutputs].filter((w) => !w.isDestroyed()).length;
-  return { outputs: byDisplayId.size + liveTestOutputs, displays: lastDisplays };
+  return { outputs: byDisplayId.size + liveTestOutputs, displays: lastDisplays, released };
+}
+
+// Toggle transient release of every output. Dev test outputs are framed windows that
+// don't claim a screen — release leaves them alone.
+export function toggleOutputsReleased(): void {
+  released = !released;
+  sync();
 }
 
 // Persist a role for a fingerprint and live-re-tag every matching window (no re-spawn —
@@ -236,6 +248,7 @@ export function setLeaderSplitFromSender(sender: Electron.WebContents, px: numbe
 }
 
 export function initDisplays(getOperatorWindow: () => BrowserWindow | null, settingsRepo: SettingsRepo): void {
+  released = false;
   getOperator = getOperatorWindow;
   settings = settingsRepo;
   screen.on('display-added', sync);

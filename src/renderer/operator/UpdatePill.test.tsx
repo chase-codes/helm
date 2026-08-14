@@ -22,7 +22,7 @@ function installHelmStub(): void {
       })
     },
     displays: {
-      get: vi.fn(() => Promise.resolve<DisplayStatus>({ outputs: 0, displays: [] })),
+      get: vi.fn(() => Promise.resolve<DisplayStatus>({ outputs: 0, displays: [], released: false })),
       onStatus: vi.fn((cb: (d: DisplayStatus) => void) => {
         displaysCb = cb
         return () => {}
@@ -54,7 +54,7 @@ describe('UpdatePill', () => {
     render(<UpdatePill />)
     await act(async () => {
       updateCb({ state: 'ready', version: '0.2.0' })
-      displaysCb({ outputs: 1, displays: [] })
+      displaysCb({ outputs: 1, displays: [], released: false })
     })
     expect(screen.queryByRole('button')).toBeNull()
   })

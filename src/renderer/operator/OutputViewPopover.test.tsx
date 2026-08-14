@@ -11,6 +11,7 @@ afterEach(cleanup)
 
 const STATUS: DisplayStatus = {
   outputs: 2,
+  released: false,
   displays: [
     {
       id: 1,
@@ -171,6 +172,7 @@ describe('OutputViewPopover', () => {
     const setLeaderSplit = vi.fn()
     const leaderStatus: DisplayStatus = {
       outputs: 2,
+      released: false,
       displays: [
         {
           id: 1,

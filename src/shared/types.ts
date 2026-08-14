@@ -161,7 +161,7 @@ export interface DisplayInfo {
   view: OutputViewMode | null;  // resolved view for outputs; null for the operator display
   leaderSplit: number | null;   // rail px for the leader view; null for the operator display
 }
-export interface DisplayStatus { outputs: number; displays: DisplayInfo[] }
+export interface DisplayStatus { outputs: number; displays: DisplayInfo[]; released: boolean }
 
 export type UpdateState = 'idle' | 'available' | 'ready'
 export interface UpdateStatus { state: UpdateState; version: string | null }
@@ -178,6 +178,7 @@ export const CH = {
   displaysOpenTest: 'displays:openTest', displaysSetRole: 'displays:setRole',
   displaysSetView: 'displays:setView',
   displaysSetLeaderSplit: 'displays:setLeaderSplit',
+  displaysToggleReleased: 'displays:toggleReleased',
   biblesManifest: 'bibles:manifest', biblesInstall: 'bibles:install',
   biblesUninstall: 'bibles:uninstall',
   biblesProgress: 'bibles:progress',  // main → all windows
@@ -282,6 +283,7 @@ export interface HelmApi {
     setRole(fingerprint: string, role: OutputRole): void;
     setView(fingerprint: string, view: OutputViewMode): void;
     setLeaderSplit(fingerprint: string | null, px: number): void;
+    toggleReleased(): void;
   };
   bibles: {
     manifest(): Promise<BibleManifestEntry[]>;

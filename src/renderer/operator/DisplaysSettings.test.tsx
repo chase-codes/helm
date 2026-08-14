@@ -10,6 +10,7 @@ afterEach(cleanup)
 
 const STATUS: DisplayStatus = {
   outputs: 2,
+  released: false,
   displays: [
     {
       id: 1,
