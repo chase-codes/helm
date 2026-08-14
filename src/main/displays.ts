@@ -164,8 +164,8 @@ export function toggleOutputsReleased(): void {
   sync();
 }
 
-// Persist a role for a fingerprint and live-re-tag every matching window (no re-spawn —
-// a variant swap is a live re-tag). Called from IPC (Task 4) and 6b's UI later.
+// Persist a role for a fingerprint and live-re-tag every matching window — a variant swap
+// is a live re-tag, except crossing the off boundary, which forces a full resync below.
 export function setDisplayRole(fingerprint: string, role: OutputRole): void {
   const roles = savedRoles();
   const prev = roles[fingerprint] ?? DEFAULT_ROLE;
