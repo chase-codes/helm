@@ -117,24 +117,35 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   // see shared/presentation/core.ts's `sameFlow`) — so stepping within the SAME deck
   // while live hot-updates, and selecting a DIFFERENT item while live does not disturb
   // the output until Go Live is pressed again.
+  //
+  // `active && track === 'slides'` gates this to the track actually being the surface the
+  // operator is driving — this component stays mounted while hidden (SermonMode's track
+  // keep-alive, mirroring the mode-level contract), so without the gate the initial media
+  // load would cue a slide from a background track. Both are deps, so re-revealing the
+  // track re-cues the slide it was left on, restoring main's cued state after another
+  // surface cued something else.
   useEffect(() => {
+    if (!active || track !== 'slides') return;
     const sel = items.find((i) => i.id === selId);
     if (!sel) return;
     const sl = slidesOf(sel);
     if (!sl.length) return;
     const idx = Math.max(0, Math.min(slideIdx, sl.length - 1));
     window.helm.presentation.cue(keyForMedia(sel.id, idx), sl[idx]);
-  }, [items, selId, slideIdx]);
+  }, [items, selId, slideIdx, active, track]);
 
   // Video items are backed by the shared main-owned video state: arm the selected
   // clip so the operator hero previews it (muted) and Go Live can mirror it. Uses
-  // slidesOf's src so the key/src match what SlideCanvas/VideoCanvas render.
+  // slidesOf's src so the key/src match what SlideCanvas/VideoCanvas render. Gated
+  // like the cue effect above; the re-fire on reveal is safe because main's loadVideo
+  // is idempotent on the already-loaded key (position/playing state kept).
   useEffect(() => {
+    if (!active || track !== 'slides') return;
     const sel = items.find((i) => i.id === selId);
     if (!sel || sel.type !== 'video') return;
     const vsl = slidesOf(sel)[0];
     window.helm.video.load(keyForMedia(sel.id, 0), vsl.src ?? '');
-  }, [items, selId]);
+  }, [items, selId, active, track]);
 
   // Progress broadcast from main (Task 2's media:importProgress) — updates the spinner
   // label with page counts while a deck import converts/rasterizes.

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { useRef, type JSX } from 'react'
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SermonMode } from './SermonMode'
 import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
-import type { ChapterData, PresentationState, ScriptureReading } from '../../shared/types'
+import type { ChapterData, MediaItem, Message, PresentationState, ScriptureReading } from '../../shared/types'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -38,12 +38,16 @@ const GEN_1_1_LIVE: PresentationState = {
 
 function installHelmStub(
   pres: PresentationState = NOTHING_LIVE,
-  schedule: ScriptureReading[] = []
+  schedule: ScriptureReading[] = [],
+  opts: { media?: MediaItem[]; tape?: Message } = {}
 ): {
   show: ReturnType<typeof vi.fn>
   goLive: ReturnType<typeof vi.fn>
   setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
+  cue: ReturnType<typeof vi.fn>
+  mediaList: ReturnType<typeof vi.fn>
+  messageList: ReturnType<typeof vi.fn>
   resolveChapter: () => void
   pushState: (next: PresentationState) => void
 } {
@@ -51,6 +55,15 @@ function installHelmStub(
   const goLive = vi.fn()
   const setOutput = vi.fn()
   const add = vi.fn(() => Promise.resolve([]))
+  const cue = vi.fn()
+  const mediaList = vi.fn(() => Promise.resolve(opts.media ?? []))
+  const messageList = vi.fn(() =>
+    Promise.resolve(
+      opts.tape
+        ? [{ id: opts.tape.id, tapeNo: opts.tape.tapeNo, title: opts.tape.title, date: opts.tape.date, durationS: opts.tape.durationS, hasAudio: false }]
+        : []
+    )
+  )
   // Main broadcasts presentation state; usePresentationState subscribes via onState. Keep
   // the subscriber so a test can push a later state (logo -> live) after mount.
   let emit: (s: PresentationState) => void = () => {}
@@ -80,25 +93,46 @@ function installHelmStub(
       show,
       goLive,
       setOutput,
-      cue: vi.fn()
+      cue
     },
-    // Minimal Message-track stubs: SermonMode.test.tsx only exercises the divider
-    // count after switching to the Message tab (see the resizable-rails describe
-    // block below), never MessageMode's own data-fetching behavior — an empty tape
-    // list keeps its post-mount effects (get/timing/onAudioProgress) from firing.
+    // Message-track stubs: an empty tape list (the default) keeps MessageMode's
+    // post-mount effects (get/timing/onAudioProgress) from firing; pass opts.tape
+    // to exercise real Message-track behavior.
     message: {
-      list: () => Promise.resolve([]),
-      get: () => Promise.resolve(null),
+      list: messageList,
+      get: (id: string) => Promise.resolve(opts.tape && opts.tape.id === id ? opts.tape : null),
       timing: () => Promise.resolve([]),
       onAudioProgress: () => () => {}
     },
-    quoteSchedule: { list: () => Promise.resolve([]) }
+    quoteSchedule: { list: () => Promise.resolve([]) },
+    media: {
+      list: mediaList,
+      importImages: vi.fn(),
+      importVideo: vi.fn(),
+      importDeck: vi.fn(),
+      remove: vi.fn(() => Promise.resolve([])),
+      onImportProgress: () => () => {}
+    },
+    video: {
+      get: () => Promise.resolve({ key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false }),
+      onState: () => () => {},
+      load: vi.fn(),
+      play: vi.fn(),
+      pause: vi.fn(),
+      seek: vi.fn(),
+      setVolume: vi.fn(),
+      setMuted: vi.fn(),
+      reportDuration: vi.fn()
+    }
   }
   return {
     show,
     goLive,
     setOutput,
     add,
+    cue,
+    mediaList,
+    messageList,
     resolveChapter: release,
     pushState: (next) => act(() => emit(next))
   }
@@ -126,6 +160,18 @@ function Harness({
       />
     </ThemeCtx.Provider>
   )
+}
+
+// All three tracks stay mounted under SermonMode's keep-alive wrappers (#60), so a hidden
+// track's DOM — including its TrackTabs and hero buttons — is still present. These helpers
+// scope queries to one track's wrapper and read its shown/hidden state; clickTab picks any
+// tab button since every TrackTabs instance drives the same setTrack.
+const trackPanel = (t: 'scripture' | 'message' | 'slides'): HTMLElement =>
+  document.querySelector(`[data-track-panel="${t}"]`) as HTMLElement
+const panelHidden = (t: 'scripture' | 'message' | 'slides'): boolean =>
+  trackPanel(t).style.display === 'none'
+const clickTab = (label: string): void => {
+  fireEvent.click(screen.getAllByText(label)[0])
 }
 
 const entry = (): HTMLElement => screen.getByPlaceholderText('Add reading — John 3:16')
@@ -362,11 +408,13 @@ describe('SermonMode — the Go live button does what its label says', () => {
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
 
-    // Move the cursor off the live verse; the label flips back to "● Go live".
+    // Move the cursor off the live verse; the label flips back to "● Go live". Scoped to
+    // the scripture panel — the hidden message/slides heroes render their own Go live.
+    const scripture = within(trackPanel('scripture'))
     fireEvent.click(verseCard(3))
-    await waitFor(() => expect(screen.getByText('Go live')).toBeTruthy())
+    await waitFor(() => expect(scripture.getByText('Go live')).toBeTruthy())
 
-    fireEvent.click(screen.getByText('Go live'))
+    fireEvent.click(scripture.getByText('Go live'))
     expect(goLive).toHaveBeenCalled()
     expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
     expect(setOutput).not.toHaveBeenCalled()
@@ -442,7 +490,9 @@ describe('SermonMode — scripture track rails are resizable', () => {
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
-    const dividers = screen.getAllByTitle('Drag to resize')
+    // Scoped to the scripture panel — the kept-alive message/slides tracks render their
+    // own dividers too.
+    const dividers = within(trackPanel('scripture')).getAllByTitle('Drag to resize')
     expect(dividers).toHaveLength(2)
     fireEvent.mouseDown(dividers[0], { clientX: 100 })
     fireEvent.mouseMove(window, { clientX: 160 })
@@ -464,8 +514,9 @@ describe('SermonMode — scripture track rails are resizable', () => {
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
-    fireEvent.click(screen.getByText('Message'))
-    await waitFor(() => expect(screen.getAllByTitle('Drag to resize')).toHaveLength(2))
+    clickTab('Message')
+    await waitFor(() => expect(panelHidden('message')).toBe(false))
+    expect(within(trackPanel('message')).getAllByTitle('Drag to resize')).toHaveLength(2)
   })
 })
 
@@ -500,18 +551,17 @@ describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', (
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
-    // Move off the scripture track first — SchedulePanel, and the entry with it, unmount
-    // entirely while the Message track is active (see the track-switch in SermonMode's
-    // render).
-    fireEvent.click(screen.getByText('Message'))
-    await waitFor(() => expect(screen.queryByPlaceholderText('Add reading — John 3:16')).toBeNull())
+    // Move off the scripture track first — the panel (kept alive, #60) hides while the
+    // Message track is active.
+    clickTab('Message')
+    await waitFor(() => expect(panelHidden('scripture')).toBe(true))
 
-    // Simulate App's Mod+L: bump lookupNonce. Part 1's setTrack is deferred a real tick, so
-    // the entry doesn't exist yet on the next render — wait (rather than assert
-    // synchronously) for it to remount, then check focus landed on it.
+    // Simulate App's Mod+L: bump lookupNonce. Part 1's setTrack is deferred a real tick,
+    // so wait (rather than assert synchronously) for the scripture panel to come back,
+    // then check focus landed on the entry.
     rerender(<Harness lookupNonce={1} />)
-    await waitFor(() => expect(entry()).toBeTruthy())
-    expect(document.activeElement).toBe(entry())
+    await waitFor(() => expect(panelHidden('scripture')).toBe(false))
+    await waitFor(() => expect(document.activeElement).toBe(entry()))
   })
 
   it('re-focuses the entry when already on the scripture track', async () => {
@@ -575,10 +625,10 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
 
-    // Move off the scripture track — TrackTabs is rendered by MessageMode too, so
+    // Move off the scripture track — TrackTabs is rendered by every track, so
     // 'Scripture'/'Message' stay clickable throughout.
-    fireEvent.click(screen.getByText('Message'))
-    await waitFor(() => expect(screen.queryByPlaceholderText('Add reading — John 3:16')).toBeNull())
+    clickTab('Message')
+    await waitFor(() => expect(panelHidden('scripture')).toBe(true))
 
     // Fire the reading hotkey while on the Message track — the `track !== 'scripture'`
     // guard must swallow it rather than moving the (currently invisible) cursor.
@@ -587,7 +637,7 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
     // The hero label is the cursor's own text ("Genesis 1:1"); the schedule row for
     // reading 1 ("Genesis 1:3") stays on screen regardless, so asserting the hero still
     // reads the untouched cursor is the unambiguous check that the action was swallowed.
-    fireEvent.click(screen.getByText('Scripture'))
+    clickTab('Scripture')
     await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
   })
 })
@@ -639,6 +689,126 @@ describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4
   })
 })
 
+// One deck of three slides / one tape of three paragraphs — enough to step off the
+// initial position and detect a reset back to it.
+const DECK: MediaItem = {
+  id: 'd1',
+  type: 'deck',
+  title: 'Easter',
+  filePath: null,
+  slides: ['d1/1.png', 'd1/2.png', 'd1/3.png'],
+  createdAt: 0
+}
+const TAPE: Message = {
+  id: 'm1',
+  tapeNo: '47-0412',
+  title: 'Faith Is The Substance',
+  date: '47-0412',
+  durationS: 60,
+  audioPath: null,
+  source: 'test',
+  paragraphs: [
+    { ord: 0, label: '1', text: 'First paragraph' },
+    { ord: 1, label: '2', text: 'Second paragraph' },
+    { ord: 2, label: '3', text: 'Third paragraph' }
+  ]
+}
+
+describe('SermonMode — track state survives switching away (#60)', () => {
+  it('returning to the slides track restores the same deck slide', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { media: [DECK] })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Slides')
+    // Deck loaded, cued on slide 1 → the on-deck strip previews slide 2.
+    await waitFor(() => expect(screen.getByText('Slide 2 of 3')).toBeTruthy())
+    fireEvent.click(screen.getByText('Next slide ›'))
+    await waitFor(() => expect(screen.getByText('Slide 3 of 3')).toBeTruthy())
+
+    clickTab('Scripture')
+    clickTab('Slides')
+    await waitFor(() => expect(screen.getByText('Slide 3 of 3')).toBeTruthy())
+  })
+
+  it('returning to the message track restores the same paragraph', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Message')
+    await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶1')).toBeTruthy())
+    fireEvent.click(screen.getByText('Next ¶ ›'))
+    await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶2')).toBeTruthy())
+
+    clickTab('Scripture')
+    clickTab('Message')
+    await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶2')).toBeTruthy())
+  })
+
+  // Keeping the tracks mounted must not let them drive main's presentation/video state
+  // while another track is the surface the operator is using — the same hazard the
+  // scripture show effect's `active && track === 'scripture'` gate closes one level up.
+  it('hidden tracks do not cue or load video while scripture drives', async () => {
+    const VIDEO: MediaItem = { id: 'v1', type: 'video', title: 'Promo', filePath: 'video/promo.mp4', slides: [], createdAt: 0 }
+    const { cue, resolveChapter } = installHelmStub(NOTHING_LIVE, [], { media: [VIDEO], tape: TAPE })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    // Let the media/message loads land — then nothing may have been cued or loaded.
+    await act(async () => {})
+    expect(cue).not.toHaveBeenCalled()
+    expect(window.helm.video.load).not.toHaveBeenCalled()
+
+    // Revealing the slides track is what cues its selection and arms the video preview.
+    clickTab('Slides')
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:v1:0', expect.anything()))
+    expect(window.helm.video.load).toHaveBeenCalledWith('pres:v1:0', 'helm-media://video/promo.mp4')
+  })
+
+  it('revealing the slides track again re-cues the slide the operator was on', async () => {
+    const { cue, resolveChapter } = installHelmStub(NOTHING_LIVE, [], { media: [DECK] })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Slides')
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:d1:0', expect.anything()))
+    fireEvent.click(screen.getByText('Next slide ›'))
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:d1:1', expect.anything()))
+
+    clickTab('Scripture')
+    cue.mockClear()
+    // Coming back must restore main's cued state to the slide the track is showing —
+    // another surface may have cued something else in between.
+    clickTab('Slides')
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:d1:1', expect.anything()))
+  })
+
+  it('switching tracks does not re-run the media or message list fetches', async () => {
+    const { mediaList, messageList, resolveChapter } = installHelmStub(NOTHING_LIVE, [], {
+      media: [DECK],
+      tape: TAPE
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Slides')
+    await waitFor(() => expect(mediaList).toHaveBeenCalled())
+    clickTab('Message')
+    await waitFor(() => expect(messageList).toHaveBeenCalled())
+    clickTab('Scripture')
+    clickTab('Slides')
+    clickTab('Message')
+    await act(async () => {})
+    expect(mediaList).toHaveBeenCalledTimes(1)
+    expect(messageList).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('SermonMode — ChapterRail scroll requests', () => {
   it('does not re-fire an already-consumed scroll request when ChapterRail remounts', async () => {
     const scrollSpy = vi.fn()
@@ -657,13 +827,14 @@ describe('SermonMode — ChapterRail scroll requests', () => {
     await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith({ block: 'start' }))
     scrollSpy.mockClear()
 
-    // Flip away to Message and back — ChapterRail unmounts, then remounts fresh. Its
-    // mount effect runs unconditionally regardless of prior deps, so without
-    // consumedNonceRef this replays the same, already-satisfied, request.
-    fireEvent.click(screen.getByText('Message'))
-    await waitFor(() => expect(screen.queryByText('Verse 3')).toBeNull())
-    fireEvent.click(screen.getByText('Scripture'))
-    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+    // Flip away to Message and back. Under keep-alive (#60) ChapterRail no longer
+    // remounts on a track switch, but the consumedNonce guard still matters for any
+    // path that does remount it — either way, the already-satisfied request must not
+    // replay after a track roundtrip.
+    clickTab('Message')
+    await waitFor(() => expect(panelHidden('scripture')).toBe(true))
+    clickTab('Scripture')
+    await waitFor(() => expect(panelHidden('scripture')).toBe(false))
 
     expect(scrollSpy).not.toHaveBeenCalled()
   })

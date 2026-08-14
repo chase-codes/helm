@@ -707,14 +707,20 @@ export function SermonMode({
   );
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
+  // Keep-alive wrapper per track, mirroring App's mode-level contract (see the
+  // keyHandlerRef-registration comment above): all three tracks stay mounted so switching
+  // away and back doesn't destroy their local state — deck/slide position, message/
+  // paragraph/search query — mid-service (#60). `contents` (not `flex`) while active so
+  // each track's children join rootStyle's flex row exactly as they did when the tracks
+  // were rendered directly; `none` hides the whole subtree without unmounting it. Each
+  // track owns its own full rail set (TrackTabs + rails + hero) — MessageMode/SlidesTrack
+  // are not rendered alongside SchedulePanel inside one panel, since that would double up
+  // the left rail.
+  const panelStyle = (t: SermonTrack): CSSProperties => ({ display: track === t ? 'contents' : 'none' });
 
   return (
     <div style={rootStyle}>
-      {track === 'message' ? (
-        // Message track: MessageMode renders its own single left rail (TrackTabs +
-        // MessageSearchRail) plus the center hero and ParagraphRail — SchedulePanel is
-        // NOT also rendered here, since that would double up the rail (SchedulePanel's
-        // tabs-only panel as one column, MessageSearchRail as a second sibling column).
+      <div style={panelStyle('message')} data-track-panel="message">
         <MessageMode
           themeMode={themeMode}
           messageKeyRef={messageKeyRef}
@@ -724,10 +730,8 @@ export function SermonMode({
           leftPanel={leftPanel}
           rightPanel={rightPanel}
         />
-      ) : track === 'slides' ? (
-        // Slides track: same reasoning as Message above — SlidesTrack owns its own
-        // TrackTabs + media-library rail + hero + deck rail, so SchedulePanel (whose
-        // body only ever renders for 'scripture') is not also rendered as a sibling.
+      </div>
+      <div style={panelStyle('slides')} data-track-panel="slides">
         <SlidesTrack
           slidesKeyRef={slidesKeyRef}
           active={active}
@@ -736,8 +740,8 @@ export function SermonMode({
           leftPanel={leftPanel}
           rightPanel={rightPanel}
         />
-      ) : (
-        <>
+      </div>
+      <div style={panelStyle('scripture')} data-track-panel="scripture">
           <SchedulePanel
             theme={T}
             width={leftPanel.width}
@@ -794,8 +798,7 @@ export function SermonMode({
             scrollRequest={railScroll && railScroll.nonce > consumedNonce ? railScroll : null}
             onScrollConsumed={setConsumedNonce}
           />
-        </>
-      )}
+      </div>
       {contextMenu.menu}
     </div>
   );

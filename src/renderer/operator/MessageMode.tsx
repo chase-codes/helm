@@ -205,11 +205,17 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const liveMsg = msg && msg.id === msgId ? msg : null;
 
   // Cue on every tape/paragraph change (mirrors SermonMode's scripture cue effect).
+  // `active && track === 'message'` gates this to the track actually being the surface
+  // the operator is driving — this component stays mounted while hidden (SermonMode's
+  // track keep-alive), so without the gate the initial tape load would cue a quote from
+  // a background track. Both are deps, so re-revealing the track re-cues the quote it
+  // was left on (see SlidesTrack's cue effect for the same pattern).
   useEffect(() => {
+    if (!active || track !== 'message') return;
     if (!liveMsg) return;
     const key = keyForMessageQuote(msgId, msgIdx);
     window.helm.presentation.cue(key, buildQuoteSlide(liveMsg, msgIdx));
-  }, [msgId, msgIdx, liveMsg]);
+  }, [msgId, msgIdx, liveMsg, active, track]);
 
   const curKey = keyForMessageQuote(msgId, msgIdx);
   const cuedIsLive = output === 'live' && liveKey === curKey;
