@@ -23,6 +23,13 @@ import type { PanelWidthControl } from './usePanelWidth';
 export interface SlidesKeyHandler {
   onArrow: (dir: 1 | -1) => void;
   onGoLive: () => void;
+  /** Escape rung for this track's own overlays (deck-fallback modal, import popover) —
+   * SermonMode's ladder consults this FIRST so Escape closes an overlay rather than
+   * blacking the screen. Returns true if it consumed the press. */
+  onEscape: () => boolean;
+  /** True while the deck-fallback modal is up — a blocking modal, so SermonMode reports
+   * it and App suppresses Enter/Delete behind it (same contract as SongsMode's QuickAdd). */
+  isModalOpen: () => boolean;
 }
 export type SlidesKeyRef = MutableRefObject<SlidesKeyHandler | null>;
 
@@ -219,7 +226,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     commitPending();
   }, [undo.pending, commitPending]);
 
-  // Commit a still-pending delete if this track unmounts before the toast expires.
+  // Commit a still-pending delete on unmount. Under SermonMode's track keep-alive this
+  // effectively only fires at app teardown (a track switch no longer unmounts this
+  // component) — the expiry and supersede paths above carry the normal load — but it
+  // stays as the backstop for any future path that does unmount the track.
   useEffect(() => () => commitPending(), [commitPending]);
 
   const stepSlide = (dir: 1 | -1): void => {
@@ -289,12 +299,31 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     );
   };
 
+  // Escape backs out this track's own overlays, modal before popover (only one can be
+  // open from the UI today, but the blocking modal wins if both somehow are).
+  const escapeOverlays = (): boolean => {
+    if (deckFallback) {
+      setDeckFallback(null);
+      return true;
+    }
+    if (importOpen) {
+      setImportOpen(false);
+      return true;
+    }
+    return false;
+  };
+
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
   // messageKeyRef-registration effect) — no deps array so it always captures the latest
   // stepSlide/goLive closures.
   useEffect(() => {
     if (!active) return;
-    slidesKeyRef.current = { onArrow: stepSlide, onGoLive: goLive };
+    slidesKeyRef.current = {
+      onArrow: stepSlide,
+      onGoLive: goLive,
+      onEscape: escapeOverlays,
+      isModalOpen: () => deckFallback !== null
+    };
     return () => {
       slidesKeyRef.current = null;
     };

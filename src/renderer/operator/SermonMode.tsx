@@ -582,7 +582,9 @@ export function SermonMode({
       // Escape ladder (onEscape above) doesn't also blur the field on the same
       // keystroke; each Escape backs out exactly one layer. A second Escape (already
       // empty) falls through via normal bubbling to the ladder, which blurs, and only
-      // a third can touch the screen.
+      // a third can touch the screen. stopPropagation also keeps the press from the
+      // dispatcher's Settings-close branch — acceptable, since the entry can't be
+      // focused with text in it while the Settings overlay is up.
       if (renderBuilder(builder) !== '') {
         e.preventDefault();
         e.stopPropagation();
@@ -667,13 +669,15 @@ export function SermonMode({
     if (!active) return;
     keyHandlerRef.current = {
       // Progressive back-out, the same ladder SongsMode implements (spec §3), minus the
-      // rungs Sermon doesn't have: no mode-owned modal to close (Settings is App's — see
-      // isModalOpen below) and no armed switch to disarm. Leave a text field first, and
-      // only then touch the screen — a typing operator must never black the screen with
-      // a stray Escape. (A first Escape with text in the scripture entry never even gets
-      // here: onEntryKeyDown clears the builder and stops propagation.) Deliberately not
+      // armed-switch rung Sermon doesn't have. Overlays first (the slides track owns two:
+      // the deck-fallback modal and the import popover; Settings is App's, handled above
+      // the mode layer), then leave a text field, and only then touch the screen — a
+      // typing operator must never black the screen with a stray Escape. (A first Escape
+      // with text in the scripture entry never even gets here: onEntryKeyDown clears the
+      // builder and stops propagation.) The blur/black rungs are deliberately not
       // track-gated — blur covers whichever rail input is focused, and black is black.
       onEscape: () => {
+        if (track === 'slides' && slidesKeyRef.current?.onEscape()) return true;
         const el = document.activeElement as HTMLElement | null;
         const tag = el?.tagName?.toLowerCase();
         if (tag === 'input' || tag === 'textarea') {
@@ -696,9 +700,10 @@ export function SermonMode({
         else if (track === 'message') messageKeyRef.current?.onGoLive();
         else if (track === 'slides') slidesKeyRef.current?.onGoLive();
       },
-      // SermonMode has no App-level modal of its own (unlike SongsMode's QuickAdd) —
-      // Settings, its only modal, is tracked directly in App via settingsOpen.
-      isModalOpen: () => false,
+      // Settings is tracked directly in App via settingsOpen; the one mode-owned
+      // blocking modal down here is the slides track's deck-fallback, reported through
+      // its delegate so Enter/Delete can't fire behind it (same contract as QuickAdd).
+      isModalOpen: () => (track === 'slides' && slidesKeyRef.current?.isModalOpen()) || false,
       onDelete: () => {
         if (track === 'scripture' && sel.selectedId) removeReading(sel.selectedId);
       },

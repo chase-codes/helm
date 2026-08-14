@@ -731,6 +731,69 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     expect(setOutput).toHaveBeenCalledWith('black')
   })
 
+  // SlidesTrack owns two overlay surfaces (the import popover and the deck-fallback
+  // modal). Escape must close those before it can ever touch the screen — the same
+  // modals-first ordering SongsMode's ladder gives QuickAdd/the import wizard.
+  it('closes the deck-fallback modal instead of blacking the screen', async () => {
+    const DECK_1_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'pres:d1:0',
+      liveSnap: { kind: 'image', src: 'helm-media://d1/1.png' },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { setOutput, resolveChapter } = installHelmStub(DECK_1_LIVE, [], { media: [DECK] })
+    ;(window.helm.media.importDeck as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [],
+      error: 'no-libreoffice'
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Slides')
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    fireEvent.click(screen.getByText('+ Import'))
+    fireEvent.click(screen.getByText('Slides / PDF'))
+    await waitFor(() => expect(screen.getByText('PowerPoint import unavailable')).toBeTruthy())
+    // The deck-fallback modal is a blocking modal: Enter/Delete must not fire behind it.
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(true)
+
+    // Press 1: closes the modal, screen untouched.
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(screen.queryByText('PowerPoint import unavailable')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+
+    // Press 2: nothing left to close — now the screen comes down.
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('closes the import popover instead of blacking the screen', async () => {
+    const DECK_1_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'pres:d1:0',
+      liveSnap: { kind: 'image', src: 'helm-media://d1/1.png' },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { setOutput, resolveChapter } = installHelmStub(DECK_1_LIVE, [], { media: [DECK] })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Slides')
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    fireEvent.click(screen.getByText('+ Import'))
+    expect(screen.getByText('Slides / PDF')).toBeTruthy()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(screen.queryByText('Slides / PDF')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+
   it('does nothing destructive with nothing live', async () => {
     const { setOutput, resolveChapter } = installHelmStub(NOTHING_LIVE)
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
@@ -886,6 +949,40 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     // another surface may have cued something else in between.
     clickTab('Slides')
     await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:d1:1', expect.anything()))
+  })
+
+  // The tape deliberately keeps playing while its track is hidden (an operator may keep
+  // listening while prepping slides, and a live follow-along must not freeze) — but its
+  // paragraph-boundary cues must not stomp the cued preview another surface owns.
+  it('a playing tape on a hidden message track does not stomp the cued preview', async () => {
+    const { cue, resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE })
+    render(<Harness />)
+    resolveChapter()
+    // The message track is mounted (hidden) from the start; wait for its tape to load.
+    await waitFor(() => expect(document.querySelector('audio')).toBeTruthy())
+    cue.mockClear()
+
+    // A timeupdate computes ord 0 (≠ TapePlayer's initial -1) and fires onActiveOrd.
+    fireEvent.timeUpdate(document.querySelector('audio') as HTMLElement)
+    expect(cue).not.toHaveBeenCalled()
+  })
+
+  it('the same playing tape keeps a LIVE reading view scrolling', async () => {
+    const READING_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'read:m1',
+      liveSnap: { kind: 'blank' },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { cue, resolveChapter } = installHelmStub(READING_LIVE, [], { tape: TAPE })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(document.querySelector('audio')).toBeTruthy())
+    cue.mockClear()
+
+    fireEvent.timeUpdate(document.querySelector('audio') as HTMLElement)
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('read:m1', expect.anything()))
   })
 
   it('switching tracks does not re-run the media or message list fetches', async () => {
