@@ -146,7 +146,7 @@ export interface VideoStateWire {
   volume: number; muted: boolean;
 }
 export type OutputVariant = 'audience' | 'main' | 'stage' | 'leader' | 'livestream';
-export type OutputRole = 'audience' | 'stage' | 'livestream';  // declared here; roles.ts imports it
+export type OutputRole = 'audience' | 'stage' | 'livestream' | 'off';  // declared here; roles.ts imports it
 export type OutputViewMode = 'slides' | 'leader' | 'mirror';
 export interface OutputPayload { slide: Slide; variant: OutputVariant; view: OutputViewMode; leaderSplit?: number }
 export interface DisplayInfo {

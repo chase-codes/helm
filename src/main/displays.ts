@@ -4,7 +4,6 @@ import { is } from '@electron-toolkit/utils';
 import { CH, type DisplayInfo, type DisplayStatus, type OutputRole, type OutputVariant, type OutputViewMode } from '../shared/types';
 import {
   DEFAULT_ROLE,
-  DEFAULT_VIEW,
   DEFAULT_LEADER_SPLIT,
   ROLE_VARIANT,
   fingerprintDisplay,
@@ -13,6 +12,7 @@ import {
   resolveLeaderSplit,
   clampLeaderSplit,
   type DisplaySnapshot,
+  type ActiveOutputRole,
 } from '../shared/displays/roles';
 import type { SettingsRepo } from './settingsRepo';
 import { presentation } from './stateStore';
@@ -21,7 +21,7 @@ const ROLES_KEY = 'displays:roles';
 const VIEWS_KEY = 'displays:views';
 const SPLITS_KEY = 'displays:leaderSplits';
 
-interface Tracked { win: BrowserWindow; fingerprint: string; role: OutputRole; view: OutputViewMode; leaderSplit: number }
+interface Tracked { win: BrowserWindow; fingerprint: string; role: ActiveOutputRole; view: OutputViewMode; leaderSplit: number }
 const byDisplayId = new Map<number, Tracked>();
 const testOutputs = new Set<BrowserWindow>();
 
@@ -86,7 +86,8 @@ function broadcastStatus(): void {
 function sync(): void {
   const snaps = screen.getAllDisplays().map(snapshot);
   const opId = operatorDisplayId();
-  const plan = planAttachments(snaps, opId, savedRoles());
+  const roles = savedRoles();
+  const plan = planAttachments(snaps, opId, roles);
   const plannedIds = new Set(plan.map((a) => a.displayId));
   const views = savedViews();
   const splits = savedSplits();
@@ -129,7 +130,6 @@ function sync(): void {
   // Build enriched DisplayInfo[] for ALL displays (operator included) for the header/6b.
   lastDisplays = snaps.map((d) => {
     const isOperator = d.id === opId;
-    const tracked = byDisplayId.get(d.id);
     const fingerprint = fingerprintDisplay(d);
     return {
       id: d.id,
@@ -138,9 +138,9 @@ function sync(): void {
       width: d.size.width,
       height: d.size.height,
       scaleFactor: d.scaleFactor,
-      role: isOperator ? null : (tracked?.role ?? DEFAULT_ROLE),
+      role: isOperator ? null : (roles[fingerprint] ?? DEFAULT_ROLE),
       isOperator,
-      view: isOperator ? null : (tracked?.view ?? DEFAULT_VIEW),
+      view: isOperator ? null : resolveView(views, fingerprint),
       leaderSplit: isOperator ? null : resolveLeaderSplit(splits, fingerprint),
     };
   });
@@ -156,8 +156,15 @@ export function displayStatus(): DisplayStatus {
 // a variant swap is a live re-tag). Called from IPC (Task 4) and 6b's UI later.
 export function setDisplayRole(fingerprint: string, role: OutputRole): void {
   const roles = savedRoles();
+  const prev = roles[fingerprint] ?? DEFAULT_ROLE;
   roles[fingerprint] = role;
   settings?.set(ROLES_KEY, roles);
+  // Crossing the off boundary needs a window destroyed or created — full sync (which
+  // also rebuilds lastDisplays and broadcasts). Everything else is a cheap live re-tag.
+  if (role === 'off' || prev === 'off') {
+    resync?.();
+    return;
+  }
   for (const t of byDisplayId.values()) {
     if (t.fingerprint === fingerprint && !t.win.isDestroyed()) {
       t.role = role;

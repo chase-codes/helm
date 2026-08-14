@@ -24,9 +24,9 @@ const snap = (over: Partial<DisplaySnapshot> = {}): DisplaySnapshot => ({
   ...over,
 });
 
-test('ROLE_VARIANT maps each role to its SlideCanvas variant', () => {
+test('ROLE_VARIANT maps each active role to its SlideCanvas variant', () => {
   expect(ROLE_VARIANT).toEqual({ audience: 'audience', stage: 'stage', livestream: 'livestream' });
-  expect(OUTPUT_ROLES).toEqual(['audience', 'stage', 'livestream']);
+  expect(OUTPUT_ROLES).toEqual(['audience', 'stage', 'livestream', 'off']);
   expect(DEFAULT_ROLE).toBe('audience');
 });
 
@@ -75,6 +75,17 @@ test('planAttachments handles a mix of known and unknown displays', () => {
 
 test('planAttachments returns [] for an empty display list', () => {
   expect(planAttachments([], 1, {})).toEqual([]);
+});
+
+test('planAttachments skips a display whose saved role is off', () => {
+  const displays = [snap({ id: 2, label: 'EXT' }), snap({ id: 3, label: 'TV' })];
+  const plan = planAttachments(displays, 1, { 'label:EXT': 'off' });
+  expect(plan.map((a) => a.displayId)).toEqual([3]);
+});
+
+test('planAttachments still defaults an unknown display to audience when others are off', () => {
+  const plan = planAttachments([snap({ id: 2, label: 'NEW' })], 1, { 'label:EXT': 'off' });
+  expect(plan[0].role).toBe('audience');
 });
 
 describe('resolveView', () => {
