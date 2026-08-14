@@ -26,12 +26,9 @@ interface MessageRow {
 }
 interface ParagraphRow { message_id: string; ord: number; label: string; text: string }
 interface TimingRow { ord: number; t_start: number; t_end: number }
-interface QuoteCandidateRow { msgId: string; tapeNo: string; title: string; ord: number; label: string; text: string }
-
 const toMeta = (r: MessageRow): MessageMeta => ({
   id: r.id, tapeNo: r.tape_no, title: r.title, date: r.date, durationS: r.duration_s, hasAudio: r.audio_path != null,
 });
-const toQuoteRow = (r: QuoteCandidateRow): QuoteRow => ({ ...r, snippet: '' });
 
 export function createMessagesRepo(db: Database.Database): MessagesRepo {
   const upsertMessage = db.prepare(`
@@ -104,8 +101,7 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
       FROM paragraphs p JOIN messages m ON m.id = p.message_id
       ${scope ? 'WHERE p.message_id = ?' : ''}
     `;
-    const rows = (scope ? db.prepare(sql).all(scope) : db.prepare(sql).all()) as QuoteCandidateRow[];
-    return rows.map(toQuoteRow);
+    return (scope ? db.prepare(sql).all(scope) : db.prepare(sql).all()) as QuoteRow[];
   };
 
   const search = (q: string, scope: string | null): { tapes: TapeRow[]; quotes: QuoteRow[] } => {
@@ -118,28 +114,34 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
     if (!tokens.length) return { tapes, quotes: [] };
 
     const match = tokens.map((t) => `"${t}"*`).join(' OR ');
+    // bm25 gives TF-IDF relevance the JS scorer can't (#53): negated so higher =
+    // better. Paragraphs FTS didn't match simply carry no prior.
+    // LIMIT keeps a common-token query's hit list under the bound-variable cap of the
+    // IN() below — best-ranked paragraphs survive.
     const ftsSql = `
-      SELECT f.rowid AS rowid
-      FROM paragraph_fts f JOIN paragraphs p ON p.rowid = f.rowid
-      WHERE f.text MATCH ?${scope ? ' AND p.message_id = ?' : ''}
+      SELECT p.rowid AS rowid, p.message_id AS msgId, p.ord AS ord, -bm25(paragraph_fts) AS rel
+      FROM paragraph_fts JOIN paragraphs p ON p.rowid = paragraph_fts.rowid
+      WHERE paragraph_fts MATCH ?${scope ? ' AND p.message_id = ?' : ''}
+      ORDER BY rel DESC LIMIT 1000
     `;
-    const rowids = (
+    const hits = (
       scope ? db.prepare(ftsSql).all(match, scope) : db.prepare(ftsSql).all(match)
-    ) as { rowid: number }[];
+    ) as { rowid: number; msgId: string; ord: number; rel: number }[];
+    const rel = new Map(hits.map((h) => [`${h.msgId}:${h.ord}`, h.rel]));
 
     let candidates: QuoteRow[];
-    if (rowids.length >= 30) {
-      const qs = rowids.map(() => '?').join(',');
-      candidates = (db.prepare(`
+    if (hits.length >= 30) {
+      const qs = hits.map(() => '?').join(',');
+      candidates = db.prepare(`
         SELECT p.message_id AS msgId, p.ord AS ord, p.label AS label, p.text AS text,
                m.tape_no AS tapeNo, m.title AS title
         FROM paragraphs p JOIN messages m ON m.id = p.message_id
         WHERE p.rowid IN (${qs})
-      `).all(...rowids.map((r) => r.rowid)) as QuoteCandidateRow[]).map(toQuoteRow);
+      `).all(...hits.map((h) => h.rowid)) as QuoteRow[];
     } else {
       candidates = allParagraphCandidates(scope); // sparse scoped FTS hits → typo likely; scan scope, scorer handles fuzz
     }
-    const quotes = rankQuotes(q, candidates);
+    const quotes = rankQuotes(q, candidates, rel);
     return { tapes, quotes };
   };
 

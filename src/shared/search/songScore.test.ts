@@ -79,3 +79,101 @@ test('tie-breaker never overrides a higher score', () => {
   // exact title (1200) must stay on top of a fuzzy-plateau song, even inserted last
   expect(rankSongs('amazing grace', [AL, AG], 'all')[0].song.id).toBe('ag');
 });
+
+// --- #53: lyric relevance signals (phrase adjacency, tf, bm25 prior, honest snippet) ---
+const TWO_LINES = song('twolines', 'Two Lines', '', [
+  ['Verse 1', ['Amazing grace how sweet the sound', 'That saved a wretch like me']],
+]);
+const TWO_SECTIONS = song('twosections', 'Two Sections', '', [
+  ['Verse 1', ['We sing for you are sweet']],
+  ['Verse 2', ['The morning rises anew']],
+]);
+
+test('phrase run spans line breaks within a section', () => {
+  expect(scoreSong('sweet the sound that saved', TWO_LINES, 'lyric').phrase).toBe(5);
+});
+
+test('phrase run is blocked at a section boundary', () => {
+  // "sweet" ends Verse 1, "the" opens Verse 2 — bridging them would make a run of 2
+  expect(scoreSong('sweet the', TWO_SECTIONS, 'lyric').phrase).toBe(1);
+});
+
+test('snippet picks the densest line, not the first line with any hit', () => {
+  const s = song('dense', 'Dense', '', [['Verse 1', [
+    'The morning breaks anew',
+    'Morning by morning new mercies I see',
+  ]]]);
+  expect(scoreSong('morning new mercies', s, 'lyric').snippet).toBe('Morning by morning new mercies I see');
+});
+
+test('snippet matches whole words — a substring inside a longer word neither scores nor snips', () => {
+  const s = song('person', 'Person', '', [['Verse 1', ['A person of peace came near']]]);
+  const r = scoreSong('son', s, 'lyric');
+  expect(r.score).toBe(0);
+  expect(r.snippet).toBe('');
+});
+
+test('fuzzy partial match is included with a snippet even without an exact substring', () => {
+  // "swet" fuzzy-matches "sweet" (no exact substring anywhere) → 360 band, real snippet
+  const r = scoreSong('swet zzzzz', TWO_LINES, 'lyric');
+  expect(r.score).toBe(360);
+  expect(r.snippet).toContain('sweet');
+});
+
+test('bm25 prior breaks ties ahead of title length, in either insertion order', () => {
+  const a = song('a', 'Longer Title Here', '', [['V', ['sing hallelujah forever']]]);
+  const b = song('b', 'Short', '', [['V', ['sing hallelujah tonight']]]);
+  const rel = new Map([['a', 4.2], ['b', 1.1]]);
+  for (const lib of [[a, b], [b, a]]) {
+    expect(rankSongs('hallelujah', lib, 'lyric', rel)[0].song.id).toBe('a');
+  }
+});
+
+test('a mid-word prefix matches like type-ahead: "wonder" finds "wonderful"', () => {
+  const s = song('wonderful', 'Hymn', '', [['Verse 1', ['Wonderful grace of Jesus']]]);
+  expect(scoreSong('wonder', s, 'lyric').score).toBeGreaterThan(0);
+});
+
+test('incremental typing mid-word keeps the full-match band and the phrase run', () => {
+  // operator is mid-word in "sound" — the song must not flicker out of results
+  const r = scoreSong('sweet the sou', TWO_LINES, 'lyric');
+  expect(r.score).toBeGreaterThanOrEqual(380);
+  expect(r.phrase).toBe(3);
+});
+
+test('a match on stopwords alone does not qualify a song', () => {
+  // "zephaniah" is beyond fuzz reach and "of" (len 2) fuzzes into nearly anything —
+  // without a significant matched token (len >= 3) the partial band must stay closed
+  const s = song('noise', 'Noise', '', [['V', ['come on up to the house']]]);
+  expect(scoreSong('zephaniah of', s, 'lyric').score).toBe(0);
+});
+
+test('a rare matched word outweighs two matched stopwords (length-weighted coverage)', () => {
+  const a = song('stopwords', 'Alpha', '', [['V', ['the light of morning']]]);
+  const b = song('rareword', 'Zulu', '', [['V', ['mighty armies rising high']]]);
+  for (const lib of [[a, b], [b, a]]) {
+    expect(rankSongs('the god of angel armies', lib, 'lyric')[0].song.id).toBe('rareword');
+  }
+});
+
+test('empty-normalizing query respects the limit parameter', () => {
+  expect(rankSongs('...', LIB, 'all', undefined, 1)).toHaveLength(1);
+});
+
+test('matching more of the query beats a stopword bigram (coverage before phrase)', () => {
+  // partial band for "the love of god": B matches three tokens scattered, A only a
+  // contiguous "the love" — B is the fuller match and must win, either order
+  const a = song('bigram', 'Alpha', '', [['V', ['sing the love again today']]]);
+  const b = song('fuller', 'Zulu', '', [['V', ['the morning breaks', 'love comes from god above']]]);
+  for (const lib of [[a, b], [b, a]]) {
+    expect(rankSongs('the love of god', lib, 'lyric')[0].song.id).toBe('fuller');
+  }
+});
+
+test('term frequency breaks ties when phrase and coverage are equal', () => {
+  const once = song('once', 'Alpha Hymn', '', [['V', ['hallelujah sing to him', 'all the glory shines']]]);
+  const many = song('many', 'Omega Hymn', '', [['V', ['hallelujah to the king', 'bring the glory down', 'hallelujah every heart', 'see the glory rise']]]);
+  for (const lib of [[once, many], [many, once]]) {
+    expect(rankSongs('hallelujah glory', lib, 'lyric')[0].song.id).toBe('many');
+  }
+});
