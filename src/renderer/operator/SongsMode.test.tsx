@@ -44,7 +44,8 @@ function installHelmStub(searchImpl?: (q: string, field: string) => Promise<Song
   (window as unknown as { helm: unknown }).helm = {
     songs: {
       list: () => Promise.resolve(SONGS),
-      search
+      search,
+      update: vi.fn()
     },
     presentation: {
       get: () => Promise.resolve(NOTHING_LIVE),
@@ -94,15 +95,21 @@ function installHelmStubWith(
   cue: ReturnType<typeof vi.fn>;
   setOutput: ReturnType<typeof vi.fn>;
   add: ReturnType<typeof vi.fn>;
+  search: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
   pushState: (s: PresentationState) => void;
 } {
   const goLive = vi.fn();
   const cue = vi.fn();
   const setOutput = vi.fn();
   const add = vi.fn();
+  const search = vi.fn(() => Promise.resolve([]));
+  const update = vi.fn((id: string, input: { title: string; sections: { label: string; lines: string[] }[] }) =>
+    Promise.resolve({ ...songs.find((s) => s.id === id)!, title: input.title, sections: input.sections })
+  );
   let stateCb: (s: PresentationState) => void = () => {};
   (window as unknown as { helm: unknown }).helm = {
-    songs: { list: () => Promise.resolve(songs), search: vi.fn(() => Promise.resolve([])), add },
+    songs: { list: () => Promise.resolve(songs), search, add, update },
     presentation: {
       get: () => Promise.resolve(state),
       onState: (cb: (s: PresentationState) => void) => {
@@ -120,7 +127,7 @@ function installHelmStubWith(
       onProgress: () => () => {}
     }
   };
-  return { goLive, cue, setOutput, add, pushState: (s) => stateCb(s) };
+  return { goLive, cue, setOutput, add, search, update, pushState: (s) => stateCb(s) };
 }
 
 describe('SongsMode', () => {
@@ -636,5 +643,112 @@ describe('SongsMode escape chain', () => {
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     expect(keyHandlerRef.current?.onEscape()).toBe(false);
+  });
+});
+
+describe('section quick-edit', () => {
+  const openSectionEditor = async (): Promise<HTMLTextAreaElement> => {
+    // SONGS has one section, 'Verse 1' / ['Amazing grace']. The line renders twice at
+    // once (hero "NOW SINGING" panel + the SectionRail row) — findAllByText, not
+    // findByText, since a singular query throws on that pre-existing duplicate.
+    await screen.findAllByText('Amazing grace');
+    fireEvent.contextMenu(screen.getAllByText('Amazing grace').at(-1)!);
+    fireEvent.click(screen.getByText('Edit'));
+    return (await screen.findByDisplayValue('Amazing grace')) as HTMLTextAreaElement;
+  };
+
+  it('right-click → Edit swaps the card lines for a textarea, without cueing elsewhere', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    const box = await openSectionEditor();
+    expect(box.value).toBe('Amazing grace');
+    expect(document.activeElement).toBe(box);
+  });
+
+  it('Enter saves: songs.update gets the patched section and the fresh slide is re-cued', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    const box = await openSectionEditor();
+    fireEvent.change(box, { target: { value: 'Amazing grace fixed\nsecond line' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() =>
+      expect(h.update).toHaveBeenCalledWith('s1', {
+        title: 'Amazing Grace',
+        author: 'John Newton',
+        sections: [{ label: 'Verse 1', lines: ['Amazing grace fixed', 'second line'] }]
+      })
+    );
+    // re-cue carries the corrected lines; goLive is never used from a save path
+    await waitFor(() =>
+      expect(h.cue).toHaveBeenCalledWith(
+        'song:s1:0',
+        expect.objectContaining({ lines: ['Amazing grace fixed', 'second line'] })
+      )
+    );
+    expect(h.goLive).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByDisplayValue(/fixed/)).toBeNull());
+  });
+
+  it('Shift+Enter does not save', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    const box = await openSectionEditor();
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
+    expect(h.update).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('Amazing grace')).toBeTruthy();
+  });
+
+  it('Escape cancels the edit, keeps the old lines, and never blacks the screen', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    const box = await openSectionEditor();
+    fireEvent.change(box, { target: { value: 'half-typed junk' } });
+    fireEvent.keyDown(box, { key: 'Escape' });
+    expect(screen.queryByDisplayValue('half-typed junk')).toBeNull();
+    expect(h.update).not.toHaveBeenCalled();
+    expect(h.setOutput).not.toHaveBeenCalled();
+    expect(screen.getAllByText('Amazing grace').length).toBeGreaterThan(0);
+  });
+
+  it('a blank-only draft cancels instead of saving', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    const box = await openSectionEditor();
+    fireEvent.change(box, { target: { value: '   \n  ' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(h.update).not.toHaveBeenCalled();
+    // Not queryByRole('textbox') — the search <input> is a textbox too, so that query
+    // never goes null; the section editor's <textarea> is what actually has to close.
+    await waitFor(() => expect(document.querySelector('textarea')).toBeNull());
+  });
+
+  it('a failed save keeps the editor and the draft, and shows an error', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    h.update.mockImplementation(() => Promise.reject(new Error('boom')));
+    renderMode(keyHandlerRef);
+    const box = await openSectionEditor();
+    fireEvent.change(box, { target: { value: 'Amazing grace fixed' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await screen.findByText(/Couldn’t save/);
+    expect(screen.getByDisplayValue('Amazing grace fixed')).toBeTruthy();
+  });
+
+  it('saving refreshes an active search so results reflect the edit', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    fireEvent.change(await screen.findByPlaceholderText('Title or a lyric line…'), { target: { value: 'grace' } });
+    await waitFor(() => expect(h.search).toHaveBeenCalledWith('grace', 'all'));
+    h.search.mockClear();
+    const box = await openSectionEditor();
+    fireEvent.change(box, { target: { value: 'Amazing grace fixed' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(h.search).toHaveBeenCalledWith('grace', 'all'));
   });
 });

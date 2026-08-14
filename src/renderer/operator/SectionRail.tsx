@@ -1,4 +1,12 @@
-import { useEffect, useRef, type CSSProperties, type JSX } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent
+} from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SongSection } from '../../shared/types';
 
@@ -9,9 +17,87 @@ export interface SectionRailProps {
   cuedIndex: number;
   isSectionLive: (i: number) => boolean;
   onSelect: (i: number) => void;
+  editingIndex: number | null;
+  editError: boolean;
+  onSectionContextMenu: (i: number, e: ReactMouseEvent) => void;
+  onEditSave: (i: number, lines: string[]) => void;
+  onEditCancel: () => void;
 }
 
-export function SectionRail({ theme: T, width, sections, cuedIndex, isSectionLive, onSelect }: SectionRailProps): JSX.Element {
+interface SectionEditorProps {
+  theme: Theme;
+  initial: string;
+  font: number;
+  error: boolean;
+  onSave: (lines: string[]) => void;
+  onCancel: () => void;
+}
+
+// In-place quick edit for one section's lines. Enter saves, Shift+Enter inserts a
+// newline, Escape cancels; both keys stop propagation so the global key dispatcher
+// (go-live / take-down chain) never sees them. Blur = click-outside = cancel.
+function SectionEditor({ theme: T, initial, font, error, onSave, onCancel }: SectionEditorProps): JSX.Element {
+  const [value, setValue] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, []);
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSave(value.split('\n'));
+    } else if (e.key === 'Escape') {
+      e.stopPropagation();
+      onCancel();
+    }
+  };
+  const style: CSSProperties = {
+    width: '100%',
+    padding: 0,
+    border: 'none',
+    outline: 'none',
+    resize: 'none',
+    background: 'transparent',
+    fontFamily: 'inherit',
+    fontSize: `${font}px`,
+    lineHeight: 1.45,
+    fontWeight: 500,
+    color: T.text
+  };
+  return (
+    <div>
+      <textarea
+        ref={ref}
+        rows={Math.max(3, value.split('\n').length + 1)}
+        style={style}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={onKeyDown}
+        onBlur={onCancel}
+      />
+      {error && <div style={{ fontSize: '11px', color: T.live, marginTop: '4px' }}>Couldn’t save — try again</div>}
+    </div>
+  );
+}
+
+export function SectionRail({
+  theme: T,
+  width,
+  sections,
+  cuedIndex,
+  isSectionLive,
+  onSelect,
+  editingIndex,
+  editError,
+  onSectionContextMenu,
+  onEditSave,
+  onEditCancel
+}: SectionRailProps): JSX.Element {
   const secFont = Math.round(Math.max(13, Math.min(18, width / 24)) * 10) / 10;
 
   const sectionPanelStyle: CSSProperties = {
@@ -79,17 +165,42 @@ export function SectionRail({ theme: T, width, sections, cuedIndex, isSectionLiv
           const isCued = i === cuedIndex;
           const isLive = isSectionLive(i);
           const showBadge = isCued || isLive;
-          return (
-            <button key={i} ref={i === cuedIndex ? cuedRef : undefined} style={secRowStyle(isCued, isLive)} onClick={() => onSelect(i)}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <div style={secLabelStyle(isCued)}>{sc.label}</div>
-                {showBadge && (
-                  <div style={secBadgeStyle(isLive)}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
-                    {isLive ? 'LIVE' : 'CUED'}
-                  </div>
-                )}
+          const isEditing = i === editingIndex;
+          const header = (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <div style={secLabelStyle(isCued)}>{sc.label}</div>
+              {showBadge && (
+                <div style={secBadgeStyle(isLive)}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+                  {isLive ? 'LIVE' : 'CUED'}
+                </div>
+              )}
+            </div>
+          );
+          if (isEditing) {
+            return (
+              <div key={i} style={secRowStyle(isCued, isLive)}>
+                {header}
+                <SectionEditor
+                  theme={T}
+                  initial={sc.lines.join('\n')}
+                  font={secFont}
+                  error={editError}
+                  onSave={(lines) => onEditSave(i, lines)}
+                  onCancel={onEditCancel}
+                />
               </div>
+            );
+          }
+          return (
+            <button
+              key={i}
+              ref={i === cuedIndex ? cuedRef : undefined}
+              style={secRowStyle(isCued, isLive)}
+              onClick={() => onSelect(i)}
+              onContextMenu={(e) => onSectionContextMenu(i, e)}
+            >
+              {header}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 {sc.lines.map((ln, j) => (
                   <div key={j} style={secLineStyle(isCued)}>
