@@ -117,6 +117,12 @@ test('typo in a lyric token still ranks the song first, with a snippet', () => {
   expect(results[0].snippet).not.toBe('');
 });
 
+test('type-ahead: a mid-word lyric prefix keeps the song in the full-match band', () => {
+  const rs = repo.search('sweet the sou', 'lyric');
+  expect(rs[0].song.id).toBe(ids.get('amazing-grace'));
+  expect(rs[0].score).toBeGreaterThanOrEqual(380); // "sou" counts as a match, not a lucky partial
+});
+
 test('a bare substring inside a longer word does not put a song in results', () => {
   const hits = repo.search('and', 'lyric').map((r) => r.song.id);
   expect(hits).not.toContain(ids.get('standing'));

@@ -129,6 +129,18 @@ test('bm25 prior breaks ties ahead of title length, in either insertion order', 
   }
 });
 
+test('a mid-word prefix matches like type-ahead: "wonder" finds "wonderful"', () => {
+  const s = song('wonderful', 'Hymn', '', [['Verse 1', ['Wonderful grace of Jesus']]]);
+  expect(scoreSong('wonder', s, 'lyric').score).toBeGreaterThan(0);
+});
+
+test('incremental typing mid-word keeps the full-match band and the phrase run', () => {
+  // operator is mid-word in "sound" — the song must not flicker out of results
+  const r = scoreSong('sweet the sou', TWO_LINES, 'lyric');
+  expect(r.score).toBeGreaterThanOrEqual(380);
+  expect(r.phrase).toBe(3);
+});
+
 test('term frequency breaks ties when phrase and coverage are equal', () => {
   const once = song('once', 'Alpha Hymn', '', [['V', ['hallelujah sing to him', 'all the glory shines']]]);
   const many = song('many', 'Omega Hymn', '', [['V', ['hallelujah to the king', 'bring the glory down', 'hallelujah every heart', 'see the glory rise']]]);

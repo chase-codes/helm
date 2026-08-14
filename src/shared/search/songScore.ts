@@ -1,13 +1,23 @@
 import type { Song, SongSection, SongSearchResult, SearchField } from '../types';
 import { norm, lev, matchTol } from './fuzzy';
 
-// Best fuzzy edit distance of token `t` against any word in `words` (0 = exact),
-// or 99 if nothing matches within tolerance. Used for title words and snippet lines.
+// A token matches a word exactly (0), as an anchored prefix (1 — type-ahead: "wonder"
+// finds "wonderful"; ≥3 chars so short tokens rely on edit tolerance), or within fuzzy
+// edit tolerance. Anchoring at the word start is what keeps "son" from matching "person".
+function matchDist(t: string, w: string): number {
+  if (w === t) return 0;
+  if (t.length >= 3 && w.length > t.length && w.startsWith(t)) return 1;
+  return Math.abs(w.length - t.length) <= 2 ? lev(t, w) : 99;
+}
+
+// Best matchDist of token `t` against any word in `words`, or 99 if nothing is within
+// tolerance. Used for title words and snippet lines.
 function bestMatch(t: string, words: string[]): number {
   let best = 99;
   for (const w of words) {
-    if (w === t) return 0;
-    if (Math.abs(w.length - t.length) <= 2) { const dd = lev(t, w); if (dd < best) best = dd; }
+    const dd = matchDist(t, w);
+    if (dd === 0) return 0;
+    if (dd < best) best = dd;
   }
   return best <= matchTol(t.length) ? best : 99;
 }
@@ -96,7 +106,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     let mask = 0;
     for (let j = 0; j < qts.length; j++) {
       const t = qts[j];
-      const d = w === t ? 0 : Math.abs(w.length - t.length) <= 2 ? lev(t, w) : 99;
+      const d = matchDist(t, w);
       if (d <= matchTol(t.length)) {
         if (j < PHRASE_MAX_TOKENS) mask |= 1 << j;
         if (d < bestDist[j]) bestDist[j] = d;
