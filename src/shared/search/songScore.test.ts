@@ -141,6 +141,16 @@ test('incremental typing mid-word keeps the full-match band and the phrase run',
   expect(r.phrase).toBe(3);
 });
 
+test('matching more of the query beats a stopword bigram (coverage before phrase)', () => {
+  // partial band for "the love of god": B matches three tokens scattered, A only a
+  // contiguous "the love" — B is the fuller match and must win, either order
+  const a = song('bigram', 'Alpha', '', [['V', ['sing the love again today']]]);
+  const b = song('fuller', 'Zulu', '', [['V', ['the morning breaks', 'love comes from god above']]]);
+  for (const lib of [[a, b], [b, a]]) {
+    expect(rankSongs('the love of god', lib, 'lyric')[0].song.id).toBe('fuller');
+  }
+});
+
 test('term frequency breaks ties when phrase and coverage are equal', () => {
   const once = song('once', 'Alpha Hymn', '', [['V', ['hallelujah sing to him', 'all the glory shines']]]);
   const many = song('many', 'Omega Hymn', '', [['V', ['hallelujah to the king', 'bring the glory down', 'hallelujah every heart', 'see the glory rise']]]);

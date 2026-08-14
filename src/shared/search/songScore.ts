@@ -1,26 +1,5 @@
 import type { Song, SongSection, SongSearchResult, SearchField } from '../types';
-import { norm, lev, matchTol } from './fuzzy';
-
-// A token matches a word exactly (0), as an anchored prefix (1 — type-ahead: "wonder"
-// finds "wonderful"; ≥3 chars so short tokens rely on edit tolerance), or within fuzzy
-// edit tolerance. Anchoring at the word start is what keeps "son" from matching "person".
-function matchDist(t: string, w: string): number {
-  if (w === t) return 0;
-  if (t.length >= 3 && w.length > t.length && w.startsWith(t)) return 1;
-  return Math.abs(w.length - t.length) <= 2 ? lev(t, w) : 99;
-}
-
-// Best matchDist of token `t` against any word in `words`, or 99 if nothing is within
-// tolerance. Used for title words and snippet lines.
-function bestMatch(t: string, words: string[]): number {
-  let best = 99;
-  for (const w of words) {
-    const dd = matchDist(t, w);
-    if (dd === 0) return 0;
-    if (dd < best) best = dd;
-  }
-  return best <= matchTol(t.length) ? best : 99;
-}
+import { norm, bestMatch, textSignals } from './fuzzy';
 
 // Primary `score` (unchanged flat buckets) plus deterministic relevance sub-signals
 // used only to break score ties (BUG-002, extended for #53). The sub-signals never
@@ -41,10 +20,6 @@ export interface ScoredSong {
   titleLen: number;        // shorter title wins
   title: string;           // lexicographic final tiebreak → fully insertion-order-independent
 }
-
-// Query tokens beyond this index don't participate in phrase runs (bitmask width);
-// coverage/tf still count them. No real query comes close.
-const PHRASE_MAX_TOKENS = 30;
 
 // Snippet: the line (or two-line window) with the most distinct query-token matches,
 // whole-word with fuzzy tolerance — never an unanchored substring, and independent of
@@ -95,47 +70,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
   }
 
-  // One fuzzy pass over UNIQUE words — a repeated chorus is scored once. Per word:
-  // a bitmask of query tokens it matches within tolerance (feeds the phrase run) and
-  // the best distance per token (feeds coverage).
-  const counts = new Map<string, number>();
-  for (const seg of segs) for (const w of seg) counts.set(w, (counts.get(w) ?? 0) + 1);
-  const bestDist: number[] = qts.map(() => 99);
-  const wordMask = new Map<string, number>();
-  for (const w of counts.keys()) {
-    let mask = 0;
-    for (let j = 0; j < qts.length; j++) {
-      const t = qts[j];
-      const d = matchDist(t, w);
-      if (d <= matchTol(t.length)) {
-        if (j < PHRASE_MAX_TOKENS) mask |= 1 << j;
-        if (d < bestDist[j]) bestDist[j] = d;
-      }
-    }
-    if (mask) wordMask.set(w, mask);
-  }
-  let matched = 0; let tf = 0;
-  for (let j = 0; j < qts.length; j++) {
-    if (bestDist[j] < 99) matched++;
-    tf += counts.get(qts[j]) ?? 0;
-  }
-
-  // Longest run of consecutive query tokens appearing consecutively in a segment:
-  // run[j] extends run[j-1] from the previous word. O(words × tokens), no lev calls.
-  let phrase = 0;
-  let prev: number[] = qts.map(() => 0);
-  let cur: number[] = qts.map(() => 0);
-  for (const seg of segs) {
-    prev.fill(0);
-    for (const w of seg) {
-      const mask = wordMask.get(w) ?? 0;
-      for (let j = 0; j < qts.length; j++) {
-        cur[j] = j < PHRASE_MAX_TOKENS && (mask >> j) & 1 ? (j > 0 ? prev[j - 1] : 0) + 1 : 0;
-        if (cur[j] > phrase) phrase = cur[j];
-      }
-      const swap = prev; prev = cur; cur = swap;
-    }
-  }
+  const { matched, tf, phrase } = textSignals(segs, qts);
 
   let score = 0;
   if (field !== 'lyric') { if (title === q) score = 1200; else if (title.includes(q)) score = 1000 - title.indexOf(q); }
@@ -161,8 +96,8 @@ function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
-  if (b.phrase !== a.phrase) return b.phrase - a.phrase;
-  if (b.coverage !== a.coverage) return b.coverage - a.coverage;
+  if (b.coverage !== a.coverage) return b.coverage - a.coverage; // more of the query matched
+  if (b.phrase !== a.phrase) return b.phrase - a.phrase;         // …then contiguity of what matched
   if (b.rel !== a.rel) return b.rel - a.rel;
   if (b.tf !== a.tf) return b.tf - a.tf;
   if (a.titleStartsWith !== b.titleStartsWith) return a.titleStartsWith ? -1 : 1;

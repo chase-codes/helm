@@ -61,6 +61,28 @@ describe('messagesRepo', () => {
     expect(res.quotes.every((q) => q.msgId === 'T')).toBe(true);
   });
 
+  it('bm25 ranks the paragraph that uses the term more, either install order', () => {
+    const heavy = { label: '1', text: 'grace upon grace, for grace abounds in grace' };
+    const light = { label: '1', text: 'grace alone remains' };
+    for (const [first, second] of [[heavy, light], [light, heavy]] as const) {
+      const fresh = repo();
+      fresh.installIndex([
+        { id: 'first', tapeNo: '65-0001', title: 'First', date: '', durationS: 1 },
+        { id: 'second', tapeNo: '65-0002', title: 'Second', date: '', durationS: 1 },
+      ]);
+      fresh.installSermon('first', [first], []);
+      fresh.installSermon('second', [second], []);
+      const heavyId = first === heavy ? 'first' : 'second';
+      expect(fresh.search('grace', null).quotes[0].msgId).toBe(heavyId);
+    }
+  });
+
+  it('a substring inside a longer word does not surface a quote', () => {
+    r.installIndex([{ id: 'a', tapeNo: '65-1204', title: 'Peace', date: '', durationS: 1 }]);
+    r.installSermon('a', [{ label: '1', text: 'a person of peace came near' }], []);
+    expect(r.search('son', null).quotes).toHaveLength(0);
+  });
+
   it('sets an audio path', () => {
     r.installIndex([{ id: 'rapture', tapeNo: '65-1204', title: 'The Rapture', date: '', durationS: 1 }]);
     r.setAudioPath('rapture', '/library/65-1204.mp3');

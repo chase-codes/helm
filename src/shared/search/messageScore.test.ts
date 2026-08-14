@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rankQuotes, rankTapes, scoreTape } from './messageScore';
+import { rankQuotes, rankTapes, scoreTape, type QuoteRow } from './messageScore';
 
 const TAPES = [
   { id: 'rapture', tapeNo: '65-1204', title: 'The Rapture', date: 'December 4, 1965' },
@@ -44,5 +44,50 @@ describe('messageScore', () => {
       snippet: '',
     }));
     expect(rankQuotes('grace', many)).toHaveLength(12);
+  });
+});
+
+// --- #53 cluster, message side: whole-word matching, real relevance, deterministic order ---
+const quote = (msgId: string, ord: number, text: string): QuoteRow =>
+  ({ msgId, tapeNo: '65-1204', title: 'The Rapture', ord, label: String(ord), text }) as QuoteRow;
+
+describe('messageScore relevance', () => {
+  it('a substring inside a longer word does not match a quote', () => {
+    expect(rankQuotes('son', [quote('a', 0, 'A person of peace came near')])).toHaveLength(0);
+  });
+
+  it('a contiguous phrase outranks the same words scattered, either order', () => {
+    const phrase = quote('p', 0, 'The love of God is greater far than tongue can tell');
+    const scatter = quote('s', 0, 'God gives the morning and love flows out of every heart');
+    for (const rows of [[phrase, scatter], [scatter, phrase]]) {
+      expect(rankQuotes('love of god', rows)[0].msgId).toBe('p');
+    }
+  });
+
+  it('bm25 relevance breaks ties between otherwise-equal quotes, either order', () => {
+    const a = quote('a', 0, 'grace abounds tonight');
+    const b = quote('b', 0, 'grace alone remains');
+    const rel = new Map([['a:0', 3.5], ['b:0', 1.0]]);
+    for (const rows of [[a, b], [b, a]]) {
+      expect(rankQuotes('grace', rows, rel)[0].msgId).toBe('a');
+    }
+  });
+
+  it('the 12-quote cap keeps the best matches, not the first twelve', () => {
+    const filler = Array.from({ length: 14 }, (_, i) => quote(`f${i}`, i, `grace and mercy portion ${i}`));
+    const best = quote('best', 99, 'grace upon grace forever');
+    const r = rankQuotes('grace', [...filler, best]);
+    expect(r.some((q) => q.msgId === 'best')).toBe(true);
+  });
+
+  it('tape ranking is insertion-order independent', () => {
+    const a = { id: 'a', tapeNo: '65-1204', title: 'The Rapture', date: '' };
+    const b = { id: 'b', tapeNo: '47-0412', title: 'The Seal', date: '' };
+    expect(rankTapes('the', [a, b])[0].id).toBe(rankTapes('the', [b, a])[0].id);
+  });
+
+  it('a partial tape number keeps matching as the operator types', () => {
+    // pins the digit-prefix path across the whole-word matching refactor
+    expect(scoreTape('65-12', TAPES[0])).toBeGreaterThan(0);
   });
 });
