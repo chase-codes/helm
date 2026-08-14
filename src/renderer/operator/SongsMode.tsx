@@ -342,13 +342,10 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     );
   };
 
-  // Stub for the Songs quick-edit follow-up. The context menu is the deliverable here;
-  // this just proves the wiring by surfacing the intent and selecting the row. Replace
-  // with the real in-preview quick-edit when that feature lands.
-  const onEditSong = (id: string): void => {
-    selectSong(id);
-    console.info('[songs] quick-edit requested for', id);
-  };
+  const [editSongId, setEditSongId] = useState<string | null>(null);
+  const editTarget = editSongId ? (library.find((s) => s.id === editSongId) ?? null) : null;
+
+  const onEditSong = (id: string): void => setEditSongId(id);
 
   const onQuickAddSaved = (song: Song): void => {
     setLibrary((prev) => [...prev, song]);
@@ -490,6 +487,10 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           setImportOpen(false);
           return true;
         }
+        if (editSongId) {
+          setEditSongId(null);
+          return true;
+        }
         // Progressive back-out (spec §3): after modals, undo the most recent intent
         // first — a section quick-edit in flight, then an armed switch — then leave a
         // text field, and only then touch the screen. Order matters: a typing operator
@@ -518,7 +519,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
       },
       onArrow: step,
       onGoLive: armed ? commitSwitch : goLive,
-      isModalOpen: () => quickAddOpen || importOpen,
+      isModalOpen: () => quickAddOpen || importOpen || editSongId !== null,
       onAction
     };
     return () => {
@@ -726,6 +727,17 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
       {contextMenu.menu}
       {quickAddOpen && (
         <QuickAdd open={quickAddOpen} initialTitle={quickAddTitle} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />
+      )}
+      {editTarget && (
+        <QuickAdd
+          open
+          editSong={editTarget}
+          onClose={() => setEditSongId(null)}
+          onSaved={(song) => {
+            setEditSongId(null);
+            onSongSaved(song);
+          }}
+        />
       )}
       {importOpen && (
         <SongImport

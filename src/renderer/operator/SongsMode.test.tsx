@@ -752,3 +752,47 @@ describe('section quick-edit', () => {
     await waitFor(() => expect(h.search).toHaveBeenCalledWith('grace', 'all'));
   });
 });
+
+describe('whole-song edit', () => {
+  it('right-click a song row → Edit opens the edit modal prefilled, with no console stub', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    const info = vi.spyOn(console, 'info');
+    renderMode(keyHandlerRef);
+    // 'Amazing Grace' renders in the rail row AND the center header; the rail comes
+    // first in DOM order, so [0] is the row.
+    fireEvent.contextMenu((await screen.findAllByText('Amazing Grace'))[0]);
+    fireEvent.click(screen.getByText('Edit'));
+    expect(await screen.findByText('Edit song')).toBeTruthy();
+    expect((screen.getByPlaceholderText('Song title') as HTMLInputElement).value).toBe('Amazing Grace');
+    expect(info).not.toHaveBeenCalled();
+    info.mockRestore();
+  });
+
+  it('saving from the modal updates the library row in place', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    fireEvent.contextMenu((await screen.findAllByText('Amazing Grace'))[0]); // [0] = rail row (rail precedes the center header in DOM order)
+    fireEvent.click(screen.getByText('Edit'));
+    await screen.findByText('Edit song');
+    fireEvent.change(screen.getByPlaceholderText('Song title'), { target: { value: 'Amazing Grace (2nd ed.)' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    // modal closes and the retitled song is in the rail + header
+    await waitFor(() => expect(screen.queryByText('Edit song')).toBeNull());
+    expect((await screen.findAllByText('Amazing Grace (2nd ed.)')).length).toBeGreaterThan(0);
+  });
+
+  it('Escape closes the edit modal before touching anything else', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    fireEvent.contextMenu((await screen.findAllByText('Amazing Grace'))[0]); // [0] = rail row (rail precedes the center header in DOM order)
+    fireEvent.click(screen.getByText('Edit'));
+    await screen.findByText('Edit song');
+    expect(keyHandlerRef.current?.onEscape()).toBe(true);
+    await waitFor(() => expect(screen.queryByText('Edit song')).toBeNull());
+    expect(h.setOutput).not.toHaveBeenCalled();
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(false);
+  });
+});
