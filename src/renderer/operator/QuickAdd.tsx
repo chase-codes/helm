@@ -1,13 +1,17 @@
 import { useContext, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { splitToSlides } from '../../shared/songs/splitToSlides';
-import type { NewSongInput, Song, SongWebCandidate } from '../../shared/types';
+import { sectionsToText } from '../../shared/songs/sectionsToText';
+import type { NewSongInput, Song, SongWebCandidate, UpdateSongInput } from '../../shared/types';
 
 export interface QuickAddProps {
   open: boolean;
   /** Prefill for the title field (e.g. the rail's search query). When non-blank,
    *  initial focus lands in the lyrics textarea instead of the title input. */
   initialTitle?: string;
+  /** Edit mode: prefill from this song and save via songs:update instead of add.
+   *  The search-online tab is hidden — editing starts from what's stored. */
+  editSong?: Song;
   onClose: () => void;
   onSaved: (song: Song) => void;
 }
@@ -22,15 +26,16 @@ const stanzaLabel = (t: string): string => {
 
 type QaTab = 'search' | 'paste';
 
-export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps): JSX.Element | null {
+export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: QuickAddProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
   // The parent only mounts this component while `open` is true, so a fresh
   // mount (and therefore fresh field state) happens on every open.
+  const editing = !!editSong;
   const prefilled = !!initialTitle?.trim();
-  const [title, setTitle] = useState(initialTitle?.trim() ?? '');
-  const [author, setAuthor] = useState('');
-  const [songKey, setSongKey] = useState('');
-  const [text, setText] = useState('');
+  const [title, setTitle] = useState(editSong?.title ?? initialTitle?.trim() ?? '');
+  const [author, setAuthor] = useState(editSong?.author ?? '');
+  const [songKey, setSongKey] = useState(editSong?.key ?? '');
+  const [text, setText] = useState(editSong ? sectionsToText(editSong.sections) : '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [tab, setTab] = useState<QaTab>('paste');
@@ -118,21 +123,27 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
     if (!canSave) return;
     setSaving(true);
     setSaveError(false);
+    const done = (song: Song): void => {
+      onClose();
+      onSaved(song);
+    };
+    const fail = (): void => {
+      // Keep the modal (and the user's text) intact; let them retry.
+      setSaving(false);
+      setSaveError(true);
+    };
+    if (editSong) {
+      const input: UpdateSongInput = { title: title.trim() || 'Untitled Song', sections: splitToSlides(text) };
+      if (author.trim()) input.author = author.trim();
+      if (songKey.trim()) input.key = songKey.trim();
+      window.helm.songs.update(editSong.id, input).then(done, fail);
+      return;
+    }
     const input: NewSongInput = { title: title.trim() || 'Untitled Song', text };
     if (author.trim()) input.author = author.trim();
     if (songKey.trim()) input.key = songKey.trim();
     if (fromWeb) input.source = 'web';
-    window.helm.songs.add(input).then(
-      (song) => {
-        onClose();
-        onSaved(song);
-      },
-      () => {
-        // Keep the modal (and the user's text) intact; let them retry.
-        setSaving(false);
-        setSaveError(true);
-      }
-    );
+    window.helm.songs.add(input).then(done, fail);
   };
 
   const stop = (e: ReactMouseEvent): void => e.stopPropagation();
@@ -223,18 +234,20 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
       <div style={modalStyle} onClick={stop}>
         <div style={{ padding: '16px 22px 0', borderBottom: `1px solid ${T.hairline}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ fontWeight: 700, fontSize: '18px', flex: 1 }}>Add a song</div>
-            <div style={tabsWrapStyle}>
-              <button style={qaTab(tab === 'search', false)} onClick={openSearchTab}>
-                Search online
-              </button>
-              <button
-                style={qaTab(tab === 'paste', false)}
-                onClick={() => { searchSeq.current++; setTab('paste'); }}
-              >
-                Paste lyrics
-              </button>
-            </div>
+            <div style={{ fontWeight: 700, fontSize: '18px', flex: 1 }}>{editing ? 'Edit song' : 'Add a song'}</div>
+            {!editing && (
+              <div style={tabsWrapStyle}>
+                <button style={qaTab(tab === 'search', false)} onClick={openSearchTab}>
+                  Search online
+                </button>
+                <button
+                  style={qaTab(tab === 'paste', false)}
+                  onClick={() => { searchSeq.current++; setTab('paste'); }}
+                >
+                  Paste lyrics
+                </button>
+              </div>
+            )}
           </div>
           <div style={{ fontSize: '13px', color: T.dim, margin: '6px 0 14px', lineHeight: 1.4 }}>
             {tab === 'search'
@@ -368,7 +381,7 @@ export function QuickAdd({ open, initialTitle, onClose, onSaved }: QuickAddProps
             Cancel
           </button>
           <button style={saveStyle} onClick={save} disabled={!canSave}>
-            Add to library
+            {editing ? 'Save changes' : 'Add to library'}
           </button>
         </div>
       </div>

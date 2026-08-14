@@ -231,3 +231,75 @@ describe('QuickAdd Search online tab', () => {
     expect(titleInput.value).toBe('');
   });
 });
+
+const EDIT_SONG = {
+  id: 's9',
+  title: 'Amazing Grace',
+  author: 'John Newton',
+  key: 'G',
+  sections: [
+    { label: 'Verse 1', lines: ['Amazing grace! how sweet the sound'] },
+    { label: 'Chorus', lines: ['Praise God'] }
+  ],
+  source: 'web',
+  createdAt: 5
+};
+
+const renderEdit = (onSaved = vi.fn(), onClose = vi.fn()): ReturnType<typeof render> =>
+  render(
+    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+      <QuickAdd open editSong={EDIT_SONG} onClose={onClose} onSaved={onSaved} />
+    </ThemeCtx.Provider>
+  );
+
+describe('QuickAdd edit mode', () => {
+  it('prefills title, author, key and round-tripped lyrics; hides the search tab', () => {
+    renderEdit();
+    expect(screen.getByText('Edit song')).toBeTruthy();
+    expect((screen.getByPlaceholderText('Song title') as HTMLInputElement).value).toBe('Amazing Grace');
+    expect((screen.getByPlaceholderText('Author (optional)') as HTMLInputElement).value).toBe('John Newton');
+    expect((screen.getByPlaceholderText('Key') as HTMLInputElement).value).toBe('G');
+    expect((screen.getByPlaceholderText(/Paste lyrics here/) as HTMLTextAreaElement).value).toBe(
+      'Verse 1\nAmazing grace! how sweet the sound\n\nChorus\nPraise God'
+    );
+    expect(screen.queryByText('Search online')).toBeNull();
+    expect(screen.getByText('Save changes')).toBeTruthy();
+  });
+
+  it('save calls songs.update (never add) with re-split sections', async () => {
+    const update = vi.fn().mockResolvedValue({ ...EDIT_SONG, title: 'Amazing Grace (fixed)' });
+    const add = vi.fn();
+    (window as unknown as { helm: unknown }).helm = { songs: { update, add } };
+    const onSaved = vi.fn();
+    renderEdit(onSaved);
+    fireEvent.change(screen.getByPlaceholderText('Song title'), { target: { value: 'Amazing Grace (fixed)' } });
+    fireEvent.change(screen.getByPlaceholderText(/Paste lyrics here/), {
+      target: { value: 'Verse 1\nAmazing grace! fixed sound\n\nChorus\nPraise God' }
+    });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith('s9', {
+        title: 'Amazing Grace (fixed)',
+        author: 'John Newton',
+        key: 'G',
+        sections: [
+          { label: 'Verse 1', lines: ['Amazing grace! fixed sound'] },
+          { label: 'Chorus', lines: ['Praise God'] }
+        ]
+      })
+    );
+    expect(add).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ ...EDIT_SONG, title: 'Amazing Grace (fixed)' }));
+  });
+
+  it('a failed update keeps the modal open with the text intact', async () => {
+    const update = vi.fn().mockRejectedValue(new Error('boom'));
+    (window as unknown as { helm: unknown }).helm = { songs: { update } };
+    const onClose = vi.fn();
+    renderEdit(vi.fn(), onClose);
+    fireEvent.click(screen.getByText('Save changes'));
+    await screen.findByText(/Couldn’t save/);
+    expect(onClose).not.toHaveBeenCalled();
+    expect((screen.getByPlaceholderText(/Paste lyrics here/) as HTMLTextAreaElement).value).toContain('Amazing grace');
+  });
+});
