@@ -1,16 +1,17 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
-import type { NewSongInput, SearchField, Song, SongSearchResult } from '../shared/types';
+import type { NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput } from '../shared/types';
 import { SONG_FTS_COLUMNS } from './schema';
 import { norm } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
-import { lyricsOf } from '../shared/songs/lyrics';
+import { lyricsOf, lyricsOfSections } from '../shared/songs/lyrics';
 
 export interface SongsRepo {
   list(): Song[];
   get(id: string): Song | null;
   add(input: NewSongInput): Song;
+  update(id: string, input: UpdateSongInput): Song;
   search(q: string, field: SearchField): SongSearchResult[];
   count(): number;
 }
@@ -35,10 +36,16 @@ const toSong = (r: Row): Song => ({
 export function createSongsRepo(db: Database.Database): SongsRepo {
   const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at, music_key) VALUES (?,?,?,?,?,?,?)');
   const insertFts = db.prepare('INSERT INTO song_fts (rowid, title, author, lyrics) VALUES ((SELECT rowid FROM songs WHERE id = ?),?,?,?)');
+  const updateSong = db.prepare('UPDATE songs SET title = ?, author = ?, sections_json = ?, music_key = ? WHERE id = ?');
+  const updateFts = db.prepare('UPDATE song_fts SET title = ?, author = ?, lyrics = ? WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
   const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSong);
+  const get = (id: string): Song | null => {
+    const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined;
+    return r ? toSong(r) : null;
+  };
   return {
     list,
-    get: (id) => { const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined; return r ? toSong(r) : null; },
+    get,
     count: () => (db.prepare('SELECT COUNT(*) AS n FROM songs').get() as { n: number }).n,
     add(input) {
       const sections = splitToSlides(input.text);
@@ -48,6 +55,27 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       db.transaction(() => {
         insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
         insertFts.run(song.id, song.title, song.author, lyricsOf(song));
+      })();
+      return song;
+    },
+    update(id, input) {
+      const existing = get(id);
+      if (!existing) throw new Error('Song not found');
+      const sections = input.sections
+        .map((s) => ({ label: s.label, lines: s.lines.map((l) => l.trim()).filter(Boolean) }))
+        .filter((s) => s.lines.length);
+      if (!sections.length) throw new Error('Song has no content');
+      const title = input.title.trim() || 'Untitled Song';
+      const author = input.author?.trim() ?? '';
+      const key = input.key?.trim() ?? '';
+      const song: Song = {
+        id, title, author, sections,
+        source: existing.source, createdAt: existing.createdAt,
+        ...(key ? { key } : {})
+      };
+      db.transaction(() => {
+        updateSong.run(title, author, JSON.stringify(sections), key, id);
+        updateFts.run(title, author, lyricsOfSections(sections), id);
       })();
       return song;
     },
