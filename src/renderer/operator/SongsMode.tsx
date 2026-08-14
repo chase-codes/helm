@@ -491,16 +491,17 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           return true;
         }
         // Progressive back-out (spec §3): after modals, undo the most recent intent
-        // first (an armed switch), then leave a text field, and only then touch the
-        // screen. Order matters: a typing operator must never black the screen with a
-        // stray Escape, and disarming before blur means "undo my arm" always wins.
-        if (armedNextId) {
-          setArmedNextId(null);
-          return true;
-        }
+        // first — a section quick-edit in flight, then an armed switch — then leave a
+        // text field, and only then touch the screen. Order matters: a typing operator
+        // must never black the screen with a stray Escape, and cancelling the edit (or
+        // disarming) before blur means "undo my in-progress action" always wins.
         if (editingSection !== null) {
           setEditingSection(null);
           setEditError(false);
+          return true;
+        }
+        if (armedNextId) {
+          setArmedNextId(null);
           return true;
         }
         const el = document.activeElement as HTMLElement | null;
