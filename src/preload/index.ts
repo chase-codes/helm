@@ -12,6 +12,7 @@ const api: HelmApi = {
     list: () => ipcRenderer.invoke(CH.songsList),
     get: (id) => ipcRenderer.invoke(CH.songsGet, id),
     add: (input) => ipcRenderer.invoke(CH.songsAdd, input),
+    update: (id, input) => ipcRenderer.invoke(CH.songsUpdate, id, input),
   },
   presentation: {
     get: () => ipcRenderer.invoke(CH.presGet),

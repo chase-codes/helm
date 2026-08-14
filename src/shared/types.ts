@@ -169,7 +169,7 @@ export interface UpdateStatus { state: UpdateState; version: string | null }
 
 export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
-  songsGet: 'songs:get', songsAdd: 'songs:add',
+  songsGet: 'songs:get', songsAdd: 'songs:add', songsUpdate: 'songs:update',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presSetOutput: 'presentation:setOutput',
@@ -267,6 +267,7 @@ export interface HelmApi {
     list(): Promise<Song[]>;
     get(id: string): Promise<Song | null>;
     add(input: NewSongInput): Promise<Song>;
+    update(id: string, input: UpdateSongInput): Promise<Song>;
   };
   presentation: {
     get(): Promise<PresentationState>;
