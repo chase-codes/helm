@@ -48,6 +48,18 @@ const STATUS: DisplayStatus = {
       view: 'mirror',
       isOperator: false,
       leaderSplit: 320
+    },
+    {
+      id: 4,
+      fingerprint: 'label:Lobby TV',
+      label: 'Lobby TV',
+      width: 1280,
+      height: 720,
+      scaleFactor: 1,
+      role: 'off',
+      view: 'slides',
+      isOperator: false,
+      leaderSplit: 320
     }
   ]
 }
@@ -218,5 +230,12 @@ describe('OutputViewPopover', () => {
     fireEvent.change(r.getByTestId('split-fpL'), { target: { value: '400' } })
     expect(setLeaderSplit).toHaveBeenCalledWith('fpL', 400)
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('skips off displays — they have no view to switch', async () => {
+    installHelmStub()
+    const r = renderPopover()
+    await waitFor(() => expect(r.getByText('Projector')).toBeTruthy())
+    expect(r.queryByText('Lobby TV')).toBeNull()
   })
 })

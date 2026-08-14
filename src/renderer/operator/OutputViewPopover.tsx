@@ -20,7 +20,7 @@ export function OutputViewPopover({
 }): JSX.Element {
   const T = useContext(ThemeCtx)
   const { displays } = useDisplayStatus()
-  const outputs = displays.filter((d) => !d.isOperator)
+  const outputs = displays.filter((d) => !d.isOperator && d.role !== 'off')
   const popRef = useRef<HTMLDivElement | null>(null)
 
   // Dismiss on Escape key.
