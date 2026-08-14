@@ -15,7 +15,9 @@ export function verseCols(
 }
 
 export function buildScriptureSlide(ref: string, columns: SlideColumn[]): Slide {
-  return { kind: 'scripture', accent: '#6f9cf0', ref, label: ref, columns }
+  // Canvas gold (SlideCanvas's default accent), not the operator-UI scripture blue: on
+  // the dark slide background the blue was the dimmest element on the slide (#48).
+  return { kind: 'scripture', accent: '#f0b24a', ref, label: ref, columns }
 }
 
 // Ported from the prototype's pickVersion (line 1002): toggles `id` in/out of the

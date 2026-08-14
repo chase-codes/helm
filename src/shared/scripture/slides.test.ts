@@ -12,7 +12,8 @@ test('buildScriptureSlide shape', () => {
   ]
   const slide = buildScriptureSlide('John 3:16', columns)
   expect(slide.kind).toBe('scripture')
-  expect(slide.accent).toBe('#6f9cf0')
+  // Canvas gold, not scripture blue: the blue was the dimmest element on the slide (#48).
+  expect(slide.accent).toBe('#f0b24a')
   expect(slide.ref).toBe('John 3:16')
   expect(slide.label).toBe('John 3:16')
   expect(slide.columns).toEqual(columns)

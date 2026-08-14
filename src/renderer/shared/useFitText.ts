@@ -15,11 +15,11 @@ export function fitSizeValue(fallback: string): string {
 
 /**
  * The `font-size` for a style that must track a fitted element proportionally rather than
- * read the fitted size directly — e.g. the scripture ref/version labels, which scale off
- * the verse text so the whole block moves as one unit (and the fit search stays monotonic:
- * nothing inside the measured box has a size that doesn't shrink when the fitted size does).
- * `ratio` is this element's original size relative to `fallback`'s (e.g. the ref was
- * `2.9cqmin` when the verse was `4.7cqmin`: `2.9/4.7 ≈ 0.62`), so the proportion holds both
+ * read the fitted size directly — e.g. the scripture version label, which scales off
+ * the verse text so each verse block moves as one unit (and the fit search stays monotonic:
+ * nothing inside the measured box grows when the fitted size shrinks).
+ * `ratio` is this element's original size relative to `fallback`'s (e.g. the version label
+ * was `2.2cqmin` when the verse was `4.7cqmin`: `2.2/4.7 ≈ 0.47`), so the proportion holds both
  * before measurement (via `fallback`) and after (via the fitted value). `floorPx` is this
  * element's own px floor, independent of the base element's.
  */
