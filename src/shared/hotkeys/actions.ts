@@ -1,7 +1,7 @@
 export type HotkeyScope = 'global' | 'songs' | 'scripture'
 
 /** Actions App handles itself (mode switching / lookup) rather than delegating to a mode. */
-export type AppActionId = 'page.pre' | 'page.songs' | 'page.sermon' | 'scripture.lookup'
+export type AppActionId = 'page.pre' | 'page.songs' | 'page.sermon' | 'scripture.lookup' | 'displays.release'
 
 export interface HotkeyAction {
   id: string
@@ -27,6 +27,7 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'page.songs', label: 'Go to Songs', scope: 'global', defaults: ['Mod+2'] },
   { id: 'page.sermon', label: 'Go to Sermon', scope: 'global', defaults: ['Mod+3'] },
   { id: 'scripture.lookup', label: 'Scripture lookup', scope: 'global', defaults: ['Mod+L'] },
+  { id: 'displays.release', label: 'Release / take screens', scope: 'global', defaults: ['Mod+B'] },
   { id: 'focus.search', label: 'Focus search / entry', scope: 'global', defaults: ['/', '\\'] },
   { id: 'field.clear', label: 'Clear field', scope: 'global', defaults: ['Mod+Backspace', 'Mod+Delete'] },
   { id: 'go.live', label: 'Go live / take down', scope: 'global', defaults: ['Enter', 'Space'] },

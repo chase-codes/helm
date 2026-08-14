@@ -163,4 +163,21 @@ describe('dispatchModeKey — hotkey actions', () => {
     dispatchModeKey(ev('c'), { ...baseCtx({ scope: 'songs' }), handler: makeHandler({ onAction, isModalOpen: () => true }) })
     expect(onAction).not.toHaveBeenCalled()
   })
+
+  it('Mod+B dispatches displays.release', () => {
+    const onAppAction = vi.fn()
+    const e = ev('b', { ctrl: true })
+    dispatchModeKey(e, { ...baseCtx({ onAppAction }), handler: makeHandler() })
+    expect(onAppAction).toHaveBeenCalledWith('displays.release')
+    expect(e.preventDefault).toHaveBeenCalled()
+  })
+
+  it('Mod+B works even with settings open or a modal up — it is a panic control', () => {
+    const onAppAction = vi.fn()
+    dispatchModeKey(ev('b', { ctrl: true }), {
+      ...baseCtx({ settingsOpen: true, onAppAction }),
+      handler: makeHandler({ isModalOpen: vi.fn(() => true) })
+    })
+    expect(onAppAction).toHaveBeenCalledWith('displays.release')
+  })
 })

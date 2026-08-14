@@ -44,6 +44,12 @@ export function dispatchModeKey(e: KeyboardEvent, ctx: KeyDispatchCtx): void {
   if (!resolved) return;
 
   switch (resolved.id) {
+    case 'displays.release':
+      // Panic control — releasing/taking the screens must work even behind Settings
+      // or a modal; it touches no operator-window UI state.
+      e.preventDefault();
+      ctx.onAppAction('displays.release');
+      return;
     case 'page.pre':
     case 'page.songs':
     case 'page.sermon':
