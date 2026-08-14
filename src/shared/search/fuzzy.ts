@@ -51,9 +51,12 @@ export function bestMatch(t: string, words: string[]): number {
 const PHRASE_MAX_TOKENS = 30;
 
 export interface TextSignals {
-  matched: number; // # query tokens matched anywhere (whole-word: exact/prefix/fuzzy)
-  tf: number;      // total exact occurrences of query tokens
-  phrase: number;  // longest run of consecutive query tokens found consecutively in a segment
+  matched: number;   // # query tokens matched anywhere (whole-word: exact/prefix/fuzzy)
+  strong: number;    // # matched tokens of length >= 3 — a 1-2 char stopword fuzzes into
+                     // nearly anything, so it can never qualify a result on its own
+  covWeight: number; // Σ length of matched tokens — a rare word outweighs two stopwords
+  tf: number;        // total exact occurrences of query tokens
+  phrase: number;    // longest run of consecutive query tokens found consecutively in a segment
 }
 
 // Shared relevance pass for the song and message scorers. One fuzzy pass over the
@@ -77,9 +80,9 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
     }
     if (mask) wordMask.set(w, mask);
   }
-  let matched = 0; let tf = 0;
+  let matched = 0; let strong = 0; let covWeight = 0; let tf = 0;
   for (let j = 0; j < qts.length; j++) {
-    if (bestDist[j] < 99) matched++;
+    if (bestDist[j] < 99) { matched++; covWeight += qts[j].length; if (qts[j].length >= 3) strong++; }
     tf += counts.get(qts[j]) ?? 0;
   }
   // Longest run of consecutive query tokens appearing consecutively in a segment:
@@ -98,5 +101,5 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       const swap = prev; prev = cur; cur = swap;
     }
   }
-  return { matched, tf, phrase };
+  return { matched, strong, covWeight, tf, phrase };
 }

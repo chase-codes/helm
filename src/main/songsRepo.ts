@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import type { NewSongInput, SearchField, Song, SongSearchResult } from '../shared/types';
+import { SONG_FTS_COLUMNS } from './schema';
 import { norm } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
@@ -14,13 +15,17 @@ export interface SongsRepo {
   count(): number;
 }
 interface Row { id: string; title: string; author: string; sections_json: string; source: string; created_at: number; music_key: string; rowid: number }
-// bm25() weights per search field over song_fts columns (title, author, lyrics).
-// Literal constants, not bound parameters — FTS5 auxiliary-function args must be
-// constant in some builds, and these never vary at runtime.
+// bm25() weights per search field, keyed by song_fts column name and rendered in
+// SONG_FTS_COLUMNS order so the positional bm25() args can never drift from the DDL.
+// Literal constants in the SQL, not bound parameters — FTS5 auxiliary-function args
+// must be constant in some builds, and these never vary at runtime.
+type FtsColumn = (typeof SONG_FTS_COLUMNS)[number];
+const bm25For = (w: Record<FtsColumn, number>): string =>
+  `bm25(song_fts, ${SONG_FTS_COLUMNS.map((c) => w[c].toFixed(1)).join(', ')})`;
 const BM25: Record<SearchField, string> = {
-  all: 'bm25(song_fts, 8.0, 2.0, 1.0)',
-  title: 'bm25(song_fts, 1.0, 0.0, 0.0)',
-  lyric: 'bm25(song_fts, 0.0, 0.0, 1.0)',
+  all: bm25For({ title: 8, author: 2, lyrics: 1 }),
+  title: bm25For({ title: 1, author: 0, lyrics: 0 }),
+  lyric: bm25For({ title: 0, author: 0, lyrics: 1 }),
 };
 const toSong = (r: Row): Song => ({
   id: r.id, title: r.title, author: r.author, sections: JSON.parse(r.sections_json),
@@ -51,9 +56,12 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       if (!tokens.length) return rankSongs('', list(), field);
       const match = tokens.map((t) => `"${t}"*`).join(' OR ');
       // bm25 gives TF-IDF relevance the JS scorer can't (#53): stopwords are IDF-damped
-      // and repeated terms count. Column weights over (title, author, lyrics) per field;
-      // negated so higher = better. Songs FTS didn't match simply carry no prior.
-      const hits = db.prepare(`SELECT s.rowid AS rowid, s.id AS id, -${BM25[field]} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ?`)
+      // and repeated terms count. Column weights per field; negated so higher = better.
+      // Songs FTS didn't match simply carry no prior. `field` arrives over IPC, so it is
+      // whitelisted before touching SQL text. The LIMIT keeps a common-token query's hit
+      // list under the bound-variable cap of the IN() below — best-ranked hits survive.
+      const bm25 = Object.hasOwn(BM25, field) ? BM25[field] : BM25.all;
+      const hits = db.prepare(`SELECT s.rowid AS rowid, s.id AS id, -${bm25} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT 1000`)
         .all(match) as { rowid: number; id: string; rel: number }[];
       const rel = new Map(hits.map((h) => [h.id, h.rel]));
       let candidates: Song[];

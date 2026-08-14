@@ -141,6 +141,25 @@ test('incremental typing mid-word keeps the full-match band and the phrase run',
   expect(r.phrase).toBe(3);
 });
 
+test('a match on stopwords alone does not qualify a song', () => {
+  // "zephaniah" is beyond fuzz reach and "of" (len 2) fuzzes into nearly anything —
+  // without a significant matched token (len >= 3) the partial band must stay closed
+  const s = song('noise', 'Noise', '', [['V', ['come on up to the house']]]);
+  expect(scoreSong('zephaniah of', s, 'lyric').score).toBe(0);
+});
+
+test('a rare matched word outweighs two matched stopwords (length-weighted coverage)', () => {
+  const a = song('stopwords', 'Alpha', '', [['V', ['the light of morning']]]);
+  const b = song('rareword', 'Zulu', '', [['V', ['mighty armies rising high']]]);
+  for (const lib of [[a, b], [b, a]]) {
+    expect(rankSongs('the god of angel armies', lib, 'lyric')[0].song.id).toBe('rareword');
+  }
+});
+
+test('empty-normalizing query respects the limit parameter', () => {
+  expect(rankSongs('...', LIB, 'all', undefined, 1)).toHaveLength(1);
+});
+
 test('matching more of the query beats a stopword bigram (coverage before phrase)', () => {
   // partial band for "the love of god": B matches three tokens scattered, A only a
   // contiguous "the love" — B is the fuller match and must win, either order

@@ -83,6 +83,13 @@ describe('messagesRepo', () => {
     expect(r.search('son', null).quotes).toHaveLength(0);
   });
 
+  it('search survives more FTS hits than the SQL bound-variable limit', () => {
+    r.installIndex([{ id: 'big', tapeNo: '65-0001', title: 'Big', date: '', durationS: 1 }]);
+    r.installSermon('big', Array.from({ length: 2100 }, (_, i) => ({ label: String(i), text: `grace portion ${i}` })), []);
+    expect(() => r.search('grace', null)).not.toThrow();
+    expect(r.search('grace', null).quotes).toHaveLength(12);
+  });
+
   it('sets an audio path', () => {
     r.installIndex([{ id: 'rapture', tapeNo: '65-1204', title: 'The Rapture', date: '', durationS: 1 }]);
     r.setAudioPath('rapture', '/library/65-1204.mp3');

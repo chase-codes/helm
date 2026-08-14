@@ -116,10 +116,13 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
     const match = tokens.map((t) => `"${t}"*`).join(' OR ');
     // bm25 gives TF-IDF relevance the JS scorer can't (#53): negated so higher =
     // better. Paragraphs FTS didn't match simply carry no prior.
+    // LIMIT keeps a common-token query's hit list under the bound-variable cap of the
+    // IN() below — best-ranked paragraphs survive.
     const ftsSql = `
       SELECT p.rowid AS rowid, p.message_id AS msgId, p.ord AS ord, -bm25(paragraph_fts) AS rel
       FROM paragraph_fts JOIN paragraphs p ON p.rowid = paragraph_fts.rowid
       WHERE paragraph_fts MATCH ?${scope ? ' AND p.message_id = ?' : ''}
+      ORDER BY rel DESC LIMIT 1000
     `;
     const hits = (
       scope ? db.prepare(ftsSql).all(match, scope) : db.prepare(ftsSql).all(match)

@@ -1,6 +1,10 @@
 // SQLite schema, kept in its own dependency-free module (no better-sqlite3 import)
 // so tests can apply it via node:sqlite without transitively loading the native
 // better-sqlite3 binary. See testDb.ts for why that matters (ABI dance avoidance).
+// Single source of truth for song_fts column order — songsRepo's bm25() weights are
+// positional, so the DDL and the weight table must agree; both derive from this list.
+export const SONG_FTS_COLUMNS = ['title', 'author', 'lyrics'] as const;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS songs (
   id TEXT PRIMARY KEY,
@@ -12,7 +16,7 @@ CREATE TABLE IF NOT EXISTS songs (
   music_key TEXT NOT NULL DEFAULT ''
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS song_fts USING fts5(
-  title, author, lyrics, tokenize='unicode61 remove_diacritics 2'
+  ${SONG_FTS_COLUMNS.join(', ')}, tokenize='unicode61 remove_diacritics 2'
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS bible_versions (

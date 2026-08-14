@@ -13,7 +13,8 @@ export interface ScoredSong {
   phrase: number;          // longest run of consecutive query tokens found consecutively
                            // in the text (fuzzy per-word; line breaks transparent,
                            // section boundaries block) — a verbatim phrase wins (#53)
-  coverage: number;        // # query tokens matched anywhere in the blob (higher wins)
+  coverage: number;        // # query tokens matched anywhere in the blob
+  covWeight: number;       // Σ length of matched tokens — rare words outweigh stopwords (higher wins)
   rel: number;             // -bm25 relevance from FTS (0 when FTS didn't match) (#53)
   tf: number;              // total exact occurrences of query tokens (higher wins)
   titleStartsWith: boolean;// title begins with the whole query (wins)
@@ -56,7 +57,7 @@ export function scoreSong(query: string, song: Song, field: SearchField, rel = 0
 function scoreSignals(query: string, song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredSong {
   const q = norm(query);
   const title = norm(song.title);
-  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
+  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
   if (!q) return empty;
   const qts = q.split(' ');
 
@@ -70,12 +71,14 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
   }
 
-  const { matched, tf, phrase } = textSignals(segs, qts);
+  const { matched, strong, covWeight, tf, phrase } = textSignals(segs, qts);
 
   let score = 0;
   if (field !== 'lyric') { if (title === q) score = 1200; else if (title.includes(q)) score = 1000 - title.indexOf(q); }
   if (matched === qts.length && matched > 0) score = Math.max(score, 380 + matched * 12);
-  else if (matched > 0 && field !== 'title') score = Math.max(score, 360);
+  // The partial band needs at least one significant matched token — 1-2 char stopwords
+  // fuzz into nearly anything and must not qualify a song on their own.
+  else if (strong > 0 && field !== 'title') score = Math.max(score, 360);
   const snippet = withSnippet && score > 0 && field !== 'title' ? bestSnippet(qts, song.sections) : '';
 
   // Tie-break signals. Title-based signals only apply when the title is in scope; a
@@ -87,7 +90,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const t of qts) { const d = bestMatch(t, titleWords); if (d < 99) { titleCoverage++; titleCloseness += d; } }
   }
   const titleStartsWith = field !== 'lyric' && title.startsWith(q);
-  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, rel, tf, titleStartsWith, titleLen: title.length, title };
+  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, rel, tf, titleStartsWith, titleLen: title.length, title };
 }
 
 // Order by primary score, then by relevance sub-signals, then lexicographically by
@@ -96,8 +99,9 @@ function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
-  if (b.coverage !== a.coverage) return b.coverage - a.coverage; // more of the query matched
-  if (b.phrase !== a.phrase) return b.phrase - a.phrase;         // …then contiguity of what matched
+  if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched, stopwords weigh less
+  if (b.phrase !== a.phrase) return b.phrase - a.phrase;             // …then contiguity of what matched
+  if (b.coverage !== a.coverage) return b.coverage - a.coverage;
   if (b.rel !== a.rel) return b.rel - a.rel;
   if (b.tf !== a.tf) return b.tf - a.tf;
   if (a.titleStartsWith !== b.titleStartsWith) return a.titleStartsWith ? -1 : 1;
@@ -107,7 +111,7 @@ function compareRelevance(a: ScoredSong, b: ScoredSong): number {
 
 export function rankSongs(query: string, songs: Song[], field: SearchField, rel?: Map<string, number>, limit = Infinity): SongSearchResult[] {
   const q = norm(query);
-  if (!q) return songs.map((song) => ({ song, score: 1, snippet: '' }));
+  if (!q) return songs.slice(0, limit).map((song) => ({ song, score: 1, snippet: '' }));
   const qts = q.split(' ');
   return songs
     .map((song) => ({ song, s: scoreSignals(query, song, field, rel?.get(song.id) ?? 0, false) }))

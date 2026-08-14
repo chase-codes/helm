@@ -123,6 +123,14 @@ test('type-ahead: a mid-word lyric prefix keeps the song in the full-match band'
   expect(rs[0].score).toBeGreaterThanOrEqual(380); // "sou" counts as a match, not a lucky partial
 });
 
+test('a stopword-only match returns an honest empty list, not 50 junk rows', () => {
+  expect(repo.search('zephaniah of', 'lyric')).toHaveLength(0);
+});
+
+test('an out-of-range search field does not reach SQL text', () => {
+  expect(() => repo.search('grace', 'constructor' as never)).not.toThrow();
+});
+
 test('a bare substring inside a longer word does not put a song in results', () => {
   const hits = repo.search('and', 'lyric').map((r) => r.song.id);
   expect(hits).not.toContain(ids.get('standing'));
