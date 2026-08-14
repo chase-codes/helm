@@ -23,6 +23,13 @@ import type { PanelWidthControl } from './usePanelWidth';
 export interface SlidesKeyHandler {
   onArrow: (dir: 1 | -1) => void;
   onGoLive: () => void;
+  /** Escape rung for this track's own overlays (deck-fallback modal, import popover) —
+   * SermonMode's ladder consults this FIRST so Escape closes an overlay rather than
+   * blacking the screen. Returns true if it consumed the press. */
+  onEscape: () => boolean;
+  /** True while the deck-fallback modal is up — a blocking modal, so SermonMode reports
+   * it and App suppresses Enter/Delete behind it (same contract as SongsMode's QuickAdd). */
+  isModalOpen: () => boolean;
 }
 export type SlidesKeyRef = MutableRefObject<SlidesKeyHandler | null>;
 
@@ -117,24 +124,35 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   // see shared/presentation/core.ts's `sameFlow`) — so stepping within the SAME deck
   // while live hot-updates, and selecting a DIFFERENT item while live does not disturb
   // the output until Go Live is pressed again.
+  //
+  // `active && track === 'slides'` gates this to the track actually being the surface the
+  // operator is driving — this component stays mounted while hidden (SermonMode's track
+  // keep-alive, mirroring the mode-level contract), so without the gate the initial media
+  // load would cue a slide from a background track. Both are deps, so re-revealing the
+  // track re-cues the slide it was left on, restoring main's cued state after another
+  // surface cued something else.
   useEffect(() => {
+    if (!active || track !== 'slides') return;
     const sel = items.find((i) => i.id === selId);
     if (!sel) return;
     const sl = slidesOf(sel);
     if (!sl.length) return;
     const idx = Math.max(0, Math.min(slideIdx, sl.length - 1));
     window.helm.presentation.cue(keyForMedia(sel.id, idx), sl[idx]);
-  }, [items, selId, slideIdx]);
+  }, [items, selId, slideIdx, active, track]);
 
   // Video items are backed by the shared main-owned video state: arm the selected
   // clip so the operator hero previews it (muted) and Go Live can mirror it. Uses
-  // slidesOf's src so the key/src match what SlideCanvas/VideoCanvas render.
+  // slidesOf's src so the key/src match what SlideCanvas/VideoCanvas render. Gated
+  // like the cue effect above; the re-fire on reveal is safe because main's loadVideo
+  // is idempotent on the already-loaded key (position/playing state kept).
   useEffect(() => {
+    if (!active || track !== 'slides') return;
     const sel = items.find((i) => i.id === selId);
     if (!sel || sel.type !== 'video') return;
     const vsl = slidesOf(sel)[0];
     window.helm.video.load(keyForMedia(sel.id, 0), vsl.src ?? '');
-  }, [items, selId]);
+  }, [items, selId, active, track]);
 
   // Progress broadcast from main (Task 2's media:importProgress) — updates the spinner
   // label with page counts while a deck import converts/rasterizes.
@@ -208,7 +226,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     commitPending();
   }, [undo.pending, commitPending]);
 
-  // Commit a still-pending delete if this track unmounts before the toast expires.
+  // Commit a still-pending delete on unmount. Under SermonMode's track keep-alive this
+  // effectively only fires at app teardown (a track switch no longer unmounts this
+  // component) — the expiry and supersede paths above carry the normal load — but it
+  // stays as the backstop for any future path that does unmount the track.
   useEffect(() => () => commitPending(), [commitPending]);
 
   const stepSlide = (dir: 1 | -1): void => {
@@ -278,12 +299,31 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     );
   };
 
+  // Escape backs out this track's own overlays, modal before popover (only one can be
+  // open from the UI today, but the blocking modal wins if both somehow are).
+  const escapeOverlays = (): boolean => {
+    if (deckFallback) {
+      setDeckFallback(null);
+      return true;
+    }
+    if (importOpen) {
+      setImportOpen(false);
+      return true;
+    }
+    return false;
+  };
+
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
   // messageKeyRef-registration effect) — no deps array so it always captures the latest
   // stepSlide/goLive closures.
   useEffect(() => {
     if (!active) return;
-    slidesKeyRef.current = { onArrow: stepSlide, onGoLive: goLive };
+    slidesKeyRef.current = {
+      onArrow: stepSlide,
+      onGoLive: goLive,
+      onEscape: escapeOverlays,
+      isModalOpen: () => deckFallback !== null
+    };
     return () => {
       slidesKeyRef.current = null;
     };

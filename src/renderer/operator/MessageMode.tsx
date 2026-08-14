@@ -205,11 +205,17 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const liveMsg = msg && msg.id === msgId ? msg : null;
 
   // Cue on every tape/paragraph change (mirrors SermonMode's scripture cue effect).
+  // `active && track === 'message'` gates this to the track actually being the surface
+  // the operator is driving — this component stays mounted while hidden (SermonMode's
+  // track keep-alive), so without the gate the initial tape load would cue a quote from
+  // a background track. Both are deps, so re-revealing the track re-cues the quote it
+  // was left on (see SlidesTrack's cue effect for the same pattern).
   useEffect(() => {
+    if (!active || track !== 'message') return;
     if (!liveMsg) return;
     const key = keyForMessageQuote(msgId, msgIdx);
     window.helm.presentation.cue(key, buildQuoteSlide(liveMsg, msgIdx));
-  }, [msgId, msgIdx, liveMsg]);
+  }, [msgId, msgIdx, liveMsg, active, track]);
 
   const curKey = keyForMessageQuote(msgId, msgIdx);
   const cuedIsLive = output === 'live' && liveKey === curKey;
@@ -239,10 +245,20 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // reading slide so a live/hot-updated reading view scrolls along. This is entirely
   // separate from the quote-slide cue effect above — the two slide kinds/keys never
   // collide (`keyForReading` vs `keyForMessageQuote`).
+  //
+  // The tape deliberately keeps playing while this track is hidden (keep-alive): an
+  // operator may keep listening while prepping slides, and a live follow-along must not
+  // freeze mid-service because they switched tracks. So this callback still fires from
+  // the background — the gate below decides what it may touch. While hidden it may only
+  // hot-update a reading view that is ALREADY live (`liveKey === key`, the sameFlow case
+  // applyCue hot-updates), which keeps the audience's view scrolling; it must not stomp
+  // the cued preview some other surface owns at every paragraph boundary.
   const handleActiveOrd = (ord: number): void => {
     setActiveOrd(ord);
     if (!liveMsg) return;
-    window.helm.presentation.cue(keyForReading(msgId), buildReadingSlide(liveMsg, ord));
+    const key = keyForReading(msgId);
+    if (!(active && track === 'message') && liveKey !== key) return;
+    window.helm.presentation.cue(key, buildReadingSlide(liveMsg, ord));
   };
 
   // "Follow along": puts the scrolling reading view on screen at the tape's current

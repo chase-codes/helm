@@ -43,6 +43,13 @@ export interface SermonCenterProps {
   heroMedia?: JSX.Element;
 }
 
+/** The slide hero's width: the largest 16:9 rectangle that fits the hero card in BOTH
+ * dimensions (#56) — full card width in a wide window, clamped by the card's height
+ * (100cqh resolves against heroCardStyle's containerType) in a short one. Named and
+ * exported because jsdom can't hold it (cssstyle drops declarations with container-query
+ * units), so SermonCenter.test pins the formula here instead of through the DOM. */
+export const SLIDE_HERO_WIDTH = 'min(100%, calc(100cqh * 16 / 9))';
+
 /** Now-bar, hero card (verse columns or a message quote), on-deck preview, and
  * transport — shared shell for the Scripture and Message tracks (Lectern.pretty.html
  * computes heroCardStyle/heroLabelStyle/ondeck/transport once for both). */
@@ -96,9 +103,16 @@ export function SermonCenter({
   const heroCardStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    overflowY: 'auto',
+    // The verse/quote heroes hold text that can genuinely overflow (long stacked
+    // versions), so they scroll. A slide preview must never scroll — it shrinks to fit
+    // instead (#56) — and the slide variant doubles as the size container the hero box's
+    // cqh width formula below resolves against.
+    ...(variant === 'slide'
+      ? ({ overflowY: 'hidden', containerType: 'size' } as CSSProperties)
+      : { overflowY: 'auto' }),
     borderRadius: '14px',
     background: T.panel,
     boxShadow: cuedIsLive ? `inset 0 0 0 2px ${accent}66` : `inset 0 0 0 1px ${T.hairline}`
@@ -228,7 +242,10 @@ export function SermonCenter({
             <div
               style={{
                 margin: 'auto',
-                width: 'min(100%, 680px)',
+                // So the slide grows into all the space the operator has and shrinks
+                // instead of scrolling — which matters most for imported decks, whose
+                // text is baked into the image at a fixed pixel size.
+                width: SLIDE_HERO_WIDTH,
                 aspectRatio: '16/9',
                 borderRadius: '10px',
                 overflow: 'hidden',

@@ -578,10 +578,16 @@ export function SermonMode({
       return;
     }
     if (e.key === 'Escape') {
-      // Clear the builder first; a second Escape (already empty) falls through to the
-      // document-level modal-close handler (Settings) via normal bubbling — matches today.
+      // Clear the builder first — and consume the press entirely, so the mode-level
+      // Escape ladder (onEscape above) doesn't also blur the field on the same
+      // keystroke; each Escape backs out exactly one layer. A second Escape (already
+      // empty) falls through via normal bubbling to the ladder, which blurs, and only
+      // a third can touch the screen. stopPropagation also keeps the press from the
+      // dispatcher's Settings-close branch — acceptable, since the entry can't be
+      // focused with text in it while the Settings overlay is up.
       if (renderBuilder(builder) !== '') {
         e.preventDefault();
+        e.stopPropagation();
         setBuilder(initialBuilder());
       }
       return;
@@ -662,7 +668,28 @@ export function SermonMode({
   useEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
-      onEscape: () => false,
+      // Progressive back-out, the same ladder SongsMode implements (spec §3), minus the
+      // armed-switch rung Sermon doesn't have. Overlays first (the slides track owns two:
+      // the deck-fallback modal and the import popover; Settings is App's, handled above
+      // the mode layer), then leave a text field, and only then touch the screen — a
+      // typing operator must never black the screen with a stray Escape. (A first Escape
+      // with text in the scripture entry never even gets here: onEntryKeyDown clears the
+      // builder and stops propagation.) The blur/black rungs are deliberately not
+      // track-gated — blur covers whichever rail input is focused, and black is black.
+      onEscape: () => {
+        if (track === 'slides' && slidesKeyRef.current?.onEscape()) return true;
+        const el = document.activeElement as HTMLElement | null;
+        const tag = el?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') {
+          el?.blur();
+          return true;
+        }
+        if (output === 'live') {
+          window.helm.presentation.setOutput('black');
+          return true;
+        }
+        return false;
+      },
       onArrow: (dir) => {
         if (track === 'scripture') stepVerse(dir);
         else if (track === 'message') messageKeyRef.current?.onArrow(dir);
@@ -673,9 +700,10 @@ export function SermonMode({
         else if (track === 'message') messageKeyRef.current?.onGoLive();
         else if (track === 'slides') slidesKeyRef.current?.onGoLive();
       },
-      // SermonMode has no App-level modal of its own (unlike SongsMode's QuickAdd) —
-      // Settings, its only modal, is tracked directly in App via settingsOpen.
-      isModalOpen: () => false,
+      // Settings is tracked directly in App via settingsOpen; the one mode-owned
+      // blocking modal down here is the slides track's deck-fallback, reported through
+      // its delegate so Enter/Delete can't fire behind it (same contract as QuickAdd).
+      isModalOpen: () => (track === 'slides' && slidesKeyRef.current?.isModalOpen()) || false,
       onDelete: () => {
         if (track === 'scripture' && sel.selectedId) removeReading(sel.selectedId);
       },
@@ -707,14 +735,20 @@ export function SermonMode({
   );
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
+  // Keep-alive wrapper per track, mirroring App's mode-level contract (see the
+  // keyHandlerRef-registration comment above): all three tracks stay mounted so switching
+  // away and back doesn't destroy their local state — deck/slide position, message/
+  // paragraph/search query — mid-service (#60). `contents` (not `flex`) while active so
+  // each track's children join rootStyle's flex row exactly as they did when the tracks
+  // were rendered directly; `none` hides the whole subtree without unmounting it. Each
+  // track owns its own full rail set (TrackTabs + rails + hero) — MessageMode/SlidesTrack
+  // are not rendered alongside SchedulePanel inside one panel, since that would double up
+  // the left rail.
+  const panelStyle = (t: SermonTrack): CSSProperties => ({ display: track === t ? 'contents' : 'none' });
 
   return (
     <div style={rootStyle}>
-      {track === 'message' ? (
-        // Message track: MessageMode renders its own single left rail (TrackTabs +
-        // MessageSearchRail) plus the center hero and ParagraphRail — SchedulePanel is
-        // NOT also rendered here, since that would double up the rail (SchedulePanel's
-        // tabs-only panel as one column, MessageSearchRail as a second sibling column).
+      <div style={panelStyle('message')} data-track-panel="message">
         <MessageMode
           themeMode={themeMode}
           messageKeyRef={messageKeyRef}
@@ -724,10 +758,8 @@ export function SermonMode({
           leftPanel={leftPanel}
           rightPanel={rightPanel}
         />
-      ) : track === 'slides' ? (
-        // Slides track: same reasoning as Message above — SlidesTrack owns its own
-        // TrackTabs + media-library rail + hero + deck rail, so SchedulePanel (whose
-        // body only ever renders for 'scripture') is not also rendered as a sibling.
+      </div>
+      <div style={panelStyle('slides')} data-track-panel="slides">
         <SlidesTrack
           slidesKeyRef={slidesKeyRef}
           active={active}
@@ -736,8 +768,8 @@ export function SermonMode({
           leftPanel={leftPanel}
           rightPanel={rightPanel}
         />
-      ) : (
-        <>
+      </div>
+      <div style={panelStyle('scripture')} data-track-panel="scripture">
           <SchedulePanel
             theme={T}
             width={leftPanel.width}
@@ -794,8 +826,7 @@ export function SermonMode({
             scrollRequest={railScroll && railScroll.nonce > consumedNonce ? railScroll : null}
             onScrollConsumed={setConsumedNonce}
           />
-        </>
-      )}
+      </div>
       {contextMenu.menu}
     </div>
   );

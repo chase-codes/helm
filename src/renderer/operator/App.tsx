@@ -20,7 +20,9 @@ export type { ThemeMode } from '../../shared/theme';
  * mode-specific. Future modes (pre/sermon) plug in the same way.
  */
 export interface ModeKeyHandler {
-  /** Escape: close an open modal if one is open. Returns true if it handled it. */
+  /** Escape: back out one layer (close a mode modal, disarm, blur a field, black the
+   * screen — see SongsMode/SermonMode's ladders). Returns true if it consumed the press;
+   * the dispatcher ignores the result, but mode tests pin ladder rungs through it. */
   onEscape: () => boolean;
   /** Arrow navigation: +1 (Right/Down) or -1 (Left/Up) steps the current cue. */
   onArrow: (dir: 1 | -1) => void;
