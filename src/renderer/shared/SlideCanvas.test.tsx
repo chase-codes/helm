@@ -35,10 +35,14 @@ test('scripture text sizes from the fit property, floored, falling back to an un
   expect(verse.style.fontSize).toBe('max(10px, var(--helm-fit-size, 4.7cqmin))');
 });
 
-test('scripture ref scales with the fitted size (0.62x the verse), floored at 8px, with no px ceiling', () => {
+test('scripture ref is a fixed container-relative size, independent of the fitted verse', () => {
+  // Paging verses re-runs the fit, so a ref tied to the fitted size rescales every
+  // advance (#48). cqmin rather than px keeps the operator preview and the projector
+  // proportional (BUG-007); the fit var must not appear or the jitter returns.
   render(<SlideCanvas slide={{ kind: 'scripture', ref: 'John 3:16', columns: [{ version: 'KJV', text: 'For God so loved…' }] }} />);
   const ref = screen.getByText('John 3:16') as HTMLElement;
-  expect(ref.style.fontSize).toBe('max(8px, calc(var(--helm-fit-size, 4.7cqmin) * 0.62))');
+  expect(ref.style.fontSize).toBe('calc(max(8px,2.9cqmin))');
+  expect(ref.style.fontSize).not.toContain('--helm-fit-size');
   expect(ref.style.fontSize).not.toContain('clamp');
 });
 

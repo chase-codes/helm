@@ -11,11 +11,11 @@ describe('preSlideFor', () => {
   });
   it('verse → scripture slide (KJV single column)', () => {
     expect(preSlideFor({ ...base, type: 'verse', ref: 'Psalm 122:1', text: 'I was glad…' } as PreCard))
-      .toEqual({ kind: 'scripture', accent: '#6f9cf0', ref: 'Psalm 122:1', label: 'Psalm 122:1', columns: [{ version: 'KJV', text: 'I was glad…' }] });
+      .toEqual({ kind: 'scripture', accent: '#f0b24a', ref: 'Psalm 122:1', label: 'Psalm 122:1', columns: [{ version: 'KJV', text: 'I was glad…' }] });
   });
   it('verse card with a version uses it as the column label', () => {
     expect(preSlideFor({ ...base, type: 'verse', ref: 'John 3:16', text: 'For God…', version: 'WEB' } as PreCard))
-      .toEqual({ kind: 'scripture', accent: '#6f9cf0', ref: 'John 3:16', label: 'John 3:16', columns: [{ version: 'WEB', text: 'For God…' }] });
+      .toEqual({ kind: 'scripture', accent: '#f0b24a', ref: 'John 3:16', label: 'John 3:16', columns: [{ version: 'WEB', text: 'For God…' }] });
   });
   it('list → title slide with points', () => {
     expect(preSlideFor({ ...base, type: 'list', title: 'Announcements', points: ['a', 'b'] } as PreCard))

@@ -7,7 +7,8 @@ export function preSlideFor(card: PreCard): Slide {
     case 'message':
       return { kind: 'title', accent: AMBER, title: card.headline || 'Welcome', subtitle: card.subtitle ?? '' };
     case 'verse':
-      return { kind: 'scripture', accent: '#6f9cf0', ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version || 'KJV', text: card.text || '' }] };
+      // Canvas gold, same as buildScriptureSlide — not the operator-UI scripture blue (#48).
+      return { kind: 'scripture', accent: '#f0b24a', ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version || 'KJV', text: card.text || '' }] };
     case 'list':
       return { kind: 'title', accent: AMBER, title: card.title, points: card.points || [] };
     case 'image':

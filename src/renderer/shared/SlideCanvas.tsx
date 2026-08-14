@@ -113,12 +113,14 @@ export function SlideCanvas({
   };
   const refStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
-    // Scales with the fitted verse size (0.62x, its original proportion when this was a
-    // fixed 2.9cqmin against a 4.7cqmin verse) rather than fitting independently: it sits
-    // inside the measured box, so an independent px ceiling here would let the projector
-    // and the operator's preview settle on different proportions of non-scaling content —
-    // exactly what BUG-007 was about. No ceiling; only the original 8px floor survives.
-    fontSize: fitSizeScaled(8, '4.7cqmin', 0.62),
+    // Fixed, deliberately NOT tied to the fitted verse size: the fit re-runs per verse,
+    // so a scaled ref rescaled on every advance — the ref is chrome and must hold still
+    // while the verse text moves (#48). Container-relative cqmin, not px, so the operator
+    // preview and the projector keep the same proportions (BUG-007); no ceiling, only the
+    // 8px floor. It still sits inside the measured box: a constant-size child keeps the
+    // fit walk monotonic, at the cost of a fixed floor on the block's height.
+    // (calc() wrapper only because jsdom's CSSOM drops a bare top-level max().)
+    fontSize: 'calc(max(8px, 2.9cqmin))',
     letterSpacing: '0.2em',
     textTransform: 'uppercase',
     color: accent,
@@ -144,8 +146,9 @@ export function SlideCanvas({
   };
   const versionStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
-    // Same reasoning as refStyle above: scales with the fitted verse size (0.47x, its
-    // original proportion against the 4.7cqmin verse) instead of carrying its own ceiling.
+    // Unlike the ref, this scales with the fitted verse size (0.47x, its original
+    // proportion against the 4.7cqmin verse): it is part of each verse block, not
+    // slide chrome, so it shrinks with the text it labels. No ceiling (BUG-007).
     fontSize: fitSizeScaled(7, '4.7cqmin', 0.47),
     letterSpacing: '0.16em',
     color: 'rgba(255,255,255,.4)'
