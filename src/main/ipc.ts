@@ -35,6 +35,7 @@ import {
   setDisplayView,
   setLeaderSplitByFingerprint,
   setLeaderSplitFromSender,
+  toggleOutputsReleased,
 } from './displays';
 
 export function registerIpc(
@@ -68,6 +69,7 @@ export function registerIpc(
   ipcMain.on(CH.displaysSetView, (_e, fp: string, view: OutputViewMode) => setDisplayView(fp, view));
   ipcMain.on(CH.displaysSetLeaderSplit, (e, fp: string | null, px: number) =>
     fp === null ? setLeaderSplitFromSender(e.sender, px) : setLeaderSplitByFingerprint(fp, px));
+  ipcMain.on(CH.displaysToggleReleased, () => toggleOutputsReleased());
   ipcMain.handle(CH.biblesManifest, () => installer.manifest());
   ipcMain.on(CH.biblesInstall, (_e, id: string) => installer.install(id));
   ipcMain.handle(CH.biblesUninstall, (_e, id: string) => installer.uninstall(id));

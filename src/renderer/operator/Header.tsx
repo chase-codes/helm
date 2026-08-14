@@ -3,6 +3,7 @@ import type { Mode, ThemeMode } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
+import { ReleaseToggle } from './ReleaseToggle'
 import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
 import type { IconProps } from '../shared/icons'
@@ -146,6 +147,7 @@ export function Header({
         ))}
       </div>
       <div style={{ flex: 1 }} />
+      <ReleaseToggle />
       <div ref={outputsContainerRef} style={{ position: 'relative' }}>
         <button
           style={{ ...outputsChipStyle, cursor: 'pointer', background: 'transparent' }}

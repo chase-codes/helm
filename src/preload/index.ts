@@ -29,6 +29,7 @@ const api: HelmApi = {
     setRole: (fp, role) => ipcRenderer.send(CH.displaysSetRole, fp, role),
     setView: (fp, view) => ipcRenderer.send(CH.displaysSetView, fp, view),
     setLeaderSplit: (fp, px) => ipcRenderer.send(CH.displaysSetLeaderSplit, fp, px),
+    toggleReleased: () => ipcRenderer.send(CH.displaysToggleReleased),
   },
   bibles: {
     manifest: () => ipcRenderer.invoke(CH.biblesManifest),

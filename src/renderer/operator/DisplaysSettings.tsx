@@ -78,7 +78,9 @@ export function DisplaysSettings(): JSX.Element {
       <div style={sectionTitleStyle}>Displays</div>
       <div style={sectionHintStyle}>
         Each screen Helm drives has a role (what feed it gets) and a view (how it shows it). Mirror
-        shows this operator screen; Leader shows a clean song view for the pulpit.
+        shows this operator screen; Leader shows a clean song view for the pulpit. Off leaves a
+        screen entirely alone — note two identical unlabeled monitors share one identity, so
+        marking one off marks both.
       </div>
       {displays.map((d) => {
         const name = d.label || `${d.width}×${d.height}`
@@ -106,18 +108,20 @@ export function DisplaysSettings(): JSX.Element {
                     </option>
                   ))}
                 </select>
-                <div style={segWrapStyle}>
-                  {OUTPUT_VIEWS.map((v) => (
-                    <button
-                      key={v}
-                      style={segStyle(d.view === v)}
-                      data-testid={`view-${d.fingerprint}-${v}`}
-                      onClick={() => window.helm.displays.setView(d.fingerprint, v)}
-                    >
-                      {VIEW_LABEL[v]}
-                    </button>
-                  ))}
-                </div>
+                {d.role !== 'off' && (
+                  <div style={segWrapStyle}>
+                    {OUTPUT_VIEWS.map((v) => (
+                      <button
+                        key={v}
+                        style={segStyle(d.view === v)}
+                        data-testid={`view-${d.fingerprint}-${v}`}
+                        onClick={() => window.helm.displays.setView(d.fingerprint, v)}
+                      >
+                        {VIEW_LABEL[v]}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>

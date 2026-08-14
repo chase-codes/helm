@@ -94,6 +94,7 @@ function App(): JSX.Element {
     if (id === 'page.pre') setMode('pre');
     else if (id === 'page.songs') setMode('songs');
     else if (id === 'page.sermon') setMode('sermon');
+    else if (id === 'displays.release') window.helm.displays.toggleReleased();
     else {
       setMode('sermon');
       setLookupNonce((n) => n + 1);

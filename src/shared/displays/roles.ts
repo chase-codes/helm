@@ -1,6 +1,9 @@
 import type { OutputVariant, OutputRole, OutputViewMode } from '../types';
 
-export const OUTPUT_ROLES: OutputRole[] = ['audience', 'stage', 'livestream'];
+/** Roles that actually drive a window; 'off' means Helm leaves the screen alone. */
+export type ActiveOutputRole = Exclude<OutputRole, 'off'>;
+
+export const OUTPUT_ROLES: OutputRole[] = ['audience', 'stage', 'livestream', 'off'];
 export const DEFAULT_ROLE: OutputRole = 'audience';
 
 export const OUTPUT_VIEWS: OutputViewMode[] = ['slides', 'leader', 'mirror'];
@@ -8,7 +11,7 @@ export const DEFAULT_VIEW: OutputViewMode = 'slides';
 
 // Roles map onto the SlideCanvas variants that already exist (types.ts OutputVariant).
 // 'main'/'leader' variants are not exposed as roles in v1.
-export const ROLE_VARIANT: Record<OutputRole, OutputVariant> = {
+export const ROLE_VARIANT: Record<ActiveOutputRole, OutputVariant> = {
   audience: 'audience',
   stage: 'stage',
   livestream: 'livestream',
@@ -27,7 +30,7 @@ export interface DisplaySnapshot {
 export interface Attachment {
   displayId: number;
   fingerprint: string;
-  role: OutputRole;
+  role: ActiveOutputRole;
   bounds: { x: number; y: number; width: number; height: number };
 }
 
@@ -45,19 +48,22 @@ export function fingerprintDisplay(d: DisplaySnapshot): string {
 
 // Pure planner: for every NON-operator display, resolve its role from saved assignments,
 // defaulting an unknown display to 'audience' (a plugged-in screen shows the audience feed
-// until the operator assigns it a role in 6b). The operator's own display is never an output.
+// until the operator assigns it a role). A display saved as 'off' produces no attachment at
+// all — Helm leaves it alone. The operator's own display is never an output.
 export function planAttachments(
   displays: DisplaySnapshot[],
   operatorDisplayId: number,
   savedRoles: Record<string, OutputRole>,
 ): Attachment[] {
-  return displays
-    .filter((d) => d.id !== operatorDisplayId)
-    .map((d) => {
-      const fingerprint = fingerprintDisplay(d);
-      const role = savedRoles[fingerprint] ?? DEFAULT_ROLE;
-      return { displayId: d.id, fingerprint, role, bounds: d.bounds };
-    });
+  const out: Attachment[] = [];
+  for (const d of displays) {
+    if (d.id === operatorDisplayId) continue;
+    const fingerprint = fingerprintDisplay(d);
+    const role = savedRoles[fingerprint] ?? DEFAULT_ROLE;
+    if (role === 'off') continue;
+    out.push({ displayId: d.id, fingerprint, role, bounds: d.bounds });
+  }
+  return out;
 }
 
 /** Saved view for a fingerprint, defaulting to the plain slides render. */
