@@ -47,6 +47,18 @@ const STATUS: DisplayStatus = {
       view: 'mirror',
       isOperator: false,
       leaderSplit: 320
+    },
+    {
+      id: 4,
+      fingerprint: 'label:Lobby TV',
+      label: 'Lobby TV',
+      width: 1280,
+      height: 720,
+      scaleFactor: 1,
+      role: 'off',
+      view: 'slides',
+      isOperator: false,
+      leaderSplit: 320
     }
   ]
 }
@@ -100,5 +112,23 @@ describe('DisplaysSettings', () => {
     const r = renderPane()
     await waitFor(() => expect(r.getByText('1920×1080 @1x')).toBeTruthy())
     expect(r.getByText('1512×982 @2x')).toBeTruthy()
+  })
+
+  it('offers an off option in the role dropdown', async () => {
+    installHelmStub()
+    const r = renderPane()
+    await waitFor(() => expect(r.getByText('Projector')).toBeTruthy())
+    const select = r.getByTestId('role-label:Projector') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toContain('off')
+  })
+
+  it('hides the view control for an off display but keeps its role picker', async () => {
+    installHelmStub()
+    const r = renderPane()
+    await waitFor(() => expect(r.getByText('Lobby TV')).toBeTruthy())
+    expect(r.getByTestId('role-label:Lobby TV')).toBeTruthy()
+    expect(r.queryByTestId('view-label:Lobby TV-slides')).toBeNull()
+    // A driven display still shows its view buttons.
+    expect(r.getByTestId('view-label:Projector-slides')).toBeTruthy()
   })
 })
