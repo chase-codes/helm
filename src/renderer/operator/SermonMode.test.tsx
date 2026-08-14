@@ -642,6 +642,107 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
   })
 })
 
+describe('SermonMode — Escape backs out progressively (#54)', () => {
+  it('takes the screen to black when scripture is live', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    // 'Take down' proves the live presentation state reached the handler's closure —
+    // 'Verse 1' only proves the chapter fetch resolved.
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('blurs a focused text field first and only blacks on the next press', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+
+    entry().focus()
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(document.activeElement).not.toBe(entry())
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('clearing typed text, leaving the field, and blacking are three separate presses', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+
+    // Mirror App's wiring: the document-level dispatcher forwards a bubbled Escape to the
+    // mode handler — unless the entry's own handler consumed the press.
+    const onDoc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') void keyHandlerRef.current?.onEscape()
+    }
+    document.addEventListener('keydown', onDoc)
+    try {
+      entry().focus()
+      typeInEntry('Rom')
+      expect(entryValue()).toBe('Rom')
+
+      // Press 1: clears the typing, keeps focus so it can be retyped, screen untouched.
+      fireEvent.keyDown(entry(), { key: 'Escape' })
+      expect(entryValue()).toBe('')
+      expect(document.activeElement).toBe(entry())
+      expect(setOutput).not.toHaveBeenCalled()
+
+      // Press 2: leaves the field, screen still untouched.
+      fireEvent.keyDown(entry(), { key: 'Escape' })
+      expect(document.activeElement).not.toBe(entry())
+      expect(setOutput).not.toHaveBeenCalled()
+
+      // Press 3: now, and only now, the screen goes to black.
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(setOutput).toHaveBeenCalledWith('black')
+    } finally {
+      document.removeEventListener('keydown', onDoc)
+    }
+  })
+
+  it('works from the slides track too', async () => {
+    const DECK_1_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'pres:d1:0',
+      liveSnap: { kind: 'image', src: 'helm-media://d1/1.png' },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { setOutput, resolveChapter } = installHelmStub(DECK_1_LIVE, [], { media: [DECK] })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    clickTab('Slides')
+    // 'Take down' (the cued slide is the live one) proves both the media load and the
+    // live presentation state have landed.
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('does nothing destructive with nothing live', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+})
+
 describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4)', () => {
   // A half-typed ref in the entry resolves a book ("Romans") but no chapter yet, so the
   // rail previews Romans (builder.book) over the CUED chapter (scrCh, since builder.chapter

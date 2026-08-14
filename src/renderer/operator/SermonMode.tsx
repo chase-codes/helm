@@ -578,10 +578,14 @@ export function SermonMode({
       return;
     }
     if (e.key === 'Escape') {
-      // Clear the builder first; a second Escape (already empty) falls through to the
-      // document-level modal-close handler (Settings) via normal bubbling — matches today.
+      // Clear the builder first — and consume the press entirely, so the mode-level
+      // Escape ladder (onEscape above) doesn't also blur the field on the same
+      // keystroke; each Escape backs out exactly one layer. A second Escape (already
+      // empty) falls through via normal bubbling to the ladder, which blurs, and only
+      // a third can touch the screen.
       if (renderBuilder(builder) !== '') {
         e.preventDefault();
+        e.stopPropagation();
         setBuilder(initialBuilder());
       }
       return;
@@ -662,7 +666,26 @@ export function SermonMode({
   useEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
-      onEscape: () => false,
+      // Progressive back-out, the same ladder SongsMode implements (spec §3), minus the
+      // rungs Sermon doesn't have: no mode-owned modal to close (Settings is App's — see
+      // isModalOpen below) and no armed switch to disarm. Leave a text field first, and
+      // only then touch the screen — a typing operator must never black the screen with
+      // a stray Escape. (A first Escape with text in the scripture entry never even gets
+      // here: onEntryKeyDown clears the builder and stops propagation.) Deliberately not
+      // track-gated — blur covers whichever rail input is focused, and black is black.
+      onEscape: () => {
+        const el = document.activeElement as HTMLElement | null;
+        const tag = el?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') {
+          el?.blur();
+          return true;
+        }
+        if (output === 'live') {
+          window.helm.presentation.setOutput('black');
+          return true;
+        }
+        return false;
+      },
       onArrow: (dir) => {
         if (track === 'scripture') stepVerse(dir);
         else if (track === 'message') messageKeyRef.current?.onArrow(dir);
