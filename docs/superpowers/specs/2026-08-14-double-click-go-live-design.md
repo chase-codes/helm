@@ -64,7 +64,7 @@ Consistency is the point. A double-click that works in one rail and not another 
 
 ## 4. Secondary semantics
 
-- **Already live.** No-op, decided in main. Not re-proved per surface.
+- **Already live.** No-op, decided in main. Not re-proved per surface. "No-op" means the *screen* is untouched — it never blacks. It does not mean the surface changes nothing: `PreServiceMode`'s `takeCard` stops the rotation unconditionally, the same halt `showNow` performs, because the operator pointed at that card and asked to hold it. Halting a rotation is not blacking, and the Loop control restarts it. Deriving the halt from "is this card already live?" cannot work either: a real double-click delivers click, click, dblclick, so the two `showCard`s have already made that card live before `takeCard` runs.
 - **Songs' armed state.** The double-clicked song wins; arming clears. Committing what was double-clicked is the least surprising.
 - **Shift-double-click.** `railSelect` is idempotent under a repeated shift-click on the same verse, so both clicks build the identical range. Then take on the range's start verse — the same single-verse slide Shift+Enter already produces via `goLiveWithChapter`.
 - **The first click still fires.** No debounce. From black, click 1 only cues and click 2 takes, so nothing intermediate is visible. When already live in the same kind, click 1 *is* the take and click 2 is the no-op. A visible intermediate needs live-in-a-different-kind, where `sameKind` refuses click 1 anyway. Delaying every single click by 250ms to avoid that case would be the wrong trade in a live tool.
@@ -80,5 +80,5 @@ Consistency is the point. A double-click that works in one rail and not another 
 
 - Double-clicking a card on any of the eight surfaces puts it on screen.
 - Double-clicking a card that is already live does nothing — it never blacks the projector.
-- Single-click behavior is unchanged everywhere, including shift-click ranges.
+- Single-click behavior is unchanged everywhere, including shift-click ranges — with one carved-out exception, approved as a trade rather than accepted as an accident: in the message track, a single click on a search row no longer clears the query. The auto-clear flipped `hasSearch` on the first click of the double-click, which unmounted the very row being double-clicked, so the second click landed on a different element and `dblclick` never dispatched. The gesture was impossible in a real browser (jsdom cannot see it — `fireEvent.doubleClick` synthesizes the event onto the node it is handed). The single click still selects the quote on the spot; only the results-clearing is gone, and the rail still returns to the QUOTE SCHEDULE view when the operator empties the box.
 - Behavior is identical across all listed surfaces.
