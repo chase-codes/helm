@@ -62,3 +62,26 @@ test('remove of an unknown id is a no-op returning the current list', () => {
   const after = repo.remove('does-not-exist')
   expect(after).toHaveLength(1)
 })
+
+test('removeMany deletes all given ids in one call and returns the updated list', () => {
+  repo.add({ book: 'Genesis', ch: 1, from: 1, to: 2 })
+  repo.add({ book: 'John', ch: 3, from: 16, to: 16 })
+  const three = repo.add({ book: 'Psalm', ch: 23, from: 1, to: 6 })
+  const doomed = three.filter((r) => r.book !== 'John').map((r) => r.id)
+  const after = repo.removeMany(doomed)
+  expect(after).toHaveLength(1)
+  expect(after[0].book).toBe('John')
+})
+
+test('removeMany with every id clears the schedule', () => {
+  repo.add({ book: 'Genesis', ch: 1, from: 1, to: 2 })
+  const all = repo.add({ book: 'John', ch: 3, from: 16, to: 16 })
+  expect(repo.removeMany(all.map((r) => r.id))).toHaveLength(0)
+})
+
+test('removeMany tolerates unknown ids and an empty list', () => {
+  const one = repo.add({ book: 'Genesis', ch: 1, from: 1, to: 2 })
+  expect(repo.removeMany(['does-not-exist'])).toHaveLength(1)
+  expect(repo.removeMany([])).toHaveLength(1)
+  expect(repo.removeMany([one[0].id, 'does-not-exist'])).toHaveLength(0)
+})
