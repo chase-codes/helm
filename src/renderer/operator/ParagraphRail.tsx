@@ -13,6 +13,8 @@ export interface ParagraphRailProps {
   isLive: (ord: number) => boolean;
   plannedSet: Set<number>;
   onSelect: (ord: number) => void;
+  /** Double-click: put this paragraph's quote on screen (#58), idempotently. */
+  onActivate: (ord: number) => void;
 }
 
 const HINT = 'Planned quotes are highlighted. Tap any paragraph — and keep reading right past the plan.';
@@ -31,7 +33,8 @@ export function ParagraphRail({
   cuedOrd,
   isLive,
   plannedSet,
-  onSelect
+  onSelect,
+  onActivate
 }: ParagraphRailProps): JSX.Element {
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
 
@@ -42,6 +45,7 @@ export function ParagraphRail({
     padding: '11px 13px',
     borderRadius: '11px',
     cursor: 'pointer',
+    userSelect: 'none',
     background: live
       ? dark
         ? 'rgba(168,139,196,.14)'
@@ -108,7 +112,7 @@ export function ParagraphRail({
           const live = isLive(p.ord);
           const showBadge = cued || live;
           return (
-            <button key={p.ord} style={rowStyle(live, cued, planned)} onClick={() => onSelect(p.ord)}>
+            <button key={p.ord} style={rowStyle(live, cued, planned)} onClick={() => onSelect(p.ord)} onDoubleClick={() => onActivate(p.ord)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <div style={labelStyle(cued, planned)}>&para; {p.label}</div>
                 {showBadge && (

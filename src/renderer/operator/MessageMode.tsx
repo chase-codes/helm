@@ -238,6 +238,21 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     window.helm.presentation.goLive(keyForMessageQuote(msgId, msgIdx), buildQuoteSlide(liveMsg, msgIdx));
   };
 
+  // Double-click a paragraph card (#58). Takes the quote slide — the same slide `goLive`
+  // builds — but idempotently, so a double-click on the paragraph already on screen is a
+  // no-op rather than the take-down `goLive` would perform. Builds the key/slide from the
+  // passed-in message rather than component state so Task 6 can call it with a message
+  // fetched for a different tape than the one currently loaded here.
+  const takeParagraphLive = (m: Message, ord: number): void => {
+    window.helm.presentation.take(keyForMessageQuote(m.id, ord), buildQuoteSlide(m, ord));
+  };
+
+  const activateParagraph = (ord: number): void => {
+    if (!liveMsg) return;
+    setMsgIdx(ord);
+    takeParagraphLive(liveMsg, ord);
+  };
+
   // Playable URL for the tape player, derived (not stored) from `liveMsg.audioPath` so
   // it updates for free once the audio-progress effect above re-`get`s the message.
   const audioSrc = liveMsg?.audioPath ? audioFileUrl(liveMsg.audioPath) : null;
@@ -447,6 +462,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         isLive={(ord) => output === 'live' && liveKey === keyForMessageQuote(msgId, ord)}
         plannedSet={plannedSet}
         onSelect={showPara}
+        onActivate={activateParagraph}
       />
     </div>
   );

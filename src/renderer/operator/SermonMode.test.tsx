@@ -989,6 +989,20 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶2')).toBeTruthy())
   })
 
+  it('double-clicking a paragraph takes it live', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    // "Second paragraph" also appears in the on-deck preview (msgIdx 0's next paragraph),
+    // so disambiguate to the ParagraphRail's row button specifically.
+    await waitFor(() => expect(screen.getAllByText('Second paragraph').some((el) => el.closest('button'))).toBe(true))
+    const row = screen.getAllByText('Second paragraph').find((el) => el.closest('button'))
+    fireEvent.doubleClick(row as HTMLElement)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
+  })
+
   // Keeping the tracks mounted must not let them drive main's presentation/video state
   // while another track is the surface the operator is using — the same hazard the
   // scripture show effect's `active && track === 'scripture'` gate closes one level up.
