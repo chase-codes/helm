@@ -43,6 +43,7 @@ function installHelmStub(
 ): {
   show: ReturnType<typeof vi.fn>
   goLive: ReturnType<typeof vi.fn>
+  take: ReturnType<typeof vi.fn>
   setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
   cue: ReturnType<typeof vi.fn>
@@ -53,6 +54,7 @@ function installHelmStub(
 } {
   const show = vi.fn()
   const goLive = vi.fn()
+  const take = vi.fn()
   const setOutput = vi.fn()
   const add = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
@@ -92,6 +94,7 @@ function installHelmStub(
       },
       show,
       goLive,
+      take,
       setOutput,
       cue
     },
@@ -128,6 +131,7 @@ function installHelmStub(
   return {
     show,
     goLive,
+    take,
     setOutput,
     add,
     cue,
@@ -282,6 +286,31 @@ describe('SermonMode — direct preview to live', () => {
     expect(add.mock.calls[0][0]).toEqual({ book: 'Genesis', ch: 1, from: 1, to: 1 })
     expect(goLive).not.toHaveBeenCalled()
     expect(show).not.toHaveBeenCalled()
+  })
+})
+
+describe('SermonMode — double-click a verse goes live (#58)', () => {
+  it('takes the verse on double-click', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    fireEvent.doubleClick(screen.getByText('Verse 2'))
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:2', expect.anything()))
+  })
+
+  it('never blacks the screen when the verse is already live', async () => {
+    const LIVE_1_1: PresentationState = {
+      output: 'live', liveKey: 'scr:Genesis:1:1', liveSnap: null, cuedKey: null, cuedSnap: null
+    }
+    const { resolveChapter, take, goLive, setOutput } = installHelmStub(LIVE_1_1, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    fireEvent.doubleClick(screen.getByText('Verse 1'))
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(goLive).not.toHaveBeenCalled()
+    expect(setOutput).not.toHaveBeenCalledWith('black')
   })
 })
 

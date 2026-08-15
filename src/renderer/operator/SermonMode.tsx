@@ -452,6 +452,35 @@ export function SermonMode({
     window.helm.presentation.goLive(key, slide);
   };
 
+  // Double-click a verse card (#58). `take` is idempotent, so double-clicking the verse
+  // already on screen is a no-op rather than the take-down `goLive` would perform. The
+  // click that precedes it has already moved the cursor via `onSelectVerse`, so the rail,
+  // the hero, and the projector agree by the time this fires.
+  const takeVerseLive = (book: string, ch: number, v: number, c: ChapterData): void => {
+    const cols = verseCols(c.verses[v] ?? {}, versions, abbrOf);
+    const slide = buildScriptureSlide(
+      formatRef({ book, ch, from: v, to: v }),
+      cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
+    );
+    window.helm.presentation.take(keyForScripture(book, ch, v), slide);
+  };
+
+  // A shift-double-click builds the range (both clicks run railSelect, which is idempotent
+  // on a repeated shift-click) and then takes its START verse — the same single-verse slide
+  // Shift+Enter produces via goLiveWithChapter, so the on-screen ref matches the hero.
+  const activateVerse = (v: number, shift: boolean): void => {
+    const book = previewBook, ch = previewCh;
+    const target = shift ? Math.min(selectedRange?.from ?? v, v) : v;
+    if (previewChapter && previewChapter.book === book && previewChapter.chapter === ch) {
+      takeVerseLive(book, ch, target, previewChapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(book, ch)
+      .then((c) => takeVerseLive(book, ch, target, c))
+      .catch(console.error);
+  };
+
   // The rail previews the builder's book+chapter when resolved, else the cued chapter.
   const previewBook = builder.book ?? scrBook;
   const previewCh = builder.chapter ?? scrCh;
@@ -836,6 +865,7 @@ export function SermonMode({
             previewOf={railPreviewOf}
             selectedRange={selectedRange}
             onSelectVerse={onRailSelectVerse}
+            onActivate={activateVerse}
             scrollRequest={railScroll && railScroll.nonce > consumedNonce ? railScroll : null}
             onScrollConsumed={setConsumedNonce}
           />
