@@ -830,6 +830,7 @@ export function SermonMode({
                   }
                 : undefined
             }
+            onClearAll={() => removeReadings(schedule.map((r) => r.id))}
             entryRef={entryRef}
           />
           <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />

@@ -39,6 +39,10 @@ export interface SchedulePanelProps {
   onAdd: () => void;
   rows: ScheduleRow[];
   undo?: { label: string; onUndo: () => void };
+  /** Clear-schedule control; the button renders only when the schedule is non-empty.
+   * Destructive but recoverable — the caller routes it through the same removeMany +
+   * undo-toast path as row deletes, so there is no confirmation dialog. */
+  onClearAll?: () => void;
   /** Lets SermonMode focus the reading entry (scripture-lookup hotkey, '/'). */
   entryRef?: RefObject<HTMLInputElement | null>;
 }
@@ -60,6 +64,7 @@ export function SchedulePanel({
   onAdd,
   rows,
   undo,
+  onClearAll,
   entryRef
 }: SchedulePanelProps): JSX.Element {
   // The ghost is derived from builder state alone and knows nothing about focus, but "space
@@ -174,8 +179,18 @@ export function SchedulePanel({
               </button>
             )}
           </div>
-          <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, padding: '0 14px 8px', flexShrink: 0 }}>
-            SCRIPTURE SCHEDULE
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 8px', flexShrink: 0 }}>
+            <span style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>
+              SCRIPTURE SCHEDULE
+            </span>
+            {onClearAll && rows.length > 0 && (
+              <button
+                style={{ fontSize: '10px', letterSpacing: '0.05em', fontWeight: 600, color: T.faint, cursor: 'pointer' }}
+                onClick={onClearAll}
+              >
+                Clear all
+              </button>
+            )}
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rows.map((r) => (

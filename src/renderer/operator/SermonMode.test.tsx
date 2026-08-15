@@ -1170,4 +1170,18 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/Genesis 1:2/))
     expect(screen.queryByText(/1 readings/)).toBeNull()
   })
+
+  it('Clear all removes every reading in one removeMany call, recoverable via undo', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await screen.findByText('Genesis 1:1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    await waitFor(() => expect(removeMany).toHaveBeenCalledTimes(1))
+    expect(removeMany).toHaveBeenCalledWith(['r1', 'r2', 'r3'])
+    await screen.findByText(/3 readings/)
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+  })
 })

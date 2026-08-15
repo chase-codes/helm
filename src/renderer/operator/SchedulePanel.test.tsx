@@ -112,4 +112,16 @@ describe('SchedulePanel', () => {
     fireEvent.blur(input)
     expect(document.querySelector('[data-ghost]')).toBeNull()
   })
+
+  it('shows Clear all only when there are rows, and fires onClearAll', () => {
+    const onClearAll = vi.fn()
+    render(<SchedulePanel {...baseProps} onClearAll={onClearAll} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(onClearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides Clear all when the schedule is empty', () => {
+    render(<SchedulePanel {...baseProps} rows={[]} onClearAll={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
+  })
 })
