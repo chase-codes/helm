@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsModal } from './SettingsModal'
 import { ThemeCtx } from './ThemeCtx'
@@ -21,6 +21,19 @@ beforeEach(() => {
       list: vi.fn().mockResolvedValue([]),
       onInstallProgress: vi.fn().mockReturnValue(() => {}),
       installCorpus: vi.fn()
+    },
+    updates: {
+      getStatus: vi.fn().mockResolvedValue({ state: 'idle', version: null }),
+      check: vi.fn().mockResolvedValue(undefined),
+      install: vi.fn().mockResolvedValue(true),
+      onStatus: vi.fn().mockReturnValue(() => {})
+    },
+    displays: {
+      get: vi.fn().mockResolvedValue({ outputs: 0, displays: [], released: false }),
+      onStatus: vi.fn().mockReturnValue(() => {})
+    },
+    app: {
+      version: vi.fn().mockResolvedValue('0.3.0')
     }
   }
 })
@@ -50,5 +63,12 @@ describe('SettingsModal nav', () => {
       const btn = screen.getByRole('button', { name: label })
       expect(btn.querySelector('svg'), `${label} nav item should contain an icon`).toBeTruthy()
     }
+  })
+
+  it('renders the update footer at the bottom of the nav', async () => {
+    renderModal()
+    await act(async () => {})
+    expect(screen.getByText('Helm 0.3.0')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check for updates' })).toBeTruthy()
   })
 })

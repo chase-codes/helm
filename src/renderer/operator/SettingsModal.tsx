@@ -12,6 +12,7 @@ import { MessageImport } from './MessageImport'
 import { DisplaysSettings } from './DisplaysSettings'
 import { ShortcutsSettings } from './ShortcutsSettings'
 import { AppearanceSettings } from './AppearanceSettings'
+import { UpdateFooter } from './UpdateFooter'
 import {
   DisplayIcon,
   ImportIcon,
@@ -464,6 +465,7 @@ export function SettingsModal({
                   {s.label}
                 </button>
               ))}
+              <UpdateFooter />
             </div>
             <div style={contentStyle}>
               {section === 'appearance' && (
