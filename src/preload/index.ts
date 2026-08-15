@@ -72,6 +72,7 @@ const api: HelmApi = {
     engage: () => ipcRenderer.send(CH.preserviceEngage),
     disengage: () => ipcRenderer.send(CH.preserviceDisengage),
     showCard: (idx) => ipcRenderer.send(CH.preserviceShow, idx),
+    takeCard: (idx) => ipcRenderer.send(CH.preserviceTake, idx),
     step: (dir) => ipcRenderer.send(CH.preserviceStep, dir),
     showNow: () => ipcRenderer.send(CH.preserviceShowNow),
     toggleLoop: () => ipcRenderer.send(CH.preserviceToggleLoop),

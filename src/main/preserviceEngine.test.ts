@@ -383,4 +383,26 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
     });
   });
+
+  describe('takeCard (#58)', () => {
+    it('starts projecting from a dark screen, unlike showCard', () => {
+      const { engine, presentation } = harness();
+      engine.takeCard(1);
+      expect(presentation().output).toBe('live');
+    });
+
+    it('does not toggle to black when that card is already live', () => {
+      const { engine, presentation } = harness();
+      engine.takeCard(0);
+      engine.takeCard(0);
+      expect(presentation().output).toBe('live');
+    });
+
+    it('stops the loop, like showNow', () => {
+      const { engine } = harness();
+      engine.engage();
+      engine.takeCard(1);
+      expect(engine.getState().engaged).toBe(false);
+    });
+  });
 });

@@ -16,6 +16,7 @@ export interface PreserviceEngine {
   engage(): void; disengage(): void;
   showCard(idx: number): void; step(dir: 1 | -1): void;
   showNow(): void;
+  takeCard(idx: number): void;
   toggleLoop(): void; setDwell(delta: number): void;
   toggleEnabled(cardId: string): void;
   saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void; removeCard(id: string): void;
@@ -87,6 +88,12 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     engage() { engaged = true; loopT = 0; clampIdx(); pushLive(); startTimer(); emit(); },
     disengage() { engaged = false; loopT = 0; stopTimer(); emit(); },
     showCard(i) { if (i >= 0 && i < cards.length) { idx = i; loopT = 0; pushShow(); emit(); } },
+    // Double-click a card (#58). showCard is navigate-only — pushShow refuses to start
+    // projecting from a dark screen (BUG-018), which is right for a single tap. A
+    // double-click is the deliberate control that may take the screen, so it routes
+    // through pushLive, and stops the loop for showNow's reason: the card the operator
+    // asked to hold must not rotate away at the next dwell boundary.
+    takeCard(i) { if (i >= 0 && i < cards.length) { engaged = false; loopT = 0; stopTimer(); idx = i; pushLive(); emit(); } },
     step(dir) { idx = nextEnabledIdx(cards, idx, dir); loopT = 0; pushShow(); emit(); },
     // Deliberate takeover for a single card. Stops the loop rather than merely leaving it
     // alone: the button is reachable while `engaged` is still true (take down the screen and

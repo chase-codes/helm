@@ -199,6 +199,7 @@ export const CH = {
   preserviceEngage: 'preservice:engage', preserviceDisengage: 'preservice:disengage',
   preserviceShow: 'preservice:show', preserviceStep: 'preservice:step',
   preserviceShowNow: 'preservice:showNow',
+  preserviceTake: 'preservice:takeCard',
   preserviceToggleLoop: 'preservice:toggleLoop', preserviceSetDwell: 'preservice:setDwell',
   preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
   preserviceRemoveCard: 'preservice:removeCard',
@@ -329,6 +330,7 @@ export interface HelmApi {
     engage(): void; disengage(): void;
     showCard(idx: number): void; step(dir: 1 | -1): void;
     showNow(): void;
+    takeCard(idx: number): void;
     toggleLoop(): void; setDwell(delta: number): void;
     toggleEnabled(id: string): void;
     saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;

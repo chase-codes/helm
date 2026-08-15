@@ -115,6 +115,7 @@ export function registerIpc(
   ipcMain.on(CH.preserviceEngage, () => preserviceEngine.engage());
   ipcMain.on(CH.preserviceDisengage, () => preserviceEngine.disengage());
   ipcMain.on(CH.preserviceShow, (_e, idx: number) => preserviceEngine.showCard(idx));
+  ipcMain.on(CH.preserviceTake, (_e, idx: number) => preserviceEngine.takeCard(idx));
   ipcMain.on(CH.preserviceStep, (_e, dir: 1 | -1) => preserviceEngine.step(dir));
   ipcMain.on(CH.preserviceShowNow, () => preserviceEngine.showNow());
   ipcMain.on(CH.preserviceToggleLoop, () => preserviceEngine.toggleLoop());

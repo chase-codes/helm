@@ -208,6 +208,7 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
               padding: '11px 13px',
               borderRadius: '11px',
               cursor: 'pointer',
+              userSelect: 'none',
               opacity: card.enabled || isShowing || isArmed ? 1 : 0.55,
               // Live gets the filled treatment; armed gets the ring only — the operator
               // must be able to tell "this is on the screen" from "this is queued up".
@@ -269,7 +270,7 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
             };
             const armedBadge: CSSProperties = { ...showingBadge, color: T.accent };
             return (
-              <button key={card.id} style={rowStyle} onClick={() => window.helm.preservice.showCard(i)}>
+              <button key={card.id} style={rowStyle} onClick={() => window.helm.preservice.showCard(i)} onDoubleClick={() => window.helm.preservice.takeCard(i)}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
                   <div style={labelStyle}>{card.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
