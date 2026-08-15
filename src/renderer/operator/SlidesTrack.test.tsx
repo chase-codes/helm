@@ -26,19 +26,21 @@ type StubHelm = {
     get: () => Promise<PresentationState>
     cue: ReturnType<typeof vi.fn>
     goLive: ReturnType<typeof vi.fn>
+    take: ReturnType<typeof vi.fn>
     setOutput: ReturnType<typeof vi.fn>
     onState: () => () => void
   }
   video: Record<string, unknown>
 }
 
-function baseHelm(): StubHelm {
-  const state: PresentationState = { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
+function baseHelm(pres?: PresentationState): StubHelm {
+  const state: PresentationState = pres ?? { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
   return {
     presentation: {
       get: () => Promise.resolve(state),
       cue: vi.fn(),
       goLive: vi.fn(),
+      take: vi.fn(),
       setOutput: vi.fn(),
       onState: () => () => {}
     },
@@ -51,9 +53,9 @@ function baseHelm(): StubHelm {
   }
 }
 
-function makeHelm(): StubHelm & { media: Record<string, unknown> } {
+function makeHelm(pres?: PresentationState): StubHelm & { media: Record<string, unknown> } {
   return {
-    ...baseHelm(),
+    ...baseHelm(pres),
     media: {
       list: () => Promise.resolve(items),
       importImages: vi.fn(() => Promise.resolve({ items })),
@@ -65,10 +67,20 @@ function makeHelm(): StubHelm & { media: Record<string, unknown> } {
   }
 }
 
-function installHelmStub(): { goLive: ReturnType<typeof vi.fn>; cue: ReturnType<typeof vi.fn> } {
-  const helm = makeHelm()
+function installHelmStub(pres?: PresentationState): {
+  goLive: ReturnType<typeof vi.fn>
+  cue: ReturnType<typeof vi.fn>
+  take: ReturnType<typeof vi.fn>
+  setOutput: ReturnType<typeof vi.fn>
+} {
+  const helm = makeHelm(pres)
   ;(window as unknown as { helm: unknown }).helm = helm
-  return { goLive: helm.presentation.goLive, cue: helm.presentation.cue }
+  return {
+    goLive: helm.presentation.goLive,
+    cue: helm.presentation.cue,
+    take: helm.presentation.take,
+    setOutput: helm.presentation.setOutput
+  }
 }
 
 const stubPanel = (width: number): PanelWidthControl => ({ width, dragging: false, startDrag: vi.fn() })
@@ -369,5 +381,32 @@ describe('SlidesTrack', () => {
     fireEvent.mouseDown(dividers[0], { clientX: 10 })
     expect(left.startDrag).toHaveBeenCalled()
     expect(right.startDrag).not.toHaveBeenCalled()
+  })
+})
+
+describe('SlidesTrack — double-click to go live (#58)', () => {
+  it('double-clicking a media row takes its first slide live', async () => {
+    const { take } = installHelmStub()
+    renderTrack()
+    fireEvent.doubleClick((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('pres:deck1:0', expect.anything()))
+  })
+
+  it('double-clicking a deck slide row takes that slide live', async () => {
+    const { take } = installHelmStub()
+    renderTrack()
+    fireEvent.click((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    fireEvent.doubleClick((await screen.findByText('2')).closest('button') as HTMLButtonElement)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('pres:deck1:1', expect.anything()))
+  })
+
+  it('never blacks the screen when that slide is already live', async () => {
+    const live: PresentationState = { output: 'live', liveKey: 'pres:deck1:0', liveSnap: null, cuedKey: null, cuedSnap: null }
+    const { take, goLive, setOutput } = installHelmStub(live)
+    renderTrack()
+    fireEvent.doubleClick((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('pres:deck1:0', expect.anything()))
+    expect(goLive).not.toHaveBeenCalled()
+    expect(setOutput).not.toHaveBeenCalledWith('black')
   })
 })
