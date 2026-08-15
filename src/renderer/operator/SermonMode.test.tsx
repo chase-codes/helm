@@ -39,7 +39,13 @@ const GEN_1_1_LIVE: PresentationState = {
 function installHelmStub(
   pres: PresentationState = NOTHING_LIVE,
   schedule: ScriptureReading[] = [],
-  opts: { media?: MediaItem[]; tape?: Message; quoteSchedule?: QuoteScheduleItem[] } = {}
+  opts: { media?: MediaItem[]; tape?: Message; quoteSchedule?: QuoteScheduleItem[] } = {},
+  // Optional second chapter, keyed by its own book/ch, with its own release — lets a test
+  // fetch a DIFFERENT chapter than the default Genesis 1 (e.g. activateReading's async
+  // getChapter branch for a reading outside the cache). Any book/ch not matching this pair
+  // falls through to the original shared `pending` promise, so every existing caller (which
+  // never names a second chapter) is unaffected.
+  second?: { book: string; ch: number; data: ChapterData }
 ): {
   show: ReturnType<typeof vi.fn>
   goLive: ReturnType<typeof vi.fn>
@@ -49,7 +55,9 @@ function installHelmStub(
   cue: ReturnType<typeof vi.fn>
   mediaList: ReturnType<typeof vi.fn>
   messageList: ReturnType<typeof vi.fn>
+  getChapter: ReturnType<typeof vi.fn>
   resolveChapter: () => void
+  resolveSecondChapter: () => void
   pushState: (next: PresentationState) => void
 } {
   const show = vi.fn()
@@ -75,12 +83,21 @@ function installHelmStub(
   const pending = new Promise<ChapterData>((res) => {
     release = () => res(GENESIS_1)
   })
+  let releaseSecond: () => void = () => {}
+  const secondPending = second
+    ? new Promise<ChapterData>((res) => {
+        releaseSecond = () => res(second.data)
+      })
+    : null
+  const getChapter = vi.fn((book: string, ch: number) =>
+    second && book === second.book && ch === second.ch ? (secondPending as Promise<ChapterData>) : pending
+  )
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
     schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])) },
     bibles: {
       manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
-      getChapter: () => pending,
+      getChapter,
       bookExtent: () => Promise.resolve({ chapters: 50, verseCounts: Array(50).fill(31) }),
       onProgress: () => () => {}
     },
@@ -137,7 +154,9 @@ function installHelmStub(
     cue,
     mediaList,
     messageList,
+    getChapter,
     resolveChapter: release,
+    resolveSecondChapter: () => releaseSecond(),
     pushState: (next) => act(() => emit(next))
   }
 }
@@ -324,6 +343,45 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
     fireEvent.doubleClick(screen.getAllByText('Genesis 1:3')[0])
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+  })
+
+  // The reading above shares SermonMode's default cue (Genesis 1), so `chapter` is already
+  // cached by the time it's double-clicked and only activateReading's synchronous branch
+  // runs. This one names a different book/chapter, forcing the `window.helm.bibles
+  // .getChapter(...).then(...)` fetch branch: `take` must stay uncalled while that fetch is
+  // in flight, then fire once it resolves.
+  it('double-clicking a reading outside the cached chapter fetches it before taking the verse', async () => {
+    const EXODUS_2: ChapterData = {
+      book: 'Exodus',
+      chapter: 2,
+      verseCount: 3,
+      verses: {
+        1: { kjv: 'Verse 1' },
+        2: { kjv: 'Verse 2' },
+        3: { kjv: 'Verse 3' }
+      }
+    }
+    const SCHEDULE: ScriptureReading[] = [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+      { id: 'r2', book: 'Exodus', ch: 2, from: 3, to: 3 }
+    ]
+    const { resolveChapter, resolveSecondChapter, getChapter, take } = installHelmStub(NOTHING_LIVE, SCHEDULE, {}, {
+      book: 'Exodus',
+      ch: 2,
+      data: EXODUS_2
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+
+    fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
+    expect(getChapter).toHaveBeenCalledWith('Exodus', 2)
+    // The fetch is still pending — the synchronous branch must not have fired instead.
+    await act(async () => {})
+    expect(take).not.toHaveBeenCalled()
+
+    resolveSecondChapter()
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Exodus:2:3', expect.anything()))
   })
 })
 
