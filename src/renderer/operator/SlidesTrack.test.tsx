@@ -400,6 +400,42 @@ describe('SlidesTrack — double-click to go live (#58)', () => {
     await waitFor(() => expect(take).toHaveBeenCalledWith('pres:deck1:1', expect.anything()))
   })
 
+  // takeSlideLive mirrors goLive's video rule: a video reaches the screen PAUSED, never
+  // auto-playing audio into the room. Only the deck was covered before, so this branch —
+  // the one that touches the shared video state — ran untested.
+  it('double-clicking a video row lands it paused, not playing', async () => {
+    const { take } = installHelmStub()
+    renderTrack()
+    fireEvent.doubleClick((await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('pres:vid1:0', expect.anything()))
+    expect(window.helm.video.load).toHaveBeenCalledWith('pres:vid1:0', 'helm-media://video/promo.mp4')
+    expect(window.helm.video.pause).toHaveBeenCalled()
+    expect(window.helm.video.play).not.toHaveBeenCalled()
+  })
+
+  // The whole point of the identity return in `takeLive`: an impatient extra click on the
+  // video already on screen must not disturb it. Re-loading or re-pausing would jump a
+  // playing video back to its anchor in front of the room.
+  it('a double-click on the video already live does not reload or re-pause it', async () => {
+    const live: PresentationState = { output: 'live', liveKey: 'pres:vid1:0', liveSnap: null, cuedKey: null, cuedSnap: null }
+    const { take, goLive, setOutput } = installHelmStub(live)
+    renderTrack()
+    const row = (await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement
+    // Selecting the video arms the preview (video.load), which is the single-click behavior
+    // this test is not about — clear it so the assertions below only see the double-click.
+    fireEvent.click(row)
+    await waitFor(() => expect(window.helm.video.load).toHaveBeenCalled())
+    ;(window.helm.video.load as ReturnType<typeof vi.fn>).mockClear()
+    ;(window.helm.video.pause as ReturnType<typeof vi.fn>).mockClear()
+
+    fireEvent.doubleClick(row)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('pres:vid1:0', expect.anything()))
+    expect(window.helm.video.load).not.toHaveBeenCalled()
+    expect(window.helm.video.pause).not.toHaveBeenCalled()
+    expect(goLive).not.toHaveBeenCalled()
+    expect(setOutput).not.toHaveBeenCalledWith('black')
+  })
+
   it('never blacks the screen when that slide is already live', async () => {
     const live: PresentationState = { output: 'live', liveKey: 'pres:deck1:0', liveSnap: null, cuedKey: null, cuedSnap: null }
     const { take, goLive, setOutput } = installHelmStub(live)
