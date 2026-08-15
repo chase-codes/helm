@@ -359,8 +359,10 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // Double-click a search/schedule row (#58). The row may name a tape other than the one
   // loaded in `liveMsg`, and paragraphs only arrive with the message — so resolve it
   // first, then take. Reuses the already-loaded message when the ids match to spare the
-  // round trip. `mountedRef` is not available here; `msgIdRef`-free correctness comes from
-  // taking the slide built off the RESOLVED message, which cannot be the wrong tape.
+  // round trip. No mounted/live guard needed on the fetch branch: `takeParagraphLive`
+  // builds the key and slide from the RESOLVED message argument, not from component
+  // state, so a late-resolving fetch can only ever take ITS OWN tape's slide — never
+  // the wrong one.
   const activateQuote = (id: string, ord: number): void => {
     selectQuote(id, ord);
     if (liveMsg && liveMsg.id === id) {

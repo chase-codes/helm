@@ -332,6 +332,26 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     expect(setOutput).not.toHaveBeenCalledWith('black')
   })
 
+  it('shift-double-click takes the range\'s start verse, not the clicked verse', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Cursor starts at verse 1. Shift-click verse 4 anchors the range at the cursor,
+    // building Genesis 1:1-4 (railSelect's idempotent-anchor case, tested on its own in
+    // selection.test.ts) — selectedRange now reads { from: 1, to: 4 }.
+    fireEvent.click(verseCard(4), { shiftKey: true })
+    await waitFor(() => expect(verseCard(4).dataset.selected).toBe('true'))
+
+    // Shift-double-click the range's END verse (4). activateVerse must resolve the take
+    // to the range's START (1) via `Math.min(selectedRange.from, v)` — if it took the
+    // clicked verse instead, this would assert scr:Genesis:1:4 and the test would not
+    // catch that regression.
+    fireEvent.doubleClick(verseCard(4), { shiftKey: true })
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:1', expect.anything()))
+  })
+
   it('double-clicking a schedule reading takes its first verse live', async () => {
     const SCHEDULE: ScriptureReading[] = [
       { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
@@ -381,7 +401,16 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     expect(take).not.toHaveBeenCalled()
 
     resolveSecondChapter()
-    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Exodus:2:3', expect.anything()))
+    // Assert the slide's text, not just the key — a bug that took the stale cached
+    // Genesis chapter while still calling `take` with the right Exodus key would pass
+    // an `expect.anything()` check here but show "And God said, Let there be light"
+    // (Genesis 1:3's text) instead of Exodus 2:3's.
+    await waitFor(() =>
+      expect(take).toHaveBeenCalledWith(
+        'scr:Exodus:2:3',
+        expect.objectContaining({ columns: [{ version: 'KJV', text: 'Verse 3' }] })
+      )
+    )
   })
 })
 
