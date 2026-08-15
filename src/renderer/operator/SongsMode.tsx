@@ -468,6 +468,23 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     }
   };
 
+  // Double-click a section card (#58). Unlike `jumpSection` — which only follows a
+  // projector already showing THIS song — a double-click is a deliberate takeover and
+  // starts projecting from black or from another flow. `take` is idempotent, so
+  // double-clicking the section already on screen is a no-op, not a take-down.
+  const takeSectionLive = (song: Song, idx: number): void => {
+    const target = song.sections[idx];
+    if (!target) return;
+    setActiveSongId(song.id);
+    setSection(idx);
+    setArmedNextId(null);
+    window.helm.presentation.take(keyForSong(song.id, idx), slideFor(song, target));
+  };
+
+  const activateSection = (i: number): void => {
+    if (activeSong) takeSectionLive(activeSong, i);
+  };
+
   const onAction = (a: ResolvedHotkey): void => {
     if (a.id === 'focus.search') {
       searchInputRef.current?.focus();
@@ -717,6 +734,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             cuedIndex={clampedSection}
             isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
             onSelect={setSection}
+            onActivate={activateSection}
             editingIndex={editingSection}
             editError={editError}
             onSectionContextMenu={onSectionContextMenu}
