@@ -14,6 +14,11 @@ export interface ChapterRailProps {
   previewOf: (v: number) => string
   selectedRange: { from: number; to: number } | null
   onSelectVerse: (v: number, shift: boolean) => void
+  /** Double-click: put this verse on screen (#58). Reported separately from
+   * `onSelectVerse` so the rail keeps deciding nothing — SermonMode reads it as an
+   * idempotent take. The shift flag rides along because a shift-double-click must
+   * build the same range a shift-click would before taking it. */
+  onActivate: (v: number, shift: boolean) => void
   /** One-shot scroll command from SermonMode. 'start' pins the verse to the top of the
    * rail (schedule click / reading hotkey / lookup jump); 'nearest' just keeps it in
    * view (arrow steps). The nonce makes each request fire exactly once; verseCount is a
@@ -49,6 +54,7 @@ export function ChapterRail({
   previewOf,
   selectedRange,
   onSelectVerse,
+  onActivate,
   scrollRequest,
   onScrollConsumed
 }: ChapterRailProps): JSX.Element {
@@ -106,6 +112,7 @@ export function ChapterRail({
     padding: '11px 13px',
     borderRadius: '11px',
     cursor: 'pointer',
+    userSelect: 'none',
     background: selected
       ? dark
         ? 'rgba(111,156,240,.18)'
@@ -213,6 +220,7 @@ export function ChapterRail({
               data-verse={v}
               style={rowStyle(isLive, isCued, planned, selected)}
               onClick={(e) => onSelectVerse(v, e.shiftKey)}
+              onDoubleClick={(e) => onActivate(v, e.shiftKey)}
               ref={v === selectedRange?.from ? selectedFromRef : undefined}
             >
               <div

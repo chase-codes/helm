@@ -8,18 +8,24 @@ export interface MsgScheduleRow {
   meta: string;
   isCurrent: boolean;
   onClick: () => void;
+  /** Double-click: take this row's quote live (#58). */
+  onDoubleClick: () => void;
 }
 export interface MsgTapeRow {
   id: string;
   title: string;
   meta: string;
   onClick: () => void;
+  /** Double-click: take this row's quote live (#58). */
+  onDoubleClick: () => void;
 }
 export interface MsgQuoteRow {
   id: string;
   title: string;
   preview: string;
   onClick: () => void;
+  /** Double-click: take this row's quote live (#58). */
+  onDoubleClick: () => void;
 }
 
 export interface MessageSearchRailProps {
@@ -97,7 +103,7 @@ export function MessageSearchRail({
     background: `${T.message}22`
   };
   const scheduleIconStyle: CSSProperties = { ...tapeIconStyle, fontSize: '14px' };
-  const tapeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}` };
+  const tapeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
   const scheduleRowStyle = (isCurrent: boolean): CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
@@ -107,9 +113,10 @@ export function MessageSearchRail({
     borderRadius: '11px',
     cursor: 'pointer',
     background: isCurrent ? T.panel3 : 'transparent',
-    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.message}55` : 'none'
+    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.message}55` : 'none',
+    userSelect: 'none'
   });
-  const quoteRowStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}` };
+  const quoteRowStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
   const quoteTitleStyle: CSSProperties = { fontWeight: 600, fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const quotePreviewStyle: CSSProperties = {
     fontSize: '12px',
@@ -165,7 +172,7 @@ export function MessageSearchRail({
             <>
               <div style={sectionHeaderStyle('2px 4px 2px')}>TAPES — SELECT TO SEARCH WITHIN</div>
               {tapeRows.map((t) => (
-                <button key={t.id} style={tapeRowStyle} onClick={t.onClick}>
+                <button key={t.id} style={tapeRowStyle} onClick={t.onClick} onDoubleClick={t.onDoubleClick}>
                   <div style={tapeIconStyle}>&#9656;</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={tapeRowTitleStyle}>{t.title}</div>
@@ -179,7 +186,7 @@ export function MessageSearchRail({
             <>
               <div style={sectionHeaderStyle('6px 4px 2px')}>{quotesHeader}</div>
               {quoteRows.map((r) => (
-                <button key={r.id} style={quoteRowStyle} onClick={r.onClick}>
+                <button key={r.id} style={quoteRowStyle} onClick={r.onClick} onDoubleClick={r.onDoubleClick}>
                   <div style={quoteTitleStyle}>{r.title}</div>
                   <div style={quotePreviewStyle}>{r.preview}</div>
                 </button>
@@ -193,7 +200,7 @@ export function MessageSearchRail({
           <div style={sectionHeaderStyle('0 14px 8px')}>QUOTE SCHEDULE</div>
           <div style={scrollWrapStyle}>
             {scheduleRows.map((r) => (
-              <button key={r.id} style={scheduleRowStyle(r.isCurrent)} onClick={r.onClick}>
+              <button key={r.id} style={scheduleRowStyle(r.isCurrent)} onClick={r.onClick} onDoubleClick={r.onDoubleClick}>
                 <div style={scheduleIconStyle}>&#10077;</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={rowTitleStyle}>{r.title}</div>

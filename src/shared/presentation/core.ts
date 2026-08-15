@@ -51,6 +51,23 @@ export function goLive(st: PresentationState, key: string, slide: Slide): Presen
   if (st.output === 'live' && st.liveKey === key) return { ...st, output: 'black' }
   return { ...st, output: 'live', liveKey: key, liveSnap: slide, cuedKey: key, cuedSnap: slide }
 }
+/** Double-click's route to the screen: deliberate takeover that is IDEMPOTENT. `goLive`
+ * minus the toggle branch — the fourth and last verb in this file's vocabulary, which now
+ * reads: `applyCue` never touches the screen, `showLive` follows but never starts,
+ * `takeLive` starts but never stops, `goLive` (the button) does both.
+ *
+ * Double-clicking a card must mean "put this on screen" and nothing else. Routed through
+ * `goLive`, an impatient extra click on the card already showing would black the
+ * projector — the operator's most destructive accident (#58).
+ *
+ * Returns `st` BY IDENTITY when the key is already live, so `stateStore.take` can skip the
+ * broadcast: every broadcast re-sends `outputSlide` to every output window, and a no-op
+ * double-click on a live deck slide must not re-push a `{kind:'video'}` payload at a
+ * <video> element that is mid-playback. */
+export function takeLive(st: PresentationState, key: string, slide: Slide): PresentationState {
+  if (st.output === 'live' && st.liveKey === key) return st
+  return { ...st, output: 'live', liveKey: key, liveSnap: slide, cuedKey: key, cuedSnap: slide }
+}
 /** Navigation's route to the screen: updates what's live when output is already live,
  * anywhere within the SAME kind of content, and never toggles. Distinct from both
  * neighbours on purpose — `applyCue` refuses any cross-*flow* update (Songs needs that:

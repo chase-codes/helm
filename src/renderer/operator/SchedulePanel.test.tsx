@@ -15,6 +15,7 @@ function rows(overrides: Partial<ScheduleRow> = {}): ScheduleRow[] {
       isCurrent: false,
       isSelected: false,
       onClick: vi.fn(),
+      onDoubleClick: vi.fn(),
       onContextMenu: vi.fn(),
       ...overrides
     }
@@ -51,6 +52,13 @@ describe('SchedulePanel', () => {
     fireEvent.contextMenu(row)
     expect(onClick).toHaveBeenCalledTimes(1)
     expect(onContextMenu).toHaveBeenCalledTimes(1)
+  })
+
+  it('fires a row onDoubleClick', () => {
+    const onDoubleClick = vi.fn()
+    render(<SchedulePanel {...baseProps} rows={[{ ...rows()[0], onDoubleClick }]} />)
+    fireEvent.doubleClick(screen.getByText('John 3:16'))
+    expect(onDoubleClick).toHaveBeenCalled()
   })
 
   it('renders the undo toast and fires onUndo', () => {

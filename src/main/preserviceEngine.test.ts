@@ -383,4 +383,59 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe('pre:' + repo.list()[2].id);
     });
   });
+
+  describe('takeCard (#58)', () => {
+    it('starts projecting from a dark screen, unlike showCard', () => {
+      const { engine, presentation } = harness();
+      engine.takeCard(1);
+      expect(presentation().output).toBe('live');
+    });
+
+    it('does not toggle to black when that card is already live', () => {
+      const { engine, presentation } = harness();
+      engine.takeCard(0);
+      engine.takeCard(0);
+      expect(presentation().output).toBe('live');
+    });
+
+    // Same reason showNow stops it: the card the operator asked to hold must not rotate away
+    // at the next dwell boundary. Card 1 is not the one engage() put on screen, so this is a
+    // genuine takeover.
+    it('stops the loop when the card is not already on screen, like showNow', () => {
+      const { engine } = harness();
+      engine.engage();
+      engine.takeCard(1);
+      expect(engine.getState().engaged).toBe(false);
+    });
+
+    // The halt is unconditional, including on the card that is already on screen: the
+    // operator pointed at THIS card and asked for it, so it must stay put.
+    it('stops the loop even when that card is already on screen', () => {
+      const { engine } = harness();
+      engine.engage(); // card 0 goes live, rotation running
+      engine.takeCard(0);
+      expect(engine.getState().engaged).toBe(false);
+    });
+
+    // THE case the suite lacked: every test above calls takeCard in isolation, but a real
+    // double-click delivers click, click, dblclick — so the renderer sends showCard(i),
+    // showCard(i), takeCard(i). While the loop is engaged and projecting, those showCards
+    // have already made card i live, so any `sink.isLive` test inside takeCard reads true
+    // and a conditional halt never fires. The card the operator deliberately took would
+    // then rotate away at the next dwell boundary.
+    it('stops the loop for the real click, click, dblclick event order', () => {
+      const { engine, presentation } = harness();
+      engine.setDwell(-100); // clamps to min
+      engine.engage();
+      engine.showCard(1);
+      engine.showCard(1);
+      engine.takeCard(1);
+      expect(engine.getState().engaged).toBe(false);
+
+      const held = presentation().liveKey;
+      const dwell = engine.getState().dwellS;
+      for (let t = 1; t <= dwell + 1; t++) engine.tick();
+      expect(presentation().liveKey).toBe(held);
+    });
+  });
 });

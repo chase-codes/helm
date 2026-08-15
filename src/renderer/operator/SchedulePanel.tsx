@@ -17,6 +17,10 @@ export interface ScheduleRow {
   isCurrent: boolean;
   isSelected: boolean;
   onClick: (e: ReactMouseEvent) => void;
+  /** Double-click: take this reading's first verse live (#58). Receives the event so
+   * the caller can ignore shift-double-clicks — two quick shift-clicks are range
+   * selection (#61), not a request to take the screen. */
+  onDoubleClick: (e: ReactMouseEvent) => void;
   onContextMenu: (e: ReactMouseEvent) => void;
 }
 
@@ -103,6 +107,7 @@ export function SchedulePanel({
     padding: '10px 11px',
     borderRadius: '11px',
     cursor: 'pointer',
+    userSelect: 'none',
     background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
     boxShadow: isSelected
       ? `inset 0 0 0 1.5px ${T.accent}`
@@ -199,6 +204,7 @@ export function SchedulePanel({
                 style={rowStyle(r.isCurrent, r.isSelected)}
                 data-selected={r.isSelected || undefined}
                 onClick={r.onClick}
+                onDoubleClick={r.onDoubleClick}
                 onContextMenu={r.onContextMenu}
               >
                 <div style={iconStyle}>&#10013;</div>

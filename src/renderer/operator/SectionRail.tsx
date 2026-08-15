@@ -17,6 +17,8 @@ export interface SectionRailProps {
   cuedIndex: number;
   isSectionLive: (i: number) => boolean;
   onSelect: (i: number) => void;
+  /** Double-click: put this section on screen (#58), idempotently — see takeLive. */
+  onActivate: (i: number) => void;
   editingIndex: number | null;
   editError: boolean;
   onSectionContextMenu: (i: number, e: ReactMouseEvent) => void;
@@ -92,6 +94,7 @@ export function SectionRail({
   cuedIndex,
   isSectionLive,
   onSelect,
+  onActivate,
   editingIndex,
   editError,
   onSectionContextMenu,
@@ -119,7 +122,8 @@ export function SectionRail({
       ? `inset 0 0 0 2px ${T.accent}`
       : isCued
         ? `inset 0 0 0 1.5px ${T.accent}66`
-        : `inset 0 0 0 1px ${T.hairline}`
+        : `inset 0 0 0 1px ${T.hairline}`,
+    userSelect: 'none'
   });
   const secLabelStyle = (isCued: boolean): CSSProperties => ({
     fontFamily: "'JetBrains Mono',monospace",
@@ -198,6 +202,7 @@ export function SectionRail({
               ref={i === cuedIndex ? cuedRef : undefined}
               style={secRowStyle(isCued, isLive)}
               onClick={() => onSelect(i)}
+              onDoubleClick={() => onActivate(i)}
               onContextMenu={(e) => onSectionContextMenu(i, e)}
             >
               {header}

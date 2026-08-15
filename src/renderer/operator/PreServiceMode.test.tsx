@@ -43,9 +43,10 @@ const cardLive = (id: string): PresentationState => ({
 function installHelmStub(
   state: PreState,
   pres: PresentationState = NOTHING_LIVE
-): { showCard: ReturnType<typeof vi.fn>; showNow: ReturnType<typeof vi.fn> } {
+): { showCard: ReturnType<typeof vi.fn>; showNow: ReturnType<typeof vi.fn>; takeCard: ReturnType<typeof vi.fn> } {
   const showCard = vi.fn()
   const showNow = vi.fn()
+  const takeCard = vi.fn()
   ;(window as unknown as { helm: unknown }).helm = {
     preservice: {
       getState: () => Promise.resolve(state),
@@ -55,6 +56,7 @@ function installHelmStub(
       showCard,
       step: vi.fn(),
       showNow,
+      takeCard,
       toggleLoop: vi.fn(),
       setDwell: vi.fn(),
       toggleEnabled: vi.fn(),
@@ -66,7 +68,7 @@ function installHelmStub(
       onState: () => () => {}
     }
   }
-  return { showCard, showNow }
+  return { showCard, showNow, takeCard }
 }
 
 const renderMode = (): ReturnType<typeof render> =>
@@ -94,6 +96,18 @@ describe('PreServiceMode', () => {
     const row = (await screen.findByText('Psalm 122:1')).closest('button') as HTMLButtonElement
     fireEvent.click(row)
     expect(showCard).toHaveBeenCalledWith(1)
+  })
+
+  it('double-clicking a card takes it live', async () => {
+    const { takeCard, showCard } = installHelmStub(baseState)
+    renderMode()
+    const row = (await screen.findByText('Psalm 122:1')).closest('button') as HTMLButtonElement
+    // jsdom's fireEvent.doubleClick only dispatches 'dblclick', not the leading
+    // 'click' a real double-click also fires — so fire it explicitly to model that.
+    fireEvent.click(row)
+    fireEvent.doubleClick(row)
+    expect(takeCard).toHaveBeenCalledWith(1)
+    expect(showCard).toHaveBeenCalledWith(1) // the first click still cues, unchanged
   })
 
   // BUG-008: these badges must follow the real presentation state, never the engine's
