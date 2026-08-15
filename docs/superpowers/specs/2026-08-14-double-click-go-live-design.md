@@ -23,12 +23,17 @@ The app already has a vocabulary for the screen, each verb with one job. Double-
 
 ```ts
 /** Double-click's route to the screen: deliberate takeover that is IDEMPOTENT.
- *  `goLive` minus the toggle branch — firing it on the already-live key returns
- *  the same state, so an impatient extra click can never black the projector. */
+ *  `goLive` minus the toggle branch, so an impatient extra click can never black
+ *  the projector. Returns `st` BY IDENTITY when the key is already live, which lets
+ *  the store skip the broadcast entirely — a no-op double-click must not re-send the
+ *  output payload to a window playing video. */
 export function takeLive(st: PresentationState, key: string, slide: Slide): PresentationState {
+  if (st.output === 'live' && st.liveKey === key) return st
   return { ...st, output: 'live', liveKey: key, liveSnap: slide, cuedKey: key, cuedSnap: slide }
 }
 ```
+
+The identity return matters beyond tidiness. Every other verb broadcasts unconditionally, and a broadcast re-sends `outputSlide` to every output window. Double-clicking the deck slide that is already live would re-push an identical `{kind:'video'}` payload at a `<video>` element that is mid-playback. `stateStore.take` therefore skips the broadcast when the verb returns the state it was given.
 
 The decision lives in main, against authoritative state, so no surface can get it wrong and the renderer's possibly-lagging broadcast state never enters into it. Plumbing: `CH.presTake` in `shared/types.ts`, `ipcMain.on` in `main/ipc.ts`, `take` on the `stateStore` sink, the preload bridge, and `HelmApi.presentation.take`.
 
