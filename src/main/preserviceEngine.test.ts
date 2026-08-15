@@ -408,27 +408,34 @@ describe('preserviceEngine', () => {
       expect(engine.getState().engaged).toBe(false);
     });
 
-    // ...but a double-click on the card ALREADY on screen is spec'd to be a no-op, and
-    // pushLive resolves to a same-key cue in that case. Halting the rotation there means an
-    // impatient extra click on the announcement the room is reading silently stops the loop
-    // for the rest of the service, with nothing on screen to explain it.
-    it('leaves the loop running when that card is already on screen', () => {
+    // The halt is unconditional, including on the card that is already on screen: the
+    // operator pointed at THIS card and asked for it, so it must stay put.
+    it('stops the loop even when that card is already on screen', () => {
       const { engine } = harness();
       engine.engage(); // card 0 goes live, rotation running
       engine.takeCard(0);
-      expect(engine.getState().engaged).toBe(true);
+      expect(engine.getState().engaged).toBe(false);
     });
 
-    it('still rotates after a double-click on the card already on screen', () => {
+    // THE case the suite lacked: every test above calls takeCard in isolation, but a real
+    // double-click delivers click, click, dblclick — so the renderer sends showCard(i),
+    // showCard(i), takeCard(i). While the loop is engaged and projecting, those showCards
+    // have already made card i live, so any `sink.isLive` test inside takeCard reads true
+    // and a conditional halt never fires. The card the operator deliberately took would
+    // then rotate away at the next dwell boundary.
+    it('stops the loop for the real click, click, dblclick event order', () => {
       const { engine, presentation } = harness();
       engine.setDwell(-100); // clamps to min
       engine.engage();
-      const first = presentation().liveKey;
-      engine.takeCard(0);
+      engine.showCard(1);
+      engine.showCard(1);
+      engine.takeCard(1);
+      expect(engine.getState().engaged).toBe(false);
+
+      const held = presentation().liveKey;
       const dwell = engine.getState().dwellS;
-      for (let t = 1; t <= dwell; t++) engine.tick();
-      expect(presentation().output).toBe('live');
-      expect(presentation().liveKey).not.toBe(first);
+      for (let t = 1; t <= dwell + 1; t++) engine.tick();
+      expect(presentation().liveKey).toBe(held);
     });
   });
 });

@@ -93,17 +93,21 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     // double-click is the deliberate control that may take the screen, so it routes
     // through pushLive.
     //
-    // Stopping the loop is CONDITIONAL, unlike showNow's unconditional halt. The spec makes
-    // a double-click on the card already on screen a no-op, and pushLive resolves to the
-    // same-key `cue` hot-update in exactly that case — so there is no "card the operator
-    // asked to hold" to protect from the next dwell boundary, and disengaging anyway would
-    // mean an impatient extra click on the announcement the room is already reading silently
-    // stops the rotation for the rest of the service, with nothing on screen to show for it.
+    // The loop halt is UNCONDITIONAL, the same halt showNow performs, and for the same
+    // reason: the operator asked to hold THIS card, so it must not rotate away at the next
+    // dwell boundary. The spec's "a double-click on the card already live does nothing" is
+    // about never BLACKING the projector — halting a rotation is not blacking, and the
+    // rotation is restarted by the same Loop control that started it.
+    //
+    // It cannot be derived from `sink.isLive` either. A real double-click delivers
+    // click, click, dblclick, so the renderer sends showCard(i), showCard(i), takeCard(i)
+    // in that order — and while the loop is engaged and projecting, showCard's pushShow has
+    // ALREADY made card i live by the time this runs. An `alreadyLive` test therefore reads
+    // true for the ordinary case and would never stop anything.
     takeCard(i) {
       if (i < 0 || i >= cards.length) return;
-      const alreadyLive = sink.isLive(preKey(cards[i].id));
       idx = i;
-      if (!alreadyLive) { engaged = false; loopT = 0; stopTimer(); }
+      engaged = false; loopT = 0; stopTimer();
       pushLive();
       emit();
     },
