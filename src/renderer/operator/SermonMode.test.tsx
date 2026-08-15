@@ -302,7 +302,11 @@ describe('SermonMode — direct preview to live', () => {
     const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    // The rail renders a single card until the chapter resolves (railVerseCount falls back
+    // to 1), so a 'Verse 1' gate can pass before the other cards exist — gate on the
+    // highest verse this test touches instead. Same for every gate below that a
+    // pre-resolution surface (lone rail card, hero label) would satisfy.
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
 
     // Move the cursor off the live verse (1) via a rail tap on verse 3, same as test 2 —
     // now addRef (the cursor) is Genesis 1:3, which is not the live key.
@@ -338,7 +342,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 2')).toBeTruthy())
     fireEvent.doubleClick(screen.getByText('Verse 2'))
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:2', expect.anything()))
   })
@@ -361,7 +365,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     // Cursor starts at verse 1. Shift-click verse 4 anchors the range at the cursor,
     // building Genesis 1:1-4 (railSelect's idempotent-anchor case, tested on its own in
@@ -389,7 +393,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take, show, pushState } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     // Cursor to verse 4, then shift-click verse 2 — a BACKWARD range, 2-4.
     fireEvent.click(verseCard(4))
@@ -417,7 +421,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(LIVE_1_1, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     fireEvent.click(verseCard(4))
     await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
@@ -438,7 +442,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     fireEvent.click(verseCard(4))
     await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
@@ -459,7 +463,9 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, SCHEDULE)
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    // Gate on the row being clicked: 'Genesis 1:1' also matches the hero label, which
+    // renders before the schedule list resolves.
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:3').length).toBeGreaterThan(0))
     fireEvent.doubleClick(screen.getAllByText('Genesis 1:3')[0])
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
   })
@@ -488,7 +494,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     )
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText('Exodus 2:3')).toBeTruthy())
 
     fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
     await act(async () => {})
@@ -515,7 +521,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     )
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText('Exodus 2:3')).toBeTruthy())
 
     // Uncached reading first — its fetch stays in flight...
     fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
@@ -555,7 +561,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     })
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText('Exodus 2:3')).toBeTruthy())
 
     fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
     expect(getChapter).toHaveBeenCalledWith('Exodus', 2)
