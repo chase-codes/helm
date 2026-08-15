@@ -23,6 +23,7 @@ const baseProps = {
   emptyText: '',
   onKeyDown: vi.fn(),
   onSelect: vi.fn(),
+  onActivate: vi.fn(),
   onAddSong: vi.fn(),
   onImportSongs: vi.fn()
 }
@@ -71,5 +72,16 @@ describe('SongSearchRail', () => {
     // Import row must precede the first song row in DOM order (fixed header, not list bottom).
     const firstRow = screen.getByText('Amazing Grace')
     expect(imp.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('fires onActivate on double-click and leaves onSelect for single-click', () => {
+    const onSelect = vi.fn()
+    const onActivate = vi.fn()
+    render(<SongSearchRail {...baseProps} onSelect={onSelect} onActivate={onActivate} />)
+    const row = screen.getByText('Amazing Grace').closest('button') as HTMLButtonElement
+    fireEvent.doubleClick(row)
+    expect(onActivate).toHaveBeenCalledWith('s1')
+    fireEvent.click(row)
+    expect(onSelect).toHaveBeenCalledWith('s1')
   })
 })

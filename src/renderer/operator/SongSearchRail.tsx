@@ -32,6 +32,9 @@ export interface SongSearchRailProps {
   emptyText: string;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSelect: (id: string) => void;
+  /** Double-click: take this song live at section 0 (#58). Distinct from `onSelect`,
+   * which arms rather than takes while another song holds the screen. */
+  onActivate: (id: string) => void;
   onAddSong: () => void;
   onImportSongs: () => void;
   onRowContextMenu?: (id: string, e: ReactMouseEvent) => void;
@@ -51,6 +54,7 @@ export function SongSearchRail({
   emptyText,
   onKeyDown,
   onSelect,
+  onActivate,
   onAddSong,
   onImportSongs,
   onRowContextMenu,
@@ -104,7 +108,8 @@ export function SongSearchRail({
     cursor: 'pointer',
     marginBottom: '2px',
     background: active ? T.selBg : 'transparent',
-    boxShadow: active ? `inset 0 0 0 1px ${T.accent}66` : 'none'
+    boxShadow: active ? `inset 0 0 0 1px ${T.accent}66` : 'none',
+    userSelect: 'none'
   });
   const snippetStyle: CSSProperties = {
     fontSize: '11px',
@@ -195,6 +200,7 @@ export function SongSearchRail({
             key={r.id}
             style={{ ...rowStyle(r.isActive), ...(r.isArmed ? { boxShadow: `inset 0 0 0 2px ${T.accent}` } : {}) }}
             onClick={() => onSelect(r.id)}
+            onDoubleClick={() => onActivate(r.id)}
             onContextMenu={(e) => onRowContextMenu?.(r.id, e)}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -234,6 +240,7 @@ export function SongSearchRail({
                   key={r.id}
                   style={rowStyle(r.isActive)}
                   onClick={() => onSelect(r.id)}
+                  onDoubleClick={() => onActivate(r.id)}
                   onContextMenu={(e) => onRowContextMenu?.(r.id, e)}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>

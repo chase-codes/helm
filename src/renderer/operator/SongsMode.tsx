@@ -25,6 +25,7 @@ import { QuickAdd } from './QuickAdd';
 import { SongImport } from './SongImport';
 import { useContextMenu } from './useContextMenu';
 import { usePanelWidth } from './usePanelWidth';
+import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 
@@ -70,6 +71,8 @@ function toRow(song: Song, snippet: string, activeSongId: string | null, armedId
 export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { output, liveKey } = usePresentationState();
+  // Staleness guard for the double-click take that resolves a song first (#58).
+  const beginTake = useTakeGuard(output);
   const contextMenu = useContextMenu();
 
   const [q, setQ] = useState('');
@@ -297,6 +300,29 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     setSection(0);
   };
 
+  // Double-click a search result (#58). `selectSong` ARMS when another song is live —
+  // the operator's usual "queue this next" gesture. A double-click says take it now, so
+  // it bypasses arming entirely and commits section 0. Resolves out of `library` (the
+  // full Song list loaded at mount); the `songs.get` fallback covers a result whose song
+  // is somehow not in it, so a double-click is never silently dropped.
+  const activateSong = (id: string): void => {
+    // Claim the take BEFORE branching, cached path included: that is what cancels an
+    // earlier double-click still waiting on its own `songs.get` (see useTakeGuard). The
+    // guard subsumes the mountedRef check this used to make — unmount cancels too.
+    const wanted = beginTake();
+    const known = library.find((s) => s.id === id);
+    if (known) {
+      takeSectionLive(known, 0);
+      return;
+    }
+    void window.helm.songs
+      .get(id)
+      .then((s) => {
+        if (s && wanted()) takeSectionLive(s, 0);
+      })
+      .catch(console.error);
+  };
+
   // One post-save path for both editors (spec §4): refresh the library row, keep an
   // active search honest, and re-cue so the leader — and, via applyCue's same-flow
   // swap, a live projector — shows the corrected text. cue, never goLive: goLive on
@@ -466,6 +492,32 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     if (output === 'live' && liveSong?.songId === activeSong.id && liveKey !== key) {
       window.helm.presentation.goLive(key, slideFor(activeSong, target));
     }
+  };
+
+  // Double-click a section card (#58). Unlike `jumpSection` — which only follows a
+  // projector already showing THIS song — a double-click is a deliberate takeover and
+  // starts projecting from black or from another flow. `take` is idempotent, so
+  // double-clicking the section already on screen is a no-op, not a take-down.
+  //
+  // Latches `pendingSwitchRef` before the send for exactly the reason `commitSwitch` does:
+  // this moves the selection to `song` in the same commit that asks main for the screen,
+  // but `liveParsed` still names the OLD song until the broadcast lands. Without the latch
+  // the reconciliation effect above sees that divergence, reads it as an external live
+  // change, and its 0ms timer — which always beats the round trip — snaps the selection
+  // back to the previous song, re-cueing it onto the leader while the new song is what's
+  // actually live.
+  const takeSectionLive = (song: Song, idx: number): void => {
+    const target = song.sections[idx];
+    if (!target) return;
+    pendingSwitchRef.current = song.id;
+    setActiveSongId(song.id);
+    setSection(idx);
+    setArmedNextId(null);
+    window.helm.presentation.take(keyForSong(song.id, idx), slideFor(song, target));
+  };
+
+  const activateSection = (i: number): void => {
+    if (activeSong) takeSectionLive(activeSong, i);
   };
 
   const onAction = (a: ResolvedHotkey): void => {
@@ -662,6 +714,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
         emptyText={emptyText}
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
+        onActivate={activateSong}
         onAddSong={() => {
           setQuickAddTitle(q.trim());
           setQuickAddOpen(true);
@@ -717,6 +770,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             cuedIndex={clampedSection}
             isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
             onSelect={setSection}
+            onActivate={activateSection}
             editingIndex={editingSection}
             editError={editError}
             onSectionContextMenu={onSectionContextMenu}

@@ -22,7 +22,8 @@ const baseProps = {
   isVerseLive: () => false,
   previewOf: (v: number) => `verse ${v} text`,
   selectedRange: { from: 2, to: 4 } as { from: number; to: number } | null,
-  onSelectVerse: vi.fn()
+  onSelectVerse: vi.fn(),
+  onActivate: vi.fn()
 }
 
 describe('ChapterRail', () => {
@@ -53,6 +54,22 @@ describe('ChapterRail', () => {
     render(<ChapterRail {...baseProps} width={360} />)
     el = screen.getByText('verse 3 text') as HTMLElement
     expect(el.style.fontSize).toBe('15px') // 360/24 = 15, within band
+  })
+
+  it('fires onActivate with the shift flag on double-click', () => {
+    const onActivate = vi.fn()
+    render(<ChapterRail {...baseProps} onActivate={onActivate} />)
+    fireEvent.doubleClick(screen.getByText('Verse 3'), { shiftKey: true })
+    expect(onActivate).toHaveBeenCalledWith(3, true)
+  })
+
+  it('leaves single-click reporting untouched', () => {
+    const onSelectVerse = vi.fn()
+    const onActivate = vi.fn()
+    render(<ChapterRail {...baseProps} onSelectVerse={onSelectVerse} onActivate={onActivate} />)
+    fireEvent.click(screen.getByText('Verse 3'))
+    expect(onSelectVerse).toHaveBeenCalledWith(3, false)
+    expect(onActivate).not.toHaveBeenCalled()
   })
 })
 

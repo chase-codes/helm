@@ -10,6 +10,7 @@ import {
 import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
+import { useTakeGuard } from './useTakeGuard';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
 import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
@@ -70,6 +71,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
+  // Staleness guard for the double-click take that resolves a tape first (#58).
+  const beginTake = useTakeGuard(output);
 
   const [list, setList] = useState<MessageMeta[]>([]);
   const [msgId, setMsgId] = useState('');
@@ -78,7 +81,14 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const [q, setQ] = useState('');
   const [scope, setScope] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<QuoteScheduleItem[]>([]);
-  const [searchRes, setSearchRes] = useState<{ tapes: TapeRow[]; quotes: QuoteRow[] }>({ tapes: [], quotes: [] });
+  // Carries the `scope` the results were FETCHED for, not just the rows: the quote rows are
+  // titled and headed differently depending on the scope, so rendering one round trip's
+  // quotes under another round trip's scope mislabels them (see quoteRows below).
+  const [searchRes, setSearchRes] = useState<{ scope: string | null; tapes: TapeRow[]; quotes: QuoteRow[] }>({
+    scope: null,
+    tapes: [],
+    quotes: []
+  });
   // Tape-player state: `timing` and `activeOrd` drive the reading-view sync (Task 12);
   // `downloading` mirrors an in-flight on-demand audio fetch for the *current* tape,
   // owned here (not TapePlayer) so an `onAudioProgress` error can clear it cleanly
@@ -198,7 +208,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     void window.helm.message
       .search(q, scope)
       .then((r) => {
-        if (live) setSearchRes(r);
+        if (live) setSearchRes({ scope, ...r });
       })
       .catch(console.error);
     return () => {
@@ -236,6 +246,21 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const goLive = (): void => {
     if (!liveMsg) return;
     window.helm.presentation.goLive(keyForMessageQuote(msgId, msgIdx), buildQuoteSlide(liveMsg, msgIdx));
+  };
+
+  // Double-click a paragraph card (#58). Takes the quote slide — the same slide `goLive`
+  // builds — but idempotently, so a double-click on the paragraph already on screen is a
+  // no-op rather than the take-down `goLive` would perform. Builds the key/slide from the
+  // passed-in message rather than component state so Task 6 can call it with a message
+  // fetched for a different tape than the one currently loaded here.
+  const takeParagraphLive = (m: Message, ord: number): void => {
+    window.helm.presentation.take(keyForMessageQuote(m.id, ord), buildQuoteSlide(m, ord));
+  };
+
+  const activateParagraph = (ord: number): void => {
+    if (!liveMsg) return;
+    setMsgIdx(ord);
+    takeParagraphLive(liveMsg, ord);
   };
 
   // Playable URL for the tape player, derived (not stored) from `liveMsg.audioPath` so
@@ -280,16 +305,26 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
   };
 
+  // Clicking a search row does NOT clear the query. It used to, and that unmounted the very
+  // button being clicked — MessageSearchRail renders either the result rows or the QUOTE
+  // SCHEDULE rows, so flipping `hasSearch` on the first click of a double-click sent the
+  // second click to a different element and `dblclick` never reached the row at all. Its
+  // `onDoubleClick` was dead code in a real browser (#58); jsdom cannot see this, because
+  // `fireEvent.doubleClick` synthesizes the event onto a node it is handed.
+  //
+  // So the results stay put and the row stays mounted indefinitely — the double-click lands
+  // no matter how high the operator has set their OS double-click threshold. The rail returns
+  // to the QUOTE SCHEDULE view on the explicit gesture that has always driven it: editing the
+  // search box (a new query replaces the results, emptying it goes back to the schedule).
+  // Nothing else here is deferred or timed.
   const selectQuote = (id: string, ord: number): void => {
     setMsgId(id);
     setMsgIdx(ord);
-    setQ('');
   };
   const scopeToTape = (id: string): void => {
     setScope(id);
     setMsgId(id);
     setMsgIdx(0);
-    setQ('');
   };
   const clearScope = (): void => setScope(null);
   const showPara = (ord: number): void => setMsgIdx(ord);
@@ -341,22 +376,69 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // result from a just-cleared query never renders — see the search effect's comment.
   // Uses `norm` (not a plain trim) so a punctuation-only query falls back to the QUOTE
   // SCHEDULE idle view, matching the design's `hasMsgSearch` (Lectern.pretty.html:1170).
+  // Double-click a search/schedule row (#58). The row may name a tape other than the one
+  // loaded in `liveMsg`, and paragraphs only arrive with the message — so resolve it
+  // first, then take. Reuses the already-loaded message when the ids match to spare the
+  // round trip. `takeParagraphLive` builds the key and slide from the RESOLVED message
+  // argument, not from component state, so a late fetch can only ever take ITS OWN tape's
+  // slide — but taking it at all can still be wrong, because `take` starts projecting and
+  // never stops: the operator may have taken the screen down, or double-clicked something
+  // else, while this was in flight. `beginTake` is the guard for that.
+  const activateQuote = (id: string, ord: number): void => {
+    selectQuote(id, ord);
+    // Claim the take BEFORE branching, cached path included: that is what cancels an
+    // earlier double-click still waiting on its own fetch (see useTakeGuard).
+    const wanted = beginTake();
+    if (liveMsg && liveMsg.id === id) {
+      takeParagraphLive(liveMsg, ord);
+      return;
+    }
+    void window.helm.message
+      .get(id)
+      .then((m) => {
+        if (m && wanted()) takeParagraphLive(m, ord);
+      })
+      .catch(console.error);
+  };
+
   const hasSearch = !!norm(q);
-  const tapeRows: MsgTapeRow[] =
-    hasSearch && !scope
-      ? searchRes.tapes.map((t) => ({
-          id: t.id,
-          title: t.title,
-          meta: `Tape ${t.tapeNo} · ${t.date}`,
-          onClick: () => scopeToTape(t.id)
-        }))
-      : [];
-  const quoteRows: MsgQuoteRow[] = hasSearch
+  // Not gated on `!scope` any more. Scoping is what a tape-row click DOES, so hiding the tape
+  // rows the moment it happened unmounted the row mid-double-click just as clearing the query
+  // did (#58) — a second, independent way to kill the same gesture, and one no amount of
+  // holding the query open can fix. Nothing is lost by keeping them: `messagesRepo.search`
+  // ranks tapes over the whole library and applies `scope` only to the quote FTS, so these
+  // are the same rows either way, and the section header ("TAPES — SELECT TO SEARCH WITHIN")
+  // stays true — clicking another one re-scopes to it, which previously took clearing the
+  // scope chip first.
+  const tapeRows: MsgTapeRow[] = hasSearch
+    ? searchRes.tapes.map((t) => ({
+        id: t.id,
+        title: t.title,
+        meta: `Tape ${t.tapeNo} · ${t.date}`,
+        onClick: () => scopeToTape(t.id),
+        // A tape has no quote of its own — scope to it exactly as the single click does, and
+        // take its first paragraph (spec §3: "a tape takes ord 0").
+        onDoubleClick: () => {
+          scopeToTape(t.id);
+          activateQuote(t.id, 0);
+        }
+      }))
+    : [];
+  // Gated on the scope the results were fetched FOR, not merely on `hasSearch`. Clicking a
+  // tape row sets `scope` immediately while the re-scoped search is still a round trip away,
+  // and neither selectQuote nor scopeToTape clears `q` any more (#58) — so for that window
+  // the PREVIOUS unscoped quotes are still in hand. Rendering them under the new scope drops
+  // their tape title (below) and MessageSearchRail retitles the section "QUOTES IN THIS TAPE",
+  // which states that quotes from other tapes belong to this one. Better to show no quotes
+  // for one round trip. The tape rows deliberately stay ungated: they are the same rows
+  // either way, and unmounting them mid-gesture is what killed the double-click.
+  const quoteRows: MsgQuoteRow[] = hasSearch && searchRes.scope === scope
     ? searchRes.quotes.map((r) => ({
         id: `${r.msgId}:${r.ord}`,
         title: scope ? `¶${r.label}` : `${r.title} — ¶${r.label}`,
         preview: r.text,
-        onClick: () => selectQuote(r.msgId, r.ord)
+        onClick: () => selectQuote(r.msgId, r.ord),
+        onDoubleClick: () => activateQuote(r.msgId, r.ord)
       }))
     : [];
   const scheduleRows: MsgScheduleRow[] = schedule.map((it) => ({
@@ -364,7 +446,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     title: it.title,
     meta: `¶${it.label} · Tape ${it.tapeNo}`,
     isCurrent: it.msgId === msgId && it.ord === msgIdx,
-    onClick: () => selectQuote(it.msgId, it.ord)
+    onClick: () => selectQuote(it.msgId, it.ord),
+    onDoubleClick: () => activateQuote(it.msgId, it.ord)
   }));
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
@@ -447,6 +530,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         isLive={(ord) => output === 'live' && liveKey === keyForMessageQuote(msgId, ord)}
         plannedSet={plannedSet}
         onSelect={showPara}
+        onActivate={activateParagraph}
       />
     </div>
   );

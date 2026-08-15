@@ -262,6 +262,25 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     window.helm.presentation.goLive(key, slides[curIdx]);
   };
 
+  // Double-click a library row or a deck slide (#58). Idempotent, so a double-click on the
+  // slide already showing is a no-op — which also means `takeLive` returns the state
+  // unchanged and the store skips the broadcast, so a playing video is never re-pushed.
+  //
+  // Mirrors goLive's video rule: a video lands PAUSED, never auto-playing audio into the
+  // room. Skipped when this key is already live, exactly as goLive skips it for a takedown.
+  const takeSlideLive = (item: MediaItem, idx: number): void => {
+    const itemSlides = slidesOf(item);
+    const sl = itemSlides[idx];
+    if (!sl) return;
+    const key = keyForMedia(item.id, idx);
+    const alreadyLive = output === 'live' && liveKey === key;
+    if (item.type === 'video' && !alreadyLive) {
+      if (vstate.key !== key) window.helm.video.load(key, sl.src ?? '');
+      window.helm.video.pause();
+    }
+    window.helm.presentation.take(key, sl);
+  };
+
   const toggleLogo = (): void => {
     window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
   };
@@ -374,7 +393,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     borderRadius: '11px',
     cursor: 'pointer',
     background: isCurrent ? T.panel3 : 'transparent',
-    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.sermon}55` : 'none'
+    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.sermon}55` : 'none',
+    userSelect: 'none'
   });
   const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
   const importHeaderBtnStyle: CSSProperties = {
@@ -445,7 +465,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     position: 'relative',
     boxShadow: isLive ? `0 0 0 2px ${T.sermon}, 0 6px 18px rgba(0,0,0,.25)` : isCued ? `0 0 0 2px ${T.sermon}66` : `inset 0 0 0 1px ${T.border}`
   });
-  const deckRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent' };
+  const deckRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', userSelect: 'none' };
   const transportBtnStyle: CSSProperties = {
     height: '34px', padding: '0 14px', borderRadius: '9px', background: T.panel2,
     boxShadow: `inset 0 0 0 1px ${T.border}`, fontSize: '13px', fontWeight: 600, color: T.dim,
@@ -549,6 +569,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
               data-media-id={item.id}
               style={rowStyle(item.id === selId)}
               onClick={() => selectItem(item)}
+              onDoubleClick={() => { selectItem(item); takeSlideLive(item, 0); }}
               onContextMenu={(e) => contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeItem(item) }])}
             >
               <div style={thumbBoxStyle}>
@@ -609,7 +630,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
               const isCued = i === curIdx;
               const isLive = output === 'live' && liveKey === keyForMedia(selected.id, i);
               return (
-                <button key={i} style={deckRowStyle} onClick={() => setSlideIdx(i)}>
+                <button key={i} style={deckRowStyle} onClick={() => setSlideIdx(i)} onDoubleClick={() => { setSlideIdx(i); takeSlideLive(selected, i); }}>
                   <div style={numStyle(isCued)}>{i + 1}</div>
                   <div style={thumbStyle(isCued, isLive)}>
                     <SlideCanvas slide={sl} fill />

@@ -38,6 +38,7 @@ import { useContextMenu } from './useContextMenu';
 import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
 import { usePanelWidth } from './usePanelWidth';
+import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
 
 export interface SermonModeProps {
@@ -74,6 +75,8 @@ export function SermonMode({
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
+  // Staleness guard for the two double-click takes that resolve a chapter first (#58).
+  const beginTake = useTakeGuard(output);
 
   const [track, setTrack] = useState<SermonTrack>('scripture');
   const [scrBook, setScrBook] = useState('Genesis');
@@ -432,6 +435,32 @@ export function SermonMode({
     requestRailScroll(r.from, 'start');
   };
 
+  // Double-click a schedule row (#58): move the cursor there exactly as a click does, then
+  // take that reading's `from` verse. Resolves the chapter first when the row names a
+  // different book/chapter than the one cached, so the live slide never shows stale text.
+  //
+  // The fetched chapter is deliberately NOT written back into `chapter`: `jumpToReading`
+  // above has already moved the cursor onto this book/chapter, so the [scrBook, scrCh,
+  // versions] effect is fetching the very same chapter and owns that state (with a mounted
+  // guard this callback has no way to reproduce). This resolves it only to build the slide,
+  // the same convention `activateVerse` follows.
+  const activateReading = (r: ScriptureReading): void => {
+    jumpToReading(r);
+    // Claim the take BEFORE branching, cached path included: that is what cancels an
+    // earlier double-click still waiting on its own fetch (see useTakeGuard).
+    const wanted = beginTake();
+    if (chapter && chapter.book === r.book && chapter.chapter === r.ch) {
+      takeVerseLive(r.book, r.ch, r.from, chapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(r.book, r.ch)
+      .then((c) => {
+        if (wanted()) takeVerseLive(r.book, r.ch, r.from, c);
+      })
+      .catch(console.error);
+  };
+
   const undoRemove = (): void => {
     if (!undo.pending) return;
     const { book, ch, from, to } = undo.pending;
@@ -450,6 +479,19 @@ export function SermonMode({
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
     window.helm.presentation.goLive(key, slide);
+  };
+
+  // Double-click a verse card (#58). `take` is idempotent, so double-clicking the verse
+  // already on screen is a no-op rather than the take-down `goLive` would perform. The
+  // click that precedes it has already moved the cursor via `onSelectVerse`, so the rail,
+  // the hero, and the projector agree by the time this fires.
+  const takeVerseLive = (book: string, ch: number, v: number, c: ChapterData): void => {
+    const cols = verseCols(c.verses[v] ?? {}, versions, abbrOf);
+    const slide = buildScriptureSlide(
+      formatRef({ book, ch, from: v, to: v }),
+      cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
+    );
+    window.helm.presentation.take(keyForScripture(book, ch, v), slide);
   };
 
   // The rail previews the builder's book+chapter when resolved, else the cued chapter.
@@ -490,6 +532,41 @@ export function SermonMode({
     (v: number): string => railChapter?.verses[v]?.[versions[0]] ?? '',
     [railChapter, versions]
   );
+
+  // Double-click a verse card (#58). A shift-double-click builds the range (both clicks run
+  // railSelect, which is idempotent on a repeated shift-tap of either endpoint) and takes
+  // its START verse — the same single-verse slide Shift+Enter produces via
+  // goLiveWithChapter, so the on-screen ref matches the hero.
+  //
+  // Move the cursor FIRST, unconditionally, exactly as `goLiveFromBuilder` does and for the
+  // same reason. A plain click has already moved it (railSelect's non-shift branch), but a
+  // shift-click deliberately leaves it alone — so without this the cursor stays on the verse
+  // it was on while the projector shows the range's start. That isn't merely cosmetic: the
+  // show effect above lists `output` as a dep, so a take that flips output from black to
+  // live re-runs it and pushes the STALE cursor's verse straight over the verse just taken.
+  //
+  // Declared down here (below `previewChapter`/`railChapter`) rather than up beside
+  // `takeVerseLive`: reading state declared further down the component body makes the React
+  // Compiler bail out of memoizing the `useCallback`s in between (`Existing memoization
+  // could not be preserved`), which `npm run lint` treats as an error.
+  const activateVerse = (v: number, shift: boolean): void => {
+    const book = previewBook, ch = previewCh;
+    // `selectedRange` is always ordered (railSelect and toParsedRef both sort their
+    // endpoints), so its `from` IS the range's start verse whichever end was clicked.
+    const target = shift ? selectedRange?.from ?? v : v;
+    jumpTo(book, ch, target);
+    const wanted = beginTake();
+    if (railChapter) {
+      takeVerseLive(book, ch, target, railChapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(book, ch)
+      .then((c) => {
+        if (wanted()) takeVerseLive(book, ch, target, c);
+      })
+      .catch(console.error);
+  };
 
   // `plannedSet`/`cuedV`/`isVerseLive` below are all computed against the CUED book/chapter
   // (scrBook/scrCh), but the rail previews `previewBook`/`previewCh` — which diverge while
@@ -630,6 +707,7 @@ export function SermonMode({
       isCurrent,
       isSelected: sel.isSelected(r.id),
       onClick: () => jumpToReading(r),
+      onDoubleClick: () => activateReading(r),
       onContextMenu: (e) => {
         sel.select(r.id);
         contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReading(r.id) }]);
@@ -836,6 +914,7 @@ export function SermonMode({
             previewOf={railPreviewOf}
             selectedRange={selectedRange}
             onSelectVerse={onRailSelectVerse}
+            onActivate={activateVerse}
             scrollRequest={railScroll && railScroll.nonce > consumedNonce ? railScroll : null}
             onScrollConsumed={setConsumedNonce}
           />

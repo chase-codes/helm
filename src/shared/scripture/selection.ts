@@ -46,8 +46,20 @@ export function railSelect(
   }
   // A typed start verse only anchors when it names the previewed book AND chapter —
   // otherwise it belongs to some other reference and would invent a cross-chapter range.
-  const typed =
-    builder.book === preview.book && builder.chapter === preview.ch ? builder.startVerse : null
+  //
+  // When the builder already holds a COMPLETE range for this chapter, the anchor is the
+  // endpoint the tap is not on. That makes a repeated shift-tap on either endpoint rebuild
+  // the identical range instead of collapsing it onto the tapped verse — the idempotence a
+  // shift-DOUBLE-click depends on (#58), since both of its clicks run this. A plain
+  // `startVerse` anchor was idempotent only for a range built FORWARD (tap above the
+  // cursor); tapping below the cursor lands the tapped verse in `startVerse`, so the second
+  // click re-anchored on it and silently ate the operator's pending range.
+  const mine = builder.book === preview.book && builder.chapter === preview.ch
+  const typed = !mine
+    ? null
+    : builder.endVerse !== null && builder.startVerse === v
+      ? builder.endVerse
+      : builder.startVerse
   const anchor =
     typed ?? (preview.book === cursor.book && preview.ch === cursor.ch ? cursor.v : null)
   const base: RefBuilderState = {

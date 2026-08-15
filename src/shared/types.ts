@@ -172,6 +172,7 @@ export const CH = {
   songsGet: 'songs:get', songsAdd: 'songs:add', songsUpdate: 'songs:update',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
+  presTake: 'presentation:take',
   presSetOutput: 'presentation:setOutput',
   presState: 'presentation:state',           // main → all windows
   outputSlide: 'output:slide',               // main → output windows
@@ -198,6 +199,7 @@ export const CH = {
   preserviceEngage: 'preservice:engage', preserviceDisengage: 'preservice:disengage',
   preserviceShow: 'preservice:show', preserviceStep: 'preservice:step',
   preserviceShowNow: 'preservice:showNow',
+  preserviceTake: 'preservice:takeCard',
   preserviceToggleLoop: 'preservice:toggleLoop', preserviceSetDwell: 'preservice:setDwell',
   preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
   preserviceRemoveCard: 'preservice:removeCard',
@@ -274,6 +276,8 @@ export interface HelmApi {
     cue(key: string, slide: Slide): void;
     goLive(key: string, slide: Slide): void;
     show(key: string, slide: Slide): void;
+    /** Idempotent take-the-screen (double-click). Never blacks the output — see takeLive. */
+    take(key: string, slide: Slide): void;
     setOutput(mode: OutputMode): void;
     onState(cb: (s: PresentationState) => void): () => void;
   };
@@ -326,6 +330,7 @@ export interface HelmApi {
     engage(): void; disengage(): void;
     showCard(idx: number): void; step(dir: 1 | -1): void;
     showNow(): void;
+    takeCard(idx: number): void;
     toggleLoop(): void; setDwell(delta: number): void;
     toggleEnabled(id: string): void;
     saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;
