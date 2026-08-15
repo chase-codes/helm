@@ -8,7 +8,7 @@ import {
   type PresentationState,
   type Slide,
 } from '../shared/types';
-import { applyCue, goLive, initialPresentation, outputPayload, setOutput, showLive } from '../shared/presentation/core';
+import { applyCue, goLive, initialPresentation, outputPayload, setOutput, showLive, takeLive } from '../shared/presentation/core';
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../shared/displays/roles';
 
 let state: PresentationState = initialPresentation();
@@ -26,6 +26,9 @@ export const presentation = {
   cue: (key: string, slide: Slide) => { state = applyCue(state, key, slide); broadcast(); },
   goLive: (key: string, slide: Slide) => { state = goLive(state, key, slide); broadcast(); },
   show: (key: string, slide: Slide) => { state = showLive(state, key, slide); broadcast(); },
+  // No broadcast when takeLive hands back the state it was given (already live on this
+  // key): re-sending an identical outputSlide would disturb a playing video for nothing.
+  take: (key: string, slide: Slide) => { const next = takeLive(state, key, slide); if (next === state) return; state = next; broadcast(); },
   setOutput: (mode: OutputMode) => { state = setOutput(state, mode); broadcast(); },
   registerOutput(w: BrowserWindow, variant: OutputVariant, view: OutputViewMode = 'slides', leaderSplit: number = DEFAULT_LEADER_SPLIT) {
     outputWindows.set(w, { variant, view, leaderSplit });

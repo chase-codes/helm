@@ -172,6 +172,7 @@ export const CH = {
   songsGet: 'songs:get', songsAdd: 'songs:add', songsUpdate: 'songs:update',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
+  presTake: 'presentation:take',
   presSetOutput: 'presentation:setOutput',
   presState: 'presentation:state',           // main → all windows
   outputSlide: 'output:slide',               // main → output windows
@@ -274,6 +275,8 @@ export interface HelmApi {
     cue(key: string, slide: Slide): void;
     goLive(key: string, slide: Slide): void;
     show(key: string, slide: Slide): void;
+    /** Idempotent take-the-screen (double-click). Never blacks the output — see takeLive. */
+    take(key: string, slide: Slide): void;
     setOutput(mode: OutputMode): void;
     onState(cb: (s: PresentationState) => void): () => void;
   };

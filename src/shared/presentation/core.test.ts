@@ -9,7 +9,8 @@ import {
   sameFlow,
   sameKind,
   setOutput,
-  showLive
+  showLive,
+  takeLive
 } from './core'
 import type { PresentationState, Slide } from '../types'
 
@@ -180,6 +181,33 @@ test('showLive fills a live-but-empty output (logo toggle can leave liveKey null
   expect(st.output).toBe('live')
   expect(st.liveKey).toBe('scr:Genesis:1:1')
   expect(st.liveSnap?.label).toBe('Gen 1:1')
+})
+
+test('takeLive takes the screen from black', () => {
+  const st = takeLive(initialPresentation(), 'song:a:0', slide('V1'))
+  expect(st.output).toBe('live')
+  expect(st.liveKey).toBe('song:a:0')
+  expect(st.cuedKey).toBe('song:a:0')
+})
+
+test('takeLive on the already-live key is a no-op, never a take-down', () => {
+  const live = takeLive(initialPresentation(), 'song:a:0', slide('V1'))
+  const again = takeLive(live, 'song:a:0', slide('V1'))
+  expect(again.output).toBe('live')
+  expect(again).toBe(live) // identity, so stateStore can skip the broadcast
+})
+
+test('takeLive crosses kinds — a card takes the screen from another flow', () => {
+  const live = takeLive(initialPresentation(), 'song:a:0', slide('V1'))
+  const st = takeLive(live, 'scr:Genesis:1:1', slide('In the beginning'))
+  expect(st.liveKey).toBe('scr:Genesis:1:1')
+})
+
+test('takeLive takes the screen back from black on the same key', () => {
+  const live = takeLive(initialPresentation(), 'song:a:0', slide('V1'))
+  const blacked = setOutput(live, 'black')
+  const st = takeLive(blacked, 'song:a:0', slide('V1'))
+  expect(st.output).toBe('live')
 })
 
 describe('parseSongKey', () => {
