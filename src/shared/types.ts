@@ -225,6 +225,7 @@ export const CH = {
   updatesGetStatus: 'updates:getStatus', updatesInstall: 'updates:install',
   updatesCheck: 'updates:check',
   updatesStatus: 'updates:status',           // main → all windows
+  appGetVersion: 'app:getVersion',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -376,7 +377,11 @@ export interface HelmApi {
   };
   updates: {
     getStatus(): Promise<UpdateStatus>;
+    check(): Promise<void>;
     install(): Promise<boolean>;
     onStatus(cb: (s: UpdateStatus) => void): () => void;
+  };
+  app: {
+    version(): Promise<string>;
   };
 }
