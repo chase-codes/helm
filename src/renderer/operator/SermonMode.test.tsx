@@ -6,7 +6,7 @@ import { SermonMode } from './SermonMode'
 import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
-import type { ChapterData, MediaItem, Message, PresentationState, ScriptureReading } from '../../shared/types'
+import type { ChapterData, MediaItem, Message, PresentationState, QuoteScheduleItem, ScriptureReading } from '../../shared/types'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -39,7 +39,7 @@ const GEN_1_1_LIVE: PresentationState = {
 function installHelmStub(
   pres: PresentationState = NOTHING_LIVE,
   schedule: ScriptureReading[] = [],
-  opts: { media?: MediaItem[]; tape?: Message } = {}
+  opts: { media?: MediaItem[]; tape?: Message; quoteSchedule?: QuoteScheduleItem[] } = {}
 ): {
   show: ReturnType<typeof vi.fn>
   goLive: ReturnType<typeof vi.fn>
@@ -107,7 +107,7 @@ function installHelmStub(
       timing: () => Promise.resolve([]),
       onAudioProgress: () => () => {}
     },
-    quoteSchedule: { list: () => Promise.resolve([]) },
+    quoteSchedule: { list: () => Promise.resolve(opts.quoteSchedule ?? []) },
     media: {
       list: mediaList,
       importImages: vi.fn(),
@@ -1000,6 +1000,20 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     await waitFor(() => expect(screen.getAllByText('Second paragraph').some((el) => el.closest('button'))).toBe(true))
     const row = screen.getAllByText('Second paragraph').find((el) => el.closest('button'))
     fireEvent.doubleClick(row as HTMLElement)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
+  })
+
+  it('double-clicking a quote-schedule row takes that quote live', async () => {
+    const QS: QuoteScheduleItem[] = [
+      { id: 'q1', msgId: 'm1', ord: 1, label: '2', tapeNo: '47-0412', title: 'Faith Is The Substance' }
+    ]
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    const row = await screen.findByText('¶2 · Tape 47-0412')
+    fireEvent.doubleClick(row.closest('button') as HTMLButtonElement)
     await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
   })
 

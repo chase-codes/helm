@@ -356,6 +356,25 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // result from a just-cleared query never renders — see the search effect's comment.
   // Uses `norm` (not a plain trim) so a punctuation-only query falls back to the QUOTE
   // SCHEDULE idle view, matching the design's `hasMsgSearch` (Lectern.pretty.html:1170).
+  // Double-click a search/schedule row (#58). The row may name a tape other than the one
+  // loaded in `liveMsg`, and paragraphs only arrive with the message — so resolve it
+  // first, then take. Reuses the already-loaded message when the ids match to spare the
+  // round trip. `mountedRef` is not available here; `msgIdRef`-free correctness comes from
+  // taking the slide built off the RESOLVED message, which cannot be the wrong tape.
+  const activateQuote = (id: string, ord: number): void => {
+    selectQuote(id, ord);
+    if (liveMsg && liveMsg.id === id) {
+      takeParagraphLive(liveMsg, ord);
+      return;
+    }
+    void window.helm.message
+      .get(id)
+      .then((m) => {
+        if (m) takeParagraphLive(m, ord);
+      })
+      .catch(console.error);
+  };
+
   const hasSearch = !!norm(q);
   const tapeRows: MsgTapeRow[] =
     hasSearch && !scope
@@ -363,7 +382,11 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
           id: t.id,
           title: t.title,
           meta: `Tape ${t.tapeNo} · ${t.date}`,
-          onClick: () => scopeToTape(t.id)
+          onClick: () => scopeToTape(t.id),
+          onDoubleClick: () => {
+            scopeToTape(t.id);
+            activateQuote(t.id, 0);
+          }
         }))
       : [];
   const quoteRows: MsgQuoteRow[] = hasSearch
@@ -371,7 +394,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         id: `${r.msgId}:${r.ord}`,
         title: scope ? `¶${r.label}` : `${r.title} — ¶${r.label}`,
         preview: r.text,
-        onClick: () => selectQuote(r.msgId, r.ord)
+        onClick: () => selectQuote(r.msgId, r.ord),
+        onDoubleClick: () => activateQuote(r.msgId, r.ord)
       }))
     : [];
   const scheduleRows: MsgScheduleRow[] = schedule.map((it) => ({
@@ -379,7 +403,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     title: it.title,
     meta: `¶${it.label} · Tape ${it.tapeNo}`,
     isCurrent: it.msgId === msgId && it.ord === msgIdx,
-    onClick: () => selectQuote(it.msgId, it.ord)
+    onClick: () => selectQuote(it.msgId, it.ord),
+    onDoubleClick: () => activateQuote(it.msgId, it.ord)
   }));
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
