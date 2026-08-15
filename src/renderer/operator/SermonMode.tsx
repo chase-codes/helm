@@ -38,6 +38,7 @@ import { useContextMenu } from './useContextMenu';
 import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
 import { usePanelWidth } from './usePanelWidth';
+import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
 
 export interface SermonModeProps {
@@ -74,6 +75,8 @@ export function SermonMode({
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
+  // Staleness guard for the two double-click takes that resolve a chapter first (#58).
+  const beginTake = useTakeGuard(output);
 
   const [track, setTrack] = useState<SermonTrack>('scripture');
   const [scrBook, setScrBook] = useState('Genesis');
@@ -443,13 +446,18 @@ export function SermonMode({
   // the same convention `activateVerse` follows.
   const activateReading = (r: ScriptureReading): void => {
     jumpToReading(r);
+    // Claim the take BEFORE branching, cached path included: that is what cancels an
+    // earlier double-click still waiting on its own fetch (see useTakeGuard).
+    const wanted = beginTake();
     if (chapter && chapter.book === r.book && chapter.chapter === r.ch) {
       takeVerseLive(r.book, r.ch, r.from, chapter);
       return;
     }
     window.helm.bibles
       .getChapter(r.book, r.ch)
-      .then((c) => takeVerseLive(r.book, r.ch, r.from, c))
+      .then((c) => {
+        if (wanted()) takeVerseLive(r.book, r.ch, r.from, c);
+      })
       .catch(console.error);
   };
 
@@ -547,13 +555,16 @@ export function SermonMode({
     // endpoints), so its `from` IS the range's start verse whichever end was clicked.
     const target = shift ? selectedRange?.from ?? v : v;
     jumpTo(book, ch, target);
+    const wanted = beginTake();
     if (railChapter) {
       takeVerseLive(book, ch, target, railChapter);
       return;
     }
     window.helm.bibles
       .getChapter(book, ch)
-      .then((c) => takeVerseLive(book, ch, target, c))
+      .then((c) => {
+        if (wanted()) takeVerseLive(book, ch, target, c);
+      })
       .catch(console.error);
   };
 

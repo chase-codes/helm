@@ -10,6 +10,7 @@ import {
 import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
+import { useTakeGuard } from './useTakeGuard';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
 import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
@@ -70,6 +71,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
+  // Staleness guard for the double-click take that resolves a tape first (#58).
+  const beginTake = useTakeGuard(output);
 
   const [list, setList] = useState<MessageMeta[]>([]);
   const [msgId, setMsgId] = useState('');
@@ -78,7 +81,14 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const [q, setQ] = useState('');
   const [scope, setScope] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<QuoteScheduleItem[]>([]);
-  const [searchRes, setSearchRes] = useState<{ tapes: TapeRow[]; quotes: QuoteRow[] }>({ tapes: [], quotes: [] });
+  // Carries the `scope` the results were FETCHED for, not just the rows: the quote rows are
+  // titled and headed differently depending on the scope, so rendering one round trip's
+  // quotes under another round trip's scope mislabels them (see quoteRows below).
+  const [searchRes, setSearchRes] = useState<{ scope: string | null; tapes: TapeRow[]; quotes: QuoteRow[] }>({
+    scope: null,
+    tapes: [],
+    quotes: []
+  });
   // Tape-player state: `timing` and `activeOrd` drive the reading-view sync (Task 12);
   // `downloading` mirrors an in-flight on-demand audio fetch for the *current* tape,
   // owned here (not TapePlayer) so an `onAudioProgress` error can clear it cleanly
@@ -198,7 +208,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     void window.helm.message
       .search(q, scope)
       .then((r) => {
-        if (live) setSearchRes(r);
+        if (live) setSearchRes({ scope, ...r });
       })
       .catch(console.error);
     return () => {
@@ -369,12 +379,16 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // Double-click a search/schedule row (#58). The row may name a tape other than the one
   // loaded in `liveMsg`, and paragraphs only arrive with the message — so resolve it
   // first, then take. Reuses the already-loaded message when the ids match to spare the
-  // round trip. No mounted/live guard needed on the fetch branch: `takeParagraphLive`
-  // builds the key and slide from the RESOLVED message argument, not from component
-  // state, so a late-resolving fetch can only ever take ITS OWN tape's slide — never
-  // the wrong one.
+  // round trip. `takeParagraphLive` builds the key and slide from the RESOLVED message
+  // argument, not from component state, so a late fetch can only ever take ITS OWN tape's
+  // slide — but taking it at all can still be wrong, because `take` starts projecting and
+  // never stops: the operator may have taken the screen down, or double-clicked something
+  // else, while this was in flight. `beginTake` is the guard for that.
   const activateQuote = (id: string, ord: number): void => {
     selectQuote(id, ord);
+    // Claim the take BEFORE branching, cached path included: that is what cancels an
+    // earlier double-click still waiting on its own fetch (see useTakeGuard).
+    const wanted = beginTake();
     if (liveMsg && liveMsg.id === id) {
       takeParagraphLive(liveMsg, ord);
       return;
@@ -382,7 +396,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     void window.helm.message
       .get(id)
       .then((m) => {
-        if (m) takeParagraphLive(m, ord);
+        if (m && wanted()) takeParagraphLive(m, ord);
       })
       .catch(console.error);
   };
@@ -410,7 +424,15 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         }
       }))
     : [];
-  const quoteRows: MsgQuoteRow[] = hasSearch
+  // Gated on the scope the results were fetched FOR, not merely on `hasSearch`. Clicking a
+  // tape row sets `scope` immediately while the re-scoped search is still a round trip away,
+  // and neither selectQuote nor scopeToTape clears `q` any more (#58) — so for that window
+  // the PREVIOUS unscoped quotes are still in hand. Rendering them under the new scope drops
+  // their tape title (below) and MessageSearchRail retitles the section "QUOTES IN THIS TAPE",
+  // which states that quotes from other tapes belong to this one. Better to show no quotes
+  // for one round trip. The tape rows deliberately stay ungated: they are the same rows
+  // either way, and unmounting them mid-gesture is what killed the double-click.
+  const quoteRows: MsgQuoteRow[] = hasSearch && searchRes.scope === scope
     ? searchRes.quotes.map((r) => ({
         id: `${r.msgId}:${r.ord}`,
         title: scope ? `¶${r.label}` : `${r.title} — ¶${r.label}`,
