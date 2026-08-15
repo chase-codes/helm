@@ -72,6 +72,7 @@ function installHelmStub(
   take: ReturnType<typeof vi.fn>
   setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
+  removeMany: ReturnType<typeof vi.fn>
   cue: ReturnType<typeof vi.fn>
   mediaList: ReturnType<typeof vi.fn>
   messageList: ReturnType<typeof vi.fn>
@@ -85,6 +86,7 @@ function installHelmStub(
   const take = vi.fn()
   const setOutput = vi.fn()
   const add = vi.fn(() => Promise.resolve([]))
+  const removeMany = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
   const mediaList = vi.fn(() => Promise.resolve(opts.media ?? []))
   const messageList = vi.fn(() =>
@@ -114,7 +116,7 @@ function installHelmStub(
   )
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
-    schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])) },
+    schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])), removeMany },
     bibles: {
       manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
       getChapter,
@@ -173,6 +175,7 @@ function installHelmStub(
     take,
     setOutput,
     add,
+    removeMany,
     cue,
     mediaList,
     messageList,
@@ -299,7 +302,11 @@ describe('SermonMode — direct preview to live', () => {
     const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    // The rail renders a single card until the chapter resolves (railVerseCount falls back
+    // to 1), so a 'Verse 1' gate can pass before the other cards exist — gate on the
+    // highest verse this test touches instead. Same for every gate below that a
+    // pre-resolution surface (lone rail card, hero label) would satisfy.
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
 
     // Move the cursor off the live verse (1) via a rail tap on verse 3, same as test 2 —
     // now addRef (the cursor) is Genesis 1:3, which is not the live key.
@@ -335,7 +342,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 2')).toBeTruthy())
     fireEvent.doubleClick(screen.getByText('Verse 2'))
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:2', expect.anything()))
   })
@@ -358,7 +365,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     // Cursor starts at verse 1. Shift-click verse 4 anchors the range at the cursor,
     // building Genesis 1:1-4 (railSelect's idempotent-anchor case, tested on its own in
@@ -386,7 +393,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take, show, pushState } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     // Cursor to verse 4, then shift-click verse 2 — a BACKWARD range, 2-4.
     fireEvent.click(verseCard(4))
@@ -414,7 +421,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(LIVE_1_1, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     fireEvent.click(verseCard(4))
     await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
@@ -435,7 +442,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [])
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
 
     fireEvent.click(verseCard(4))
     await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
@@ -456,7 +463,9 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, SCHEDULE)
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    // Gate on the row being clicked: 'Genesis 1:1' also matches the hero label, which
+    // renders before the schedule list resolves.
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:3').length).toBeGreaterThan(0))
     fireEvent.doubleClick(screen.getAllByText('Genesis 1:3')[0])
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
   })
@@ -485,7 +494,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     )
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText('Exodus 2:3')).toBeTruthy())
 
     fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
     await act(async () => {})
@@ -512,7 +521,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     )
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText('Exodus 2:3')).toBeTruthy())
 
     // Uncached reading first — its fetch stays in flight...
     fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
@@ -552,7 +561,7 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     })
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText('Exodus 2:3')).toBeTruthy())
 
     fireEvent.doubleClick(screen.getByText('Exodus 2:3'))
     expect(getChapter).toHaveBeenCalledWith('Exodus', 2)
@@ -1558,5 +1567,120 @@ describe('SermonMode — ChapterRail scroll requests', () => {
     await waitFor(() => expect(panelHidden('scripture')).toBe(false))
 
     expect(scrollSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('SermonMode — schedule multi-select and bulk delete', () => {
+  const THREE: ScriptureReading[] = [
+    { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+    { id: 'r2', book: 'Genesis', ch: 1, from: 2, to: 2 },
+    { id: 'r3', book: 'Genesis', ch: 1, from: 3, to: 3 }
+  ]
+  // Schedule-row titles ("Genesis 1:1"/"1:2") can also appear as the hero's cursor
+  // label or the on-deck "next verse" preview, neither of which is a <button> — only
+  // the schedule row itself is, so scoping to a button ancestor disambiguates without
+  // caring which non-row surface happens to echo the same text at a given cursor
+  // position.
+  const rowButton = (title: string): HTMLElement => {
+    const match = screen.getAllByText(title).find((el) => el.closest('button'))
+    if (!match) throw new Error(`no row button found for "${title}"`)
+    return match.closest('button') as HTMLElement
+  }
+
+  it('shift-click selects the contiguous run without moving the rail cursor', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:3'), { shiftKey: true })
+
+    for (const t of ['Genesis 1:1', 'Genesis 1:2', 'Genesis 1:3']) {
+      expect(rowButton(t).getAttribute('data-selected')).toBe('true')
+    }
+  })
+
+  // Two quick shift-clicks on a row register as a double-click; #58's take must not
+  // fire mid-range-selection or extending a selection could put a verse on screen.
+  it('shift-double-click on a schedule row never takes the screen', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:3'), { shiftKey: true })
+    fireEvent.doubleClick(rowButton('Genesis 1:3'), { shiftKey: true })
+
+    expect(take).not.toHaveBeenCalled()
+    for (const t of ['Genesis 1:1', 'Genesis 1:2', 'Genesis 1:3']) {
+      expect(rowButton(t).getAttribute('data-selected')).toBe('true')
+    }
+  })
+
+  it('Delete removes the whole selection via one removeMany call and arms a batch undo', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(removeMany).toHaveBeenCalledTimes(1))
+    expect(removeMany).toHaveBeenCalledWith(['r1', 'r2'])
+    await screen.findByText(/2 readings/)
+  })
+
+  it('undo after a bulk delete re-adds every reading in order', async () => {
+    const { resolveChapter, add } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
+    act(() => keyHandlerRef.current?.onDelete?.())
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(2))
+    expect(add.mock.calls[0][0]).toMatchObject({ book: 'Genesis', ch: 1, from: 1, to: 1 })
+    expect(add.mock.calls[1][0]).toMatchObject({ book: 'Genesis', ch: 1, from: 2, to: 2 })
+  })
+
+  it('single-item delete still works and keeps its formatRef toast label', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:2'))
+
+    fireEvent.click(rowButton('Genesis 1:2'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(removeMany).toHaveBeenCalledWith(['r2']))
+    // Toast label is the ref, not "1 readings". Anchor on the toast's own "Removed"
+    // text — the row title also reads "Genesis 1:2", so matching the ref alone could
+    // pass against the not-yet-unmounted row.
+    await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/Genesis 1:2/))
+    expect(screen.queryByText(/1 readings/)).toBeNull()
+  })
+
+  it('Clear all removes every reading in one removeMany call, recoverable via undo', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await screen.findByText('Genesis 1:1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    await waitFor(() => expect(removeMany).toHaveBeenCalledTimes(1))
+    expect(removeMany).toHaveBeenCalledWith(['r1', 'r2', 'r3'])
+    await screen.findByText(/3 readings/)
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
   })
 })

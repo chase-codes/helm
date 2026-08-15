@@ -6,6 +6,7 @@ export interface ScheduleRepo {
   list(): ScriptureReading[]
   add(r: Omit<ScriptureReading, 'id'>): ScriptureReading[]
   remove(id: string): ScriptureReading[]
+  removeMany(ids: string[]): ScriptureReading[]
 }
 
 const DEFAULT_SERVICE_ID = 'default'
@@ -38,6 +39,9 @@ export function createScheduleRepo(db: Database.Database): ScheduleRepo {
     'SELECT MAX(position) AS m FROM service_items WHERE service_id = ?'
   )
   const deleteItem = db.prepare('DELETE FROM service_items WHERE id = ?')
+  const deleteItems = db.transaction((ids: string[]) => {
+    for (const id of ids) deleteItem.run(id)
+  })
 
   const list = (): ScriptureReading[] =>
     (selectItems.all(DEFAULT_SERVICE_ID) as ItemRow[]).map((row) => {
@@ -60,6 +64,10 @@ export function createScheduleRepo(db: Database.Database): ScheduleRepo {
     },
     remove(id) {
       deleteItem.run(id)
+      return list()
+    },
+    removeMany(ids) {
+      deleteItems(ids)
       return list()
     }
   }
