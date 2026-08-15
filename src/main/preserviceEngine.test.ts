@@ -398,11 +398,37 @@ describe('preserviceEngine', () => {
       expect(presentation().output).toBe('live');
     });
 
-    it('stops the loop, like showNow', () => {
+    // Same reason showNow stops it: the card the operator asked to hold must not rotate away
+    // at the next dwell boundary. Card 1 is not the one engage() put on screen, so this is a
+    // genuine takeover.
+    it('stops the loop when the card is not already on screen, like showNow', () => {
       const { engine } = harness();
       engine.engage();
       engine.takeCard(1);
       expect(engine.getState().engaged).toBe(false);
+    });
+
+    // ...but a double-click on the card ALREADY on screen is spec'd to be a no-op, and
+    // pushLive resolves to a same-key cue in that case. Halting the rotation there means an
+    // impatient extra click on the announcement the room is reading silently stops the loop
+    // for the rest of the service, with nothing on screen to explain it.
+    it('leaves the loop running when that card is already on screen', () => {
+      const { engine } = harness();
+      engine.engage(); // card 0 goes live, rotation running
+      engine.takeCard(0);
+      expect(engine.getState().engaged).toBe(true);
+    });
+
+    it('still rotates after a double-click on the card already on screen', () => {
+      const { engine, presentation } = harness();
+      engine.setDwell(-100); // clamps to min
+      engine.engage();
+      const first = presentation().liveKey;
+      engine.takeCard(0);
+      const dwell = engine.getState().dwellS;
+      for (let t = 1; t <= dwell; t++) engine.tick();
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).not.toBe(first);
     });
   });
 });
