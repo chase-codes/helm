@@ -435,6 +435,12 @@ export function SermonMode({
   // Double-click a schedule row (#58): move the cursor there exactly as a click does, then
   // take that reading's `from` verse. Resolves the chapter first when the row names a
   // different book/chapter than the one cached, so the live slide never shows stale text.
+  //
+  // The fetched chapter is deliberately NOT written back into `chapter`: `jumpToReading`
+  // above has already moved the cursor onto this book/chapter, so the [scrBook, scrCh,
+  // versions] effect is fetching the very same chapter and owns that state (with a mounted
+  // guard this callback has no way to reproduce). This resolves it only to build the slide,
+  // the same convention `activateVerse` follows.
   const activateReading = (r: ScriptureReading): void => {
     jumpToReading(r);
     if (chapter && chapter.book === r.book && chapter.chapter === r.ch) {
@@ -443,10 +449,7 @@ export function SermonMode({
     }
     window.helm.bibles
       .getChapter(r.book, r.ch)
-      .then((c) => {
-        setChapter(c);
-        takeVerseLive(r.book, r.ch, r.from, c);
-      })
+      .then((c) => takeVerseLive(r.book, r.ch, r.from, c))
       .catch(console.error);
   };
 
@@ -481,22 +484,6 @@ export function SermonMode({
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
     window.helm.presentation.take(keyForScripture(book, ch, v), slide);
-  };
-
-  // A shift-double-click builds the range (both clicks run railSelect, which is idempotent
-  // on a repeated shift-click) and then takes its START verse — the same single-verse slide
-  // Shift+Enter produces via goLiveWithChapter, so the on-screen ref matches the hero.
-  const activateVerse = (v: number, shift: boolean): void => {
-    const book = previewBook, ch = previewCh;
-    const target = shift ? Math.min(selectedRange?.from ?? v, v) : v;
-    if (previewChapter && previewChapter.book === book && previewChapter.chapter === ch) {
-      takeVerseLive(book, ch, target, previewChapter);
-      return;
-    }
-    window.helm.bibles
-      .getChapter(book, ch)
-      .then((c) => takeVerseLive(book, ch, target, c))
-      .catch(console.error);
   };
 
   // The rail previews the builder's book+chapter when resolved, else the cued chapter.
@@ -537,6 +524,38 @@ export function SermonMode({
     (v: number): string => railChapter?.verses[v]?.[versions[0]] ?? '',
     [railChapter, versions]
   );
+
+  // Double-click a verse card (#58). A shift-double-click builds the range (both clicks run
+  // railSelect, which is idempotent on a repeated shift-tap of either endpoint) and takes
+  // its START verse — the same single-verse slide Shift+Enter produces via
+  // goLiveWithChapter, so the on-screen ref matches the hero.
+  //
+  // Move the cursor FIRST, unconditionally, exactly as `goLiveFromBuilder` does and for the
+  // same reason. A plain click has already moved it (railSelect's non-shift branch), but a
+  // shift-click deliberately leaves it alone — so without this the cursor stays on the verse
+  // it was on while the projector shows the range's start. That isn't merely cosmetic: the
+  // show effect above lists `output` as a dep, so a take that flips output from black to
+  // live re-runs it and pushes the STALE cursor's verse straight over the verse just taken.
+  //
+  // Declared down here (below `previewChapter`/`railChapter`) rather than up beside
+  // `takeVerseLive`: reading state declared further down the component body makes the React
+  // Compiler bail out of memoizing the `useCallback`s in between (`Existing memoization
+  // could not be preserved`), which `npm run lint` treats as an error.
+  const activateVerse = (v: number, shift: boolean): void => {
+    const book = previewBook, ch = previewCh;
+    // `selectedRange` is always ordered (railSelect and toParsedRef both sort their
+    // endpoints), so its `from` IS the range's start verse whichever end was clicked.
+    const target = shift ? selectedRange?.from ?? v : v;
+    jumpTo(book, ch, target);
+    if (railChapter) {
+      takeVerseLive(book, ch, target, railChapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(book, ch)
+      .then((c) => takeVerseLive(book, ch, target, c))
+      .catch(console.error);
+  };
 
   // `plannedSet`/`cuedV`/`isVerseLive` below are all computed against the CUED book/chapter
   // (scrBook/scrCh), but the rail previews `previewBook`/`previewCh` — which diverge while

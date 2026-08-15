@@ -105,6 +105,45 @@ test('a builder with no start verse leaves the cursor as the anchor', () => {
   expect(r.builder.endVerse).toBe(9)
 })
 
+// Both clicks of a shift-DOUBLE-click run railSelect, so the second must rebuild the range
+// the first one made rather than collapse it (#58). The forward direction (tap ABOVE the
+// cursor, so the tapped verse lands in `endVerse`) was always idempotent; the backward one
+// puts the tapped verse in `startVerse`, which a plain `startVerse` anchor then re-anchored
+// on — silently destroying the operator's pending range.
+test('a repeated shift-tap on a backward range rebuilds it instead of collapsing it', () => {
+  const first = railSelect(empty, cursor, here, 2, true) // cursor 5, tap 2 -> 2-5
+  expect(first.builder.startVerse).toBe(2)
+  expect(first.builder.endVerse).toBe(5)
+  const second = railSelect(first.builder, cursor, here, 2, true)
+  expect(second.builder.startVerse).toBe(2)
+  expect(second.builder.endVerse).toBe(5)
+})
+
+test('a repeated shift-tap on a forward range rebuilds it instead of collapsing it', () => {
+  const first = railSelect(empty, cursor, here, 9, true) // cursor 5, tap 9 -> 5-9
+  const second = railSelect(first.builder, cursor, here, 9, true)
+  expect(second.builder.startVerse).toBe(5)
+  expect(second.builder.endVerse).toBe(9)
+})
+
+// The other endpoint is still a live target: shift-tapping the far end of an existing range
+// anchors on the near end, which is the range it already had.
+test('shift-tapping the other endpoint of a range keeps the same range', () => {
+  const range = built({ startVerse: 2, endVerse: 5, stage: 'endVerse' })
+  const r = railSelect(range, cursor, here, 5, true)
+  expect(r.builder.startVerse).toBe(2)
+  expect(r.builder.endVerse).toBe(5)
+})
+
+// Only the ENDPOINTS are idempotent — shift-tapping inside a range still re-aims it from
+// the start verse the rail is highlighting, exactly as before.
+test('shift-tapping inside a range still re-aims it from the start verse', () => {
+  const range = built({ startVerse: 2, endVerse: 9, stage: 'endVerse' })
+  const r = railSelect(range, cursor, here, 5, true)
+  expect(r.builder.startVerse).toBe(2)
+  expect(r.builder.endVerse).toBe(5)
+})
+
 test('addTarget falls back to the cursor when the builder is empty', () => {
   expect(addTarget(initialBuilder(), cursor)).toEqual({ book: 'Genesis', ch: 1, from: 5, to: 5 })
 })

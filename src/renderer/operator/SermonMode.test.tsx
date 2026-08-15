@@ -6,7 +6,16 @@ import { SermonMode } from './SermonMode'
 import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
-import type { ChapterData, MediaItem, Message, PresentationState, QuoteScheduleItem, ScriptureReading } from '../../shared/types'
+import type {
+  ChapterData,
+  MediaItem,
+  Message,
+  PresentationState,
+  QuoteRow,
+  QuoteScheduleItem,
+  ScriptureReading,
+  TapeRow
+} from '../../shared/types'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -39,7 +48,14 @@ const GEN_1_1_LIVE: PresentationState = {
 function installHelmStub(
   pres: PresentationState = NOTHING_LIVE,
   schedule: ScriptureReading[] = [],
-  opts: { media?: MediaItem[]; tape?: Message; quoteSchedule?: QuoteScheduleItem[] } = {},
+  opts: {
+    media?: MediaItem[]
+    tape?: Message
+    quoteSchedule?: QuoteScheduleItem[]
+    // What `message.search` resolves to for any query — lets a test drive MessageSearchRail's
+    // TAPES/QUOTES result rows (the ones a double-click has to survive) without a real index.
+    search?: { tapes: TapeRow[]; quotes: QuoteRow[] }
+  } = {},
   // Optional second chapter, keyed by its own book/ch, with its own release — lets a test
   // fetch a DIFFERENT chapter than the default Genesis 1 (e.g. activateReading's async
   // getChapter branch for a reading outside the cache). Any book/ch not matching this pair
@@ -122,6 +138,7 @@ function installHelmStub(
       list: messageList,
       get: (id: string) => Promise.resolve(opts.tape && opts.tape.id === id ? opts.tape : null),
       timing: () => Promise.resolve([]),
+      search: () => Promise.resolve(opts.search ?? { tapes: [], quotes: [] }),
       onAudioProgress: () => () => {}
     },
     quoteSchedule: { list: () => Promise.resolve(opts.quoteSchedule ?? []) },
@@ -350,6 +367,80 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     // catch that regression.
     fireEvent.doubleClick(verseCard(4), { shiftKey: true })
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:1', expect.anything()))
+  })
+
+  // A shift-click deliberately leaves the cursor where it is, so activateVerse has to move
+  // it onto the verse it takes — the same "jump first, unconditionally" rule
+  // goLiveFromBuilder follows. Two ways to get this wrong, one per output state, so both are
+  // pinned here.
+  //
+  // From BLACK: the take flips main's output to 'live', that broadcast re-runs the show
+  // effect (`output` is one of its deps), and a stale cursor would then push its OWN verse
+  // over the one just taken — the projector flashes verse 2 and settles on verse 4.
+  it('shift-double-click from black leaves the projector on the range start, not the cursor', async () => {
+    const { resolveChapter, take, show, pushState } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Cursor to verse 4, then shift-click verse 2 — a BACKWARD range, 2-4.
+    fireEvent.click(verseCard(4))
+    await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
+    fireEvent.click(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(verseCard(2).dataset.selected).toBe('true'))
+
+    fireEvent.doubleClick(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:2', expect.anything()))
+
+    // Main answers the take by broadcasting the new live state, exactly as stateStore does.
+    show.mockClear()
+    pushState({ output: 'live', liveKey: 'scr:Genesis:1:2', liveSnap: null, cuedKey: null, cuedSnap: null })
+    await act(async () => {})
+    for (const call of show.mock.calls) expect(call[0]).toBe('scr:Genesis:1:2')
+  })
+
+  // Already LIVE: the show effect does not re-run (no `output` change), so nothing corrects
+  // the divergence — verse 2 sticks on the projector while the hero and the rail cursor both
+  // read verse 4, and the next arrow press steps to verse 5.
+  it('shift-double-click while live moves the cursor onto the verse it takes', async () => {
+    const LIVE_1_1: PresentationState = {
+      output: 'live', liveKey: 'scr:Genesis:1:1', liveSnap: null, cuedKey: null, cuedSnap: null
+    }
+    const { resolveChapter, take } = installHelmStub(LIVE_1_1, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    fireEvent.click(verseCard(4))
+    await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
+    fireEvent.click(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(verseCard(2).dataset.selected).toBe('true'))
+
+    fireEvent.doubleClick(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:2', expect.anything()))
+    // The hero (and with it the cursor the arrows step) now names what is on the projector.
+    await waitFor(() => expect(screen.getByText('Genesis 1:2')).toBeTruthy())
+    expect(screen.queryByText('Genesis 1:4')).toBeNull()
+  })
+
+  // The double-click's second click runs railSelect again. Anchored on `builder.startVerse`
+  // that collapsed a BACKWARD range onto the clicked verse, so the pending "+ Add Genesis
+  // 1:2-4" the operator was building silently became "+ Add Genesis 1:2".
+  it('shift-double-click keeps a backward range intact', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    fireEvent.click(verseCard(4))
+    await waitFor(() => expect(screen.getByText('Genesis 1:4')).toBeTruthy())
+    fireEvent.click(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(screen.getByText('+ Add Genesis 1:2–4')).toBeTruthy())
+
+    fireEvent.click(verseCard(2), { shiftKey: true })
+    fireEvent.doubleClick(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(screen.getByText('+ Add Genesis 1:2–4')).toBeTruthy())
+    expect(verseCard(3).dataset.selected).toBe('true')
   })
 
   it('double-clicking a schedule reading takes its first verse live', async () => {
@@ -1054,6 +1145,87 @@ const TAPE: Message = {
     { ord: 2, label: '3', text: 'Third paragraph' }
   ]
 }
+
+// One tape match and one quote match for `message.search`, so the rail renders both kinds
+// of result row.
+const SEARCH_HITS: { tapes: TapeRow[]; quotes: QuoteRow[] } = {
+  tapes: [{ id: 'm1', tapeNo: '47-0412', title: 'Faith Is The Substance', date: '47-0412' }],
+  quotes: [
+    { msgId: 'm1', tapeNo: '47-0412', title: 'Faith Is The Substance', ord: 2, label: '3', text: 'Third paragraph' }
+  ]
+}
+
+const searchBox = (): HTMLInputElement => screen.getByPlaceholderText('Search tapes & quotes…') as HTMLInputElement
+const runSearch = async (): Promise<void> => {
+  fireEvent.change(await screen.findByPlaceholderText('Search tapes & quotes…'), { target: { value: 'faith' } })
+}
+
+// MessageSearchRail renders EITHER the TAPES/QUOTES result rows or the QUOTE SCHEDULE rows,
+// so anything the first click does that flips `hasSearch` (or empties `tapeRows`) unmounts
+// the very button being double-clicked — and in a real browser the second click then lands
+// on a different element, so `dblclick` never reaches the row and its handler is dead code.
+// MessageSearchRail.test.tsx cannot see this: it hands the presentational component its
+// props directly. These drive the gesture the way a browser does — click, then click AGAIN
+// on the same node — which only works if that node survived the first click.
+describe('SermonMode — double-clicking a message search row (#58)', () => {
+  it('takes a quote result live, with the row still mounted for the second click', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await runSearch()
+    const row = (await screen.findByText('Faith Is The Substance — ¶3')).closest('button') as HTMLButtonElement
+
+    fireEvent.click(row)
+    await act(async () => {})
+    expect(row.isConnected).toBe(true)
+
+    fireEvent.click(row)
+    fireEvent.doubleClick(row)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:2', expect.anything()))
+  })
+
+  it('takes a tape result\'s first quote live, with the row still mounted for the second click', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await runSearch()
+    const row = (await screen.findByText('Tape 47-0412 · 47-0412')).closest('button') as HTMLButtonElement
+
+    // A tape row click also SCOPES the search, which empties `tapeRows` on its own — so this
+    // row has two independent ways to vanish out from under the second click.
+    fireEvent.click(row)
+    await act(async () => {})
+    expect(row.isConnected).toBe(true)
+
+    fireEvent.click(row)
+    fireEvent.doubleClick(row)
+    await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:0', expect.anything()))
+  })
+
+  // The other half of the contract: keeping the row alive must not cost the single click its
+  // meaning. It still selects the quote immediately and it still hands the rail back to the
+  // QUOTE SCHEDULE view — just after the double-click window rather than inside it.
+  it('a plain single click still selects the quote and clears the query', async () => {
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await runSearch()
+    const row = (await screen.findByText('Faith Is The Substance — ¶3')).closest('button') as HTMLButtonElement
+
+    fireEvent.click(row)
+    // Selection is immediate — the hero names the clicked paragraph on the same commit.
+    await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶3')).toBeTruthy())
+    expect(take).not.toHaveBeenCalled()
+    await waitFor(() => expect(searchBox().value).toBe(''), { timeout: 3000 })
+    await waitFor(() => expect(screen.getByText('QUOTE SCHEDULE')).toBeTruthy())
+  })
+})
 
 describe('SermonMode — track state survives switching away (#60)', () => {
   it('returning to the slides track restores the same deck slide', async () => {
