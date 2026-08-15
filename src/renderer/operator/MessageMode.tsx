@@ -2,7 +2,6 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
-  useRef,
   useState,
   type CSSProperties,
   type JSX,
@@ -27,12 +26,6 @@ import type { PanelWidthControl } from './usePanelWidth';
  * playable by an HTML5 `<audio>` element. Handles POSIX paths (`/a/b.m4a`) and Windows
  * drive paths (`C:\a\b.m4a` → `file:///C:/a/b.m4a`) the same way: normalize slashes,
  * ensure a leading `/`, percent-encode. */
-/** How long a clicked search row stays mounted before the rail swaps back to its idle
- * QUOTE SCHEDULE view — long enough to cover the OS double-click threshold (500ms on both
- * macOS and Windows by default), which is what keeps the second click of a double-click
- * landing on the row that was clicked. See `swapRailToScheduleSoon`. */
-const RAIL_SWAP_MS = 500;
-
 function audioFileUrl(path: string): string {
   const normalized = path.replace(/\\/g, '/');
   const abs = normalized.startsWith('/') ? normalized : `/${normalized}`;
@@ -302,50 +295,26 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
   };
 
-  // Clicking a search row hands the rail back to its idle QUOTE SCHEDULE view — clearing
-  // the query (which flips `hasSearch`) and, for a tape row, setting the scope (which empties
-  // `tapeRows`). Both UNMOUNT the very button being clicked, and doing that synchronously on
-  // the first click of a double-click killed the gesture outright (#58): the second click
-  // landed on whatever schedule row had slid under the cursor, so `dblclick` never reached
-  // the row and its `onDoubleClick` was dead code in a real browser (jsdom can't see this —
-  // `fireEvent.doubleClick` synthesizes the event directly onto a node it is handed).
+  // Clicking a search row does NOT clear the query. It used to, and that unmounted the very
+  // button being clicked — MessageSearchRail renders either the result rows or the QUOTE
+  // SCHEDULE rows, so flipping `hasSearch` on the first click of a double-click sent the
+  // second click to a different element and `dblclick` never reached the row at all. Its
+  // `onDoubleClick` was dead code in a real browser (#58); jsdom cannot see this, because
+  // `fireEvent.doubleClick` synthesizes the event onto a node it is handed.
   //
-  // So the swap waits out the browser's double-click window while the row stays mounted and
-  // clickable. What the click MEANS is untouched and still immediate: the tape/quote is
-  // selected on the first click exactly as before, so the hero and the cue never lag. Only
-  // the left rail's return to the schedule view is deferred, and `activateQuote` performs it
-  // at once once the double-click has actually fired.
-  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelRailSwap = (): void => {
-    if (swapTimer.current === null) return;
-    clearTimeout(swapTimer.current);
-    swapTimer.current = null;
-  };
-  const swapRailToSchedule = (scopeTo?: string): void => {
-    setQ('');
-    if (scopeTo !== undefined) setScope(scopeTo);
-  };
-  const swapRailToScheduleSoon = (scopeTo?: string): void => {
-    cancelRailSwap();
-    // Nothing to swap (a QUOTE SCHEDULE row click, where the box is already empty) — don't
-    // leave a timer running to set state nobody is waiting on.
-    if (!q && scopeTo === undefined) return;
-    swapTimer.current = setTimeout(() => {
-      swapTimer.current = null;
-      swapRailToSchedule(scopeTo);
-    }, RAIL_SWAP_MS);
-  };
-  useEffect(() => cancelRailSwap, []);
-
+  // So the results stay put and the row stays mounted indefinitely — the double-click lands
+  // no matter how high the operator has set their OS double-click threshold. The rail returns
+  // to the QUOTE SCHEDULE view on the explicit gesture that has always driven it: editing the
+  // search box (a new query replaces the results, emptying it goes back to the schedule).
+  // Nothing else here is deferred or timed.
   const selectQuote = (id: string, ord: number): void => {
     setMsgId(id);
     setMsgIdx(ord);
-    swapRailToScheduleSoon();
   };
   const scopeToTape = (id: string): void => {
+    setScope(id);
     setMsgId(id);
     setMsgIdx(0);
-    swapRailToScheduleSoon(id);
   };
   const clearScope = (): void => setScope(null);
   const showPara = (ord: number): void => setMsgIdx(ord);
@@ -404,16 +373,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // builds the key and slide from the RESOLVED message argument, not from component
   // state, so a late-resolving fetch can only ever take ITS OWN tape's slide — never
   // the wrong one.
-  //
-  // `scopeTo` is the tape-row case: a tape double-click both scopes the search to that tape
-  // and takes its first quote. The rail swap runs immediately here (rather than through
-  // `swapRailToScheduleSoon`) because the double-click has already been delivered — there is
-  // no longer a click to keep the row alive for.
-  const activateQuote = (id: string, ord: number, scopeTo?: string): void => {
-    setMsgId(id);
-    setMsgIdx(ord);
-    cancelRailSwap();
-    swapRailToSchedule(scopeTo);
+  const activateQuote = (id: string, ord: number): void => {
+    selectQuote(id, ord);
     if (liveMsg && liveMsg.id === id) {
       takeParagraphLive(liveMsg, ord);
       return;
@@ -427,18 +388,28 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   };
 
   const hasSearch = !!norm(q);
-  const tapeRows: MsgTapeRow[] =
-    hasSearch && !scope
-      ? searchRes.tapes.map((t) => ({
-          id: t.id,
-          title: t.title,
-          meta: `Tape ${t.tapeNo} · ${t.date}`,
-          onClick: () => scopeToTape(t.id),
-          // A tape has no quote of its own — take its first paragraph, and scope the search
-          // to it exactly as the single click does (spec §3: "a tape takes ord 0").
-          onDoubleClick: () => activateQuote(t.id, 0, t.id)
-        }))
-      : [];
+  // Not gated on `!scope` any more. Scoping is what a tape-row click DOES, so hiding the tape
+  // rows the moment it happened unmounted the row mid-double-click just as clearing the query
+  // did (#58) — a second, independent way to kill the same gesture, and one no amount of
+  // holding the query open can fix. Nothing is lost by keeping them: `messagesRepo.search`
+  // ranks tapes over the whole library and applies `scope` only to the quote FTS, so these
+  // are the same rows either way, and the section header ("TAPES — SELECT TO SEARCH WITHIN")
+  // stays true — clicking another one re-scopes to it, which previously took clearing the
+  // scope chip first.
+  const tapeRows: MsgTapeRow[] = hasSearch
+    ? searchRes.tapes.map((t) => ({
+        id: t.id,
+        title: t.title,
+        meta: `Tape ${t.tapeNo} · ${t.date}`,
+        onClick: () => scopeToTape(t.id),
+        // A tape has no quote of its own — scope to it exactly as the single click does, and
+        // take its first paragraph (spec §3: "a tape takes ord 0").
+        onDoubleClick: () => {
+          scopeToTape(t.id);
+          activateQuote(t.id, 0);
+        }
+      }))
+    : [];
   const quoteRows: MsgQuoteRow[] = hasSearch
     ? searchRes.quotes.map((r) => ({
         id: `${r.msgId}:${r.ord}`,

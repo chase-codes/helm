@@ -1207,10 +1207,10 @@ describe('SermonMode — double-clicking a message search row (#58)', () => {
   })
 
   // The other half of the contract: keeping the row alive must not cost the single click its
-  // meaning. It still selects the quote immediately and it still hands the rail back to the
-  // QUOTE SCHEDULE view — just after the double-click window rather than inside it.
-  it('a plain single click still selects the quote and clears the query', async () => {
-    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
+  // meaning. It still selects the quote on the spot — it just no longer takes the results
+  // away, which is what made the double-click unreachable.
+  it('a plain single click selects the quote without going live or disturbing the results', async () => {
+    const { resolveChapter, take, goLive } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
     render(<Harness />)
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
@@ -1222,8 +1222,49 @@ describe('SermonMode — double-clicking a message search row (#58)', () => {
     // Selection is immediate — the hero names the clicked paragraph on the same commit.
     await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶3')).toBeTruthy())
     expect(take).not.toHaveBeenCalled()
-    await waitFor(() => expect(searchBox().value).toBe(''), { timeout: 3000 })
+    expect(goLive).not.toHaveBeenCalled()
+    expect(searchBox().value).toBe('faith')
+    expect(row.isConnected).toBe(true)
+  })
+
+  // The regression that retired the deferred-clear approach: a clear scheduled by the click
+  // fired later with nothing re-checking whether the operator had typed since, so a query
+  // started within the window was silently wiped mid-service. Nothing may empty the box but
+  // the operator.
+  it('a query typed after clicking a result is not wiped', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await runSearch()
+    const row = (await screen.findByText('Faith Is The Substance — ¶3')).closest('button') as HTMLButtonElement
+
+    fireEvent.click(row)
+    fireEvent.change(searchBox(), { target: { value: 'substance' } })
+    expect(searchBox().value).toBe('substance')
+
+    // Well past any double-click threshold: the box still holds what the operator typed.
+    await new Promise((r) => setTimeout(r, 700))
+    expect(searchBox().value).toBe('substance')
+  })
+
+  // The rail's only route back to the idle view is the search box itself — emptying it flips
+  // `hasSearch` and the QUOTE SCHEDULE rows return. MessageSearchRail has no Esc handler and
+  // no clear-the-query affordance of its own (its ✕ chip clears the tape SCOPE, not the
+  // query), so this is the gesture, and it is unchanged by any of the above.
+  it('emptying the search box returns the rail to the QUOTE SCHEDULE view', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await runSearch()
+    await screen.findByText('Faith Is The Substance — ¶3')
+
+    fireEvent.change(searchBox(), { target: { value: '' } })
     await waitFor(() => expect(screen.getByText('QUOTE SCHEDULE')).toBeTruthy())
+    expect(screen.queryByText('Faith Is The Substance — ¶3')).toBeNull()
   })
 })
 
