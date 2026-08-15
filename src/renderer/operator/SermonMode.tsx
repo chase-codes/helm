@@ -1,4 +1,14 @@
-import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type KeyboardEvent
+} from 'react';
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { ThemeCtx } from './ThemeCtx';
@@ -660,12 +670,15 @@ export function SermonMode({
 
   // Registers this mode's keyboard delegate only while active — App keeps both Songs
   // and Sermon mounted (keep-alive contract) so operator state survives tab switches.
+  // LAYOUT effect for the same reason SongsMode's is: the ref is an imperative handle
+  // read by App's document keydown listener, so it must never lag the commit that is on
+  // screen (a passive effect flushes in a later task — see SongsMode.tsx for the full note).
   // While inactive, skip touching the ref entirely (don't null it here): a mode switch
   // re-runs both modes' effects in the same commit, and if this ran unconditionally it
   // could execute *after* the newly-active mode's effect in tree order and clobber the
   // handler it just set. Deactivation is handled by this effect's own cleanup instead,
   // which only fires when this mode was the one that last owned the ref.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
       // Progressive back-out, the same ladder SongsMode implements (spec §3), minus the

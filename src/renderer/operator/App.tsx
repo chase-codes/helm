@@ -30,7 +30,8 @@ export interface ModeKeyHandler {
   onGoLive: () => void;
   /**
    * True while this mode has its own modal open (e.g. SongsMode's QuickAdd). Queried
-   * fresh at dispatch time (the handler is re-registered every render, so this always
+   * fresh at dispatch time (the handler is re-registered every render — from a LAYOUT
+   * effect, so it never lags the commit that is on screen — and this therefore always
    * reflects current state) so App can suppress Enter/Space→onGoLive without needing a
    * separate piece of App-level state per mode's modal.
    */

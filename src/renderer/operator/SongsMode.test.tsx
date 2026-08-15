@@ -783,6 +783,36 @@ describe('whole-song edit', () => {
     expect((await screen.findAllByText('Amazing Grace (2nd ed.)')).length).toBeGreaterThan(0);
   });
 
+  // Regression for a CI flake (SongsMode chorus-jump / edit-modal Escape, SermonMode
+  // deck-fallback): the mode key handler is an imperative handle, so it has to be attached
+  // with layout timing. Registered in a passive effect it runs one commit behind, and a
+  // MutationObserver callback — the microtask right after a commit, exactly where RTL's
+  // waitFor resolves and where a real keypress can land — still gets the previous render's
+  // closure. That is App.tsx's stated contract ("always reflects current state") broken:
+  // Escape would keep answering for a modal that is already off screen.
+  it('answers isModalOpen for the commit on screen, not the previous one', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    fireEvent.contextMenu((await screen.findAllByText('Amazing Grace'))[0]);
+    fireEvent.click(screen.getByText('Edit'));
+    await screen.findByText('Edit song');
+
+    const disagreements: string[] = [];
+    const observer = new MutationObserver(() => {
+      const onScreen = screen.queryByText('Edit song') !== null;
+      const handlerSays = keyHandlerRef.current?.isModalOpen() ?? false;
+      if (onScreen !== handlerSays) disagreements.push(`dom=${onScreen} handler=${handlerSays}`);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    // songs.update resolves outside act(), so the close commits with no surrounding act()
+    // to force an effect flush — the same shape as the real IPC round-trip.
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(screen.queryByText('Edit song')).toBeNull());
+    observer.disconnect();
+    expect(disagreements).toEqual([]);
+  });
+
   it('Escape closes the edit modal before touching anything else', async () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     const h = installHelmStubWith(SONGS, NOTHING_LIVE);

@@ -585,10 +585,16 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Genesis 1:1')).toBeTruthy())
+    // Both scheduled readings sit in the rail permanently, so a bare getByText on either
+    // reference proves nothing about where the cue is — it matches the rail row whether or
+    // not the jump fired. The hero label is the second occurrence: one match = rail only,
+    // two = rail + hero. Waiting for 1:1 to reach two is also the real "chapter resolved
+    // and reading 1 is cued" precondition this jump needs.
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2))
 
     act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 2 }))
-    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:3')).toHaveLength(2))
+    expect(screen.getAllByText('Genesis 1:1')).toHaveLength(1) // hero left reading 1
   })
 
   it('focus.search focuses the entry input', async () => {
@@ -729,6 +735,48 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
     act(() => void keyHandlerRef.current?.onEscape())
     expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  // Regression for a CI flake: SermonMode's isModalOpen delegates straight through to
+  // SlidesTrack's own handle, so BOTH have to be attached with layout timing. Registered
+  // as passive effects the chain runs a commit behind, and a MutationObserver callback —
+  // the microtask right after a commit, exactly where RTL's waitFor resolves and where a
+  // real keypress can land — still gets the previous render's closure, so Escape would
+  // black the screen instead of closing the modal that just appeared.
+  it('answers isModalOpen for the commit on screen, not the previous one', async () => {
+    const DECK_1_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'pres:d1:0',
+      liveSnap: { kind: 'image', src: 'helm-media://d1/1.png' },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { resolveChapter } = installHelmStub(DECK_1_LIVE, [], { media: [DECK] })
+    ;(window.helm.media.importDeck as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [],
+      error: 'no-libreoffice'
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Slides')
+    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+
+    const disagreements: string[] = []
+    const observer = new MutationObserver(() => {
+      const onScreen = screen.queryByText('PowerPoint import unavailable') !== null
+      const handlerSays = keyHandlerRef.current?.isModalOpen() ?? false
+      if (onScreen !== handlerSays) disagreements.push(`dom=${onScreen} handler=${handlerSays}`)
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    fireEvent.click(screen.getByText('+ Import'))
+    // importDeck resolves outside act(), so the modal commits with no surrounding act()
+    // to force an effect flush — the same shape as the real IPC round-trip.
+    fireEvent.click(screen.getByText('Slides / PDF'))
+    await waitFor(() => expect(screen.getByText('PowerPoint import unavailable')).toBeTruthy())
+    observer.disconnect()
+    expect(disagreements).toEqual([])
   })
 
   // SlidesTrack owns two overlay surfaces (the import popover and the deck-fallback
