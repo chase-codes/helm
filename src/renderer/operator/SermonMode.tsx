@@ -91,7 +91,7 @@ export function SermonMode({
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([]);
 
   const contextMenu = useContextMenu();
-  const sel = useListSelection();
+  const sel = useListSelection(schedule.map((r) => r.id));
   const undo = useTimedUndo<ScriptureReading>();
 
   // Shared by all tracks (Task 4 threads these into MessageMode/SlidesTrack too), so
