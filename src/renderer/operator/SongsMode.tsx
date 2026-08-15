@@ -297,6 +297,25 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     setSection(0);
   };
 
+  // Double-click a search result (#58). `selectSong` ARMS when another song is live —
+  // the operator's usual "queue this next" gesture. A double-click says take it now, so
+  // it bypasses arming entirely and commits section 0. Resolves out of `library` (the
+  // full Song list loaded at mount); the `songs.get` fallback covers a result whose song
+  // is somehow not in it, so a double-click is never silently dropped.
+  const activateSong = (id: string): void => {
+    const known = library.find((s) => s.id === id);
+    if (known) {
+      takeSectionLive(known, 0);
+      return;
+    }
+    void window.helm.songs
+      .get(id)
+      .then((s) => {
+        if (s && mountedRef.current) takeSectionLive(s, 0);
+      })
+      .catch(console.error);
+  };
+
   // One post-save path for both editors (spec §4): refresh the library row, keep an
   // active search honest, and re-cue so the leader — and, via applyCue's same-flow
   // swap, a live projector — shows the corrected text. cue, never goLive: goLive on
@@ -679,6 +698,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
         emptyText={emptyText}
         onKeyDown={onInputKeyDown}
         onSelect={selectSong}
+        onActivate={activateSong}
         onAddSong={() => {
           setQuickAddTitle(q.trim());
           setQuickAddOpen(true);

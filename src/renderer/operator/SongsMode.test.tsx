@@ -852,4 +852,14 @@ describe('double-click to go live (#58)', () => {
     expect(goLive).not.toHaveBeenCalled();
     expect(setOutput).not.toHaveBeenCalledWith('black');
   });
+
+  it('takes a search result live at section 0 instead of arming it', async () => {
+    const live: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: null, cuedKey: null, cuedSnap: null };
+    const { take } = installHelmStubWith([...SONGS, CHORUS_SONG], live);
+    renderMode({ current: null });
+    const row = (await screen.findAllByText('With Chorus'))[0];
+    fireEvent.doubleClick(row);
+    await waitFor(() => expect(take).toHaveBeenCalledWith('song:s2:0', expect.anything()));
+    expect(screen.queryByText('NEXT')).toBeNull(); // took it, did not merely arm it
+  });
 });
