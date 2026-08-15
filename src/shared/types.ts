@@ -186,6 +186,7 @@ export const CH = {
   biblesGetChapter: 'bibles:getChapter',
   biblesBookExtent: 'bibles:bookExtent',
   scheduleList: 'schedule:list', scheduleAdd: 'schedule:add', scheduleRemove: 'schedule:remove',
+  scheduleRemoveMany: 'schedule:removeMany',
   settingsGet: 'settings:get', settingsSet: 'settings:set',
   messageSearch: 'message:search', messageList: 'message:list', messageGet: 'message:get',
   messageInstallCorpus: 'message:installCorpus', messageImportParse: 'message:importParse',
@@ -299,6 +300,7 @@ export interface HelmApi {
     list(): Promise<ScriptureReading[]>;
     add(r: Omit<ScriptureReading, 'id'>): Promise<ScriptureReading[]>;
     remove(id: string): Promise<ScriptureReading[]>;
+    removeMany(ids: string[]): Promise<ScriptureReading[]>;
   };
   settings: {
     get<T>(key: string, fallback: T): Promise<T>;

@@ -88,6 +88,7 @@ export function registerIpc(
   ipcMain.handle(CH.scheduleList, () => scheduleRepo.list());
   ipcMain.handle(CH.scheduleAdd, (_e, r: Omit<ScriptureReading, 'id'>) => scheduleRepo.add(r));
   ipcMain.handle(CH.scheduleRemove, (_e, id: string) => scheduleRepo.remove(id));
+  ipcMain.handle(CH.scheduleRemoveMany, (_e, ids: string[]) => scheduleRepo.removeMany(ids));
   ipcMain.handle(CH.settingsGet, (_e, key: string, fallback: unknown) =>
     settingsRepo.get(key, fallback),
   );
