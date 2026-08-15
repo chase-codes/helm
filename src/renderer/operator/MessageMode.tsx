@@ -1,4 +1,12 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type MutableRefObject
+} from 'react';
 import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
@@ -288,8 +296,9 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
 
   // Registers this mode's own key delegate only while active (see the MessageKeyHandler
   // doc comment above) — no deps array so it always captures the latest stepPara/goLive
-  // closures, mirroring SermonMode's own keyHandlerRef-registration effect.
-  useEffect(() => {
+  // closures, mirroring SermonMode's own keyHandlerRef-registration effect. LAYOUT effect
+  // for the same reason that one is: an imperative handle must not lag its commit.
+  useLayoutEffect(() => {
     if (!active) return;
     messageKeyRef.current = { onArrow: stepPara, onGoLive: goLive };
     return () => {

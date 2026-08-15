@@ -2,6 +2,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -484,14 +485,21 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   };
 
   // Register this mode's keyboard delegate on every render so the closure below always
-  // sees current state. While inactive, skip touching the ref entirely rather than
-  // nulling it: App keeps both Songs and Sermon mounted (keep-alive contract), so a mode
+  // sees current state. LAYOUT effect, not a passive one: this ref is an imperative
+  // handle that App's document keydown listener reads at dispatch time, so it must be in
+  // sync with the commit that is on screen. A passive effect flushes in a later task, and
+  // a keypress landing in that window would be answered by the previous render's closure
+  // — Escape closing a modal that is already gone, Enter going live on a stale section.
+  // (React attaches useImperativeHandle with layout timing for the same reason.)
+  //
+  // While inactive, skip touching the ref entirely rather than nulling it: App keeps both
+  // Songs and Sermon mounted (keep-alive contract), so a mode
   // switch re-runs both modes' effects in the same commit — if the inactive mode's body
   // wrote null unconditionally, it could run *after* the newly-active mode's effect in
   // tree order and clobber the handler it just registered. Deactivation is instead
   // handled by this effect's own cleanup (below), which only fires when this mode was
   // the one that last set the ref.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
       onEscape: () => {

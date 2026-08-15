@@ -1,4 +1,15 @@
-import { useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type MouseEvent as ReactMouseEvent,
+  type MutableRefObject
+} from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
@@ -315,8 +326,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
 
   // Registers this mode's own key delegate only while active (mirrors MessageMode's
   // messageKeyRef-registration effect) — no deps array so it always captures the latest
-  // stepSlide/goLive closures.
-  useEffect(() => {
+  // stepSlide/goLive closures. LAYOUT effect: SermonMode's isModalOpen delegates straight
+  // through to this handle, so a passive registration would leave the whole chain a commit
+  // behind and Escape would answer for an overlay that is already gone (see SongsMode.tsx).
+  useLayoutEffect(() => {
     if (!active) return;
     slidesKeyRef.current = {
       onArrow: stepSlide,
