@@ -92,7 +92,7 @@ export function SermonMode({
 
   const contextMenu = useContextMenu();
   const sel = useListSelection(schedule.map((r) => r.id));
-  const undo = useTimedUndo<ScriptureReading>();
+  const undo = useTimedUndo<ScriptureReading[]>();
 
   // Shared by all tracks (Task 4 threads these into MessageMode/SlidesTrack too), so
   // they live at the top level rather than inside the scripture-track branch below.
@@ -405,17 +405,19 @@ export function SermonMode({
 
   // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog).
   // Toast/selection-clear happen on IPC success so a rejected remove doesn't falsely claim
-  // removal. Undo re-adds via schedule.add, which appends at the end (position-preserving
-  // restore is a follow-up — see the interaction-primitives design's Known caveats).
-  const removeReading = (id: string): void => {
-    const reading = schedule.find((r) => r.id === id);
-    if (!reading) return;
+  // removal. One removeMany call covers single-item delete, a shift-click range, and
+  // Clear-all alike — always one IPC round-trip, one transaction. Undo re-adds via
+  // schedule.add, which appends at the end (position-preserving restore is a follow-up —
+  // see the interaction-primitives design's Known caveats).
+  const removeReadings = (ids: string[]): void => {
+    const readings = schedule.filter((r) => ids.includes(r.id));
+    if (readings.length === 0) return;
     window.helm.schedule
-      .remove(id)
+      .removeMany(readings.map((r) => r.id))
       .then((rows) => {
         setSchedule(rows);
-        if (sel.isSelected(id)) sel.clear();
-        undo.arm(reading);
+        if (ids.some((id) => sel.isSelected(id))) sel.clear();
+        undo.arm(readings);
       })
       .catch(console.error);
   };
@@ -432,11 +434,19 @@ export function SermonMode({
     requestRailScroll(r.from, 'start');
   };
 
+  // Sequential re-adds keep the batch's relative order; the last response is the
+  // authoritative list. Cancel first so a re-click can't double-restore.
   const undoRemove = (): void => {
-    if (!undo.pending) return;
-    const { book, ch, from, to } = undo.pending;
-    window.helm.schedule.add({ book, ch, from, to }).then(setSchedule).catch(console.error);
+    const batch = undo.pending;
+    if (!batch) return;
     undo.cancel();
+    (async () => {
+      let rows: ScriptureReading[] | null = null;
+      for (const { book, ch, from, to } of batch) {
+        rows = await window.helm.schedule.add({ book, ch, from, to });
+      }
+      if (rows) setSchedule(rows);
+    })().catch(console.error);
   };
 
   // Builds the live slide for a single verse (the reading's `from`, matching where the
@@ -629,10 +639,20 @@ export function SermonMode({
       meta: `${n} ${n === 1 ? 'verse' : 'verses'} · ${primary}`,
       isCurrent,
       isSelected: sel.isSelected(r.id),
-      onClick: () => jumpToReading(r),
+      onClick: (e) => {
+        if (e.shiftKey) sel.selectTo(r.id);
+        else jumpToReading(r);
+      },
       onContextMenu: (e) => {
-        sel.select(r.id);
-        contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReading(r.id) }]);
+        if (sel.isSelected(r.id) && sel.selectedIds.length > 1) {
+          const ids = sel.selectedIds;
+          contextMenu.open(e, [
+            { label: `Delete ${ids.length} readings`, danger: true, onSelect: () => removeReadings(ids) }
+          ]);
+        } else {
+          sel.select(r.id);
+          contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReadings([r.id]) }]);
+        }
       }
     };
   });
@@ -718,7 +738,7 @@ export function SermonMode({
       // its delegate so Enter/Delete can't fire behind it (same contract as QuickAdd).
       isModalOpen: () => (track === 'slides' && slidesKeyRef.current?.isModalOpen()) || false,
       onDelete: () => {
-        if (track === 'scripture' && sel.selectedId) removeReading(sel.selectedId);
+        if (track === 'scripture' && sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
       },
       onAction: (a: ResolvedHotkey) => {
         if (track !== 'scripture') return;
@@ -799,7 +819,17 @@ export function SermonMode({
             addLabel={addLabel}
             onAdd={addToSchedule}
             rows={scheduleRows}
-            undo={undo.pending ? { label: formatRef(undo.pending), onUndo: undoRemove } : undefined}
+            undo={
+              undo.pending
+                ? {
+                    label:
+                      undo.pending.length === 1
+                        ? formatRef(undo.pending[0])
+                        : `${undo.pending.length} readings`,
+                    onUndo: undoRemove
+                  }
+                : undefined
+            }
             entryRef={entryRef}
           />
           <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />

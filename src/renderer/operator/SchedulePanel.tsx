@@ -16,7 +16,7 @@ export interface ScheduleRow {
   meta: string;
   isCurrent: boolean;
   isSelected: boolean;
-  onClick: () => void;
+  onClick: (e: ReactMouseEvent) => void;
   onContextMenu: (e: ReactMouseEvent) => void;
 }
 

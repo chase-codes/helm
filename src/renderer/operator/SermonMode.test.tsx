@@ -45,6 +45,7 @@ function installHelmStub(
   goLive: ReturnType<typeof vi.fn>
   setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
+  removeMany: ReturnType<typeof vi.fn>
   cue: ReturnType<typeof vi.fn>
   mediaList: ReturnType<typeof vi.fn>
   messageList: ReturnType<typeof vi.fn>
@@ -55,6 +56,7 @@ function installHelmStub(
   const goLive = vi.fn()
   const setOutput = vi.fn()
   const add = vi.fn(() => Promise.resolve([]))
+  const removeMany = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
   const mediaList = vi.fn(() => Promise.resolve(opts.media ?? []))
   const messageList = vi.fn(() =>
@@ -75,7 +77,7 @@ function installHelmStub(
   })
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
-    schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])) },
+    schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])), removeMany },
     bibles: {
       manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
       getChapter: () => pending,
@@ -130,6 +132,7 @@ function installHelmStub(
     goLive,
     setOutput,
     add,
+    removeMany,
     cue,
     mediaList,
     messageList,
@@ -1083,5 +1086,88 @@ describe('SermonMode — ChapterRail scroll requests', () => {
     await waitFor(() => expect(panelHidden('scripture')).toBe(false))
 
     expect(scrollSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('SermonMode — schedule multi-select and bulk delete', () => {
+  const THREE: ScriptureReading[] = [
+    { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+    { id: 'r2', book: 'Genesis', ch: 1, from: 2, to: 2 },
+    { id: 'r3', book: 'Genesis', ch: 1, from: 3, to: 3 }
+  ]
+  // Schedule-row titles ("Genesis 1:1"/"1:2") can also appear as the hero's cursor
+  // label or the on-deck "next verse" preview, neither of which is a <button> — only
+  // the schedule row itself is, so scoping to a button ancestor disambiguates without
+  // caring which non-row surface happens to echo the same text at a given cursor
+  // position.
+  const rowButton = (title: string): HTMLElement => {
+    const match = screen.getAllByText(title).find((el) => el.closest('button'))
+    if (!match) throw new Error(`no row button found for "${title}"`)
+    return match.closest('button') as HTMLElement
+  }
+
+  it('shift-click selects the contiguous run without moving the rail cursor', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:3'), { shiftKey: true })
+
+    for (const t of ['Genesis 1:1', 'Genesis 1:2', 'Genesis 1:3']) {
+      expect(rowButton(t).getAttribute('data-selected')).toBe('true')
+    }
+  })
+
+  it('Delete removes the whole selection via one removeMany call and arms a batch undo', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(removeMany).toHaveBeenCalledTimes(1))
+    expect(removeMany).toHaveBeenCalledWith(['r1', 'r2'])
+    await screen.findByText(/2 readings/)
+  })
+
+  it('undo after a bulk delete re-adds every reading in order', async () => {
+    const { resolveChapter, add } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
+    act(() => keyHandlerRef.current?.onDelete?.())
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(2))
+    expect(add.mock.calls[0][0]).toMatchObject({ book: 'Genesis', ch: 1, from: 1, to: 1 })
+    expect(add.mock.calls[1][0]).toMatchObject({ book: 'Genesis', ch: 1, from: 2, to: 2 })
+  })
+
+  it('single-item delete still works and keeps its formatRef toast label', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:2'))
+
+    fireEvent.click(rowButton('Genesis 1:2'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(removeMany).toHaveBeenCalledWith(['r2']))
+    // Toast label is the ref, not "1 readings". Anchor on the toast's own "Removed"
+    // text — the row title also reads "Genesis 1:2", so matching the ref alone could
+    // pass against the not-yet-unmounted row.
+    await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/Genesis 1:2/))
+    expect(screen.queryByText(/1 readings/)).toBeNull()
   })
 })
