@@ -432,6 +432,24 @@ export function SermonMode({
     requestRailScroll(r.from, 'start');
   };
 
+  // Double-click a schedule row (#58): move the cursor there exactly as a click does, then
+  // take that reading's `from` verse. Resolves the chapter first when the row names a
+  // different book/chapter than the one cached, so the live slide never shows stale text.
+  const activateReading = (r: ScriptureReading): void => {
+    jumpToReading(r);
+    if (chapter && chapter.book === r.book && chapter.chapter === r.ch) {
+      takeVerseLive(r.book, r.ch, r.from, chapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(r.book, r.ch)
+      .then((c) => {
+        setChapter(c);
+        takeVerseLive(r.book, r.ch, r.from, c);
+      })
+      .catch(console.error);
+  };
+
   const undoRemove = (): void => {
     if (!undo.pending) return;
     const { book, ch, from, to } = undo.pending;
@@ -659,6 +677,7 @@ export function SermonMode({
       isCurrent,
       isSelected: sel.isSelected(r.id),
       onClick: () => jumpToReading(r),
+      onDoubleClick: () => activateReading(r),
       onContextMenu: (e) => {
         sel.select(r.id);
         contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReading(r.id) }]);

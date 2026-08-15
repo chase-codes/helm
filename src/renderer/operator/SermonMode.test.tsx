@@ -312,6 +312,19 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     expect(goLive).not.toHaveBeenCalled()
     expect(setOutput).not.toHaveBeenCalledWith('black')
   })
+
+  it('double-clicking a schedule reading takes its first verse live', async () => {
+    const SCHEDULE: ScriptureReading[] = [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+      { id: 'r2', book: 'Genesis', ch: 1, from: 3, to: 3 }
+    ]
+    const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, SCHEDULE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:1').length).toBeGreaterThan(0))
+    fireEvent.doubleClick(screen.getAllByText('Genesis 1:3')[0])
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+  })
 })
 
 describe('SermonMode — the book-name ghost is wired to the entry', () => {
