@@ -227,7 +227,10 @@ app.whenReady().then(() => {
   // electron-updater throws on unpacked builds — dev gets the no-op null driver.
   const updater = createUpdater(app.isPackaged ? autoUpdater : null, {
     outputCount: () => presentation.outputCount(),
-    broadcast: broadcastUpdateStatus
+    broadcast: broadcastUpdateStatus,
+    // Unsigned mac builds can't apply updates (no latest-mac.yml is even
+    // published) — manual checks report 'unsupported' instead of a 404.
+    supported: process.platform !== 'darwin'
   })
 
   registerIpc(

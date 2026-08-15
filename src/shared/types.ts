@@ -164,8 +164,16 @@ export interface DisplayInfo {
 }
 export interface DisplayStatus { outputs: number; displays: DisplayInfo[]; released: boolean }
 
-export type UpdateState = 'idle' | 'available' | 'ready'
-export interface UpdateStatus { state: UpdateState; version: string | null }
+export type UpdateState =
+  | 'idle' | 'available' | 'ready'          // background-visible
+  | 'checking' | 'downloading'              // manual-only
+  | 'upToDate' | 'error' | 'unsupported'    // manual-only, terminal
+export interface UpdateStatus {
+  state: UpdateState
+  version: string | null
+  percent?: number   // downloading only
+  message?: string   // error only
+}
 
 export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
@@ -215,7 +223,9 @@ export const CH = {
   songImportCommit: 'songImport:commit', songImportProgress: 'songImport:progress',
   songSourcesSearch: 'songSources:search', songSourcesFromUrl: 'songSources:fromUrl',
   updatesGetStatus: 'updates:getStatus', updatesInstall: 'updates:install',
+  updatesCheck: 'updates:check',
   updatesStatus: 'updates:status',           // main → all windows
+  appGetVersion: 'app:getVersion',
 } as const;
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -367,7 +377,11 @@ export interface HelmApi {
   };
   updates: {
     getStatus(): Promise<UpdateStatus>;
+    check(): Promise<void>;
     install(): Promise<boolean>;
     onStatus(cb: (s: UpdateStatus) => void): () => void;
+  };
+  app: {
+    version(): Promise<string>;
   };
 }

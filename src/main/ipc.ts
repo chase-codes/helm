@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import {
   CH,
   type MessageImportResult,
@@ -150,5 +150,7 @@ export function registerIpc(
   ipcMain.on(CH.videoReportDuration, (_e, ms: number) => video.reportDuration(ms));
 
   ipcMain.handle(CH.updatesGetStatus, () => updater.status());
+  ipcMain.handle(CH.updatesCheck, () => updater.check());
   ipcMain.handle(CH.updatesInstall, () => updater.install());
+  ipcMain.handle(CH.appGetVersion, () => app.getVersion());
 }

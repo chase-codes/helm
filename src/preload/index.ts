@@ -113,8 +113,12 @@ const api: HelmApi = {
   },
   updates: {
     getStatus: () => ipcRenderer.invoke(CH.updatesGetStatus),
+    check: () => ipcRenderer.invoke(CH.updatesCheck),
     install: () => ipcRenderer.invoke(CH.updatesInstall),
     onStatus: sub(CH.updatesStatus),
+  },
+  app: {
+    version: () => ipcRenderer.invoke(CH.appGetVersion),
   },
 };
 contextBridge.exposeInMainWorld('helm', api);
