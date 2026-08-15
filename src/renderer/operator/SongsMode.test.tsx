@@ -862,4 +862,25 @@ describe('double-click to go live (#58)', () => {
     await waitFor(() => expect(take).toHaveBeenCalledWith('song:s2:0', expect.anything()));
     expect(screen.queryByText('NEXT')).toBeNull(); // took it, did not merely arm it
   });
+
+  // The divergence window: `take` is sent and the selection moves in one commit, but
+  // `liveParsed` keeps naming the OLD song until main's broadcast lands. The live-lock
+  // reconciliation effect fires a 0ms timer, which always beats that round trip — so
+  // without the pendingSwitchRef latch it snaps the selection back to the previous song
+  // and re-cues it. On the leader display that is the WRONG SONG (cuedKey = the old song
+  // while liveKey = the new one), plus a center-panel flicker.
+  it('does not re-cue the previous song after taking another one live', async () => {
+    const live: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: null, cuedKey: null, cuedSnap: null };
+    const { take, cue } = installHelmStubWith([...SONGS, CHORUS_SONG], live);
+    renderMode({ current: null });
+    const row = (await screen.findAllByText('With Chorus'))[0];
+    fireEvent.doubleClick(row);
+    await waitFor(() => expect(take).toHaveBeenCalledWith('song:s2:0', expect.anything()));
+
+    // Well past the reconciliation effect's setTimeout(…, 0), still before any broadcast.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(cue.mock.calls.map((c) => c[0])).toEqual(['song:s1:0', 'song:s2:0']);
+  });
 });
