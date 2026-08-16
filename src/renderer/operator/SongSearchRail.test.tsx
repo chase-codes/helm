@@ -21,6 +21,7 @@ const baseProps = {
   rows,
   noResults: false,
   emptyText: '',
+  libraryEmpty: false,
   onKeyDown: vi.fn(),
   onSelect: vi.fn(),
   onActivate: vi.fn(),
@@ -83,5 +84,25 @@ describe('SongSearchRail', () => {
     expect(onActivate).toHaveBeenCalledWith('s1')
     fireEvent.click(row)
     expect(onSelect).toHaveBeenCalledWith('s1')
+  })
+
+  it('invites the operator to fill an empty library, naming both affordances (#88)', () => {
+    render(<SongSearchRail {...baseProps} rows={[]} libraryEmpty />)
+    const empty = screen.getByText(/No songs yet/)
+    expect(empty.textContent).toMatch(/\+ Add a song/)
+    expect(empty.textContent).toMatch(/Import a song library/)
+  })
+
+  it('shows no empty state while the library has rows', () => {
+    render(<SongSearchRail {...baseProps} libraryEmpty={false} />)
+    expect(screen.queryByText(/No songs yet/)).toBeNull()
+  })
+
+  it('prefers the no-match copy over the empty-library copy for a fruitless search', () => {
+    render(
+      <SongSearchRail {...baseProps} rows={[]} libraryEmpty noResults emptyText="No match for “zzz”." />
+    )
+    expect(screen.getByText(/No match for/)).toBeTruthy()
+    expect(screen.queryByText(/No songs yet/)).toBeNull()
   })
 })

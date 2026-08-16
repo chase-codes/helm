@@ -60,6 +60,7 @@ export function registerIpc(
   ipcMain.handle(CH.songsGet, (_e, id: string) => repo.get(id));
   ipcMain.handle(CH.songsAdd, (_e, input: NewSongInput) => repo.add(input));
   ipcMain.handle(CH.songsUpdate, (_e, id: string, input: UpdateSongInput) => repo.update(id, input));
+  ipcMain.handle(CH.songsRemove, (_e, id: string) => repo.remove(id));
   ipcMain.handle(CH.presGet, () => presentation.get());
   ipcMain.on(CH.presCue, (_e, key: string, slide: Slide) => presentation.cue(key, slide));
   ipcMain.on(CH.presGoLive, (_e, key: string, slide: Slide) => presentation.goLive(key, slide));
@@ -111,6 +112,10 @@ export function registerIpc(
   ipcMain.handle(CH.quoteScheduleAdd, (_e, msgId: string, ord: number) =>
     messagesScheduleRepo.add(msgId, ord),
   );
+  ipcMain.handle(CH.quoteScheduleRemove, (_e, id: string) => messagesScheduleRepo.remove(id));
+  ipcMain.handle(CH.quoteScheduleRemoveMany, (_e, ids: string[]) =>
+    messagesScheduleRepo.removeMany(ids),
+  );
 
   ipcMain.handle(CH.preserviceGetState, () => preserviceEngine.getState());
   ipcMain.on(CH.preserviceEngage, () => preserviceEngine.engage());
@@ -126,6 +131,9 @@ export function registerIpc(
     preserviceEngine.saveCard(c),
   );
   ipcMain.on(CH.preserviceRemoveCard, (_e, id: string) => preserviceEngine.removeCard(id));
+  ipcMain.on(CH.preserviceRestoreCard, (_e, card: PreCard, index: number) =>
+    preserviceEngine.restoreCard(card, index),
+  );
 
   ipcMain.handle(CH.mediaList, () => mediaRepo.list());
   ipcMain.handle(CH.mediaImportImages, () => mediaImport.importImages());

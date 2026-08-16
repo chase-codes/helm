@@ -132,4 +132,23 @@ describe('SchedulePanel', () => {
     render(<SchedulePanel {...baseProps} rows={[]} onClearAll={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
   })
+
+  it('gives Clear all a real button footprint, not a text link (#86)', () => {
+    render(<SchedulePanel {...baseProps} onClearAll={vi.fn()} />)
+    const clear = screen.getByRole('button', { name: 'Clear all' })
+    expect(clear.style.height).toBe('26px')
+    expect(clear.style.padding).toBe('0px 10px')
+  })
+
+  it('invites the operator to act when the schedule is empty (#88)', () => {
+    render(<SchedulePanel {...baseProps} rows={[]} />)
+    const empty = screen.getByText(/Readings you add will wait here/)
+    expect(empty.textContent).toMatch(/type a reference above/)
+    expect(empty.textContent).toMatch(/\+ Add/)
+  })
+
+  it('shows no empty state once the schedule has rows', () => {
+    render(<SchedulePanel {...baseProps} />)
+    expect(screen.queryByText(/Readings you add will wait here/)).toBeNull()
+  })
 })

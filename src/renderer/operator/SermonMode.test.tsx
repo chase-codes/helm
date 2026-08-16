@@ -73,6 +73,9 @@ function installHelmStub(
   setOutput: ReturnType<typeof vi.fn>
   add: ReturnType<typeof vi.fn>
   removeMany: ReturnType<typeof vi.fn>
+  scheduleList: ReturnType<typeof vi.fn>
+  quoteScheduleList: ReturnType<typeof vi.fn>
+  quoteRemoveMany: ReturnType<typeof vi.fn>
   cue: ReturnType<typeof vi.fn>
   mediaList: ReturnType<typeof vi.fn>
   messageList: ReturnType<typeof vi.fn>
@@ -85,8 +88,27 @@ function installHelmStub(
   const goLive = vi.fn()
   const take = vi.fn()
   const setOutput = vi.fn()
-  const add = vi.fn(() => Promise.resolve([]))
-  const removeMany = vi.fn(() => Promise.resolve([]))
+  // Models main's schedule table rather than answering a canned []: every one of these
+  // replies carries the AUTHORITATIVE list, and deferred deletes mean the rail and that
+  // list legitimately disagree for five seconds. A stub that always answers [] cannot show
+  // what the renderer does with a reply that still holds a row the operator watched go.
+  const db: ScriptureReading[] = [...schedule]
+  const add = vi.fn((r: Omit<ScriptureReading, 'id'>) => {
+    db.push({ id: `new-${db.length}`, ...r })
+    return Promise.resolve([...db])
+  })
+  const removeMany = vi.fn((ids: string[]) => {
+    for (const id of ids) {
+      const i = db.findIndex((r) => r.id === id)
+      if (i >= 0) db.splice(i, 1)
+    }
+    return Promise.resolve([...db])
+  })
+  // A spy, not an inline arrow: undo now restores by RE-READING the schedule rather than
+  // re-adding rows, so tests need to see this call.
+  const scheduleList = vi.fn(() => Promise.resolve([...db]))
+  const quoteScheduleList = vi.fn(() => Promise.resolve(opts.quoteSchedule ?? []))
+  const quoteRemoveMany = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
   const mediaList = vi.fn(() => Promise.resolve(opts.media ?? []))
   const messageList = vi.fn(() =>
@@ -116,7 +138,7 @@ function installHelmStub(
   )
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
-    schedule: { list: () => Promise.resolve(schedule), add, remove: vi.fn(() => Promise.resolve([])), removeMany },
+    schedule: { list: scheduleList, add, remove: vi.fn(() => Promise.resolve([])), removeMany },
     bibles: {
       manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
       getChapter,
@@ -148,7 +170,7 @@ function installHelmStub(
         Promise.resolve(typeof opts.search === 'function' ? opts.search(q, scope) : (opts.search ?? { tapes: [], quotes: [] })),
       onAudioProgress: () => () => {}
     },
-    quoteSchedule: { list: () => Promise.resolve(opts.quoteSchedule ?? []) },
+    quoteSchedule: { list: quoteScheduleList, add: vi.fn(() => Promise.resolve([])), remove: vi.fn(() => Promise.resolve([])), removeMany: quoteRemoveMany },
     media: {
       list: mediaList,
       importImages: vi.fn(),
@@ -176,6 +198,9 @@ function installHelmStub(
     setOutput,
     add,
     removeMany,
+    scheduleList,
+    quoteScheduleList,
+    quoteRemoveMany,
     cue,
     mediaList,
     messageList,
@@ -1586,6 +1611,13 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     if (!match) throw new Error(`no row button found for "${title}"`)
     return match.closest('button') as HTMLElement
   }
+  // The schedule's rows, in rail order. Reads the rows' own marker rather than matching
+  // on text, for the same reason rowButton scopes to a button: the hero and the on-deck
+  // preview echo the same reference strings.
+  const scheduleRowTitles = (): string[] =>
+    Array.from(document.querySelectorAll('[data-schedule-row]')).map(
+      (el) => el.querySelector('div > div')?.textContent ?? ''
+    )
 
   it('shift-click selects the contiguous run without moving the rail cursor', async () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
@@ -1619,8 +1651,8 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     }
   })
 
-  it('Delete removes the whole selection via one removeMany call and arms a batch undo', async () => {
-    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+  it('Delete drops the whole selection from the rail at once and arms a batch undo', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
@@ -1630,30 +1662,85 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
     act(() => keyHandlerRef.current?.onDelete?.())
 
-    await waitFor(() => expect(removeMany).toHaveBeenCalledTimes(1))
-    expect(removeMany).toHaveBeenCalledWith(['r1', 'r2'])
+    // The rail leads the round trip — mid-service a delete must not visibly lag (#86).
+    expect(scheduleRowTitles()).toEqual(['Genesis 1:3'])
     await screen.findByText(/2 readings/)
   })
 
-  it('undo after a bulk delete re-adds every reading in order', async () => {
-    const { resolveChapter, add } = installHelmStub(NOTHING_LIVE, THREE)
+  it('defers the real removeMany until the undo window closes, then sends one call', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
     await waitFor(() => rowButton('Genesis 1:1'))
+
+    // Fake timers only from here: installed before the delete, so the undo window's own
+    // timeout is the one being advanced (the async mount above needs real timers).
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(rowButton('Genesis 1:1'))
+      fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
+      act(() => keyHandlerRef.current?.onDelete?.())
+
+      // Nothing has actually been deleted yet — that is what makes the undo exact.
+      expect(removeMany).not.toHaveBeenCalled()
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(removeMany).toHaveBeenCalledTimes(1)
+      expect(removeMany).toHaveBeenCalledWith(['r1', 'r2'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The behaviour #86 asks for: undo used to re-add via schedule.add, which APPENDS, so
+  // undoing a delete silently moved the reading to the bottom of the service. It now
+  // cancels a delete that never happened and re-reads the list, which is exact.
+  it('undo restores by re-reading the schedule, never by re-adding', async () => {
+    const { resolveChapter, add, scheduleList } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+    const listCallsBefore = scheduleList.mock.calls.length
 
     fireEvent.click(rowButton('Genesis 1:1'))
     fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
     act(() => keyHandlerRef.current?.onDelete?.())
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
 
-    await waitFor(() => expect(add).toHaveBeenCalledTimes(2))
-    expect(add.mock.calls[0][0]).toMatchObject({ book: 'Genesis', ch: 1, from: 1, to: 1 })
-    expect(add.mock.calls[1][0]).toMatchObject({ book: 'Genesis', ch: 1, from: 2, to: 2 })
+    await waitFor(() => expect(scheduleList.mock.calls.length).toBe(listCallsBefore + 1))
+    expect(add).not.toHaveBeenCalled()
+    // The rows come back in their original order, not appended after Genesis 1:3.
+    await waitFor(() => rowButton('Genesis 1:1'))
+    expect(scheduleRowTitles()).toEqual(['Genesis 1:1', 'Genesis 1:2', 'Genesis 1:3'])
+  })
+
+  it('a taken undo never commits the delete, however long the operator waits', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(rowButton('Genesis 1:1'))
+      act(() => keyHandlerRef.current?.onDelete?.())
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+      act(() => {
+        vi.advanceTimersByTime(60000)
+      })
+      expect(removeMany).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('single-item delete still works and keeps its formatRef toast label', async () => {
-    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
@@ -1662,25 +1749,273 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     fireEvent.click(rowButton('Genesis 1:2'))
     act(() => keyHandlerRef.current?.onDelete?.())
 
-    await waitFor(() => expect(removeMany).toHaveBeenCalledWith(['r2']))
     // Toast label is the ref, not "1 readings". Anchor on the toast's own "Removed"
     // text — the row title also reads "Genesis 1:2", so matching the ref alone could
     // pass against the not-yet-unmounted row.
     await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/Genesis 1:2/))
     expect(screen.queryByText(/1 readings/)).toBeNull()
+    expect(scheduleRowTitles()).toEqual(['Genesis 1:1', 'Genesis 1:3'])
   })
 
-  it('Clear all removes every reading in one removeMany call, recoverable via undo', async () => {
+  it('Clear all empties the rail in one batch, recoverable via undo', async () => {
     const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await screen.findByText('Genesis 1:1')
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+      expect(scheduleRowTitles()).toEqual([])
+      expect(screen.getByText(/3 readings/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(removeMany).toHaveBeenCalledTimes(1)
+      expect(removeMany).toHaveBeenCalledWith(['r1', 'r2', 'r3'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Deferred deletes mean the rail and the database legitimately disagree for five seconds.
+  // Anything that applies a reply from main verbatim during that window puts the deleted
+  // rows back on the rail, where they sit under their own "Removed — Undo" toast and then
+  // vanish a second time when the commit lands.
+  it('a superseding delete does not resurrect the row still inside its undo window', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    // Deleting a second row commits the first — whose reply still lists the second.
+    fireEvent.click(rowButton('Genesis 1:2'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await act(async () => {})
+    expect(scheduleRowTitles()).toEqual(['Genesis 1:3'])
+  })
+
+  it('adding a reading during an undo window does not bring the deleted ones back', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await screen.findByText('Genesis 1:1')
+
+    // Clear all is the worst case: one add would otherwise restore the whole schedule.
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(scheduleRowTitles()).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add/ }))
+    await act(async () => {})
+
+    expect(scheduleRowTitles()).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+  })
+
+  it('Clear all is a real button, and is offered only while the schedule has rows', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await screen.findByText('Genesis 1:1')
+
+    // #86: the most destructive in-service control must not be the smallest target.
+    const clear = screen.getByRole('button', { name: 'Clear all' })
+    expect(clear.style.height).toBe('26px')
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(clear)
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    } finally {
+      vi.useRealTimers()
+    }
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear all' })).toBeTruthy())
+  })
+
+  it('shows an inviting empty state once the schedule is cleared', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
     render(<Harness />)
     resolveChapter()
     await screen.findByText('Genesis 1:1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
-    await waitFor(() => expect(removeMany).toHaveBeenCalledTimes(1))
-    expect(removeMany).toHaveBeenCalledWith(['r1', 'r2', 'r3'])
-    await screen.findByText(/3 readings/)
-    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    // #88: an empty list names what belongs here AND how to put something in it.
+    const empty = await screen.findByText(/Readings you add will wait here/)
+    expect(empty.textContent).toMatch(/\+ Add/)
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
+  })
+})
+
+describe('SermonMode — quote schedule list kit (#90/#8)', () => {
+  const TAPE_M = TAPE
+  const THREE_READINGS: ScriptureReading[] = [
+    { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+    { id: 'r2', book: 'Genesis', ch: 1, from: 2, to: 2 }
+  ]
+  const QS: QuoteScheduleItem[] = [
+    { id: 'q1', msgId: 'm1', ord: 0, label: '1', tapeNo: '47-0412', title: 'Faith Is The Substance' },
+    { id: 'q2', msgId: 'm1', ord: 1, label: '2', tapeNo: '47-0412', title: 'Faith Is The Substance' },
+    { id: 'q3', msgId: 'm1', ord: 2, label: '3', tapeNo: '47-0412', title: 'Faith Is The Substance' }
+  ]
+  const quoteRow = (label: string): HTMLElement =>
+    screen.getByText(`¶${label} · Tape 47-0412`).closest('button') as HTMLElement
+  const quoteRowIds = (): string[] =>
+    Array.from(document.querySelectorAll('[data-quote-row]')).map((el) => el.getAttribute('data-quote-row') ?? '')
+
+  const openMessageTrack = async (): Promise<void> => {
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await screen.findByText('¶1 · Tape 47-0412')
+  }
+
+  it('shift-click selects the contiguous run of quotes', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    fireEvent.click(quoteRow('3'), { shiftKey: true })
+    for (const l of ['1', '2', '3']) {
+      expect(quoteRow(l).getAttribute('data-selected')).toBe('true')
+    }
+  })
+
+  it('right-click on a multi-row selection deletes the batch with one undo toast', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    fireEvent.click(quoteRow('2'), { shiftKey: true })
+    fireEvent.contextMenu(quoteRow('2'))
+    fireEvent.click(await screen.findByText('Delete 2 quotes'))
+
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q3']))
+    expect(await screen.findByText(/2 quotes/)).toBeTruthy()
+  })
+
+  it('the Delete key removes the quote selection (#8)', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('2'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q3']))
+    await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/¶2/))
+  })
+
+  it('defers the real removeMany until the undo window closes', async () => {
+    const { resolveChapter, quoteRemoveMany } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(quoteRow('1'))
+      fireEvent.click(quoteRow('2'), { shiftKey: true })
+      act(() => keyHandlerRef.current?.onDelete?.())
+      expect(quoteRemoveMany).not.toHaveBeenCalled()
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(quoteRemoveMany).toHaveBeenCalledTimes(1)
+      expect(quoteRemoveMany).toHaveBeenCalledWith(['q1', 'q2'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('undo restores the quotes in their original order and cancels the delete', async () => {
+    const { resolveChapter, quoteRemoveMany, quoteScheduleList } = installHelmStub(NOTHING_LIVE, [], {
+      tape: TAPE_M,
+      quoteSchedule: QS
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+    const listCallsBefore = quoteScheduleList.mock.calls.length
+
+    fireEvent.click(quoteRow('1'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(quoteScheduleList.mock.calls.length).toBe(listCallsBefore + 1))
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q2', 'q3']))
+    expect(quoteRemoveMany).not.toHaveBeenCalled()
+  })
+
+  it('Delete does nothing while a search has swapped the schedule off screen', async () => {
+    const { resolveChapter, quoteRemoveMany } = installHelmStub(NOTHING_LIVE, [], {
+      tape: TAPE_M,
+      quoteSchedule: QS,
+      search: { tapes: [], quotes: [] }
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    // Typing a query replaces the schedule with search results; the selection survives
+    // underneath, but Delete must not act on rows the operator cannot see.
+    fireEvent.change(screen.getByPlaceholderText('Search tapes & quotes…'), { target: { value: 'faith' } })
+    await waitFor(() => expect(document.querySelectorAll('[data-quote-row]')).toHaveLength(0))
+
+    act(() => keyHandlerRef.current?.onDelete?.())
+    expect(quoteRemoveMany).not.toHaveBeenCalled()
+
+    // Clearing the query brings the schedule — and the delete — back.
+    fireEvent.change(screen.getByPlaceholderText('Search tapes & quotes…'), { target: { value: '' } })
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q2', 'q3']))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q2', 'q3']))
+  })
+
+  it('Delete on the message track never touches the scripture schedule', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE_READINGS, {
+      tape: TAPE_M,
+      quoteSchedule: QS
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q2', 'q3']))
+    expect(removeMany).not.toHaveBeenCalled()
+  })
+
+  it('ghosts Go live on the message track when no tape is installed (#88)', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+
+    const messagePanel = document.querySelector('[data-track-panel="message"]') as HTMLElement
+    const goLive = within(messagePanel).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(goLive.disabled).toBe(true)
+    expect(screen.getByText(/No messages yet/)).toBeTruthy()
   })
 })

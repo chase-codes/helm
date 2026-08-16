@@ -12,6 +12,11 @@ export interface SongsRepo {
   get(id: string): Song | null;
   add(input: NewSongInput): Song;
   update(id: string, input: UpdateSongInput): Song;
+  /** Permanent removal from the library (#90). Deletes the FTS row in the same
+   * transaction — song_fts is a plain external-content-free fts5 table with no triggers,
+   * so a `songs` delete alone would leave an orphan row that keeps matching searches and
+   * then mis-attributes itself to whatever song later reuses that rowid. */
+  remove(id: string): Song[];
   search(q: string, field: SearchField): SongSearchResult[];
   count(): number;
 }
@@ -38,6 +43,9 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   const insertFts = db.prepare('INSERT INTO song_fts (rowid, title, author, lyrics) VALUES ((SELECT rowid FROM songs WHERE id = ?),?,?,?)');
   const updateSong = db.prepare('UPDATE songs SET title = ?, author = ?, sections_json = ?, music_key = ? WHERE id = ?');
   const updateFts = db.prepare('UPDATE song_fts SET title = ?, author = ?, lyrics = ? WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
+  // FTS row first, while `songs` still holds the rowid the subquery resolves through.
+  const deleteFts = db.prepare('DELETE FROM song_fts WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
+  const deleteSong = db.prepare('DELETE FROM songs WHERE id = ?');
   const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSong);
   const get = (id: string): Song | null => {
     const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined;
@@ -78,6 +86,13 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
         updateFts.run(title, author, lyricsOfSections(sections), id);
       })();
       return song;
+    },
+    remove(id) {
+      db.transaction(() => {
+        deleteFts.run(id);
+        deleteSong.run(id);
+      })();
+      return list();
     },
     search(q, field) {
       const tokens = norm(q).split(' ').filter(Boolean);

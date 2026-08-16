@@ -143,7 +143,11 @@ function App(): JSX.Element {
       <div style={rootStyle}>
         <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
         <div style={mainStyle}>
-          {mode === 'pre' && <PreServiceMode active={mode === 'pre'} />}
+          {/* Unlike Songs/Sermon, Pre-service is mounted only while it's the active page
+              — the brief gives it no keep-alive, since its whole state lives in main and
+              is re-read on mount. It still takes `keyHandlerRef` so Delete and Escape
+              reach its card rail like every other list surface (#90). */}
+          {mode === 'pre' && <PreServiceMode active={mode === 'pre'} keyHandlerRef={keyHandlerRef} />}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
               state — cued song/section, sermon reading, schedule — survives tab switches.
               The inactive one is hidden via `display:none`; `display:contents` while active

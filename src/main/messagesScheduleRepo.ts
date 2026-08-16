@@ -6,6 +6,10 @@ export interface QuoteScheduleItem { id: string; msgId: string; ord: number; lab
 export interface MessagesScheduleRepo {
   list(): QuoteScheduleItem[];
   add(msgId: string, ord: number): QuoteScheduleItem[];
+  remove(id: string): QuoteScheduleItem[];
+  /** One transaction for a whole batch — a shift-click range delete is one round trip,
+   * mirroring scheduleRepo.removeMany. */
+  removeMany(ids: string[]): QuoteScheduleItem[];
 }
 
 const DEFAULT_SERVICE_ID = 'default';
@@ -30,6 +34,10 @@ export function createMessagesScheduleRepo(db: Database.Database): MessagesSched
   const maxPosition = db.prepare(
     'SELECT MAX(position) AS m FROM service_items WHERE service_id = ?'
   );
+  const deleteItem = db.prepare('DELETE FROM service_items WHERE id = ?');
+  const deleteItems = db.transaction((ids: string[]) => {
+    for (const id of ids) deleteItem.run(id);
+  });
   const selectJoin = db.prepare(`
     SELECT p.label AS label, m.tape_no AS tape_no, m.title AS title
     FROM paragraphs p JOIN messages m ON m.id = p.message_id
@@ -53,6 +61,14 @@ export function createMessagesScheduleRepo(db: Database.Database): MessagesSched
         const position = ((maxPosition.get(DEFAULT_SERVICE_ID) as { m: number | null }).m ?? 0) + 1;
         insertItem.run(randomUUID(), DEFAULT_SERVICE_ID, 'quote', JSON.stringify({ msgId, ord }), position);
       }
+      return list();
+    },
+    remove(id) {
+      deleteItem.run(id);
+      return list();
+    },
+    removeMany(ids) {
+      deleteItems(ids);
       return list();
     },
   };

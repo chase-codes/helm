@@ -61,4 +61,55 @@ describe('preCardsRepo', () => {
     expect(repo.setEnabled(logo.id, true).find((c) => c.id === logo.id)?.enabled).toBe(true);
     expect(repo.remove(logo.id).some((c) => c.id === logo.id)).toBe(false);
   });
+  it('restore puts a removed card back at its original index, id and payload intact', () => {
+    const repo = freshRepo();
+    const before = repo.list();
+    const target = before[2];
+    repo.remove(target.id);
+    const after = repo.restore(target, 2);
+    expect(after.map((c) => c.id)).toEqual(before.map((c) => c.id));
+    expect(after[2]).toMatchObject({ id: target.id, title: target.title, points: target.points });
+    expect(after[2].enabled).toBe(target.enabled);
+  });
+  it('restore into the first and last slots lands where asked', () => {
+    const repo = freshRepo();
+    const before = repo.list();
+    const first = before[0];
+    repo.remove(first.id);
+    expect(repo.restore(first, 0)[0].id).toBe(first.id);
+
+    const last = repo.list()[4];
+    repo.remove(last.id);
+    const after = repo.restore(last, 4);
+    expect(after).toHaveLength(5);
+    expect(after[4].id).toBe(last.id);
+  });
+  it('restore clamps an out-of-range index to the end', () => {
+    const repo = freshRepo();
+    const target = repo.list()[1];
+    repo.remove(target.id);
+    const after = repo.restore(target, 99);
+    expect(after).toHaveLength(5);
+    expect(after[4].id).toBe(target.id);
+  });
+  it('restore renumbers positions, so a second remove+restore round-trips too', () => {
+    const repo = freshRepo();
+    const before = repo.list();
+    const a = before[1];
+    repo.remove(a.id);
+    repo.restore(a, 1);
+    const b = repo.list()[3];
+    repo.remove(b.id);
+    const after = repo.restore(b, 3);
+    expect(after.map((c) => c.id)).toEqual(before.map((c) => c.id));
+  });
+  it('save still appends after a restore has renumbered positions', () => {
+    const repo = freshRepo();
+    const target = repo.list()[0];
+    repo.remove(target.id);
+    repo.restore(target, 0);
+    const after = repo.save({ type: 'message', title: 'Notice', headline: 'Hi', enabled: true });
+    expect(after).toHaveLength(6);
+    expect(after[5].title).toBe('Notice');
+  });
 });

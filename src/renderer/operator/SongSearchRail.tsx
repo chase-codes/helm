@@ -2,6 +2,7 @@ import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent, 
 import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
 import { ImportIcon, SearchIcon } from '../shared/icons';
+import { ListEmpty } from './ListEmpty';
 
 export interface SongRow {
   id: string;
@@ -30,6 +31,9 @@ export interface SongSearchRailProps {
   secondaryRows?: SongRow[];
   noResults: boolean;
   emptyText: string;
+  /** True when the library holds no songs at all — a different message from "no match for
+   * that query", because there is nothing here to search yet (#88). */
+  libraryEmpty: boolean;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSelect: (id: string) => void;
   /** Double-click: take this song live at section 0 (#58). Distinct from `onSelect`,
@@ -52,6 +56,7 @@ export function SongSearchRail({
   secondaryRows,
   noResults,
   emptyText,
+  libraryEmpty,
   onKeyDown,
   onSelect,
   onActivate,
@@ -195,6 +200,14 @@ export function SongSearchRail({
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>
+        {libraryEmpty && rows.length === 0 && !noResults && (
+          // Both affordances it names are already in the header above, so the line only
+          // has to point at them.
+          <ListEmpty>
+            No songs yet — add one with <b>+ Add a song</b>, or bring your existing set in
+            with <b>Import a song library</b>.
+          </ListEmpty>
+        )}
         {rows.map((r) => (
           <button
             key={r.id}

@@ -87,3 +87,33 @@ test('update throws on unknown id and on empty sections', () => {
   // failed update leaves the row untouched
   expect(repo.get(s.id)?.sections[0].lines).toEqual(['x']);
 });
+
+test('remove deletes the row and returns the remaining library', () => {
+  const a = repo.add({ title: 'Keep Me', text: 'Verse 1\nx' });
+  const b = repo.add({ title: 'Drop Me', text: 'Verse 1\ny' });
+  const after = repo.remove(b.id);
+  expect(after.map((s) => s.id)).toEqual([a.id]);
+  expect(repo.get(b.id)).toBeNull();
+  expect(repo.count()).toBe(1);
+});
+
+test('remove deindexes FTS: the removed song stops matching its own lyric', () => {
+  const s = repo.add({ title: 'Findable', text: 'Verse 1\nwonderful unique zebra' });
+  repo.add({ title: 'Other', text: 'Verse 1\nzebra crossing' });
+  expect(repo.search('zebra', 'lyric').map((r) => r.song.id)).toContain(s.id);
+  repo.remove(s.id);
+  expect(repo.search('zebra', 'lyric').map((r) => r.song.id)).not.toContain(s.id);
+});
+
+test('removing then re-adding does not resurrect the old FTS row', () => {
+  const s = repo.add({ title: 'Gone', text: 'Verse 1\npeculiar walrus' });
+  repo.remove(s.id);
+  const fresh = repo.add({ title: 'Fresh', text: 'Verse 1\npeculiar walrus' });
+  const hits = repo.search('walrus', 'lyric').map((r) => r.song.id);
+  expect(hits).toEqual([fresh.id]);
+});
+
+test('remove of an unknown id is a no-op', () => {
+  const a = repo.add({ title: 'A', text: 'Verse 1\nx' });
+  expect(repo.remove('nope').map((s) => s.id)).toEqual([a.id]);
+});

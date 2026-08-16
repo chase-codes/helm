@@ -1,15 +1,21 @@
-import type { CSSProperties, JSX, KeyboardEvent } from 'react';
+import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
+import { ListEmpty } from './ListEmpty';
+import { UndoToast } from './UndoToast';
 
 export interface MsgScheduleRow {
   id: string;
   title: string;
   meta: string;
   isCurrent: boolean;
-  onClick: () => void;
+  /** In the delete-selection (#90) — distinct from `isCurrent`, which is the cued quote. */
+  isSelected: boolean;
+  /** Receives the event so the caller can branch on shiftKey for range selection. */
+  onClick: (e: ReactMouseEvent) => void;
   /** Double-click: take this row's quote live (#58). */
-  onDoubleClick: () => void;
+  onDoubleClick: (e: ReactMouseEvent) => void;
+  onContextMenu: (e: ReactMouseEvent) => void;
 }
 export interface MsgTapeRow {
   id: string;
@@ -42,6 +48,14 @@ export interface MessageSearchRailProps {
   /** Slot for Task 12's tape player card — rendered as-is at the bottom of the rail,
    * omitted entirely when null (this task has no player yet). */
   tapePlayer: JSX.Element | null;
+  /** "Removed … — Undo" bar for a quote-schedule delete (#86); same 5s grammar as the
+   * scripture and media rails. */
+  undo?: { label: string; onUndo: () => void };
+  /** False when no tapes are installed at all — the empty schedule then points at the
+   * import rather than at a search box that can't match anything (#88). */
+  hasTapes: boolean;
+  /** Opens Settings, where message import lives — the affordance the empty state names. */
+  onImportMessages: () => void;
 }
 
 /** Body of the Message track's left rail: scope chip + search box, TAPES/QUOTES search
@@ -58,7 +72,10 @@ export function MessageSearchRail({
   tapeRows,
   quoteRows,
   scheduleRows,
-  tapePlayer
+  tapePlayer,
+  undo,
+  hasTapes,
+  onImportMessages
 }: MessageSearchRailProps): JSX.Element {
   const schedInputStyle: CSSProperties = {
     display: 'flex',
@@ -104,7 +121,9 @@ export function MessageSearchRail({
   };
   const scheduleIconStyle: CSSProperties = { ...tapeIconStyle, fontSize: '14px' };
   const tapeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
-  const scheduleRowStyle = (isCurrent: boolean): CSSProperties => ({
+  // Two states, same treatment the scripture and media rails use: the delete-selection
+  // ring wins over the cued tint so a shift-click range reads as one block.
+  const scheduleRowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
@@ -112,10 +131,27 @@ export function MessageSearchRail({
     padding: '10px 11px',
     borderRadius: '11px',
     cursor: 'pointer',
-    background: isCurrent ? T.panel3 : 'transparent',
-    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.message}55` : 'none',
+    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
+    boxShadow: isSelected
+      ? `inset 0 0 0 1.5px ${T.accent}`
+      : isCurrent
+        ? `inset 0 0 0 1px ${T.message}55`
+        : 'none',
     userSelect: 'none'
   });
+  const importBtnStyle: CSSProperties = {
+    height: '30px',
+    marginTop: '10px',
+    padding: '0 12px',
+    borderRadius: '8px',
+    background: `${T.message}22`,
+    color: T.message,
+    fontSize: '12px',
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  };
   const quoteRowStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
   const quoteTitleStyle: CSSProperties = { fontWeight: 600, fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const quotePreviewStyle: CSSProperties = {
@@ -199,8 +235,35 @@ export function MessageSearchRail({
         <>
           <div style={sectionHeaderStyle('0 14px 8px')}>QUOTE SCHEDULE</div>
           <div style={scrollWrapStyle}>
+            {scheduleRows.length === 0 &&
+              (hasTapes ? (
+                // Deliberately does NOT promise "click a quote to add it here": nothing in
+                // the app calls quoteSchedule.add, so this list cannot currently gain rows
+                // and that copy would describe a workflow the operator cannot perform.
+                // When an add affordance lands, this line should name it.
+                <ListEmpty>Search above to find a quote and put it in the preview.</ListEmpty>
+              ) : (
+                // Nothing installed at all: a search box the operator cannot make match
+                // anything is not an invitation, so name the import instead (#88).
+                <ListEmpty>
+                  No messages yet — import one to search its quotes.
+                  <div>
+                    <button style={importBtnStyle} onClick={onImportMessages}>
+                      Import a message
+                    </button>
+                  </div>
+                </ListEmpty>
+              ))}
             {scheduleRows.map((r) => (
-              <button key={r.id} style={scheduleRowStyle(r.isCurrent)} onClick={r.onClick} onDoubleClick={r.onDoubleClick}>
+              <button
+                key={r.id}
+                data-quote-row={r.id}
+                data-selected={r.isSelected || undefined}
+                style={scheduleRowStyle(r.isCurrent, r.isSelected)}
+                onClick={r.onClick}
+                onDoubleClick={r.onDoubleClick}
+                onContextMenu={r.onContextMenu}
+              >
                 <div style={scheduleIconStyle}>&#10077;</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={rowTitleStyle}>{r.title}</div>
@@ -213,6 +276,7 @@ export function MessageSearchRail({
         </>
       )}
 
+      {undo && <UndoToast label={undo.label} onUndo={undo.onUndo} />}
       {tapePlayer}
     </>
   );

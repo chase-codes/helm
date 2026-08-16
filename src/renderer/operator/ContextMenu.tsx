@@ -15,6 +15,11 @@ export interface ContextMenuItem {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Leave the menu open after selecting. For two-step confirms, whose first click only
+   * arms the second — closing there would put the confirmation somewhere the operator has
+   * to go looking for it (see SongsMode's "Remove from library"). The handler re-labels the
+   * item in place via `useContextMenu`'s `update`. */
+  keepOpen?: boolean;
 }
 
 export interface ContextMenuProps {
@@ -109,6 +114,10 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
 
   const activate = (it: ContextMenuItem): void => {
     if (it.disabled) return;
+    if (it.keepOpen) {
+      it.onSelect();
+      return;
+    }
     onClose();
     it.onSelect();
   };

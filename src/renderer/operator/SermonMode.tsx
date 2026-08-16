@@ -36,7 +36,7 @@ import { MessageMode, type MessageKeyRef } from './MessageMode';
 import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack';
 import { useContextMenu } from './useContextMenu';
 import { useListSelection } from './useListSelection';
-import { useTimedUndo } from './useTimedUndo';
+import { useDeferredRemove } from './useDeferredRemove';
 import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
@@ -95,7 +95,33 @@ export function SermonMode({
 
   const contextMenu = useContextMenu();
   const sel = useListSelection(schedule.map((r) => r.id));
-  const undo = useTimedUndo<ScriptureReading[]>();
+  // Deferred commit, so undo restores the schedule in its ORIGINAL order (#86). The old
+  // shape removed immediately and re-added on undo, and `schedule.add` appends — so
+  // undoing a delete quietly moved the reading to the bottom of the service.
+  const undo = useDeferredRemove<ScriptureReading>({
+    commit: (readings) => {
+      window.helm.schedule
+        .removeMany(readings.map((r) => r.id))
+        // The authoritative post-delete list, which also folds in anything added during
+        // the undo window; on failure it resyncs a rail that optimistically lied.
+        .then(applyRows)
+        .catch((err: unknown) => {
+          console.error(err);
+          window.helm.schedule.list().then(applyRows).catch(console.error);
+        });
+    },
+    restore: () => {
+      window.helm.schedule.list().then(setSchedule).catch(console.error);
+    }
+  });
+
+  // Every list main hands back goes through here. Rows in the undo window are still in the
+  // database, so a raw `setSchedule` would put a just-deleted reading back on the rail —
+  // see `pendingNow`. Not used by `restore`, which wants exactly the unfiltered list.
+  function applyRows(rows: ScriptureReading[]): void {
+    const pendingIds = new Set(undo.pendingNow().map((r) => r.id));
+    setSchedule(pendingIds.size ? rows.filter((r) => !pendingIds.has(r.id)) : rows);
+  }
 
   // Shared by all tracks (Task 4 threads these into MessageMode/SlidesTrack too), so
   // they live at the top level rather than inside the scripture-track branch below.
@@ -406,23 +432,20 @@ export function SermonMode({
     setScrV(v);
   };
 
-  // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog).
-  // Toast/selection-clear happen on IPC success so a rejected remove doesn't falsely claim
-  // removal. One removeMany call covers single-item delete, a shift-click range, and
-  // Clear-all alike — always one IPC round-trip, one transaction. Undo re-adds via
-  // schedule.add, which appends at the end (position-preserving restore is a follow-up —
-  // see the interaction-primitives design's Known caveats).
+  // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog):
+  // the in-service half of the destructive-action grammar (#86). The rows leave the rail on
+  // the keystroke rather than after an IPC round trip — mid-service, a delete that visibly
+  // lags is worse than one that optimistically leads, and `undo.commit` resyncs if the
+  // delete somehow fails. One removeMany call covers single-item delete, a shift-click
+  // range, and Clear-all alike — one round trip, one transaction.
   const removeReadings = (ids: string[]): void => {
     const readings = schedule.filter((r) => ids.includes(r.id));
     if (readings.length === 0) return;
-    window.helm.schedule
-      .removeMany(readings.map((r) => r.id))
-      .then((rows) => {
-        setSchedule(rows);
-        if (ids.some((id) => sel.isSelected(id))) sel.clear();
-        undo.arm(readings);
-      })
-      .catch(console.error);
+    setSchedule((rows) => rows.filter((r) => !ids.includes(r.id)));
+    // `sel.selectedIds` is derived against the list, so the removed rows fall out on their
+    // own; this is here to drop the range anchor with them.
+    if (ids.some((id) => sel.isSelected(id))) sel.clear();
+    undo.remove(readings);
   };
 
   // The reading 1–9 hotkey and a schedule-row click are the same gesture: cursor to the
@@ -461,21 +484,6 @@ export function SermonMode({
         if (wanted()) takeVerseLive(r.book, r.ch, r.from, c);
       })
       .catch(console.error);
-  };
-
-  // Sequential re-adds keep the batch's relative order; the last response is the
-  // authoritative list. Cancel first so a re-click can't double-restore.
-  const undoRemove = (): void => {
-    const batch = undo.pending;
-    if (!batch) return;
-    undo.cancel();
-    (async () => {
-      let rows: ScriptureReading[] | null = null;
-      for (const { book, ch, from, to } of batch) {
-        rows = await window.helm.schedule.add({ book, ch, from, to });
-      }
-      if (rows) setSchedule(rows);
-    })().catch(console.error);
   };
 
   // Builds the live slide for a single verse (the reading's `from`, matching where the
@@ -627,7 +635,10 @@ export function SermonMode({
   // the Go live button show. Both read `addRef`, so an empty entry commits the cursor's
   // verse — Shift+Enter on an empty field is the keyboard twin of the Go live button.
   const addToSchedule = (): void => {
-    window.helm.schedule.add(addRef).then(setSchedule).catch(console.error);
+    // applyRows, not setSchedule: `add` replies with the whole list, which during an undo
+    // window still holds the rows the operator just deleted (most visible right after
+    // Clear all — one add would bring the entire cleared schedule back for five seconds).
+    window.helm.schedule.add(addRef).then(applyRows).catch(console.error);
     setBuilder(initialBuilder());
     setTrack('scripture');
   };
@@ -819,8 +830,13 @@ export function SermonMode({
       // blocking modal down here is the slides track's deck-fallback, reported through
       // its delegate so Enter/Delete can't fire behind it (same contract as QuickAdd).
       isModalOpen: () => (track === 'slides' && slidesKeyRef.current?.isModalOpen()) || false,
+      // Delete/Backspace reaches whichever track's list is on screen (#90/#8). Each track
+      // owns the guard for "is anything selected"; SermonMode only routes.
       onDelete: () => {
-        if (track === 'scripture' && sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
+        if (track === 'scripture') {
+          if (sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
+        } else if (track === 'message') messageKeyRef.current?.onDelete();
+        else if (track === 'slides') slidesKeyRef.current?.onDelete();
       },
       onAction: (a: ResolvedHotkey) => {
         if (track !== 'scripture') return;
@@ -872,6 +888,7 @@ export function SermonMode({
           setTrack={setTrack}
           leftPanel={leftPanel}
           rightPanel={rightPanel}
+          onOpenSettings={onOpenSettings}
         />
       </div>
       <div style={panelStyle('slides')} data-track-panel="slides">
@@ -908,7 +925,7 @@ export function SermonMode({
                       undo.pending.length === 1
                         ? formatRef(undo.pending[0])
                         : `${undo.pending.length} readings`,
-                    onUndo: undoRemove
+                    onUndo: undo.undo
                   }
                 : undefined
             }
