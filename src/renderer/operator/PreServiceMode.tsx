@@ -3,6 +3,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { usePreState, usePresentationState } from './useHelm';
 import { preSlideFor } from '../../shared/preservice/cards';
 import { SlideCanvas } from '../shared/SlideCanvas';
+import { ScreenBlackIcon } from '../shared/icons';
 import { PreCardEditor } from './PreCardEditor';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
@@ -33,10 +34,6 @@ interface RemovedCard {
 const isDeletable = (c: PreCard): boolean => c.type !== 'logo';
 
 const PRE_RAIL_W = 320;
-// Fixed accent for "currently projecting" — distinct from the theme's `live` (red,
-// used elsewhere for on-air/recording indicators) since the design brief for this
-// chip calls for a green dot specifically (see task B6 ambiguity #2).
-const PROJECTING_GREEN = '#3fb950';
 
 // Must keep the engine's promise exactly (BUG-018): a tap is navigation, so it switches the
 // screen only while pre-service is already projecting, and never starts projecting.
@@ -102,36 +99,6 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     }
   };
 
-  // Escape closes the card editor — the one modal this page owns. Registered here rather
-  // than inside PreCardEditor so the whole page speaks App's ModeKeyHandler contract, the
-  // way Songs and Sermon do.
-  //
-  // `onArrow`/`onGoLive` are deliberate no-ops. Pre-service has never answered arrows or
-  // Enter, and wiring them now would let a keystroke start projecting from a dark screen —
-  // exactly the takeover BUG-018 exists to prevent. Navigation stays on the ‹ › buttons and
-  // taking the screen stays on Start loop / Show this card.
-  useLayoutEffect(() => {
-    if (!active) return;
-    keyHandlerRef.current = {
-      onEscape: () => {
-        if (editing !== null) {
-          setEditing(null);
-          return true;
-        }
-        return false;
-      },
-      onArrow: () => {},
-      onGoLive: () => {},
-      isModalOpen: () => editing !== null,
-      onDelete: () => {
-        if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
-      }
-    };
-    return () => {
-      keyHandlerRef.current = null;
-    };
-  });
-
   const idxC = Math.max(0, Math.min(idx, cards.length - 1));
   const current = cards[idxC];
   const enabledCount = cards.filter((c) => c.enabled).length;
@@ -145,6 +112,66 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // Visually distinct from ● ON SCREEN, which means actually live.
   const selectedIsLive = current ? isCardLive(current) : false;
   const armed = current !== undefined && !selectedIsLive;
+
+  // The page's missing verb (#87). "Stop loop" halts the rotation but leaves the card lit,
+  // so until now the only way to clear the screen from here was the header chip. Same reach
+  // as that chip and as SongsMode's Escape rung: whoever owns the output, this clears it.
+  //
+  // `disengage` is explicit rather than left to the engine's tick, which yields on its own
+  // but only at the next one-second boundary — a full second of the loop still claiming a
+  // screen the operator has just taken down.
+  const canTakeDown = output === 'live';
+  const takeDown = (): void => {
+    window.helm.presentation.setOutput('black');
+    window.helm.preservice.disengage();
+  };
+
+  // This page's ModeKeyHandler. Arrows and Enter used to be no-ops on the theory that any
+  // keystroke reaching the screen was the BUG-018 defect — but BUG-018 is about a single
+  // TAP being navigation, not about the transport. So each key is wired to the control it
+  // sits next to, and inherits that control's guarantees:
+  //   ‹ ›            → `step`, which routes through the engine's navigate-only path and so
+  //                    can never light a dark screen.
+  //   Show this card → `showNow`, but only while `armed`, mirroring the button's own
+  //                    disabled state. Enter is therefore never a take-down here, unlike
+  //                    Songs/Sermon where the same button toggles.
+  //   Take down      → the last rung of the Escape ladder, as everywhere else.
+  //
+  // The ladder has no blur rung: the only text entry on this page lives inside
+  // PreCardEditor, which the first rung closes outright.
+  useLayoutEffect(() => {
+    if (!active) return;
+    keyHandlerRef.current = {
+      onEscape: () => {
+        if (editing !== null) {
+          setEditing(null);
+          return true;
+        }
+        // Back out the most recent intent before touching the screen: a stray Escape while
+        // a delete-range is picked out must drop the range, not black the projector.
+        if (sel.selectedIds.length > 0) {
+          sel.clear();
+          return true;
+        }
+        if (canTakeDown) {
+          takeDown();
+          return true;
+        }
+        return false;
+      },
+      onArrow: (dir) => window.helm.preservice.step(dir),
+      onGoLive: () => {
+        if (armed) window.helm.preservice.showNow();
+      },
+      isModalOpen: () => editing !== null,
+      onDelete: () => {
+        if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
+      }
+    };
+    return () => {
+      keyHandlerRef.current = null;
+    };
+  });
 
   // ---------------- styles (ported verbatim from Lectern.dc.html's computed values) ----------------
   const preRailStyle: CSSProperties = { width: `${PRE_RAIL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
@@ -209,8 +236,18 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // "Show this card" — the deliberate single-card takeover. Reads as an action while the
   // selection is armed, and falls back to a quiet ghost once that card is already live so
   // it never competes with Start loop for attention.
+  // The min-width is load-bearing, not cosmetic: "Show this card" and "On screen" are very
+  // different lengths, and without it the whole centred row — Take down included — slides
+  // sideways the moment a card goes live, moving controls out from under the operator's
+  // pointer mid-service. Sized to the longer label so neither state reflows the row.
   const showBtn: CSSProperties = armed
-    ? { ...primaryBtn, background: 'transparent', color: T.accent, boxShadow: `inset 0 0 0 1.5px ${T.accent}` }
+    ? { ...primaryBtn, minWidth: '150px', background: 'transparent', color: T.accent, boxShadow: `inset 0 0 0 1.5px ${T.accent}` }
+    : { ...ghostBtn, minWidth: '150px', cursor: 'default' };
+  // Tinted rather than filled: a solid red button would out-shout Start loop, and this is
+  // the page's escape hatch, not its primary verb. Same `1c`/`55` formula as the on-air bar
+  // below, so the two red things on the page read as one signal.
+  const takeDownBtn: CSSProperties = canTakeDown
+    ? { ...ghostBtn, color: T.live, background: `${T.live}1c`, boxShadow: `inset 0 0 0 1px ${T.live}55` }
     : { ...ghostBtn, cursor: 'default' };
   const smallGhost: CSSProperties = {
     height: '46px',
@@ -225,7 +262,12 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     alignItems: 'center'
   };
 
-  const projColor = preOwnsScreen ? PROJECTING_GREEN : T.faint;
+  // Red is the whole app's word for "the congregation sees this" (#87). This bar used to
+  // say it in a hard-coded green, so the operator's most important signal changed colour
+  // with the page they were on and ignored the theme families outright. The two not-ours
+  // states stay faint on purpose: the bar reports THIS page's claim on the screen, and the
+  // header already carries the global on-air state.
+  const projColor = preOwnsScreen ? T.live : T.faint;
   const projBarStyle: CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
@@ -247,6 +289,29 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   const projText = preOwnsScreen ? 'PROJECTING' : output === 'live' ? 'ANOTHER FLOW LIVE' : 'OFF SCREEN';
 
   const dividerStyle: CSSProperties = { width: '1px', height: '28px', background: T.hairline, margin: '0 4px' };
+  // The transport is a sibling of the preview rather than a child of it, so it can run wider
+  // than the 680px the slide is clamped to. With Take down added, eight controls no longer
+  // fit in 680 — and wrapping would put the page's one destructive verb on an orphan second
+  // line, which is the last control that should move about.
+  const transportStyle: CSSProperties = {
+    width: '100%',
+    maxWidth: '820px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    marginTop: '20px',
+    flexWrap: 'wrap'
+  };
+  const hintStyle: CSSProperties = {
+    width: '100%',
+    maxWidth: '680px',
+    textAlign: 'center',
+    fontSize: '13px',
+    color: T.dim,
+    marginTop: '18px',
+    lineHeight: 1.5
+  };
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const centerStyle: CSSProperties = {
@@ -471,40 +536,49 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
           >
             <SlideCanvas slide={preSlideFor(cardForSlide)} fill />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
-            <button style={ghostBtn} onClick={() => window.helm.preservice.step(-1)} title="Previous card">
-              ‹
-            </button>
-            <button
-              style={showBtn}
-              onClick={() => window.helm.preservice.showNow()}
-              disabled={!armed}
-              title={armed ? 'Put this card on the audience screen now — no rotation' : 'This card is already on screen'}
-            >
-              {armed ? 'Show this card' : 'On screen'}
-            </button>
-            <button
-              style={primaryBtn}
-              onClick={() => (engaged ? window.helm.preservice.disengage() : window.helm.preservice.engage())}
-            >
-              {engaged ? 'Stop loop' : 'Start loop'}
-            </button>
-            <button style={ghostBtn} onClick={() => window.helm.preservice.step(1)} title="Next card">
-              ›
-            </button>
-            <div style={dividerStyle} />
-            <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(-1)}>
-              −
-            </button>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: T.dim, minWidth: '74px' }}>
-              {`${dwellS}s / card`}
-            </span>
-            <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(1)}>
-              +
-            </button>
-          </div>
-          <div style={{ fontSize: '13px', color: T.dim, marginTop: '18px', lineHeight: 1.5 }}>{PRE_HINT}</div>
         </div>
+        <div style={transportStyle}>
+          <button style={ghostBtn} onClick={() => window.helm.preservice.step(-1)} title="Previous card">
+            ‹
+          </button>
+          <button
+            style={showBtn}
+            onClick={() => window.helm.preservice.showNow()}
+            disabled={!armed}
+            title={armed ? 'Put this card on the audience screen now — no rotation' : 'This card is already on screen'}
+          >
+            {armed ? 'Show this card' : 'On screen'}
+          </button>
+          <button
+            style={primaryBtn}
+            onClick={() => (engaged ? window.helm.preservice.disengage() : window.helm.preservice.engage())}
+          >
+            {engaged ? 'Stop loop' : 'Start loop'}
+          </button>
+          <button style={ghostBtn} onClick={() => window.helm.preservice.step(1)} title="Next card">
+            ›
+          </button>
+          <div style={dividerStyle} />
+          <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(-1)}>
+            −
+          </button>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: T.dim, minWidth: '74px' }}>
+            {`${dwellS}s / card`}
+          </span>
+          <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(1)}>
+            +
+          </button>
+          <div style={dividerStyle} />
+          <button
+            style={takeDownBtn}
+            onClick={takeDown}
+            disabled={!canTakeDown}
+            title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
+          >
+            <ScreenBlackIcon size={14} /> Take down
+          </button>
+        </div>
+        <div style={hintStyle}>{PRE_HINT}</div>
       </div>
 
       {editing !== null && (
