@@ -15,7 +15,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { bandCandidates } from '../../shared/slides/fitText';
 import { useFitText, fitSizeValue } from '../shared/useFitText';
-import { keyForSong, parseSongKey } from '../../shared/presentation/core';
+import { keyForSong, parseSongKey, sameFlow } from '../../shared/presentation/core';
 import { stanzaLabel } from '../../shared/songs/stanza';
 import { CANVAS_AMBER } from '../../shared/slideAccents';
 import { secondaryLyricRows } from '../../shared/songs/secondaryLyric';
@@ -577,7 +577,11 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   };
 
   const curKey = activeSong ? keyForSong(activeSong.id, clampedSection) : null;
-  const cuedIsLive = output === 'live' && liveKey === curKey;
+  // `sameFlow`, not key equality: within the live song the cue effect hot-updates the
+  // screen (main's `applyCue` follows same-flow keys), so a section change leaves the verb
+  // nothing to do — not one broadcast round-trip later. Key equality here made the button
+  // flash green for the gap between the cue send and the liveKey broadcast returning.
+  const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
 
   // Auto-fit the hero lyric to its box (LeaderView's mechanism). Width changes — window
   // resize, panel drags, rail collapse — re-measure via useFitText's ResizeObserver, so

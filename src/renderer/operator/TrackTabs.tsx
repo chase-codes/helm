@@ -23,8 +23,14 @@ export function TrackTabs({ theme: T, track, setTrack }: TrackTabsProps): JSX.El
   const trackWrapStyle: CSSProperties = { display: 'flex', gap: '4px', background: T.panel2, padding: '4px', borderRadius: '10px' };
   const trackColor = (id: SermonTrack): string => (id === 'scripture' ? T.scripture : id === 'message' ? T.message : T.sermon);
   const trackTabStyle = (id: SermonTrack): CSSProperties => ({
-    flex: 1,
+    // `auto` basis, not equal thirds: at the rail's 200px minimum an equal split gives
+    // "Slides" width it doesn't need while "Scripture" overflows its pill — the labels
+    // must divide the row by their own widths to all keep breathing room. minWidth 0 +
+    // hidden overflow are the below-minimum safety net (clip, never spill).
+    flex: '1 1 auto',
+    minWidth: 0,
     height: '34px',
+    padding: '0 6px',
     borderRadius: '8px',
     fontSize: '12.5px',
     fontWeight: track === id ? 700 : 600,
@@ -32,7 +38,9 @@ export function TrackTabs({ theme: T, track, setTrack }: TrackTabsProps): JSX.El
     background: track === id ? trackColor(id) : 'transparent',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden'
   });
 
   return (
