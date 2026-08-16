@@ -116,6 +116,29 @@ describe('PreCardEditor verse look-up', () => {
     )
   })
 
+  it('previews the draft as the operator types, not the saved card', () => {
+    // The preview is the real renderer fed by draft state: the operator sees what saving
+    // WOULD project, keystroke by keystroke — including cleanListPoints stripping the
+    // typed "- " marker (#50) before it ever reaches the screen.
+    installHelm()
+    renderEditor()
+    fireEvent.click(screen.getByText('List of items'))
+    fireEvent.change(screen.getByPlaceholderText('Fellowship dinner — next Sunday after service'), {
+      target: { value: '- Potluck sign-up' }
+    })
+    const preview = screen.getByTestId('pre-card-preview')
+    expect(preview.textContent).toContain('Potluck sign-up')
+    expect(preview.textContent).not.toContain('- Potluck')
+  })
+
+  it('preview tracks the message card headline live', () => {
+    installHelm()
+    renderEditor()
+    fireEvent.click(screen.getByText('Big message'))
+    fireEvent.change(screen.getByPlaceholderText('Welcome'), { target: { value: 'Happy Easter' } })
+    expect(screen.getByTestId('pre-card-preview').textContent).toContain('Happy Easter')
+  })
+
   it('leaves pre-existing verse text intact when a look-up fails', async () => {
     installHelm()
     render(

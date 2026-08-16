@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, cleanup } from '@testing-library/react';
 import { afterEach, expect, test } from 'vitest';
-import { SlideCanvas, SCRIPTURE_BAND, TITLE_BAND } from './SlideCanvas';
+import { SlideCanvas, SCRIPTURE_BAND, TITLE_BAND, LIST_BAND } from './SlideCanvas';
 
 afterEach(cleanup);
 
@@ -115,13 +115,44 @@ test('title slides size from the fit property with no px ceiling (#49)', () => {
   expect(title.style.fontSize).not.toContain('clamp');
 });
 
-test('list bullet points scale with the fitted size, floored, with the 28px ceiling gone (#49)', () => {
+test('list points ARE the fitted base — full size, no ratio, no px ceiling (#49)', () => {
   // The 28px cap made an announcement bullet's MAXIMUM smaller than a lyric line's
-  // most-cramped fitted size, and pinned 4K output at 28px. Same defect class as BUG-007.
+  // most-cramped fitted size (BUG-007 class); the 0.37× title ratio that replaced it kept
+  // the items at ~37px on 1080p while the label towered over them. The items are what the
+  // congregation reads, so they take the fitted size directly.
   render(<SlideCanvas slide={{ kind: 'title', title: 'Announcements', points: ['Potluck sign-up'] }} />);
   const point = screen.getByText('Potluck sign-up') as HTMLElement;
-  expect(point.style.fontSize).toBe('max(9px, calc(var(--helm-fit-size, 9.2cqmin) * 0.37))');
+  expect(point.style.fontSize).toBe('max(9px, var(--helm-fit-size, 6.4cqmin))');
   expect(point.style.fontSize).not.toContain('clamp');
+});
+
+test('a list slide demotes its title to scripture-ref chrome: fixed size, mono, accent', () => {
+  // One grammar across the pre-service deck: small label up top, big content underneath.
+  // Fixed like the scripture ref — it is chrome, so it must hold still while the fitter
+  // works, and a constant-size child keeps the fit walk monotonic.
+  render(<SlideCanvas slide={{ kind: 'title', title: 'Announcements', points: ['Potluck sign-up'] }} />);
+  const title = screen.getByText('Announcements') as HTMLElement;
+  expect(title.style.fontSize).toBe('calc(max(8px,2.9cqmin))');
+  expect(title.style.fontSize).not.toContain('--helm-fit-size');
+  expect(title.style.textTransform).toBe('uppercase');
+  expect(title.style.fontFamily).toContain('JetBrains Mono');
+});
+
+test('a wrapped list item hangs under its first line, dot pinned beside it', () => {
+  // alignItems center floated the dot between the lines of a two-line item. flex-start
+  // pins it to the first line; the text (its own flex item) wraps within its own box,
+  // which is what gives the hanging indent.
+  render(<SlideCanvas slide={{ kind: 'title', title: 'Announcements', points: ['Potluck sign-up'] }} />);
+  const point = screen.getByText('Potluck sign-up') as HTMLElement;
+  expect(point.style.alignItems).toBe('flex-start');
+});
+
+test('the list fit band starts at the item design size and reaches low enough for a long list', () => {
+  // 6.4cqmin is the three-item design size (≈69px on 1080p — nearly double the 0.37×
+  // arrangement it replaces); the walk must be able to degrade to 2.15 (a whole number
+  // of 0.25 steps below 6.4) because the output has no scrolling.
+  expect(LIST_BAND[0]).toBe(6.4);
+  expect(LIST_BAND[LIST_BAND.length - 1]).toBe(2.15);
 });
 
 test('title subtitle scales with the fitted size (0.39x the title), floored, with no px ceiling', () => {
