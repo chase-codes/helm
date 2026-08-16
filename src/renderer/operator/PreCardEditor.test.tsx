@@ -100,6 +100,22 @@ describe('PreCardEditor verse look-up', () => {
     expect(saveCard.mock.calls[0][0].version).toBeUndefined()
   })
 
+  it('strips typed list markers when saving a list card (#50)', () => {
+    const { saveCard } = installHelm()
+    renderEditor()
+    fireEvent.click(screen.getByText('List of items'))
+    fireEvent.change(screen.getByPlaceholderText('Fellowship dinner — next Sunday after service'), {
+      target: { value: '- Potluck sign-up\n* Prayer meeting\n1. Building fund\nBare item\n-' }
+    })
+    fireEvent.click(screen.getByText('Add to loop'))
+    expect(saveCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'list',
+        points: ['Potluck sign-up', 'Prayer meeting', 'Building fund', 'Bare item']
+      })
+    )
+  })
+
   it('leaves pre-existing verse text intact when a look-up fails', async () => {
     installHelm()
     render(
