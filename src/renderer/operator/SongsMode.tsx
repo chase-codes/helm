@@ -847,12 +847,24 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     whiteSpace: 'nowrap',
     color: T.text
   };
+  // The rail (divider + panel, or the collapsed stub) lives in a width-animated wrapper:
+  // collapsing glides the width shut rather than snapping it, and the hero — whose
+  // auto-fit re-measures through its ResizeObserver every frame of the transition —
+  // scales its lyric smoothly into the freed space. The transition is disabled while the
+  // divider is being dragged, where it would lag the cursor.
+  const railWrapStyle: CSSProperties = {
+    width: railCollapsed ? '30px' : `${sectionPanel.width + 12}px`,
+    flexShrink: 0,
+    display: 'flex',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+    transition: sectionPanel.dragging ? 'none' : 'width 240ms ease'
+  };
   // Collapsed-rail stub: a slim strip where the rail was, whose whole surface re-opens
   // it. The hero absorbs the freed width, and — being width-bound — its lyric grows.
   const railStubStyle: CSSProperties = {
     width: '30px',
     flexShrink: 0,
-    marginLeft: '10px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -939,41 +951,43 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             </div>
           </div>
 
-          {railCollapsed ? (
-            <button
-              style={railStubStyle}
-              title="Show sections"
-              onClick={() => setRailCollapsedPersisted(false)}
-            >
-              <span aria-hidden>«</span>
-              <span style={railStubLabelStyle}>SECTIONS</span>
-            </button>
-          ) : (
-            <>
-              <PanelDivider
-                active={sectionPanel.dragging}
-                onMouseDown={sectionPanel.startDrag}
-                hit={12}
-                title="Drag to resize — lyric text scales with the panel"
-              />
+          <div style={railWrapStyle} data-testid="rail-wrap">
+            {railCollapsed ? (
+              <button
+                style={railStubStyle}
+                title="Show sections"
+                onClick={() => setRailCollapsedPersisted(false)}
+              >
+                <span aria-hidden>«</span>
+                <span style={railStubLabelStyle}>SECTIONS</span>
+              </button>
+            ) : (
+              <>
+                <PanelDivider
+                  active={sectionPanel.dragging}
+                  onMouseDown={sectionPanel.startDrag}
+                  hit={12}
+                  title="Drag to resize — lyric text scales with the panel"
+                />
 
-              <SectionRail
-                theme={T}
-                width={sectionPanel.width}
-                sections={activeSong?.sections ?? []}
-                cuedIndex={clampedSection}
-                isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
-                onSelect={setSection}
-                onActivate={activateSection}
-                editingIndex={editingSection}
-                editError={editError}
-                onSectionContextMenu={onSectionContextMenu}
-                onEditSave={saveSection}
-                onEditCancel={() => { setEditingSection(null); setEditError(false); }}
-                onCollapse={() => setRailCollapsedPersisted(true)}
-              />
-            </>
-          )}
+                <SectionRail
+                  theme={T}
+                  width={sectionPanel.width}
+                  sections={activeSong?.sections ?? []}
+                  cuedIndex={clampedSection}
+                  isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
+                  onSelect={setSection}
+                  onActivate={activateSection}
+                  editingIndex={editingSection}
+                  editError={editError}
+                  onSectionContextMenu={onSectionContextMenu}
+                  onEditSave={saveSection}
+                  onEditCancel={() => { setEditingSection(null); setEditError(false); }}
+                  onCollapse={() => setRailCollapsedPersisted(true)}
+                />
+              </>
+            )}
+          </div>
         </div>
 
         {/* Fixed slots (#85). Take down is always here — the panic control cannot move, or

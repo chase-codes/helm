@@ -1270,9 +1270,16 @@ describe('SongsMode — collapsible section rail', () => {
     expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
     // The hero (the confidence monitor) is untouched.
     expect(within(screen.getByTestId('song-hero')).getByText('Amazing grace')).toBeTruthy();
+    // The wrapper GLIDES shut rather than snapping — the width transition is what lets
+    // the hero's auto-fit (re-measured per frame via its ResizeObserver) scale smoothly.
+    const wrap = screen.getByTestId('rail-wrap');
+    expect(wrap.style.width).toBe('30px');
+    expect(wrap.style.transition).toContain('width');
 
     fireEvent.click(screen.getByTitle('Show sections'));
     expect(screen.getByText('SECTIONS — TAP TO SING')).toBeTruthy();
+    // Default rail width (380) + the divider's 12px hit area.
+    expect(screen.getByTestId('rail-wrap').style.width).toBe('392px');
   });
 
   it('persists the collapsed state across a remount', async () => {

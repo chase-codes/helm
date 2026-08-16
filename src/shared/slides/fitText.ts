@@ -31,3 +31,31 @@ export function fitFontSize(candidates: number[], fits: (cqmin: number) => boole
   for (const c of candidates) if (fits(c)) return c;
   return candidates[candidates.length - 1];
 }
+
+/**
+ * Continuous refinement between a size known to fit and a larger size known not to:
+ * bisects until the bracket is narrower than `precision` and returns the largest probed
+ * size that fit. The walk above quantizes to the band step (0.25cqmin ≈ 2px in an
+ * operator pane), which reads as visible stair-steps while a panel is being dragged;
+ * refining to 0.02cqmin makes the fitted size track the box continuously.
+ *
+ * Bisection, not a proportional solve: it only needs `fits` to be monotone (a size that
+ * fits still fits when smaller — which the fit contract already guarantees, see
+ * fitSizeScaled), so it stays correct for wrapped text whose height moves in whole-line
+ * jumps rather than linearly with font size.
+ */
+export function refineFitSize(
+  fitLo: number,
+  failHi: number,
+  fits: (cqmin: number) => boolean,
+  precision = 0.02
+): number {
+  let lo = fitLo;
+  let hi = failHi;
+  while (hi - lo > precision) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
