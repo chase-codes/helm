@@ -24,6 +24,9 @@ export interface SectionRailProps {
   onSectionContextMenu: (i: number, e: ReactMouseEvent) => void;
   onEditSave: (i: number, lines: string[]) => void;
   onEditCancel: () => void;
+  /** Collapse the rail to a slim stub, handing its width to the hero (whose auto-fitted
+   *  lyric is width-bound, so the freed width becomes font size). */
+  onCollapse?: () => void;
 }
 
 interface SectionEditorProps {
@@ -99,7 +102,8 @@ export function SectionRail({
   editError,
   onSectionContextMenu,
   onEditSave,
-  onEditCancel
+  onEditCancel,
+  onCollapse
 }: SectionRailProps): JSX.Element {
   const secFont = Math.round(Math.max(13, Math.min(18, width / 24)) * 10) / 10;
 
@@ -161,8 +165,37 @@ export function SectionRail({
 
   return (
     <div style={sectionPanelStyle}>
-      <div style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, marginBottom: '10px', flexShrink: 0 }}>
-        SECTIONS — TAP TO SING
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '11px',
+          letterSpacing: '0.1em',
+          color: T.faint,
+          fontWeight: 600,
+          marginBottom: '10px',
+          flexShrink: 0
+        }}
+      >
+        <span>SECTIONS — TAP TO SING</span>
+        {onCollapse && (
+          <button
+            title="Hide sections — bigger lyrics"
+            onClick={onCollapse}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: T.faint,
+              cursor: 'pointer',
+              fontSize: '13px',
+              lineHeight: 1,
+              padding: '2px 4px'
+            }}
+          >
+            »
+          </button>
+        )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '2px' }}>
         {sections.map((sc, i) => {

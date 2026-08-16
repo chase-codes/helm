@@ -13,6 +13,8 @@ import {
 import type { ModeKeyHandlerRef } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
+import { bandCandidates } from '../../shared/slides/fitText';
+import { useFitText, fitSizeValue } from '../shared/useFitText';
 import { keyForSong, parseSongKey } from '../../shared/presentation/core';
 import { stanzaLabel } from '../../shared/songs/stanza';
 import { CANVAS_AMBER } from '../../shared/slideAccents';
@@ -37,6 +39,18 @@ export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
   active: boolean;
 }
+
+// The hero doubles as the confidence monitor for rooms that mirror the operator screen
+// up front, so it renders lyrics under the projector's contract: one authored line = one
+// visual line (nowrap), auto-fitted as large as the box allows. Same band as LeaderView —
+// hoisted for stable identity in useFitText's deps (see SlideCanvas's bands).
+const HERO_BAND = bandCandidates(10.5, 3.5);
+/** Hero lyric font-size formula, exported for the same reason as SLIDE_HERO_WIDTH:
+ * jsdom's cssstyle drops declarations with container-query units, so the test pins the
+ * formula here instead of through the DOM. */
+export const HERO_LINE_FONT = `max(14px, ${fitSizeValue('7.4cqmin')})`;
+
+const RAIL_COLLAPSED_KEY = 'helmSectionRailCollapsed';
 
 const LIST_W_DEFAULT = 250;
 const LIST_W_MIN = 200;
@@ -103,6 +117,24 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const [editError, setEditError] = useState(false);
   const listPanel = usePanelWidth('helmSongListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
   const sectionPanel = usePanelWidth('helmSectionPanelW', { def: SECTION_W_DEFAULT, min: SECTION_W_MIN, max: SECTION_W_MAX, anchor: 'right' });
+  // Collapsing the rail hands its width to the hero — and since the fitted lyric size is
+  // width-bound for nearly every section, that width converts directly into font size.
+  // Meant for rooms that mirror the operator screen as the confidence monitor.
+  const [railCollapsed, setRailCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(RAIL_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setRailCollapsedPersisted = (v: boolean): void => {
+    setRailCollapsed(v);
+    try {
+      localStorage.setItem(RAIL_COLLAPSED_KEY, v ? '1' : '0');
+    } catch {
+      // localStorage unavailable — the choice just won't persist.
+    }
+  };
 
   // Cancellation guard for refreshLibrary's setState calls: reused by both the initial-load
   // effect below and SongImport's onImported callback, so it can't live as a per-call `let
@@ -547,6 +579,18 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const curKey = activeSong ? keyForSong(activeSong.id, clampedSection) : null;
   const cuedIsLive = output === 'live' && liveKey === curKey;
 
+  // Auto-fit the hero lyric to its box (LeaderView's mechanism). Width changes — window
+  // resize, panel drags, rail collapse — re-measure via useFitText's ResizeObserver, so
+  // the deps only need to cover content identity: which section, and its lines
+  // (currentSectionObj is a fresh object after a save).
+  const heroFitRef = useRef<HTMLDivElement | null>(null);
+  const heroContentRef = useRef<HTMLDivElement | null>(null);
+  useFitText(heroFitRef, heroContentRef, currentSectionObj ? HERO_BAND : null, [
+    activeSong?.id,
+    clampedSection,
+    currentSectionObj
+  ]);
+
   // The primary verb only ever means "put this on screen" (#85). When the cued section is
   // already the one up there it has nothing left to do, so it stops here rather than
   // reaching main's `goLive` — which reads a repeat of the live key as a take-down. The
@@ -759,12 +803,17 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    overflowY: 'auto',
+    // hidden, not auto: the fit below guarantees the section fits, and a scrollbar
+    // appearing mid-measure would change the box being measured.
+    overflow: 'hidden',
     borderRadius: '14px',
     background: T.panel,
     boxShadow: cuedIsLive ? `inset 0 0 0 2px ${T.accent}66` : `inset 0 0 0 1px ${T.hairline}`
   };
   const bigVerseLabelStyle: CSSProperties = {
+    flexShrink: 0,
+    padding: '18px 24px 0',
+    textAlign: 'center',
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: '12px',
     letterSpacing: '0.14em',
@@ -772,12 +821,56 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     color: cuedIsLive ? T.accent : T.faint,
     fontWeight: 500
   };
+  // The fit-measurement box (same shape as LeaderView's heroMiddle): containerType for
+  // cqmin — useFitText reads/writes FIT_SIZE_VAR in cqmin, which must resolve against
+  // this element — and overflow:hidden so "fits" means "visible". Margin, not padding:
+  // useFitText compares scrollHeight against clientHeight, and clientHeight includes
+  // padding, so padded space would count as room to grow into while not being visible-safe.
+  const heroFitStyle: CSSProperties = {
+    flex: 1,
+    minHeight: 0,
+    margin: '12px 24px 20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    containerType: 'size',
+    overflow: 'hidden'
+  };
   const bigLineStyle: CSSProperties = {
     fontWeight: 700,
-    fontSize: 'clamp(20.0px, 2.90vw, 34.0px)',
-    lineHeight: 1.3,
+    fontSize: HERO_LINE_FONT,
+    lineHeight: 1.22,
     letterSpacing: '-0.012em',
+    // The projector's contract: one authored line = one visual line. The fit shrinks the
+    // text instead of wrapping it, so the leader up front never sees line breaks the
+    // congregation doesn't.
+    whiteSpace: 'nowrap',
     color: T.text
+  };
+  // Collapsed-rail stub: a slim strip where the rail was, whose whole surface re-opens
+  // it. The hero absorbs the freed width, and — being width-bound — its lyric grows.
+  const railStubStyle: CSSProperties = {
+    width: '30px',
+    flexShrink: 0,
+    marginLeft: '10px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '14px 0',
+    border: 'none',
+    borderRadius: '11px',
+    background: T.panel2,
+    boxShadow: `inset 0 0 0 1px ${T.hairline}`,
+    color: T.faint,
+    cursor: 'pointer'
+  };
+  const railStubLabelStyle: CSSProperties = {
+    writingMode: 'vertical-rl',
+    fontFamily: "'JetBrains Mono',monospace",
+    fontSize: '10px',
+    letterSpacing: '0.14em',
+    fontWeight: 600
   };
   const ghostBtn = transportGhostBtn(T);
   // A switch is always something to put on screen, so an arm re-arms the primary slot even
@@ -831,9 +924,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '2px' }}>
           <div style={bigVerseWrapStyle}>
-            <div style={{ margin: 'auto', width: '100%', maxWidth: '760px', textAlign: 'center', padding: '22px 32px' }}>
-              <div style={bigVerseLabelStyle}>{currentSectionObj?.label ? `NOW SINGING · ${currentSectionObj.label}` : ''}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '20px' }}>
+            <div style={bigVerseLabelStyle}>{currentSectionObj?.label ? `NOW SINGING · ${currentSectionObj.label}` : ''}</div>
+            <div ref={heroFitRef} style={heroFitStyle} data-testid="song-hero">
+              <div
+                ref={heroContentRef}
+                style={{ display: 'flex', flexDirection: 'column', gap: '0.8em', width: '100%', textAlign: 'center' }}
+              >
                 {(currentSectionObj?.lines ?? []).map((ln, i) => (
                   <div key={i} style={bigLineStyle}>
                     {ln}
@@ -843,27 +939,41 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             </div>
           </div>
 
-          <PanelDivider
-            active={sectionPanel.dragging}
-            onMouseDown={sectionPanel.startDrag}
-            hit={12}
-            title="Drag to resize — lyric text scales with the panel"
-          />
+          {railCollapsed ? (
+            <button
+              style={railStubStyle}
+              title="Show sections"
+              onClick={() => setRailCollapsedPersisted(false)}
+            >
+              <span aria-hidden>«</span>
+              <span style={railStubLabelStyle}>SECTIONS</span>
+            </button>
+          ) : (
+            <>
+              <PanelDivider
+                active={sectionPanel.dragging}
+                onMouseDown={sectionPanel.startDrag}
+                hit={12}
+                title="Drag to resize — lyric text scales with the panel"
+              />
 
-          <SectionRail
-            theme={T}
-            width={sectionPanel.width}
-            sections={activeSong?.sections ?? []}
-            cuedIndex={clampedSection}
-            isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
-            onSelect={setSection}
-            onActivate={activateSection}
-            editingIndex={editingSection}
-            editError={editError}
-            onSectionContextMenu={onSectionContextMenu}
-            onEditSave={saveSection}
-            onEditCancel={() => { setEditingSection(null); setEditError(false); }}
-          />
+              <SectionRail
+                theme={T}
+                width={sectionPanel.width}
+                sections={activeSong?.sections ?? []}
+                cuedIndex={clampedSection}
+                isSectionLive={(i) => (activeSong ? output === 'live' && liveKey === keyForSong(activeSong.id, i) : false)}
+                onSelect={setSection}
+                onActivate={activateSection}
+                editingIndex={editingSection}
+                editError={editError}
+                onSectionContextMenu={onSectionContextMenu}
+                onEditSave={saveSection}
+                onEditCancel={() => { setEditingSection(null); setEditError(false); }}
+                onCollapse={() => setRailCollapsedPersisted(true)}
+              />
+            </>
+          )}
         </div>
 
         {/* Fixed slots (#85). Take down is always here — the panic control cannot move, or
