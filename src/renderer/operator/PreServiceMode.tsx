@@ -24,6 +24,14 @@ interface RemovedCard {
   index: number;
 }
 
+/**
+ * The seeded logo card is the one row on this rail with no creation path — PreCardEditor
+ * only builds verse/list/message cards, and its edit chip already skips logo — so once its
+ * five-second undo lapsed it would be gone for good with no way back. It is therefore
+ * excluded from every delete path; SKIPPED (toggleEnabled) is how you stop showing it.
+ */
+const isDeletable = (c: PreCard): boolean => c.type !== 'logo';
+
 const PRE_RAIL_W = 320;
 // Fixed accent for "currently projecting" — distinct from the theme's `live` (red,
 // used elsewhere for on-air/recording indicators) since the design brief for this
@@ -76,7 +84,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   const removeCards = (ids: string[]): void => {
     const batch: RemovedCard[] = cards
       .map((card, index) => ({ card, index }))
-      .filter(({ card }) => ids.includes(card.id));
+      .filter(({ card }) => ids.includes(card.id) && isDeletable(card));
     if (!batch.length) return;
     sel.clear();
     for (const { card } of batch) window.helm.preservice.removeCard(card.id);
@@ -371,17 +379,21 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                   if (!e.shiftKey) window.helm.preservice.takeCard(i);
                 }}
                 onContextMenu={(e) => {
-                  if (isSelected && sel.selectedIds.length > 1) {
-                    const ids = sel.selectedIds;
-                    contextMenu.open(e, [
-                      { label: `Delete ${ids.length} cards`, danger: true, onSelect: () => removeCards(ids) }
-                    ]);
-                  } else {
-                    sel.select(card.id);
-                    contextMenu.open(e, [
-                      { label: 'Delete', danger: true, onSelect: () => removeCards([card.id]) }
-                    ]);
-                  }
+                  const batchMenu = isSelected && sel.selectedIds.length > 1;
+                  if (!batchMenu) sel.select(card.id);
+                  const ids = batchMenu ? sel.selectedIds : [card.id];
+                  // The count names what will ACTUALLY go, so a range that happens to
+                  // include the undeletable logo card doesn't promise more than it does.
+                  const deletable = cards.filter((c) => ids.includes(c.id) && isDeletable(c));
+                  contextMenu.open(e, [
+                    deletable.length === 0
+                      ? { label: 'The logo card can’t be deleted', disabled: true, onSelect: () => {} }
+                      : {
+                          label: deletable.length === 1 ? 'Delete' : `Delete ${deletable.length} cards`,
+                          danger: true,
+                          onSelect: () => removeCards(deletable.map((c) => c.id))
+                        }
+                  ]);
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>

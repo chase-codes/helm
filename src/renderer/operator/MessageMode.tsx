@@ -114,16 +114,24 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     commit: (batch) => {
       window.helm.quoteSchedule
         .removeMany(batch.map((it) => it.id))
-        .then(setSchedule)
+        .then(applyRows)
         .catch((err: unknown) => {
           console.error(err);
-          window.helm.quoteSchedule.list().then(setSchedule).catch(console.error);
+          window.helm.quoteSchedule.list().then(applyRows).catch(console.error);
         });
     },
     restore: () => {
       window.helm.quoteSchedule.list().then(setSchedule).catch(console.error);
     }
   });
+
+  // Filters out rows still inside their undo window, which the database has not dropped
+  // yet — a raw setSchedule here puts a just-deleted quote back on the rail. See
+  // `pendingNow`. `restore` deliberately bypasses it: that call wants the full list.
+  function applyRows(rows: QuoteScheduleItem[]): void {
+    const pendingIds = new Set(undo.pendingNow().map((it) => it.id));
+    setSchedule(pendingIds.size ? rows.filter((it) => !pendingIds.has(it.id)) : rows);
+  }
 
   // Mirrors SermonMode's removeReadings: the rows leave the rail on the gesture, the
   // delete lands when the undo window closes.

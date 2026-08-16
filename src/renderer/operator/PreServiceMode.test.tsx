@@ -369,4 +369,56 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     await screen.findByText('Announcements')
     expect(screen.queryByText(/The loop is empty/)).toBeNull()
   })
+
+  // The logo card is the one row with no creation path — PreCardEditor only builds
+  // verse/list/message cards — so a delete that lapsed would be permanent with no way back.
+  it('refuses to delete the logo card, and says why', async () => {
+    const WITH_LOGO: PreState = {
+      ...baseState,
+      cards: [...cards, { id: 'logo', type: 'logo', title: 'Logo', enabled: false }]
+    }
+    const { removeCard } = installHelmStub(WITH_LOGO)
+    renderMode()
+    await screen.findByText('Logo')
+
+    fireEvent.contextMenu(rowFor('Logo'))
+    const item = await screen.findByRole('menuitem', { name: /logo card/i })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(item)
+    expect(removeCard).not.toHaveBeenCalled()
+  })
+
+  it('a range spanning the logo deletes the rest and counts only those', async () => {
+    const WITH_LOGO: PreState = {
+      ...baseState,
+      cards: [...cards, { id: 'logo', type: 'logo', title: 'Logo', enabled: false }]
+    }
+    const { removeCard } = installHelmStub(WITH_LOGO)
+    renderMode()
+    await screen.findByText('Logo')
+
+    fireEvent.click(rowFor('Greeting'))
+    fireEvent.click(rowFor('Logo'), { shiftKey: true })
+    fireEvent.contextMenu(rowFor('Logo'))
+    // Three rows are selected, but only two can go — the label must not over-promise.
+    fireEvent.click(await screen.findByText('Delete 2 cards'))
+
+    expect(removeCard.mock.calls.map((c) => c[0])).toEqual(['a', 'b'])
+  })
+
+  it('the Delete key leaves the logo card alone', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const WITH_LOGO: PreState = {
+      ...baseState,
+      cards: [...cards, { id: 'logo', type: 'logo', title: 'Logo', enabled: false }]
+    }
+    const { removeCard } = installHelmStub(WITH_LOGO)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Logo')
+
+    fireEvent.click(rowFor('Logo'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    expect(removeCard).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Removed/)).toBeNull()
+  })
 })

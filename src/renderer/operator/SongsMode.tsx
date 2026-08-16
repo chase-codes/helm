@@ -47,6 +47,11 @@ const SECONDARY_LIMIT = 3;
 // How long "Remove — sure?" stays armed before lapsing back. Same value Settings uses for
 // uninstalling a bible, because it is the same gesture — see onSongContextMenu.
 const REMOVE_CONFIRM_MS = 4000;
+// The confirm re-labels in place, so the second half of a double-click lands on "Remove —
+// sure?" at the very coordinates the first half armed it — arming and confirming in one
+// gesture, which is exactly what the two-step exists to prevent. Clicks this soon after
+// arming are the tail of that double-click, not a decision, so they are ignored.
+const CONFIRM_ARM_GUARD_MS = 350;
 
 // Shared by the cue effect, goLive, and jumpSection — all three build the identical
 // lyrics-slide literal for a song section, so a change to the shape only has one place to go.
@@ -354,6 +359,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   };
 
   const onSectionContextMenu = (i: number, e: ReactMouseEvent): void => {
+    // Clear the song-remove confirm timer here too, not just in onSongContextMenu:
+    // `contextMenu.update` rewrites WHICHEVER menu is open, so a timer left running from a
+    // song row would, four seconds later, silently turn this section menu into the song
+    // menu — its Edit would open the song editor and a destructive item would appear
+    // unprompted over a control the operator never right-clicked.
+    clearConfirmTimer();
     contextMenu.open(e, [
       { label: 'Edit', onSelect: () => { setEditError(false); setEditingSection(i); } }
     ]);
@@ -409,11 +420,21 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   // answer the Delete key or offer multi-select: no single keystroke may take a song out
   // of the library.
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // False until the arm-guard elapses. A timer rather than comparing clock readings:
+  // reading the clock from a function the compiler cannot prove is event-only counts as an
+  // impure call during render.
+  const confirmArmedRef = useRef(false);
+  const armGuardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearConfirmTimer = (): void => {
     if (confirmTimerRef.current !== null) {
       clearTimeout(confirmTimerRef.current);
       confirmTimerRef.current = null;
     }
+    if (armGuardTimerRef.current !== null) {
+      clearTimeout(armGuardTimerRef.current);
+      armGuardTimerRef.current = null;
+    }
+    confirmArmedRef.current = false;
   };
   useEffect(() => clearConfirmTimer, []);
 
@@ -442,21 +463,44 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
   // Rebuilt rather than toggled through state: the menu captures its items when it opens,
   // so re-labelling means handing it a fresh array via `update`.
-  const songMenuItems = (id: string, armed: boolean): ContextMenuItem[] => [
-    { label: 'Edit', onSelect: () => onEditSong(id) },
-    {
-      label: armed ? 'Remove — sure?' : 'Remove from library',
-      danger: true,
-      // The arming click must leave the menu up — the confirmation belongs under the
-      // cursor that is already there, not somewhere the operator has to find it again.
-      keepOpen: !armed,
-      onSelect: () => (armed ? removeSong(id) : armRemove(id))
-    }
-  ];
+  const songMenuItems = (id: string, armed: boolean): ContextMenuItem[] => {
+    // Refuse to remove the song the congregation is currently reading. `sameFlow` would
+    // keep its lyrics on the projector with no library row behind them, and the center
+    // stays live-locked against a song that no longer exists — a state nothing else in
+    // this mode can produce. Taking the screen down first costs one click and clears both.
+    const isLiveSong = output === 'live' && liveParsed?.songId === id;
+    const removeItem: ContextMenuItem = isLiveSong
+      ? { label: 'On screen — take it down first', disabled: true, onSelect: () => {} }
+      : {
+          label: armed ? 'Remove — sure?' : 'Remove from library',
+          danger: true,
+          // Always keepOpen, closing by hand only once the removal actually commits. The
+          // arming click obviously has to leave the menu up — the confirmation belongs
+          // under the cursor already there. But so does a click the arm-guard swallows:
+          // closing on one would leave a double-clicking operator with a shut menu,
+          // nothing deleted, and no sign of why. A swallowed click leaves "Remove —
+          // sure?" there to be pressed deliberately.
+          keepOpen: true,
+          onSelect: () => {
+            if (!armed) {
+              armRemove(id);
+              return;
+            }
+            if (!confirmArmedRef.current) return;
+            contextMenu.close();
+            removeSong(id);
+          }
+        };
+    return [{ label: 'Edit', onSelect: () => onEditSong(id) }, removeItem];
+  };
 
   const armRemove = (id: string): void => {
     clearConfirmTimer();
     contextMenu.update(songMenuItems(id, true));
+    armGuardTimerRef.current = setTimeout(() => {
+      armGuardTimerRef.current = null;
+      confirmArmedRef.current = true;
+    }, CONFIRM_ARM_GUARD_MS);
     confirmTimerRef.current = setTimeout(() => {
       confirmTimerRef.current = null;
       contextMenu.update(songMenuItems(id, false));

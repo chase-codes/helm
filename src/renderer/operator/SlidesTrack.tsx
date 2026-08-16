@@ -298,7 +298,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   const applyImport = (res: MediaImportResult, prevIds: Set<string>): void => {
     if (res.canceled) return;
     const added = res.items.find((i) => !prevIds.has(i.id));
-    setItems(res.items);
+    // An import reply carries the whole library, which during an undo window still holds
+    // the items the operator just deleted — dropping them in raw resurrects those rows
+    // until the commit lands. See useDeferredRemove's `pendingNow`.
+    const pendingIds = new Set(undo.pendingNow().map((i) => i.id));
+    setItems(pendingIds.size ? res.items.filter((i) => !pendingIds.has(i.id)) : res.items);
     if (added) {
       setSelId(added.id);
       setSlideIdx(0);

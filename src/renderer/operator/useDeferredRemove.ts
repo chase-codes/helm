@@ -9,6 +9,22 @@ export interface DeferredRemove<T> {
   remove: (items: T[]) => void;
   /** Take the undo: cancels the pending commit and asks `restore` to re-read the list. */
   undo: () => void;
+  /**
+   * The batch awaiting commit, read fresh at call time (never a render-old copy).
+   *
+   * Callers MUST filter every list they accept from main through this. Removal here is
+   * optimistic — the rows are gone from the rail but still in the database until the
+   * window closes — so any response that carries the authoritative list (a sibling add, an
+   * import, even the superseded delete's own reply) still contains them, and applying it
+   * verbatim resurrects rows the operator watched disappear. They would then vanish a
+   * second time when the commit lands.
+   *
+   * A ref rather than `pending`, because the moment that matters is exactly when the two
+   * disagree: `remove` commits the previous batch before arming the new one, so the reply
+   * to that commit arrives while `pending` still names the batch being committed rather
+   * than the one now in the undo window.
+   */
+  pendingNow: () => T[];
 }
 
 export interface DeferredRemoveOptions<T> {
@@ -94,5 +110,7 @@ export function useDeferredRemove<T>({
   // operator's view either way, so it must not survive in the database.
   useEffect(() => () => commitPending(), [commitPending]);
 
-  return { pending: undo.pending, remove, undo: takeUndo };
+  const pendingNow = useCallback((): T[] => armedRef.current ?? [], []);
+
+  return { pending: undo.pending, remove, undo: takeUndo, pendingNow };
 }

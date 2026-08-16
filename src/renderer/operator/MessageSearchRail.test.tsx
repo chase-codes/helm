@@ -88,8 +88,16 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
 
   it('invites the operator to search when tapes exist but the schedule is empty (#88)', () => {
     render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes />)
-    expect(screen.getByText(/Quotes you add will wait here/).textContent).toMatch(/search a tape above/)
+    expect(screen.getByText(/Search above to find a quote/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Import a message' })).toBeNull()
+  })
+
+  // Nothing in the app calls quoteSchedule.add, so copy promising that clicking a quote
+  // files it here would describe a workflow the operator cannot perform. Delete this test
+  // when the add affordance lands — and update the copy with it.
+  it('does not promise an add-to-schedule gesture that does not exist', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes />)
+    expect(screen.queryByText(/Quotes you add will wait here/)).toBeNull()
   })
 
   it('points at the import when no tapes are installed at all (#88)', () => {
@@ -105,7 +113,7 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
   it('shows no empty state once the schedule has rows', () => {
     render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow()]} hasTapes={false} />)
     expect(screen.queryByText(/No messages yet/)).toBeNull()
-    expect(screen.queryByText(/Quotes you add will wait here/)).toBeNull()
+    expect(screen.queryByText(/Search above to find a quote/)).toBeNull()
   })
 
   it('renders the undo toast and fires onUndo (#86)', () => {

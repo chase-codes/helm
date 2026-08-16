@@ -237,9 +237,11 @@ export function MessageSearchRail({
           <div style={scrollWrapStyle}>
             {scheduleRows.length === 0 &&
               (hasTapes ? (
-                <ListEmpty>
-                  Quotes you add will wait here — search a tape above, then click a quote.
-                </ListEmpty>
+                // Deliberately does NOT promise "click a quote to add it here": nothing in
+                // the app calls quoteSchedule.add, so this list cannot currently gain rows
+                // and that copy would describe a workflow the operator cannot perform.
+                // When an add affordance lands, this line should name it.
+                <ListEmpty>Search above to find a quote and put it in the preview.</ListEmpty>
               ) : (
                 // Nothing installed at all: a search box the operator cannot make match
                 // anything is not an invitation, so name the import instead (#88).

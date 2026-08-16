@@ -88,11 +88,25 @@ function installHelmStub(
   const goLive = vi.fn()
   const take = vi.fn()
   const setOutput = vi.fn()
-  const add = vi.fn(() => Promise.resolve([]))
-  const removeMany = vi.fn(() => Promise.resolve([]))
+  // Models main's schedule table rather than answering a canned []: every one of these
+  // replies carries the AUTHORITATIVE list, and deferred deletes mean the rail and that
+  // list legitimately disagree for five seconds. A stub that always answers [] cannot show
+  // what the renderer does with a reply that still holds a row the operator watched go.
+  const db: ScriptureReading[] = [...schedule]
+  const add = vi.fn((r: Omit<ScriptureReading, 'id'>) => {
+    db.push({ id: `new-${db.length}`, ...r })
+    return Promise.resolve([...db])
+  })
+  const removeMany = vi.fn((ids: string[]) => {
+    for (const id of ids) {
+      const i = db.findIndex((r) => r.id === id)
+      if (i >= 0) db.splice(i, 1)
+    }
+    return Promise.resolve([...db])
+  })
   // A spy, not an inline arrow: undo now restores by RE-READING the schedule rather than
   // re-adding rows, so tests need to see this call.
-  const scheduleList = vi.fn(() => Promise.resolve(schedule))
+  const scheduleList = vi.fn(() => Promise.resolve([...db]))
   const quoteScheduleList = vi.fn(() => Promise.resolve(opts.quoteSchedule ?? []))
   const quoteRemoveMany = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
@@ -1765,6 +1779,44 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // Deferred deletes mean the rail and the database legitimately disagree for five seconds.
+  // Anything that applies a reply from main verbatim during that window puts the deleted
+  // rows back on the rail, where they sit under their own "Removed — Undo" toast and then
+  // vanish a second time when the commit lands.
+  it('a superseding delete does not resurrect the row still inside its undo window', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    // Deleting a second row commits the first — whose reply still lists the second.
+    fireEvent.click(rowButton('Genesis 1:2'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await act(async () => {})
+    expect(scheduleRowTitles()).toEqual(['Genesis 1:3'])
+  })
+
+  it('adding a reading during an undo window does not bring the deleted ones back', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await screen.findByText('Genesis 1:1')
+
+    // Clear all is the worst case: one add would otherwise restore the whole schedule.
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(scheduleRowTitles()).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add/ }))
+    await act(async () => {})
+
+    expect(scheduleRowTitles()).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
   })
 
   it('Clear all is a real button, and is offered only while the schedule has rows', async () => {

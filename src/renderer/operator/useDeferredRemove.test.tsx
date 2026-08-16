@@ -177,4 +177,64 @@ describe('useDeferredRemove', () => {
       vi.useRealTimers();
     }
   });
-});
+
+  // The moment that matters is not when `commit` is entered — it is when that commit's IPC
+  // REPLY lands, which is after `remove` has armed the next batch. A reply carries the whole
+  // list, so a consumer applying it verbatim would resurrect the batch now in the window.
+  it("pendingNow names the newer batch by the time a superseded commit's reply lands", async () => {
+    const seen: string[][] = []
+    let resolveFirst: () => void = () => {}
+    function Probe(): JSX.Element {
+      const d = useDeferredRemove<string>({
+        commit: (batch) => {
+          // Models the IPC round trip each real consumer makes.
+          const reply =
+            batch[0] === 'a' ? new Promise<void>((r) => (resolveFirst = r)) : Promise.resolve()
+          void reply.then(() => seen.push(d.pendingNow()))
+        },
+        restore: () => {}
+      })
+      return (
+        <div>
+          <button onClick={() => d.remove(['a'])}>rm-a</button>
+          <button onClick={() => d.remove(['b'])}>rm-b</button>
+        </div>
+      )
+    }
+    render(<Probe />)
+    fireEvent.click(screen.getByText('rm-a'))
+    fireEvent.click(screen.getByText('rm-b')) // commits 'a', arms 'b'
+
+    await act(async () => {
+      resolveFirst()
+    })
+    expect(seen[0]).toEqual(['b'])
+  })
+
+  it('pendingNow is empty before any removal and after the window closes', () => {
+    vi.useFakeTimers()
+    try {
+      const readings: string[][] = []
+      function Probe(): JSX.Element {
+        const d = useDeferredRemove<string>({ commit: () => {}, restore: () => {} })
+        return (
+          <div>
+            <button onClick={() => readings.push(d.pendingNow())}>read</button>
+            <button onClick={() => d.remove(['a'])}>rm</button>
+          </div>
+        )
+      }
+      render(<Probe />)
+      fireEvent.click(screen.getByText('read'))
+      fireEvent.click(screen.getByText('rm'))
+      fireEvent.click(screen.getByText('read'))
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      fireEvent.click(screen.getByText('read'))
+      expect(readings).toEqual([[], ['a'], []])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

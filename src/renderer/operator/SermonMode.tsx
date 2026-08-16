@@ -104,16 +104,24 @@ export function SermonMode({
         .removeMany(readings.map((r) => r.id))
         // The authoritative post-delete list, which also folds in anything added during
         // the undo window; on failure it resyncs a rail that optimistically lied.
-        .then(setSchedule)
+        .then(applyRows)
         .catch((err: unknown) => {
           console.error(err);
-          window.helm.schedule.list().then(setSchedule).catch(console.error);
+          window.helm.schedule.list().then(applyRows).catch(console.error);
         });
     },
     restore: () => {
       window.helm.schedule.list().then(setSchedule).catch(console.error);
     }
   });
+
+  // Every list main hands back goes through here. Rows in the undo window are still in the
+  // database, so a raw `setSchedule` would put a just-deleted reading back on the rail —
+  // see `pendingNow`. Not used by `restore`, which wants exactly the unfiltered list.
+  function applyRows(rows: ScriptureReading[]): void {
+    const pendingIds = new Set(undo.pendingNow().map((r) => r.id));
+    setSchedule(pendingIds.size ? rows.filter((r) => !pendingIds.has(r.id)) : rows);
+  }
 
   // Shared by all tracks (Task 4 threads these into MessageMode/SlidesTrack too), so
   // they live at the top level rather than inside the scripture-track branch below.
@@ -627,7 +635,10 @@ export function SermonMode({
   // the Go live button show. Both read `addRef`, so an empty entry commits the cursor's
   // verse — Shift+Enter on an empty field is the keyboard twin of the Go live button.
   const addToSchedule = (): void => {
-    window.helm.schedule.add(addRef).then(setSchedule).catch(console.error);
+    // applyRows, not setSchedule: `add` replies with the whole list, which during an undo
+    // window still holds the rows the operator just deleted (most visible right after
+    // Clear all — one add would bring the entire cleared schedule back for five seconds).
+    window.helm.schedule.add(addRef).then(applyRows).catch(console.error);
     setBuilder(initialBuilder());
     setTrack('scripture');
   };

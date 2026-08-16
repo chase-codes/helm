@@ -903,6 +903,21 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
   const awaitRow = async (title: string): Promise<void> => {
     await waitFor(() => rowFor(title));
   };
+  // Right-click the row and arm the confirm, then step past the arm-guard window (which
+  // exists to swallow the tail of a double-click) so the NEXT click is a real decision.
+  // Fake timers must be installed before arming, since that is when the guard timer starts.
+  const armRemoveConfirm = (title: string): void => {
+    vi.useFakeTimers();
+    try {
+      fireEvent.contextMenu(rowFor(title));
+      fireEvent.click(screen.getByText('Remove from library'));
+      act(() => {
+        vi.advanceTimersByTime(400); // > CONFIRM_ARM_GUARD_MS
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  };
 
   it('offers Remove from library on the row menu, alongside Edit', async () => {
     installHelmStubWith(TWO, NOTHING_LIVE);
@@ -932,9 +947,8 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
     renderMode({ current: null });
     await awaitRow('Only Believe');
-    fireEvent.contextMenu(rowFor('Only Believe'));
-    fireEvent.click(await screen.findByText('Remove from library'));
-    fireEvent.click(await screen.findByText('Remove — sure?'));
+    armRemoveConfirm('Only Believe');
+    fireEvent.click(screen.getByText('Remove — sure?'));
 
     expect(remove).toHaveBeenCalledWith('s2');
     await waitFor(() => expect(screen.queryByText('Only Believe')).toBeNull());
@@ -987,13 +1001,101 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     await awaitRow('Amazing Grace');
 
     // Amazing Grace is selected on load (first song); remove it.
-    fireEvent.contextMenu(rowFor('Amazing Grace'));
-    fireEvent.click(await screen.findByText('Remove from library'));
-    fireEvent.click(await screen.findByText('Remove — sure?'));
+    armRemoveConfirm('Amazing Grace');
+    fireEvent.click(screen.getByText('Remove — sure?'));
 
     await waitFor(() => expect(screen.queryByText('Amazing Grace')).toBeNull());
     // The heading tracks the selection, so it having moved on is what proves it.
     await waitFor(() => expect(screen.getAllByText('Only Believe').length).toBeGreaterThan(1));
+  });
+
+  // The confirm re-labels in place, so without a guard the second half of a double-click
+  // lands on 'Remove — sure?' at the same coordinates and deletes in one gesture.
+  it('a double-click arms without also confirming', async () => {
+    const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.contextMenu(rowFor('Only Believe'));
+      fireEvent.click(screen.getByText('Remove from library'));
+      // The very next click, landing immediately on the re-labelled item, is the tail of
+      // the double-click — not a decision.
+      fireEvent.click(screen.getByText('Remove — sure?'));
+      expect(remove).not.toHaveBeenCalled();
+      expect(screen.getByText('Remove — sure?')).toBeTruthy();
+
+      // A deliberate click after the guard elapses still works.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      fireEvent.click(screen.getByText('Remove — sure?'));
+      expect(remove).toHaveBeenCalledWith('s2');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a confirm timer left running never rewrites a different menu', async () => {
+    installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.contextMenu(rowFor('Only Believe'));
+      fireEvent.click(screen.getByText('Remove from library'));
+      // Escape out, then open the SECTION menu, which offers only Edit.
+      fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+      fireEvent.contextMenu(screen.getByText('Verse 1').closest('button') as HTMLElement);
+      expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      // The lapsing song-confirm must not turn this into the song menu.
+      expect(screen.queryByText('Remove from library')).toBeNull();
+      expect(screen.queryByText('Remove — sure?')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses to remove the song currently on screen, and says why', async () => {
+    const LIVE_S2: PresentationState = {
+      output: 'live',
+      liveKey: 'song:s2:0',
+      liveSnap: { kind: 'lyrics', label: 'Only Believe', lines: ['b'] },
+      cuedKey: null,
+      cuedSnap: null
+    };
+    const { remove } = installHelmStubWith(TWO, LIVE_S2);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+
+    fireEvent.contextMenu(rowFor('Only Believe'));
+    const item = await screen.findByRole('menuitem', { name: /take it down first/i });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(item);
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.queryByText('Remove from library')).toBeNull();
+  });
+
+  it('still offers removal for songs that are not the live one', async () => {
+    const LIVE_S2: PresentationState = {
+      output: 'live',
+      liveKey: 'song:s2:0',
+      liveSnap: { kind: 'lyrics', label: 'Only Believe', lines: ['b'] },
+      cuedKey: null,
+      cuedSnap: null
+    };
+    installHelmStubWith(TWO, LIVE_S2);
+    renderMode({ current: null });
+    await awaitRow('Amazing Grace');
+
+    fireEvent.contextMenu(rowFor('Amazing Grace'));
+    expect(await screen.findByText('Remove from library')).toBeTruthy();
   });
 
   it('never answers the Delete key — no keystroke removes a library song', async () => {
