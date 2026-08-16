@@ -243,6 +243,16 @@ const trackPanel = (t: 'scripture' | 'message' | 'slides'): HTMLElement =>
   document.querySelector(`[data-track-panel="${t}"]`) as HTMLElement
 const panelHidden = (t: 'scripture' | 'message' | 'slides'): boolean =>
   trackPanel(t).style.display === 'none'
+/** Waits until the live presentation state has reached this track's closure — a resolved
+ * chapter (or a loaded deck) only proves the fetch landed. The tell is the primary slot
+ * ghosting: since #85 the transport never re-labels itself, so "Take down is showing" no
+ * longer distinguishes a live track from a dark one — every track renders it always. */
+const awaitCuedLive = (t: 'scripture' | 'message' | 'slides'): Promise<void> =>
+  waitFor(() =>
+    expect(
+      (within(trackPanel(t)).getByRole('button', { name: /Go live/ }) as HTMLButtonElement).disabled
+    ).toBe(true)
+  )
 const clickTab = (label: string): void => {
   fireEvent.click(screen.getAllByText(label)[0])
 }
@@ -714,14 +724,33 @@ describe('SermonMode — a half-typed reference is not a commit', () => {
 })
 
 describe('SermonMode — the Go live button does what its label says', () => {
-  it('takes the screen down, and does not toggle via goLive, when the cursor is live', async () => {
+  it('takes the screen down from its own slot, never through goLive', async () => {
     const { goLive, setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    const scripture = within(trackPanel('scripture'))
+    await waitFor(() => expect(scripture.getByRole('button', { name: /Take down/ })).toBeTruthy())
 
-    fireEvent.click(screen.getByText('Take down'))
+    fireEvent.click(scripture.getByRole('button', { name: /Take down/ }))
     expect(setOutput).toHaveBeenCalledWith('black')
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  // #85: the primary slot only ever means "put this on screen". Enter is its keyboard twin,
+  // so once the cursor's verse IS the screen, Enter has nothing to do — it must not fall
+  // through to the old toggle and black the screen. Escape is still the way down.
+  it('makes Enter a no-op — not a take-down — once the cursor is already live', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { goLive, setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    const scripture = within(trackPanel('scripture'))
+    await waitFor(() =>
+      expect((scripture.getByRole('button', { name: /Go live/ }) as HTMLButtonElement).disabled).toBe(true)
+    )
+
+    keyHandlerRef.current?.onGoLive()
+    expect(setOutput).not.toHaveBeenCalled()
     expect(goLive).not.toHaveBeenCalled()
   })
 
@@ -977,9 +1006,8 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
-    // 'Take down' proves the live presentation state reached the handler's closure —
-    // 'Verse 1' only proves the chapter fetch resolved.
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    // 'Verse 1' would only prove the chapter fetch resolved.
+    await awaitCuedLive('scripture')
 
     act(() => void keyHandlerRef.current?.onEscape())
     expect(setOutput).toHaveBeenCalledWith('black')
@@ -990,7 +1018,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    await awaitCuedLive('scripture')
 
     entry().focus()
     act(() => void keyHandlerRef.current?.onEscape())
@@ -1006,7 +1034,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     render(<Harness keyHandlerRef={keyHandlerRef} />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    await awaitCuedLive('scripture')
 
     // Mirror App's wiring: the document-level dispatcher forwards a bubbled Escape to the
     // mode handler — unless the entry's own handler consumed the press.
@@ -1053,9 +1081,9 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
     clickTab('Slides')
-    // 'Take down' (the cued slide is the live one) proves both the media load and the
-    // live presentation state have landed.
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    // The cued slide is the live one — proves both the media load and the live
+    // presentation state have landed.
+    await awaitCuedLive('slides')
     act(() => void keyHandlerRef.current?.onEscape())
     expect(setOutput).toHaveBeenCalledWith('black')
   })
@@ -1084,7 +1112,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
     clickTab('Slides')
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    await awaitCuedLive('slides')
 
     const disagreements: string[] = []
     const observer = new MutationObserver(() => {
@@ -1124,7 +1152,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
     clickTab('Slides')
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    await awaitCuedLive('slides')
     fireEvent.click(screen.getByText('+ Import'))
     fireEvent.click(screen.getByText('Slides / PDF'))
     await waitFor(() => expect(screen.getByText('PowerPoint import unavailable')).toBeTruthy())
@@ -1156,7 +1184,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
     clickTab('Slides')
-    await waitFor(() => expect(screen.getByText('Take down')).toBeTruthy())
+    await awaitCuedLive('slides')
     fireEvent.click(screen.getByText('+ Import'))
     expect(screen.getByText('Slides / PDF')).toBeTruthy()
 

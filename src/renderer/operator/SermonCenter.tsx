@@ -4,6 +4,7 @@ import type { OutputMode, Slide, SlideColumn } from '../../shared/types';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
+import { primaryBtnStyle, transportGhostBtn, verbDividerStyle } from './transport';
 
 export interface SermonCenterProps {
   theme: Theme;
@@ -29,7 +30,9 @@ export interface SermonCenterProps {
    * sitting there green and armed over an empty hero (#88). Defaults to true, so the
    * scripture track (whose hero always has a cursor) needs no opinion. */
   canGoLive?: boolean;
-  onToggleLogo: () => void;
+  /** Blacks the screen. Its own permanent slot rather than a second meaning bolted onto
+   * the primary button — see the transport comment below (#85). */
+  onTakeDown: () => void;
   variant: 'verse' | 'quote' | 'slide';
   /** verse-only */
   cols?: SlideColumn[];
@@ -80,7 +83,7 @@ export function SermonCenter({
   onNext,
   onGoLive,
   canGoLive = true,
-  onToggleLogo
+  onTakeDown
 }: SermonCenterProps): JSX.Element {
   const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
   const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
@@ -172,48 +175,13 @@ export function SermonCenter({
     flexShrink: 0,
     whiteSpace: 'nowrap'
   };
-  const ghostBtn: CSSProperties = {
-    height: '46px',
-    padding: '0 16px',
-    borderRadius: '11px',
-    background: T.panel2,
-    boxShadow: `inset 0 0 0 1px ${T.hairline}`,
-    fontSize: '14px',
-    fontWeight: 600,
-    color: T.dim,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '7px'
-  };
-  const goLiveStyle: CSSProperties = {
-    height: '46px',
-    padding: '0 20px',
-    borderRadius: '11px',
-    background: canGoLive ? (cuedIsLive ? T.live : T.go) : 'transparent',
-    boxShadow: canGoLive ? 'none' : `inset 0 0 0 1px ${T.border}`,
-    color: canGoLive ? '#fff' : T.faint,
-    cursor: canGoLive ? 'pointer' : 'default',
-    fontSize: '14.5px',
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '7px',
-    whiteSpace: 'nowrap'
-  };
-  const logoBtnStyle: CSSProperties = {
-    height: '46px',
-    padding: '0 14px',
-    borderRadius: '11px',
-    background: 'transparent',
-    boxShadow: `inset 0 0 0 1px ${output === 'logo' ? T.accent + '66' : T.border}`,
-    fontSize: '13px',
-    fontWeight: 600,
-    color: output === 'logo' ? T.accent : T.dim,
-    display: 'flex',
-    alignItems: 'center'
-  };
+  const ghostBtn = transportGhostBtn(T);
+  // Nothing to put up while the cued verse is already the one on screen — the slot ghosts
+  // rather than re-labelling itself "Take down" the way it used to (#85).
+  const canTakeDown = output === 'live';
+  const primaryLive = canGoLive && !cuedIsLive;
+  const goLiveStyle = primaryBtnStyle(T, primaryLive ? 'go' : 'ghost');
+  const takeDownStyle = primaryBtnStyle(T, canTakeDown ? 'down' : 'ghost');
 
   return (
     <div style={centerStyle}>
@@ -280,7 +248,12 @@ export function SermonCenter({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginTop: '13px', flexShrink: 0 }}>
+      {/* Fixed slots (#85). Everything variable-width — the version picker, whose label
+          grows with the stacked-version list — sits left of the two verbs, because with a
+          flex spacer a control's position is set by the widths to its RIGHT. Take down and
+          Go live are therefore the last two controls in the row, at the same coordinates in
+          every state, and neither ever takes on the other's meaning. */}
+      <div style={{ display: 'flex', gap: '10px', marginTop: '13px', flexShrink: 0 }} data-transport-bar>
         <button style={ghostBtn} onClick={onPrev}>
           &lsaquo; Back
         </button>
@@ -288,18 +261,29 @@ export function SermonCenter({
           {nextLabel}
         </button>
         <div style={{ flex: 1 }} />
-        <button
-          style={{ ...goLiveStyle, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-          onClick={onGoLive}
-          disabled={!canGoLive}
-          title={canGoLive ? undefined : 'Nothing to take — there is nothing cued yet'}
-        >
-          {cuedIsLive ? <ScreenBlackIcon size={14} /> : <GoLiveIcon size={14} />}
-          {cuedIsLive ? 'Take down' : 'Go live'}
-        </button>
         {versionPicker}
-        <button style={logoBtnStyle} onClick={onToggleLogo}>
-          {output === 'logo' ? 'Hide logo' : 'Show logo'}
+        <button
+          style={takeDownStyle}
+          onClick={onTakeDown}
+          disabled={!canTakeDown}
+          title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
+        >
+          <ScreenBlackIcon size={14} /> Take down
+        </button>
+        <div style={verbDividerStyle(T)} />
+        <button
+          style={goLiveStyle}
+          onClick={onGoLive}
+          disabled={!primaryLive}
+          title={
+            !canGoLive
+              ? 'Nothing to take — there is nothing cued yet'
+              : cuedIsLive
+                ? 'Already on screen'
+                : undefined
+          }
+        >
+          <GoLiveIcon size={14} /> Go live
         </button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
@@ -379,7 +379,7 @@ describe('SongsMode armed switching', () => {
     fireEvent.click(screen.getByText('Blessed Assurance'));
     // Center unchanged: hero still shows the live song (title appears twice — rail row + hero header).
     expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(1);
-    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    expect(screen.getByText('⇄ Switch')).toBeTruthy();
     expect(screen.getByText('NEXT')).toBeTruthy();
     // Arming is silent: no cue, no goLive.
     expect(cue).not.toHaveBeenCalled();
@@ -392,11 +392,11 @@ describe('SongsMode armed switching', () => {
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
-    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    fireEvent.click(screen.getByText('⇄ Switch'));
     expect(goLive).toHaveBeenCalledWith('song:s3:0', expect.objectContaining({ label: 'Blessed Assurance · Verse 1' }));
     // Selection followed the commit; arm cleared.
     await waitFor(() => expect(screen.getAllByText('Blessed Assurance').length).toBeGreaterThan(1)); // rail row + hero header
-    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(screen.queryByText('⇄ Switch')).toBeNull();
   });
 
   it('re-arming the just-committed song before its broadcast lands, then switching, disarms without a second goLive', async () => {
@@ -408,7 +408,7 @@ describe('SongsMode armed switching', () => {
     // Arm and commit: goLive fires, selection moves to s3, but the stub's live state
     // (liveKey) hasn't been pushed yet — the broadcast round-trip is still in flight.
     fireEvent.click(screen.getByText('Blessed Assurance'));
-    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    fireEvent.click(screen.getByText('⇄ Switch'));
     expect(goLive).toHaveBeenCalledTimes(1);
 
     // Click the same (now-selected) row again before the broadcast lands: still `locked`
@@ -420,17 +420,17 @@ describe('SongsMode armed switching', () => {
       .map((el) => el.closest('button'))
       .find((b): b is HTMLButtonElement => !!b)!;
     fireEvent.click(s3RowBtn);
-    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    expect(screen.getByText('⇄ Switch')).toBeTruthy();
 
     // Now the broadcast lands: liveKey catches up to the song that was already re-armed.
     act(() => pushState({ ...LIVE_ON_S2, liveKey: 'song:s3:0', cuedKey: 'song:s3:0' }));
-    await waitFor(() => expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('⇄ Switch')).toBeTruthy());
 
     // Pressing Switch now must NOT send a second goLive on the already-live key (main
     // reads a same-key goLive as take-down) — it just disarms.
-    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    fireEvent.click(screen.getByText('⇄ Switch'));
     expect(goLive).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(screen.queryByText('⇄ Switch')).toBeNull();
     // Selection landed on (stayed on) the armed song — rail row + hero header.
     expect(screen.getAllByText('Blessed Assurance').length).toBeGreaterThan(1);
   });
@@ -445,7 +445,7 @@ describe('SongsMode armed switching', () => {
     // state is never pushed in this test, so liveParsed stays on the OLD key (song:s2:0)
     // throughout — this is the pre-broadcast window the pendingSwitchRef guard covers.
     fireEvent.click(screen.getByText('Blessed Assurance'));
-    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    fireEvent.click(screen.getByText('⇄ Switch'));
     expect(goLive).toHaveBeenCalledTimes(1);
 
     // Re-arm the same (now-selected) song and commit again, still before any broadcast.
@@ -454,12 +454,12 @@ describe('SongsMode armed switching', () => {
       .map((el) => el.closest('button'))
       .find((b): b is HTMLButtonElement => !!b)!;
     fireEvent.click(s3RowBtn);
-    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
-    fireEvent.click(screen.getByText(/⇄ Switch to Blessed Assurance/));
+    expect(screen.getByText('⇄ Switch')).toBeTruthy();
+    fireEvent.click(screen.getByText('⇄ Switch'));
 
     // Guarded by pendingSwitchRef (liveParsed is still stale): no second goLive.
     expect(goLive).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(screen.queryByText('⇄ Switch')).toBeNull();
   });
 
   it('Enter (onGoLive) commits the switch while armed', async () => {
@@ -498,7 +498,7 @@ describe('SongsMode armed switching', () => {
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
     expect(screen.getByText('Take down')).toBeTruthy();
-    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    expect(screen.getByText('⇄ Switch')).toBeTruthy();
     fireEvent.click(screen.getByText('Take down'));
     expect(setOutput).toHaveBeenCalledWith('black');
   });
@@ -513,7 +513,7 @@ describe('SongsMode armed switching', () => {
     act(() => pushState({ ...LIVE_ON_S2, output: 'black' }));
     // Hero transitions to the armed song, the arm clears, and the cue effect stages it.
     await waitFor(() => expect(screen.getByText('Fanny Crosby')).toBeTruthy());
-    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(screen.queryByText('⇄ Switch')).toBeNull();
     await waitFor(() => expect(cue).toHaveBeenCalledWith('song:s3:0', expect.anything()));
   });
 
@@ -524,7 +524,7 @@ describe('SongsMode armed switching', () => {
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
     act(() => pushState({ ...LIVE_ON_S2, liveKey: 'scr:kjv:John:3', liveSnap: { kind: 'scripture' } }));
-    await waitFor(() => expect(screen.queryByText(/⇄ Switch to/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText('⇄ Switch')).toBeNull());
     expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(1); // rail row + hero header — selection untouched
   });
 
@@ -546,7 +546,7 @@ describe('SongsMode armed switching', () => {
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
     await waitFor(() => expect(screen.getByText('Fanny Crosby')).toBeTruthy());
-    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(screen.queryByText('⇄ Switch')).toBeNull();
     await waitFor(() => expect(cue).toHaveBeenCalledWith('song:s3:0', expect.anything()));
   });
 
@@ -560,7 +560,7 @@ describe('SongsMode armed switching', () => {
     fireEvent.change(await screen.findByPlaceholderText(/Paste lyrics here/), { target: { value: 'Blessed assurance' } });
     fireEvent.click(screen.getByText('Add to library'));
     // The new song lands armed; the center never left the live song.
-    await waitFor(() => expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('⇄ Switch')).toBeTruthy());
     expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(1); // rail row + hero header
   });
 });
@@ -576,7 +576,7 @@ describe('SongsMode escape chain', () => {
     let handled: boolean | undefined;
     act(() => { handled = keyHandlerRef.current?.onEscape(); });
     expect(handled).toBe(true);
-    expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+    expect(screen.queryByText('⇄ Switch')).toBeNull();
     expect(setOutput).not.toHaveBeenCalled();
 
     act(() => { handled = keyHandlerRef.current?.onEscape(); });
@@ -590,7 +590,7 @@ describe('SongsMode escape chain', () => {
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
-    expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+    expect(screen.getByText('⇄ Switch')).toBeTruthy();
 
     // Wire a REAL document-level keydown listener via dispatchModeKey, mirroring App.tsx's
     // own wiring exactly. This is the only way to actually prove e.stopPropagation() in the
@@ -617,13 +617,13 @@ describe('SongsMode escape chain', () => {
       // propagation — the document dispatcher's onEscape must never run, so the arm survives.
       fireEvent.keyDown(input, { key: 'Escape' });
       expect(input.value).toBe('');
-      expect(screen.getByText(/⇄ Switch to Blessed Assurance/)).toBeTruthy();
+      expect(screen.getByText('⇄ Switch')).toBeTruthy();
       expect(setOutput).not.toHaveBeenCalled();
 
       // Second Escape: query already empty, so the field is a no-op and the press reaches
       // the global chain, which disarms (progressive back-out, next step).
       fireEvent.keyDown(input, { key: 'Escape' });
-      expect(screen.queryByText(/⇄ Switch to/)).toBeNull();
+      expect(screen.queryByText('⇄ Switch')).toBeNull();
       expect(setOutput).not.toHaveBeenCalled();
     } finally {
       document.removeEventListener('keydown', onKeyDown);
@@ -1128,5 +1128,107 @@ describe('SongsMode — empty library invites the operator to fill it (#88)', ()
     renderMode({ current: null });
     await waitFor(() => expect(screen.getAllByText('Amazing Grace').length).toBeGreaterThan(0));
     expect(screen.queryByText(/No songs yet/)).toBeNull();
+  });
+});
+
+// #85. Same contract SermonCenter holds, verified here because Songs has the extra state
+// the issue was written about: an armed switch used to grow the bar by the width of a song
+// title, and shove Take down sideways on its way in.
+describe('SongsMode — the transport is stable ground (#85)', () => {
+  const bar = (): HTMLElement => document.querySelector('[data-transport-bar]') as HTMLElement;
+  const verb = (name: RegExp): HTMLButtonElement =>
+    within(bar()).getByRole('button', { name }) as HTMLButtonElement;
+
+  it('renders Take down in every state, ghosted while nothing is on screen', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(verb(/Take down/).disabled).toBe(true);
+  });
+
+  it('keeps the primary slot saying Go live once the cued section is on screen', async () => {
+    const { goLive } = installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const primary = verb(/Go live/);
+    expect(primary.disabled).toBe(true);
+    fireEvent.click(primary);
+    expect(goLive).not.toHaveBeenCalled();
+  });
+
+  // Enter is the button's keyboard twin, so it stops where the button stops. Escape is
+  // still the way down — see the onEscape ladder.
+  it('makes Enter a no-op — not a take-down — when the cued section is already live', async () => {
+    const { goLive, setOutput } = installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    act(() => keyHandlerRef.current?.onGoLive());
+    expect(goLive).not.toHaveBeenCalled();
+    expect(setOutput).not.toHaveBeenCalled();
+  });
+
+  it('carries no logo toggle', async () => {
+    installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /logo/i })).toBeNull();
+  });
+
+  it('ends with Take down then the primary slot, at a fixed width, armed or not', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    const order = (): (string | undefined)[] =>
+      within(bar())
+        .getAllByRole('button')
+        .map((b) => b.textContent?.trim());
+    expect(order().slice(-2)).toEqual(['Take down', 'Go live']);
+    const idleWidth = verb(/Go live/).style.width;
+    expect(idleWidth).toBeTruthy();
+
+    // Arming used to insert a second button AND size the primary by the song's title.
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+    expect(order().slice(-2)).toEqual(['Take down', '⇄ Switch']);
+    expect(verb(/Switch/).style.width).toBe(idleWidth);
+  });
+
+  it('names the armed song in the tooltip, never in the button width', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Blessed Assurance'));
+
+    const primary = verb(/Switch/);
+    expect(primary.textContent?.trim()).toBe('⇄ Switch');
+    expect(primary.title).toBe('Switch to Blessed Assurance');
+  });
+});
+
+describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
+  it('offers NEXT? on hover only while a song holds the screen', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    const railRow = screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement;
+    fireEvent.mouseEnter(railRow);
+    expect(screen.getByText('NEXT?')).toBeTruthy();
+
+    // Committing the arm replaces the forecast with the real badge.
+    fireEvent.click(railRow);
+    expect(screen.queryByText('NEXT?')).toBeNull();
+    expect(screen.getByText('NEXT')).toBeTruthy();
+  });
+
+  it('stays quiet when nothing is live — a click there only moves the cue', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    fireEvent.mouseEnter(screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement);
+    expect(screen.queryByText('NEXT?')).toBeNull();
   });
 });

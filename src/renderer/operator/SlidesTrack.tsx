@@ -286,8 +286,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     window.helm.presentation.take(key, sl);
   };
 
-  const toggleLogo = (): void => {
-    window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
+  const takeDown = (): void => {
+    window.helm.presentation.setOutput('black');
   };
 
   // Unified post-import handling for every media type: a canceled picker leaves selection
@@ -627,7 +627,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         // An empty library renders the fallback logo in the hero; Go live would be a no-op,
         // so it must not sit there looking armed (#88).
         canGoLive={selected !== null && slides.length > 0}
-        onToggleLogo={toggleLogo}
+        onTakeDown={takeDown}
       />
 
       {hasRightPanel && <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />}
