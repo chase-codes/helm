@@ -139,18 +139,22 @@ export function MessageSearchRail({
         : 'none',
     userSelect: 'none'
   });
-  const importBtnStyle: CSSProperties = {
-    height: '30px',
-    marginTop: '10px',
-    padding: '0 12px',
+  // The Slides rail's header verb, character-exact — import is rail chrome here too,
+  // not empty-state furniture (the deviation the other two rails never had).
+  const importHeaderBtnStyle: CSSProperties = {
+    height: '26px',
+    padding: '0 10px',
     borderRadius: '8px',
-    background: `${T.message}22`,
-    color: T.message,
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    border: 'none',
+    color: T.dim,
     fontSize: '12px',
     fontWeight: 600,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    background: 'transparent',
+    // Must survive the rail's 200px minimum in one piece — the heading beside it gives
+    // way instead.
+    whiteSpace: 'nowrap',
+    flexShrink: 0
   };
   const quoteRowStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
   const quoteTitleStyle: CSSProperties = { fontWeight: 600, fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
@@ -233,7 +237,14 @@ export function MessageSearchRail({
         </div>
       ) : (
         <>
-          <div style={sectionHeaderStyle('0 14px 8px')}>QUOTE SCHEDULE</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 8px', flexShrink: 0 }}>
+            <div style={{ ...sectionHeaderStyle(''), minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="Quote schedule">
+              QUOTE SCHEDULE
+            </div>
+            <button style={importHeaderBtnStyle} onClick={onImportMessages}>
+              + Import
+            </button>
+          </div>
           <div style={scrollWrapStyle}>
             {scheduleRows.length === 0 &&
               (hasTapes ? (
@@ -244,14 +255,10 @@ export function MessageSearchRail({
                 <ListEmpty>Search above to find a quote and put it in the preview.</ListEmpty>
               ) : (
                 // Nothing installed at all: a search box the operator cannot make match
-                // anything is not an invitation, so name the import instead (#88).
+                // anything is not an invitation, so name the import instead (#88) — the
+                // header's + Import, the same verb the Slides rail teaches.
                 <ListEmpty>
-                  No messages yet — import one to search its quotes.
-                  <div>
-                    <button style={importBtnStyle} onClick={onImportMessages}>
-                      Import a message
-                    </button>
-                  </div>
+                  No messages yet — import one with <b>+ Import</b> to search its quotes.
                 </ListEmpty>
               ))}
             {scheduleRows.map((r) => (

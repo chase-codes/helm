@@ -12,6 +12,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { useTakeGuard } from './useTakeGuard';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
+import { sameFlow } from '../../shared/presentation/core';
 import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
 import { MessageSearchRail, type MsgQuoteRow, type MsgScheduleRow, type MsgTapeRow } from './MessageSearchRail';
@@ -281,7 +282,11 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   }, [msgId, msgIdx, liveMsg, active, track]);
 
   const curKey = keyForMessageQuote(msgId, msgIdx);
-  const cuedIsLive = output === 'live' && liveKey === curKey;
+  // `sameFlow`, not key equality: within the live tape the cue effect hot-updates the
+  // screen (main's `applyCue` follows same-flow keys), so a quote change leaves the verb
+  // nothing to do — not one broadcast round-trip later. Key equality here made the button
+  // flash green for the gap between the cue send and the liveKey broadcast returning.
+  const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
 
   const stepPara = (dir: 1 | -1): void => {
     if (!liveMsg) return;
@@ -289,7 +294,11 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   };
 
   const goLive = (): void => {
-    if (!liveMsg) return;
+    // Same stop SermonMode/SongsMode make (#85): when the cued quote is already on screen
+    // the verb has nothing to do. Without this, Enter — the button's keyboard twin, which
+    // ignores the disabled state — would reach main's goLive on the live key and take the
+    // screen down.
+    if (!liveMsg || cuedIsLive) return;
     window.helm.presentation.goLive(keyForMessageQuote(msgId, msgIdx), buildQuoteSlide(liveMsg, msgIdx));
   };
 

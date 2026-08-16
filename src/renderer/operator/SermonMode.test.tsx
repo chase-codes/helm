@@ -311,6 +311,23 @@ describe('SermonMode — direct preview to live', () => {
     expect(goLive).not.toHaveBeenCalled()
   })
 
+  it('a rail tap while live keeps Go live ghosted during the broadcast gap', async () => {
+    // The projector follows the scripture cursor while live (main's showLive / sameKind),
+    // so moving to another verse leaves the button with nothing to do. Between the show
+    // send and the state broadcast returning, liveKey still names the OLD verse — the verb
+    // must not light green for that round trip and then blank again (the flash).
+    const { resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+    // No pushState: the broadcast is still in flight.
+    const scripture = within(trackPanel('scripture'))
+    expect((scripture.getByRole('button', { name: /Go live/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('Shift+Enter on the reference already live still moves the cursor to it', async () => {
     const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
     render(<Harness />)
@@ -754,19 +771,26 @@ describe('SermonMode — the Go live button does what its label says', () => {
     expect(goLive).not.toHaveBeenCalled()
   })
 
-  it('sends the cursor when the cursor is not what is live', async () => {
-    const { goLive, setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+  // While scripture itself is live the show effect carries every cursor move to the
+  // screen, so the verb only ever has work when ANOTHER flow owns it — main's `showLive`
+  // refuses a cross-kind follow, and taking over is exactly what the green button is for.
+  // (A cursor merely ahead of the liveKey broadcast is the ghosted-gap test above.)
+  it('sends the cursor when another flow is what is live', async () => {
+    const SONG_LIVE: PresentationState = {
+      output: 'live', liveKey: 'song:s1:0', liveSnap: null, cuedKey: null, cuedSnap: null
+    }
+    const { goLive, setOutput, resolveChapter } = installHelmStub(SONG_LIVE)
     render(<Harness />)
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
 
-    // Move the cursor off the live verse; the label flips back to "● Go live". Scoped to
-    // the scripture panel — the hidden message/slides heroes render their own Go live.
+    // Scoped to the scripture panel — the hidden message/slides heroes render their own
+    // Go live.
     const scripture = within(trackPanel('scripture'))
     fireEvent.click(verseCard(3))
-    await waitFor(() => expect(scripture.getByText('Go live')).toBeTruthy())
+    await waitFor(() => expect(scripture.getByText('Genesis 1:3')).toBeTruthy())
 
-    fireEvent.click(scripture.getByText('Go live'))
+    fireEvent.click(scripture.getByRole('button', { name: /Go live/ }))
     expect(goLive).toHaveBeenCalled()
     expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
     expect(setOutput).not.toHaveBeenCalled()
@@ -1121,7 +1145,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
       if (onScreen !== handlerSays) disagreements.push(`dom=${onScreen} handler=${handlerSays}`)
     })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
-    fireEvent.click(screen.getByText('+ Import'))
+    fireEvent.click(within(trackPanel('slides')).getByText('+ Import'))
     // importDeck resolves outside act(), so the modal commits with no surrounding act()
     // to force an effect flush — the same shape as the real IPC round-trip.
     fireEvent.click(screen.getByText('Slides / PDF'))
@@ -1153,7 +1177,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
 
     clickTab('Slides')
     await awaitCuedLive('slides')
-    fireEvent.click(screen.getByText('+ Import'))
+    fireEvent.click(within(trackPanel('slides')).getByText('+ Import'))
     fireEvent.click(screen.getByText('Slides / PDF'))
     await waitFor(() => expect(screen.getByText('PowerPoint import unavailable')).toBeTruthy())
     // The deck-fallback modal is a blocking modal: Enter/Delete must not fire behind it.
@@ -1185,7 +1209,7 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
 
     clickTab('Slides')
     await awaitCuedLive('slides')
-    fireEvent.click(screen.getByText('+ Import'))
+    fireEvent.click(within(trackPanel('slides')).getByText('+ Import'))
     expect(screen.getByText('Slides / PDF')).toBeTruthy()
 
     act(() => void keyHandlerRef.current?.onEscape())

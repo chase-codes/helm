@@ -101,12 +101,22 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
   })
 
   it('points at the import when no tapes are installed at all (#88)', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes={false} />)
+    expect(screen.getByText(/No messages yet/)).toBeTruthy()
+    // The empty state names the header's + Import rather than carrying a one-off button
+    // of its own (the Slides rail's grammar).
+    expect(screen.getByText(/import one with/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: '+ Import' })).toBeTruthy()
+  })
+
+  // The import affordance is rail chrome, not empty-state furniture — the same
+  // heading + "+ Import" row the Slides track carries, present with or without tapes.
+  it('carries the standard + Import button in the QUOTE SCHEDULE header', () => {
     const onImportMessages = vi.fn()
     render(
-      <MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes={false} onImportMessages={onImportMessages} />
+      <MessageSearchRail {...baseProps} scheduleRows={[scheduleRow()]} hasTapes onImportMessages={onImportMessages} />
     )
-    expect(screen.getByText(/No messages yet/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Import a message' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Import' }))
     expect(onImportMessages).toHaveBeenCalledTimes(1)
   })
 

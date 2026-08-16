@@ -26,6 +26,7 @@ import {
 } from '../../shared/scripture/refBuilder';
 import { railSelect, addTarget, type Cursor } from '../../shared/scripture/selection';
 import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
+import { sameKind } from '../../shared/presentation/core';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import type { BibleManifestEntry, BookExtent, ChapterData, ScriptureReading } from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
@@ -356,7 +357,12 @@ export function SermonMode({
   }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf, output, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
-  const cuedIsLive = output === 'live' && liveKey === curKey;
+  // `sameKind`, not key equality: while scripture is live the show effect above puts every
+  // cursor move on screen (main's `showLive` follows within a kind), so the verb has
+  // nothing to do the moment the cursor lands — not one broadcast round-trip later. Key
+  // equality here made the button flash green for the gap between our send and the
+  // liveKey broadcast returning, then ghost again.
+  const cuedIsLive = output === 'live' && sameKind(liveKey, curKey);
   const verseCount = liveChapter?.verseCount || 1;
   const liveCols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
 

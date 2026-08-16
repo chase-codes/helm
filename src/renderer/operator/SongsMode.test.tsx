@@ -301,6 +301,23 @@ describe('SongsMode hotkey jumps', () => {
     expect(goLive).not.toHaveBeenCalled();
   });
 
+  it('stepping sections while this song is live keeps Go live ghosted during the broadcast gap', async () => {
+    // The projector follows the cue within the live song (main's applyCue / sameFlow), so
+    // a section change while live leaves the button with nothing to do. Between our cue
+    // send and the state broadcast returning, liveKey still names the OLD section — the
+    // verb must not light green for that round trip and then blank again (the flash).
+    const live: PresentationState = { output: 'live', liveKey: 'song:s2:0', liveSnap: null, cuedKey: null, cuedSnap: null };
+    installHelmStubWith([CHORUS_SONG], live);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.click(screen.getByText('Cue next ›'));
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus')).toBeTruthy());
+    // No pushState: the broadcast is still in flight.
+    const btn = screen.getByText('Go live').closest('button') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
   it('repeat chorus press cycles to Chorus 2; verse digit matches label', async () => {
     installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };

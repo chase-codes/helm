@@ -12,6 +12,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
+import { sameFlow } from '../../shared/presentation/core';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
 import { PanelDivider } from './PanelDivider';
 import { type SermonTrack } from './SchedulePanel';
@@ -222,7 +223,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   }, [justImported]);
 
   const curKey = selected ? keyForMedia(selected.id, curIdx) : '';
-  const cuedIsLive = output === 'live' && liveKey === curKey;
+  // `sameFlow`, not key equality: within the live deck the cue effect hot-updates the
+  // screen (main's `applyCue` follows same-flow keys), so stepping slides leaves the verb
+  // nothing to do — not one broadcast round-trip later. Key equality here made the button
+  // flash green for the gap between the cue send and the liveKey broadcast returning.
+  const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
 
   const selectItem = (item: MediaItem): void => {
     setSelId(item.id);
@@ -254,7 +259,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   };
 
   const goLive = (): void => {
-    if (!selected || !slides.length) return;
+    // Same stop SermonMode/SongsMode make (#85): when the cued slide is already on screen
+    // the verb has nothing to do. Without this, Enter — the button's keyboard twin, which
+    // ignores the disabled state — would reach main's goLive on the live key and take the
+    // screen down.
+    if (!selected || !slides.length || cuedIsLive) return;
     const key = keyForMedia(selected.id, curIdx);
     // Scope decision: Go Live on a video lands it PAUSED, never auto-playing audio —
     // the operator presses Play once it's on-air. This also preserves any position the
@@ -425,7 +434,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     color: T.dim,
     fontSize: '12px',
     fontWeight: 600,
-    background: 'transparent'
+    background: 'transparent',
+    // The verb must survive the rail's 200px minimum in one piece — the heading beside it
+    // may wrap, the button may not ("+" over "Import" reads as two controls).
+    whiteSpace: 'nowrap',
+    flexShrink: 0
   };
   const importPopStyle: CSSProperties = {
     position: 'absolute',
@@ -518,7 +531,12 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
           <TrackTabs theme={T} track={track} setTrack={setTrack} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 9px', flexShrink: 0 }}>
-          <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>
+          <div
+            // One line that gives way to the button: at the rail's 200px minimum the
+            // heading truncates rather than wrapping into a two-line cram beside +Import.
+            style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title="Presentations & media"
+          >
             PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
           </div>
           <div style={{ position: 'relative' }}>
