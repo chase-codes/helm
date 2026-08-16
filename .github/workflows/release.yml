@@ -31,6 +31,17 @@ jobs:
         uses: ./.github/actions/vendor-deps
         timeout-minutes: 25
       - run: npm run build
+      # electron-builder's GitHub publisher uploads assets concurrently, and when
+      # no draft exists yet the uploaders race to create one, splitting assets
+      # across duplicate drafts (#104). Create the draft up front so the
+      # publisher always finds it; release-mac runs after via needs: and reuses it.
+      - name: Ensure draft release exists
+        shell: bash
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --notes ""
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build installer and publish draft release
         run: npx electron-builder --win --publish always
         env:
