@@ -20,6 +20,8 @@ import { chorusJump, labelJump, verseJump } from '../../shared/songs/sectionJump
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import type { SearchField, Slide, Song, SongSearchResult, UpdateSongInput } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
+import type { ContextMenuItem } from './ContextMenu';
+import { pickNeighborId } from './pickNeighbor';
 import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
 import { SongImport } from './SongImport';
@@ -42,6 +44,9 @@ const SECTION_W_MIN = 260;
 const SECTION_W_MAX = 620;
 const SECONDARY_TITLE_MAX = 3;
 const SECONDARY_LIMIT = 3;
+// How long "Remove — sure?" stays armed before lapsing back. Same value Settings uses for
+// uninstalling a bible, because it is the same gesture — see onSongContextMenu.
+const REMOVE_CONFIRM_MS = 4000;
 
 // Shared by the cue effect, goLive, and jumpSection — all three build the identical
 // lyrics-slide literal for a song section, so a change to the shape only has one place to go.
@@ -396,6 +401,75 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
   const onEditSong = (id: string): void => setEditModalSongId(id);
 
+  // The song library is the one list in the app that CONFIRMS rather than undoing (#90).
+  // The rule from #86 is "in-service surfaces never confirm, they undo" — but a schedule is
+  // this Sunday's plan and the library is every Sunday's, so removing from it is a
+  // Settings-shaped act of library management that happens to live on an in-service page.
+  // It therefore borrows Settings' two-step "Remove — sure?", and deliberately does NOT
+  // answer the Delete key or offer multi-select: no single keystroke may take a song out
+  // of the library.
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearConfirmTimer = (): void => {
+    if (confirmTimerRef.current !== null) {
+      clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+  };
+  useEffect(() => clearConfirmTimer, []);
+
+  const removeSong = (id: string): void => {
+    clearConfirmTimer();
+    window.helm.songs
+      .remove(id)
+      .then((songs) => {
+        if (!mountedRef.current) return;
+        setLibrary(songs);
+        // An active query holds its own copy of the row; drop it there too, or the song
+        // stays clickable until the next keystroke re-runs the search.
+        setResults((r) => r.filter((x) => x.song.id !== id));
+        setLyricHint((r) => r.filter((x) => x.song.id !== id));
+        if (armedNextId === id) setArmedNextId(null);
+        if (activeSongId === id) {
+          // `library` here is the pre-removal list, which is what pickNeighborId needs to
+          // work out which row took its place.
+          const next = pickNeighborId(library, [id]);
+          setActiveSongId(next || null);
+          setSection(0);
+        }
+      })
+      .catch(console.error);
+  };
+
+  // Rebuilt rather than toggled through state: the menu captures its items when it opens,
+  // so re-labelling means handing it a fresh array via `update`.
+  const songMenuItems = (id: string, armed: boolean): ContextMenuItem[] => [
+    { label: 'Edit', onSelect: () => onEditSong(id) },
+    {
+      label: armed ? 'Remove — sure?' : 'Remove from library',
+      danger: true,
+      // The arming click must leave the menu up — the confirmation belongs under the
+      // cursor that is already there, not somewhere the operator has to find it again.
+      keepOpen: !armed,
+      onSelect: () => (armed ? removeSong(id) : armRemove(id))
+    }
+  ];
+
+  const armRemove = (id: string): void => {
+    clearConfirmTimer();
+    contextMenu.update(songMenuItems(id, true));
+    confirmTimerRef.current = setTimeout(() => {
+      confirmTimerRef.current = null;
+      contextMenu.update(songMenuItems(id, false));
+    }, REMOVE_CONFIRM_MS);
+  };
+
+  // Opening any menu disarms a confirm left armed on another row, so a lapsing timer can
+  // never re-label the menu the operator is looking at now.
+  const onSongContextMenu = (id: string, e: ReactMouseEvent): void => {
+    clearConfirmTimer();
+    contextMenu.open(e, songMenuItems(id, false));
+  };
+
   const onQuickAddSaved = (song: Song): void => {
     setLibrary((prev) => [...prev, song]);
     selectSong(song.id);
@@ -720,9 +794,8 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           setQuickAddOpen(true);
         }}
         onImportSongs={() => setImportOpen(true)}
-        onRowContextMenu={(id, e) =>
-          contextMenu.open(e, [{ label: 'Edit', onSelect: () => onEditSong(id) }])
-        }
+        libraryEmpty={library.length === 0}
+        onRowContextMenu={onSongContextMenu}
         inputRef={searchInputRef}
       />
 

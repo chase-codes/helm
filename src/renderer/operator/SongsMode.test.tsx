@@ -45,7 +45,8 @@ function installHelmStub(searchImpl?: (q: string, field: string) => Promise<Song
     songs: {
       list: () => Promise.resolve(SONGS),
       search,
-      update: vi.fn()
+      update: vi.fn(),
+      remove: vi.fn(() => Promise.resolve([]))
     },
     presentation: {
       get: () => Promise.resolve(NOTHING_LIVE),
@@ -99,6 +100,7 @@ function installHelmStubWith(
   add: ReturnType<typeof vi.fn>;
   search: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
   pushState: (s: PresentationState) => void;
 } {
   const goLive = vi.fn();
@@ -110,9 +112,10 @@ function installHelmStubWith(
   const update = vi.fn((id: string, input: { title: string; sections: { label: string; lines: string[] }[] }) =>
     Promise.resolve({ ...songs.find((s) => s.id === id)!, title: input.title, sections: input.sections })
   );
+  const remove = vi.fn((id: string) => Promise.resolve(songs.filter((s) => s.id !== id)));
   let stateCb: (s: PresentationState) => void = () => {};
   (window as unknown as { helm: unknown }).helm = {
-    songs: { list: () => Promise.resolve(songs), search, add, update },
+    songs: { list: () => Promise.resolve(songs), search, add, update, remove },
     presentation: {
       get: () => Promise.resolve(state),
       onState: (cb: (s: PresentationState) => void) => {
@@ -131,7 +134,7 @@ function installHelmStubWith(
       onProgress: () => () => {}
     }
   };
-  return { goLive, cue, take, setOutput, add, search, update, pushState: (s) => stateCb(s) };
+  return { goLive, cue, take, setOutput, add, search, update, remove, pushState: (s) => stateCb(s) };
 }
 
 describe('SongsMode', () => {
@@ -882,5 +885,146 @@ describe('double-click to go live (#58)', () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect(cue.mock.calls.map((c) => c[0])).toEqual(['song:s1:0', 'song:s2:0']);
+  });
+});
+
+describe('SongsMode — Remove from library confirms rather than undoing (#90)', () => {
+  const TWO: Song[] = [
+    { id: 's1', title: 'Amazing Grace', author: 'Newton', sections: [{ label: 'Verse 1', lines: ['a'] }], source: 'manual', createdAt: 0 },
+    { id: 's2', title: 'Only Believe', author: 'Rader', sections: [{ label: 'Verse 1', lines: ['b'] }], source: 'manual', createdAt: 1 }
+  ];
+  // The big preview header repeats the selected song's bare title, so matching on text
+  // alone is ambiguous — only the search rail renders its rows as buttons.
+  const rowFor = (title: string): HTMLElement => {
+    const match = screen.getAllByText(title).find((el) => el.closest('button'));
+    if (!match) throw new Error(`no song row found for "${title}"`);
+    return match.closest('button') as HTMLElement;
+  };
+  const awaitRow = async (title: string): Promise<void> => {
+    await waitFor(() => rowFor(title));
+  };
+
+  it('offers Remove from library on the row menu, alongside Edit', async () => {
+    installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+    fireEvent.contextMenu(rowFor('Only Believe'));
+
+    expect(await screen.findByText('Edit')).toBeTruthy();
+    expect(screen.getByText('Remove from library')).toBeTruthy();
+  });
+
+  it('the first click only arms — the song survives and the menu stays open', async () => {
+    const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+    fireEvent.contextMenu(rowFor('Only Believe'));
+    fireEvent.click(await screen.findByText('Remove from library'));
+
+    // The library is precious: no single click may take a song out of it.
+    expect(remove).not.toHaveBeenCalled();
+    expect(await screen.findByText('Remove — sure?')).toBeTruthy();
+    expect(screen.getByRole('menu')).toBeTruthy();
+    expect(screen.getByText('Only Believe')).toBeTruthy();
+  });
+
+  it('the second click removes the song and drops it from the rail', async () => {
+    const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+    fireEvent.contextMenu(rowFor('Only Believe'));
+    fireEvent.click(await screen.findByText('Remove from library'));
+    fireEvent.click(await screen.findByText('Remove — sure?'));
+
+    expect(remove).toHaveBeenCalledWith('s2');
+    await waitFor(() => expect(screen.queryByText('Only Believe')).toBeNull());
+    expect(rowFor('Amazing Grace')).toBeTruthy();
+    // Confirm-grammar surfaces do not also offer an undo.
+    expect(screen.queryByText(/Removed/)).toBeNull();
+  });
+
+  it('the arm lapses back to the plain label after the confirm window', async () => {
+    installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.contextMenu(rowFor('Only Believe'));
+      fireEvent.click(screen.getByText('Remove from library'));
+      expect(screen.getByText('Remove — sure?')).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(screen.queryByText('Remove — sure?')).toBeNull();
+      expect(screen.getByText('Remove from library')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('right-clicking another row disarms a confirm left armed on the first', async () => {
+    const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Only Believe');
+
+    fireEvent.contextMenu(rowFor('Only Believe'));
+    fireEvent.click(await screen.findByText('Remove from library'));
+    fireEvent.contextMenu(rowFor('Amazing Grace'));
+
+    // The fresh menu must open disarmed, or one click would remove a song the operator
+    // never confirmed.
+    expect(await screen.findByText('Remove from library')).toBeTruthy();
+    expect(screen.queryByText('Remove — sure?')).toBeNull();
+    fireEvent.click(screen.getByText('Remove from library'));
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('moves the selection to a neighbour when the selected song is removed', async () => {
+    installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode({ current: null });
+    await awaitRow('Amazing Grace');
+
+    // Amazing Grace is selected on load (first song); remove it.
+    fireEvent.contextMenu(rowFor('Amazing Grace'));
+    fireEvent.click(await screen.findByText('Remove from library'));
+    fireEvent.click(await screen.findByText('Remove — sure?'));
+
+    await waitFor(() => expect(screen.queryByText('Amazing Grace')).toBeNull());
+    // The heading tracks the selection, so it having moved on is what proves it.
+    await waitFor(() => expect(screen.getAllByText('Only Believe').length).toBeGreaterThan(1));
+  });
+
+  it('never answers the Delete key — no keystroke removes a library song', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    await awaitRow('Only Believe');
+
+    fireEvent.click(rowFor('Only Believe'));
+    act(() => keyHandlerRef.current?.onDelete?.());
+    expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('SongsMode — empty library invites the operator to fill it (#88)', () => {
+  it('names both affordances when the library holds nothing', async () => {
+    installHelmStubWith([], NOTHING_LIVE);
+    renderMode({ current: null });
+
+    const empty = await screen.findByText(/No songs yet/);
+    expect(empty.textContent).toMatch(/\+ Add a song/);
+    expect(empty.textContent).toMatch(/Import a song library/);
+  });
+
+  it('shows no empty state once the library has songs', async () => {
+    installHelmStubWith(
+      [{ id: 's1', title: 'Amazing Grace', author: 'Newton', sections: [{ label: 'Verse 1', lines: ['a'] }], source: 'manual', createdAt: 0 }],
+      NOTHING_LIVE
+    );
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getAllByText('Amazing Grace').length).toBeGreaterThan(0));
+    expect(screen.queryByText(/No songs yet/)).toBeNull();
   });
 });
