@@ -3,6 +3,8 @@ import type { Theme } from '../../shared/theme';
 import type { RefGhost } from '../../shared/scripture/refBuilder';
 import { TrackTabs } from './TrackTabs';
 import { UndoToast } from './UndoToast';
+import { DangerGhostButton } from './DangerGhostButton';
+import { ListEmpty } from './ListEmpty';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
@@ -45,7 +47,9 @@ export interface SchedulePanelProps {
   undo?: { label: string; onUndo: () => void };
   /** Clear-schedule control; the button renders only when the schedule is non-empty.
    * Destructive but recoverable — the caller routes it through the same removeMany +
-   * undo-toast path as row deletes, so there is no confirmation dialog. */
+   * undo-toast path as row deletes, so there is no confirmation dialog. It gets a real
+   * button footprint (DangerGhostButton) rather than the 10px text link it used to be:
+   * the most destructive in-service action must not also be the smallest target (#86). */
   onClearAll?: () => void;
   /** Lets SermonMode focus the reading entry (scripture-lookup hotkey, '/'). */
   entryRef?: RefObject<HTMLInputElement | null>;
@@ -189,19 +193,24 @@ export function SchedulePanel({
               SCRIPTURE SCHEDULE
             </span>
             {onClearAll && rows.length > 0 && (
-              <button
-                style={{ fontSize: '10px', letterSpacing: '0.05em', fontWeight: 600, color: T.faint, cursor: 'pointer' }}
+              <DangerGhostButton
+                label="Clear all"
                 onClick={onClearAll}
-              >
-                Clear all
-              </button>
+                title="Remove every reading — undoable for five seconds"
+              />
             )}
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {rows.length === 0 && (
+              <ListEmpty>
+                Readings you add will wait here — type a reference above, then <b>+ Add</b>.
+              </ListEmpty>
+            )}
             {rows.map((r) => (
               <button
                 key={r.id}
                 style={rowStyle(r.isCurrent, r.isSelected)}
+                data-schedule-row={r.id}
                 data-selected={r.isSelected || undefined}
                 onClick={r.onClick}
                 onDoubleClick={r.onDoubleClick}

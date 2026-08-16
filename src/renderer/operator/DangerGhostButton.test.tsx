@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { JSX } from 'react';
 import { DangerGhostButton } from './DangerGhostButton';
 import { ThemeCtx } from './ThemeCtx';
 import { themeFor } from '../../shared/theme';
