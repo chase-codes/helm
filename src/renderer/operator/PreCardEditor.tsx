@@ -7,6 +7,10 @@ import { verseText } from '../../shared/scripture/preVerse';
 export interface PreCardEditorProps {
   card: PreCard | null;
   onClose: () => void;
+  /** Removal is PreServiceMode's to perform, not this modal's: it owns the rail's undo
+   * affordance, and a card removed from here must land in the same 5-second "Removed —
+   * Undo" bar as one removed by right-click or the Delete key (#86). */
+  onRemove: (card: PreCard) => void;
 }
 
 // Sub-slice C (media) hasn't landed yet, so the 'image' card type has no creation path
@@ -23,7 +27,7 @@ function asEditableType(t: PreCardType | undefined): EditableType {
   return t === 'list' || t === 'message' ? t : 'verse';
 }
 
-export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Element {
+export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const isNew = card === null;
 
@@ -99,7 +103,7 @@ export function PreCardEditor({ card, onClose }: PreCardEditorProps): JSX.Elemen
 
   const remove = (): void => {
     if (!card) return;
-    window.helm.preservice.removeCard(card.id);
+    onRemove(card);
     onClose();
   };
 

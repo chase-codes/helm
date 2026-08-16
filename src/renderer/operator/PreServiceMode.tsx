@@ -1,13 +1,27 @@
-import { useContext, useState, type CSSProperties, type JSX } from 'react';
+import { useContext, useLayoutEffect, useState, type CSSProperties, type JSX } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePreState, usePresentationState } from './useHelm';
 import { preSlideFor } from '../../shared/preservice/cards';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { PreCardEditor } from './PreCardEditor';
+import { ListEmpty } from './ListEmpty';
+import { UndoToast } from './UndoToast';
+import { useContextMenu } from './useContextMenu';
+import { useListSelection } from './useListSelection';
+import { useTimedUndo } from './useTimedUndo';
+import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
 
 export interface PreServiceModeProps {
   active: boolean;
+  keyHandlerRef: ModeKeyHandlerRef;
+}
+
+/** A removed card plus where it sat, which is all `preservice.restoreCard` needs to put
+ * the rotation back exactly as the operator built it. */
+interface RemovedCard {
+  card: PreCard;
+  index: number;
 }
 
 const PRE_RAIL_W = 320;
@@ -35,13 +49,7 @@ function snippetFor(card: PreCard): string {
   }
 }
 
-// `active` isn't used yet: per the brief, pre-service needs no keep-alive (App only
-// mounts this component while mode === 'pre', and engine state lives in main and is
-// re-read on mount) — kept in the prop list to match App's mount call and leave room
-// for a future keyboard delegate. It is now the only prop, since the live-card fill
-// reads T.selBg from the theme instead of branching on the mode.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
+export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { engaged, dwellS, idx, cards } = usePreState();
   // Badges below read from the REAL presentation state, never from `engaged`. The engine
@@ -53,6 +61,68 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
 
   // null = closed, 'new' = add-card flow, a PreCard = editing that card.
   const [editing, setEditing] = useState<PreCard | 'new' | null>(null);
+
+  // The standard list kit (#90). `sel` is the delete-selection, kept entirely separate
+  // from the engine's `idx` — that is the card the loop is ON, and selecting rows to
+  // delete must never move what the congregation is looking at.
+  const contextMenu = useContextMenu();
+  const sel = useListSelection(cards.map((c) => c.id));
+  const undo = useTimedUndo<RemovedCard[]>();
+
+  // Unlike the schedule rails, this delete is NOT deferred: the rotation lives in main,
+  // and a card left in the engine for five more seconds can rotate onto the audience
+  // screen after the operator has already removed it. So it commits immediately, and undo
+  // buys exactness back with `restoreCard`, which re-inserts at the original index (#86).
+  const removeCards = (ids: string[]): void => {
+    const batch: RemovedCard[] = cards
+      .map((card, index) => ({ card, index }))
+      .filter(({ card }) => ids.includes(card.id));
+    if (!batch.length) return;
+    sel.clear();
+    for (const { card } of batch) window.helm.preservice.removeCard(card.id);
+    undo.arm(batch);
+  };
+
+  const undoRemove = (): void => {
+    const batch = undo.pending;
+    if (!batch) return;
+    undo.cancel();
+    // Ascending index order: restoring the earliest slot first is what makes each later
+    // index line up again, since every insert shifts the rows after it.
+    for (const { card, index } of [...batch].sort((a, b) => a.index - b.index)) {
+      window.helm.preservice.restoreCard(card, index);
+    }
+  };
+
+  // Escape closes the card editor — the one modal this page owns. Registered here rather
+  // than inside PreCardEditor so the whole page speaks App's ModeKeyHandler contract, the
+  // way Songs and Sermon do.
+  //
+  // `onArrow`/`onGoLive` are deliberate no-ops. Pre-service has never answered arrows or
+  // Enter, and wiring them now would let a keystroke start projecting from a dark screen —
+  // exactly the takeover BUG-018 exists to prevent. Navigation stays on the ‹ › buttons and
+  // taking the screen stays on Start loop / Show this card.
+  useLayoutEffect(() => {
+    if (!active) return;
+    keyHandlerRef.current = {
+      onEscape: () => {
+        if (editing !== null) {
+          setEditing(null);
+          return true;
+        }
+        return false;
+      },
+      onArrow: () => {},
+      onGoLive: () => {},
+      isModalOpen: () => editing !== null,
+      onDelete: () => {
+        if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
+      }
+    };
+    return () => {
+      keyHandlerRef.current = null;
+    };
+  });
 
   const idxC = Math.max(0, Math.min(idx, cards.length - 1));
   const current = cards[idxC];
@@ -197,9 +267,16 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {cards.length === 0 && (
+            <ListEmpty>
+              The loop is empty — add a card below to put something on screen before the
+              service.
+            </ListEmpty>
+          )}
           {cards.map((card, i) => {
             const isShowing = isCardLive(card);
             const isArmed = !isShowing && i === idxC;
+            const isSelected = sel.isSelected(card.id);
             const canEdit = card.type !== 'logo';
             const rowStyle: CSSProperties = {
               display: 'block',
@@ -212,12 +289,16 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
               opacity: card.enabled || isShowing || isArmed ? 1 : 0.55,
               // Live gets the filled treatment; armed gets the ring only — the operator
               // must be able to tell "this is on the screen" from "this is queued up".
+              // A delete-selection ring outranks both: while a range is picked out, what
+              // Delete would take has to be the unambiguous thing on the rail.
               background: isShowing ? T.selBg : T.panel2,
-              boxShadow: isShowing
-                ? `inset 0 0 0 1.5px ${T.accent}88`
-                : isArmed
-                  ? `inset 0 0 0 1.5px ${T.accent}44`
-                  : `inset 0 0 0 1px ${T.hairline}`
+              boxShadow: isSelected
+                ? `inset 0 0 0 1.5px ${T.accent}`
+                : isShowing
+                  ? `inset 0 0 0 1.5px ${T.accent}88`
+                  : isArmed
+                    ? `inset 0 0 0 1.5px ${T.accent}44`
+                    : `inset 0 0 0 1px ${T.hairline}`
             };
             const labelStyle: CSSProperties = {
               fontFamily: "'JetBrains Mono',monospace",
@@ -270,7 +351,39 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
             };
             const armedBadge: CSSProperties = { ...showingBadge, color: T.accent };
             return (
-              <button key={card.id} style={rowStyle} onClick={() => window.helm.preservice.showCard(i)} onDoubleClick={() => window.helm.preservice.takeCard(i)}>
+              <button
+                key={card.id}
+                data-pre-card={card.id}
+                data-selected={isSelected || undefined}
+                style={rowStyle}
+                onClick={(e) => {
+                  // Shift-click extends the delete-selection only. It must not reach
+                  // showCard: on an engaged loop that call switches the audience screen,
+                  // and picking rows to delete is not a request to project any of them.
+                  if (e.shiftKey) {
+                    sel.selectTo(card.id);
+                    return;
+                  }
+                  sel.select(card.id);
+                  window.helm.preservice.showCard(i);
+                }}
+                onDoubleClick={(e) => {
+                  if (!e.shiftKey) window.helm.preservice.takeCard(i);
+                }}
+                onContextMenu={(e) => {
+                  if (isSelected && sel.selectedIds.length > 1) {
+                    const ids = sel.selectedIds;
+                    contextMenu.open(e, [
+                      { label: `Delete ${ids.length} cards`, danger: true, onSelect: () => removeCards(ids) }
+                    ]);
+                  } else {
+                    sel.select(card.id);
+                    contextMenu.open(e, [
+                      { label: 'Delete', danger: true, onSelect: () => removeCards([card.id]) }
+                    ]);
+                  }
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
                   <div style={labelStyle}>{card.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -308,6 +421,14 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
             + Add a card — verse, announcements, prayer…
           </button>
         </div>
+        {undo.pending && (
+          <UndoToast
+            label={
+              undo.pending.length === 1 ? undo.pending[0].card.title : `${undo.pending.length} cards`
+            }
+            onUndo={undoRemove}
+          />
+        )}
       </div>
 
       <div style={centerStyle}>
@@ -375,8 +496,13 @@ export function PreServiceMode(_props: PreServiceModeProps): JSX.Element {
       </div>
 
       {editing !== null && (
-        <PreCardEditor card={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
+        <PreCardEditor
+          card={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onRemove={(card) => removeCards([card.id])}
+        />
       )}
+      {contextMenu.menu}
     </div>
   );
 }
