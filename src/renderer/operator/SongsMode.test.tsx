@@ -391,6 +391,11 @@ describe('SongsMode armed switching', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    // The initial-selection cue of s2:0 is a passive effect of the same commit that renders
+    // the hero, and waitFor's MutationObserver can resolve on the DOM before that effect
+    // flushes (it did, on the loaded Windows release runner) — so wait for the cue itself
+    // before dropping it, or the late cue lands after the clear and fails the no-cue assert.
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('song:s2:0', expect.anything()));
     cue.mockClear(); // drop the initial-selection cue of s2:0
 
     fireEvent.click(screen.getByText('Blessed Assurance'));
