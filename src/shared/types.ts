@@ -178,6 +178,7 @@ export interface UpdateStatus {
 export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
   songsGet: 'songs:get', songsAdd: 'songs:add', songsUpdate: 'songs:update',
+  songsRemove: 'songs:remove',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presTake: 'presentation:take',
@@ -204,6 +205,7 @@ export const CH = {
   messageInstallProgress: 'message:installProgress',   // main → all
   messageAudioProgress: 'message:audioProgress',        // main → all
   quoteScheduleList: 'quoteSchedule:list', quoteScheduleAdd: 'quoteSchedule:add',
+  quoteScheduleRemove: 'quoteSchedule:remove', quoteScheduleRemoveMany: 'quoteSchedule:removeMany',
   preserviceGetState: 'preservice:getState', preserviceState: 'preservice:state',   // main → all windows
   preserviceEngage: 'preservice:engage', preserviceDisengage: 'preservice:disengage',
   preserviceShow: 'preservice:show', preserviceStep: 'preservice:step',
@@ -212,6 +214,7 @@ export const CH = {
   preserviceToggleLoop: 'preservice:toggleLoop', preserviceSetDwell: 'preservice:setDwell',
   preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
   preserviceRemoveCard: 'preservice:removeCard',
+  preserviceRestoreCard: 'preservice:restoreCard',
   mediaList: 'media:list', mediaImportImages: 'media:importImages',
   mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
   mediaRemove: 'media:remove', mediaImportProgress: 'media:importProgress',
@@ -281,6 +284,9 @@ export interface HelmApi {
     get(id: string): Promise<Song | null>;
     add(input: NewSongInput): Promise<Song>;
     update(id: string, input: UpdateSongInput): Promise<Song>;
+    /** Permanent — the library is not a schedule, so this is the one in-service list
+     * action that confirms instead of offering an undo (#90). */
+    remove(id: string): Promise<Song[]>;
   };
   presentation: {
     get(): Promise<PresentationState>;
@@ -335,6 +341,8 @@ export interface HelmApi {
   quoteSchedule: {
     list(): Promise<QuoteScheduleItem[]>;
     add(msgId: string, ord: number): Promise<QuoteScheduleItem[]>;
+    remove(id: string): Promise<QuoteScheduleItem[]>;
+    removeMany(ids: string[]): Promise<QuoteScheduleItem[]>;
   };
   preservice: {
     getState(): Promise<PreState>;
@@ -347,6 +355,9 @@ export interface HelmApi {
     toggleEnabled(id: string): void;
     saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void;
     removeCard(id: string): void;
+    /** Undo for removeCard: re-inserts the card at `index` with its original id, so the
+     * rotation comes back in the order the operator built (#86). */
+    restoreCard(card: PreCard, index: number): void;
   };
   media: {
     list(): Promise<MediaItem[]>;

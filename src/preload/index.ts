@@ -13,6 +13,7 @@ const api: HelmApi = {
     get: (id) => ipcRenderer.invoke(CH.songsGet, id),
     add: (input) => ipcRenderer.invoke(CH.songsAdd, input),
     update: (id, input) => ipcRenderer.invoke(CH.songsUpdate, id, input),
+    remove: (id) => ipcRenderer.invoke(CH.songsRemove, id),
   },
   presentation: {
     get: () => ipcRenderer.invoke(CH.presGet),
@@ -66,6 +67,8 @@ const api: HelmApi = {
   quoteSchedule: {
     list: () => ipcRenderer.invoke(CH.quoteScheduleList),
     add: (msgId, ord) => ipcRenderer.invoke(CH.quoteScheduleAdd, msgId, ord),
+    remove: (id) => ipcRenderer.invoke(CH.quoteScheduleRemove, id),
+    removeMany: (ids) => ipcRenderer.invoke(CH.quoteScheduleRemoveMany, ids),
   },
   preservice: {
     getState: () => ipcRenderer.invoke(CH.preserviceGetState),
@@ -81,6 +84,7 @@ const api: HelmApi = {
     toggleEnabled: (id) => ipcRenderer.send(CH.preserviceToggleEnabled, id),
     saveCard: (c) => ipcRenderer.send(CH.preserviceSaveCard, c),
     removeCard: (id) => ipcRenderer.send(CH.preserviceRemoveCard, id),
+    restoreCard: (card, index) => ipcRenderer.send(CH.preserviceRestoreCard, card, index),
   },
   media: {
     list: () => ipcRenderer.invoke(CH.mediaList),

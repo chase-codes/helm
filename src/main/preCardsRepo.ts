@@ -27,6 +27,13 @@ export interface PreCardsRepo {
   list(): PreCard[];
   save(card: Omit<PreCard, 'id'> & { id?: string }): PreCard[];
   remove(id: string): PreCard[];
+  /**
+   * Put a removed card back at `index`, keeping its original id and payload — the undo
+   * half of the remove/undo grammar (#86). Distinct from `save`, which always appends:
+   * an undo that dropped the card at the end of the loop would silently reorder the
+   * rotation the operator was only trying to restore.
+   */
+  restore(card: PreCard, index: number): PreCard[];
   setEnabled(id: string, enabled: boolean): PreCard[];
 }
 
@@ -37,6 +44,7 @@ export function createPreCardsRepo(db: Database.Database): PreCardsRepo {
   const update = db.prepare('UPDATE pre_cards SET type=?, title=?, payload_json=?, enabled=? WHERE id=?');
   const del = db.prepare('DELETE FROM pre_cards WHERE id=?');
   const setEn = db.prepare('UPDATE pre_cards SET enabled=? WHERE id=?');
+  const setPos = db.prepare('UPDATE pre_cards SET position=? WHERE id=?');
   const maxPos = db.prepare('SELECT MAX(position) AS m FROM pre_cards');
 
   const list = (): PreCard[] => (selectAll.all() as Row[]).map(toCard);
@@ -75,6 +83,22 @@ export function createPreCardsRepo(db: Database.Database): PreCardsRepo {
       return list();
     },
     remove(id) { del.run(id); return list(); },
+    // Splice-and-renumber rather than "insert at position N": `position` values are only
+    // ever read through ORDER BY, and a removal leaves a gap, so there is no free integer
+    // that reliably lands the card between two neighbours. Rewriting every row's position
+    // to its array index is cheap (a loop is five rows long) and leaves the column dense,
+    // which keeps `save`'s MAX(position)+1 append honest afterwards.
+    restore(card, index) {
+      const ids = list().map((c) => c.id);
+      const at = Math.max(0, Math.min(index, ids.length));
+      const restoreTx = db.transaction(() => {
+        insert.run(card.id, card.type, card.title, payloadOf(card), card.enabled ? 1 : 0, ids.length);
+        ids.splice(at, 0, card.id);
+        ids.forEach((id, i) => setPos.run(i, id));
+      });
+      restoreTx();
+      return list();
+    },
     setEnabled(id, enabled) { setEn.run(enabled ? 1 : 0, id); return list(); }
   };
 }

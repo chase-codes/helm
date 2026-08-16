@@ -32,6 +32,30 @@ test('exact-duplicate add is a no-op', () => {
   expect(list).toHaveLength(1);
 });
 
+test('remove drops one row and leaves the rest in order', () => {
+  repo.add('rapture', 0);
+  const both = repo.add('rapture', 1);
+  const after = repo.remove(both[0].id);
+  expect(after).toHaveLength(1);
+  expect(after[0].label).toBe('76');
+});
+
+test('removeMany drops a batch in one call', () => {
+  repo.add('rapture', 0);
+  const both = repo.add('rapture', 1);
+  expect(repo.removeMany(both.map((r) => r.id))).toHaveLength(0);
+});
+
+test('removeMany ignores ids that are not in the schedule', () => {
+  const one = repo.add('rapture', 0);
+  expect(repo.removeMany([one[0].id, 'nope'])).toHaveLength(0);
+});
+
+test('removeMany with no ids is a no-op', () => {
+  repo.add('rapture', 0);
+  expect(repo.removeMany([])).toHaveLength(1);
+});
+
 test('list round-trips after reopening a repo on the same db handle', () => {
   repo.add('rapture', 0);
   const repo2 = createMessagesScheduleRepo(db);

@@ -184,6 +184,61 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe(null);
     });
 
+    it('restoreCard puts the card back at its index with its id intact', () => {
+      const { engine, repo } = harness();
+      const before = repo.list();
+      const target = before[2];
+      engine.removeCard(target.id);
+      engine.restoreCard(target, 2);
+      expect(engine.getState().cards.map((c) => c.id)).toEqual(before.map((c) => c.id));
+      expect(engine.getState().cards[2].title).toBe(target.title);
+    });
+
+    it('restoreCard never starts projecting from a dark screen', () => {
+      const { engine, presentation, repo } = harness();
+      const target = repo.list()[0];
+      engine.removeCard(target.id);
+      engine.restoreCard(target, 0);
+      expect(presentation().output).toBe('black');
+      expect(presentation().liveKey).toBe(null);
+    });
+
+    it('restoreCard leaves the audience on whatever holds the screen', () => {
+      const { engine, presentation, repo, songGoesLive } = harness();
+      const target = repo.list()[3];
+      engine.removeCard(target.id);
+      songGoesLive();
+      engine.restoreCard(target, 3);
+      expect(presentation().output).toBe('live');
+      expect(presentation().liveKey).toBe('song:abc:0');
+    });
+
+    it('restoring a card before the live one keeps the audience and selection on it', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showCard(2);
+      engine.showNow();
+      const live = repo.list()[2];
+      const removed = repo.list()[0];
+      engine.removeCard(removed.id);
+      expect(engine.getState().idx).toBe(1); // selection followed the live card
+      engine.restoreCard(removed, 0);
+      expect(presentation().liveKey).toBe('pre:' + live.id);
+      expect(engine.getState().cards[engine.getState().idx].id).toBe(live.id);
+    });
+
+    it('restoring into an emptied rail selects the only card without projecting it', () => {
+      const { engine, presentation, repo, takeDown } = harness();
+      engine.showNow();
+      takeDown();
+      const all = repo.list();
+      for (const c of all) engine.removeCard(c.id);
+      expect(engine.getState().cards).toHaveLength(0);
+      engine.restoreCard(all[0], 0);
+      expect(engine.getState().cards).toHaveLength(1);
+      expect(engine.getState().idx).toBe(0);
+      expect(presentation().output).toBe('black');
+    });
+
     it('showCard does NOT interrupt a live song — it only selects', () => {
       const { engine, presentation, songGoesLive } = harness();
       songGoesLive();

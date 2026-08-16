@@ -20,6 +20,7 @@ export interface PreserviceEngine {
   toggleLoop(): void; setDwell(delta: number): void;
   toggleEnabled(cardId: string): void;
   saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void; removeCard(id: string): void;
+  restoreCard(card: PreCard, index: number): void;
   tick(): void; dispose(): void;
 }
 const DWELL_MIN = 5, DWELL_MAX = 60;
@@ -156,6 +157,24 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
       clampIdx();
       if (cards.length === 0) { if (deletedWasLive) sink.setOutput('black'); }
       else pushShow();
+      emit();
+    },
+    // The undo half of removeCard (#86). Deliberately touches NO screen call, not even
+    // pushShow: a restore repopulates the rail, and the audience is already looking at
+    // whatever removeCard left them on — the neighbour it pushed up, another flow's slide,
+    // or black. Putting the restored card back on air would be a takeover nobody asked
+    // for, which is exactly the BUG-018 rule removeCard is written to respect.
+    //
+    // The selection is re-pinned by card id for the same reason removeCard does it
+    // (BUG-019): inserting a card at or before `idx` shifts every later index, so a
+    // positional `idx` alone would slide the preview onto a card nobody chose. Falls back
+    // to a clamp when there was no selection to keep — restoring into an emptied rail.
+    restoreCard(card, index) {
+      const selectedId = cards[idx]?.id;
+      cards = repo.restore(card, index);
+      const i = selectedId === undefined ? -1 : cards.findIndex((c) => c.id === selectedId);
+      idx = i >= 0 ? i : 0;
+      clampIdx();
       emit();
     },
     tick, dispose() { stopTimer(); subs.clear(); }
