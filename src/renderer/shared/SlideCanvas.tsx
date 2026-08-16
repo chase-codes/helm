@@ -31,6 +31,15 @@ export const SCRIPTURE_BAND = bandCandidates(10, 1.5);
 // list — the output has no scrolling, so the walk must be able to keep shrinking until
 // the slide fits.
 export const TITLE_BAND = bandCandidates(9.2, 2.2);
+// List slides (title + points) speak the scripture slide's grammar: the title is fixed
+// chrome — a small accent eyebrow, like the scripture ref — and the POINTS are the fitted
+// base. The old arrangement inverted the hierarchy: the label ("Announcements") was the
+// biggest thing on the slide while the items people actually read sat at 0.37× that size,
+// ~37px on 1080p even after #49 removed the px ceiling. 6.4cqmin is the design size for a
+// three-item list; the 2.15cqmin floor (a whole number of 0.25 steps below 6.4) is the
+// degrade case for a very long one (no scrolling exists on the output, so the walk must
+// be able to keep shrinking).
+export const LIST_BAND = bandCandidates(6.4, 2.15);
 
 export interface SlideCanvasProps {
   slide: Slide;
@@ -196,47 +205,80 @@ export function SlideCanvas({
     marginTop: '3cqmin'
   };
 
-  const titleStyle: CSSProperties = {
-    fontWeight: 800,
-    // The fitted base for the title block; subtitle and points scale off it so the whole
-    // block moves as one unit (and the fit walk stays monotonic). No px ceiling (#49).
-    fontSize: `max(14px, ${fitSizeValue('9.2cqmin')})`,
-    lineHeight: 1.04,
-    letterSpacing: '-0.02em'
-  };
+  // A title slide WITH points is a list slide, and the list is the message: the title
+  // demotes to fixed chrome and the points take the fitted base (see LIST_BAND). Message
+  // and sermon title slides (no points) really are about their title and keep the big
+  // fitted-title treatment.
+  const listMode = (kind === 'title' || kind === 'sermon') && (s.points || []).length > 0 && !isLT;
+  const titleStyle: CSSProperties = listMode
+    ? {
+        // Identical to the scripture ref treatment: same face, size, tracking, and accent
+        // colour, so every pre-service slide speaks one grammar — small label up top, big
+        // content underneath. Fixed size (not the fit var): it is chrome, it holds still
+        // while the fitter works, and a constant-size child keeps the fit walk monotonic.
+        // (calc() wrapper only because jsdom's CSSOM drops a bare top-level max().)
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 'calc(max(8px, 2.9cqmin))',
+        letterSpacing: '0.2em',
+        textTransform: 'uppercase',
+        color: accent,
+        fontWeight: 500
+      }
+    : {
+        fontWeight: 800,
+        // The fitted base for the title block; the subtitle scales off it so the whole
+        // block moves as one unit (and the fit walk stays monotonic). No px ceiling (#49).
+        fontSize: `max(14px, ${fitSizeValue('9.2cqmin')})`,
+        lineHeight: 1.04,
+        letterSpacing: '-0.02em'
+      };
   const subtitleStyle: CSSProperties = {
     fontWeight: 500,
     // 0.39: the subtitle's original proportion against the title (3.6cqmin / 9.2cqmin).
-    fontSize: fitSizeScaled(9, '9.2cqmin', 0.39),
+    // In list mode the base var is the point size instead; 0.56 keeps the subtitle at the
+    // same intended cqmin (3.6 / 6.4) should a list slide ever carry one.
+    fontSize: listMode ? fitSizeScaled(9, '6.4cqmin', 0.56) : fitSizeScaled(9, '9.2cqmin', 0.39),
     color: 'rgba(255,255,255,.58)',
     marginTop: '1.4cqmin'
   };
   const pointsWrap: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1.8cqmin',
-    marginTop: '4cqmin',
+    // The wrap carries the fitted size so the em-based gap and dot metrics below scale
+    // with the text they space — one knob for the fitter to turn.
+    fontSize: `max(9px, ${fitSizeValue('6.4cqmin')})`,
+    gap: '0.4em',
+    marginTop: '3.2cqmin',
     alignItems: 'flex-start'
   };
   const pointStyle: CSSProperties = {
     display: 'flex',
-    alignItems: 'center',
-    gap: '2cqmin',
-    fontWeight: 500,
-    // 0.37: the points' original proportion against the title (3.4cqmin / 9.2cqmin). The
-    // 28px ceiling this replaces capped an announcement bullet's maximum below a lyric
-    // line's most-cramped fitted size, and pinned 4K output at 28px (#49).
-    fontSize: fitSizeScaled(9, '9.2cqmin', 0.37),
-    color: 'rgba(255,255,255,.85)'
+    // flex-start, not center: a wrapped item must hang under its own first line with the
+    // dot pinned beside that line — centered, the dot floated between the lines.
+    alignItems: 'flex-start',
+    gap: '0.55em',
+    fontWeight: 600,
+    // The points are the fitted base — the congregation reads these, not the label (#49
+    // removed the px ceiling; this removes the 0.37× title ratio that kept them small).
+    fontSize: `max(9px, ${fitSizeValue('6.4cqmin')})`,
+    lineHeight: 1.22,
+    letterSpacing: '-0.01em',
+    color: '#f2efe8',
+    textAlign: 'left',
+    textShadow: '0 2px 22px rgba(0,0,0,.55)'
   };
   const pointDotStyle: CSSProperties = {
-    width: '1.4cqmin',
-    height: '1.4cqmin',
+    width: '0.24em',
+    height: '0.24em',
     minWidth: '5px',
     minHeight: '5px',
     borderRadius: '50%',
     background: accent,
-    display: 'inline-block'
+    display: 'inline-block',
+    flexShrink: 0,
+    // Optically centers the dot on the first line: half the 1.22 line box minus half the
+    // dot's 0.24em height.
+    marginTop: '0.49em'
   };
 
   const isLogo = kind === 'logo';
@@ -408,8 +450,17 @@ export function SlideCanvas({
   const points = s.points || [];
 
   // Lyrics, scripture, and title/list slides auto-fit; every other kind passes null and
-  // keeps its own clamp.
-  const fitBand = isLyrics ? LYRICS_BAND : isScripture ? SCRIPTURE_BAND : isTitle ? TITLE_BAND : null;
+  // keeps its own clamp. List slides fit on their own band: the points are the fitted
+  // base there, not the title (see LIST_BAND).
+  const fitBand = isLyrics
+    ? LYRICS_BAND
+    : isScripture
+      ? SCRIPTURE_BAND
+      : isTitle
+        ? hasPoints
+          ? LIST_BAND
+          : TITLE_BAND
+        : null;
   useFitText(rootRef, fitRef, fitBand, [
     kind,
     fitBand,
@@ -458,7 +509,7 @@ export function SlideCanvas({
       {isTitle && (
         <div ref={fitRef} style={contentStyle}>
           <div style={titleStyle}>{s.title || ''}</div>
-          <div style={subtitleStyle}>{s.subtitle || ''}</div>
+          {!!s.subtitle && <div style={subtitleStyle}>{s.subtitle}</div>}
           {hasPoints && (
             <div style={pointsWrap}>
               {points.map((p, i) => (

@@ -5,6 +5,8 @@ import type { PreCard, PreCardType } from '../../shared/types';
 import { parseRef, formatRef } from '../../shared/scripture/refs';
 import { verseText } from '../../shared/scripture/preVerse';
 import { cleanListPoints } from '../../shared/preservice/listPoints';
+import { preSlideFor } from '../../shared/preservice/cards';
+import { SlideCanvas } from '../shared/SlideCanvas';
 
 export interface PreCardEditorProps {
   card: PreCard | null;
@@ -106,6 +108,38 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
     onClose();
   };
 
+  // The draft as a card, mirroring save()'s field mapping, so the preview above the
+  // fields is the REAL renderer showing exactly what saving would project — including
+  // marker stripping (#50) and auto-fit (#49) doing their work while the operator types,
+  // not after they save. Notably NOT the saved card: the preview must track keystrokes.
+  const draft: PreCard =
+    peType === 'verse'
+      ? {
+          id: card?.id ?? '',
+          type: 'verse',
+          enabled: true,
+          title: peTitle,
+          ref: peRef.trim(),
+          text: peText.trim(),
+          version
+        }
+      : peType === 'list'
+        ? {
+            id: card?.id ?? '',
+            type: 'list',
+            enabled: true,
+            title: peTitle.trim() || 'List',
+            points: peLines.split('\n')
+          }
+        : {
+            id: card?.id ?? '',
+            type: 'message',
+            enabled: true,
+            title: peTitle,
+            headline: peHeadline.trim() || 'Welcome',
+            subtitle: peSubtitle.trim()
+          };
+
   const fieldLabelStyle: CSSProperties = { fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, marginBottom: '6px' };
   const inputStyle: CSSProperties = {
     width: '100%',
@@ -187,7 +221,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   });
 
   return (
-    <ModalShell onClose={onClose} variant="card" width="100%" maxWidth="520px" maxHeight="90vh">
+    <ModalShell onClose={onClose} variant="card" width="100%" maxWidth="640px" maxHeight="90vh">
       <div style={{ fontWeight: 700, fontSize: '18px' }}>{isNew ? 'Add a card to the loop' : 'Edit card'}</div>
       {isNew && (
         <div style={{ display: 'flex', gap: '6px', marginTop: '14px' }}>
@@ -198,6 +232,19 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
           ))}
         </div>
       )}
+      <div
+        data-testid="pre-card-preview"
+        style={{
+          marginTop: '14px',
+          width: '100%',
+          aspectRatio: '16 / 9',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          boxShadow: `inset 0 0 0 1px ${T.border}`
+        }}
+      >
+        <SlideCanvas slide={preSlideFor(draft)} fill />
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
         <div>
           <div style={fieldLabelStyle}>CARD NAME</div>
