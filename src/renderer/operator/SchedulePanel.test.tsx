@@ -71,7 +71,7 @@ describe('SchedulePanel', () => {
 
   it('renders the tail ghost dimmed and aria-hidden, without touching the input value', () => {
     render(<SchedulePanel {...baseProps} value="gen" ghost={{ kind: 'tail', text: 'esis' }} />)
-    const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    const input = screen.getByPlaceholderText(/Add verse/) as HTMLInputElement
     fireEvent.focus(input)
     expect(input.value).toBe('gen') // the ghost is NEVER in the value
     const ghost = document.querySelector('[data-ghost]') as HTMLElement
@@ -83,7 +83,7 @@ describe('SchedulePanel', () => {
 
   it('renders the alias ghost as an arrow to the book name', () => {
     render(<SchedulePanel {...baseProps} value="jhn" ghost={{ kind: 'alias', book: 'John' }} />)
-    const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    const input = screen.getByPlaceholderText(/Add verse/) as HTMLInputElement
     fireEvent.focus(input)
     expect(input.value).toBe('jhn')
     const text = document.querySelector('[data-ghost-text]') as HTMLElement
@@ -92,13 +92,13 @@ describe('SchedulePanel', () => {
 
   it('renders no ghost when there is no completion', () => {
     render(<SchedulePanel {...baseProps} value="xyz" ghost={null} />)
-    fireEvent.focus(screen.getByPlaceholderText(/Add reading/))
+    fireEvent.focus(screen.getByPlaceholderText(/Add verse/))
     expect(document.querySelector('[data-ghost]')).toBeNull()
   })
 
   it('renders no ghost when the prop is omitted entirely', () => {
     render(<SchedulePanel {...baseProps} value="John 3:16" />)
-    fireEvent.focus(screen.getByPlaceholderText(/Add reading/))
+    fireEvent.focus(screen.getByPlaceholderText(/Add verse/))
     expect(document.querySelector('[data-ghost]')).toBeNull()
   })
 
@@ -113,7 +113,7 @@ describe('SchedulePanel', () => {
 
   it('shows the ghost overlay once focused, and hides it again on blur', () => {
     render(<SchedulePanel {...baseProps} value="gen" ghost={{ kind: 'tail', text: 'esis' }} />)
-    const input = screen.getByPlaceholderText(/Add reading/) as HTMLInputElement
+    const input = screen.getByPlaceholderText(/Add verse/) as HTMLInputElement
     expect(document.querySelector('[data-ghost]')).toBeNull()
     fireEvent.focus(input)
     expect(document.querySelector('[data-ghost]')).toBeTruthy()
@@ -142,14 +142,14 @@ describe('SchedulePanel', () => {
 
   it('invites the operator to act when the schedule is empty (#88)', () => {
     render(<SchedulePanel {...baseProps} rows={[]} />)
-    const empty = screen.getByText(/Readings you add will wait here/)
-    expect(empty.textContent).toMatch(/type a reference above/)
+    const empty = screen.getByText(/No verses yet/)
+    expect(empty.textContent).toMatch(/enter a reference above/)
     expect(empty.textContent).toMatch(/\+ Add/)
   })
 
   it('shows no empty state once the schedule has rows', () => {
     render(<SchedulePanel {...baseProps} />)
-    expect(screen.queryByText(/Readings you add will wait here/)).toBeNull()
+    expect(screen.queryByText(/No verses yet/)).toBeNull()
   })
 })
 

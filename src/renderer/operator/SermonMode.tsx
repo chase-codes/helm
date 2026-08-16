@@ -741,7 +741,7 @@ export function SermonMode({
         if (sel.isSelected(r.id) && sel.selectedIds.length > 1) {
           const ids = sel.selectedIds;
           contextMenu.open(e, [
-            { label: `Delete ${ids.length} readings`, danger: true, onSelect: () => removeReadings(ids) }
+            { label: `Delete ${ids.length} verses`, danger: true, onSelect: () => removeReadings(ids) }
           ]);
         } else {
           sel.select(r.id);
@@ -779,7 +779,7 @@ export function SermonMode({
     ondeckPreview = previewOf(nv);
   } else {
     ondeckTitle = `End of ${scrBook} ${scrCh}`;
-    ondeckPreview = 'Pick the next reading on the left';
+    ondeckPreview = 'Pick the next verse on the left';
   }
 
   // Registers this mode's keyboard delegate only while active — App keeps both Songs
@@ -925,7 +925,7 @@ export function SermonMode({
                     label:
                       undo.pending.length === 1
                         ? formatRef(undo.pending[0])
-                        : `${undo.pending.length} readings`,
+                        : `${undo.pending.length} verses`,
                     onUndo: undo.undo
                   }
                 : undefined

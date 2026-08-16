@@ -257,7 +257,7 @@ const clickTab = (label: string): void => {
   fireEvent.click(screen.getAllByText(label)[0])
 }
 
-const entry = (): HTMLElement => screen.getByPlaceholderText('Add reading — John 3:16')
+const entry = (): HTMLElement => screen.getByPlaceholderText('Add verse — John 3:16')
 const entryValue = (): string => (entry() as HTMLInputElement).value
 const verseCard = (n: number): HTMLElement =>
   screen.getByText(`Verse ${n}`).closest('button') as HTMLElement
@@ -274,7 +274,7 @@ describe('SermonMode — direct preview to live', () => {
     // The entry field is rendered by SchedulePanel unconditionally, synchronously on
     // mount, regardless of the chapter fetch — so waiting for it is a cheap way to let
     // mount effects run without depending on anything chapter-fetch-shaped.
-    await waitFor(() => expect(screen.getByPlaceholderText('Add reading — John 3:16')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16')).toBeTruthy())
     expect(show).not.toHaveBeenCalled()
 
     resolveChapter()
@@ -346,7 +346,7 @@ describe('SermonMode — direct preview to live', () => {
     // Move the cursor off the live verse (1) via a rail tap on verse 3, same as test 2 —
     // now addRef (the cursor) is Genesis 1:3, which is not the live key.
     fireEvent.click(verseCard(3))
-    await waitFor(() => expect(screen.getByPlaceholderText('Add reading — John 3:16')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16')).toBeTruthy())
 
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
     await waitFor(() => expect(goLive).toHaveBeenCalled())
@@ -626,7 +626,7 @@ describe('SermonMode — the book-name ghost is wired to the entry', () => {
     const { resolveChapter } = installHelmStub()
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByPlaceholderText('Add reading — John 3:16')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16')).toBeTruthy())
 
     fireEvent.focus(entry())
     typeInEntry('ma')
@@ -1692,7 +1692,7 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
 
     // The rail leads the round trip — mid-service a delete must not visibly lag (#86).
     expect(scheduleRowTitles()).toEqual(['Genesis 1:3'])
-    await screen.findByText(/2 readings/)
+    await screen.findByText(/2 verses/)
   })
 
   it('defers the real removeMany until the undo window closes, then sends one call', async () => {
@@ -1777,11 +1777,11 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     fireEvent.click(rowButton('Genesis 1:2'))
     act(() => keyHandlerRef.current?.onDelete?.())
 
-    // Toast label is the ref, not "1 readings". Anchor on the toast's own "Removed"
+    // Toast label is the ref, not "1 verses". Anchor on the toast's own "Removed"
     // text — the row title also reads "Genesis 1:2", so matching the ref alone could
     // pass against the not-yet-unmounted row.
     await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/Genesis 1:2/))
-    expect(screen.queryByText(/1 readings/)).toBeNull()
+    expect(screen.queryByText(/1 verses/)).toBeNull()
     expect(scheduleRowTitles()).toEqual(['Genesis 1:1', 'Genesis 1:3'])
   })
 
@@ -1800,7 +1800,7 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
       expect(scheduleRowTitles()).toEqual([])
-      expect(screen.getByText(/3 readings/)).toBeTruthy()
+      expect(screen.getByText(/3 verses/)).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
 
       act(() => {
@@ -1892,7 +1892,7 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     // #88: an empty list names what belongs here AND how to put something in it.
-    const empty = await screen.findByText(/Readings you add will wait here/)
+    const empty = await screen.findByText(/No verses yet/)
     expect(empty.textContent).toMatch(/\+ Add/)
     expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
   })

@@ -159,7 +159,7 @@ export function SchedulePanel({
                   onKeyDown={onEntryKeyDown}
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
-                  placeholder="Add reading — John 3:16"
+                  placeholder="Add verse — John 3:16"
                 />
                 {ghost && focused && (
                   // A transparent copy of the typed text advances the dim completion to
@@ -203,14 +203,14 @@ export function SchedulePanel({
               <DangerGhostButton
                 label="Clear all"
                 onClick={onClearAll}
-                title="Remove every reading — undoable for five seconds"
+                title="Remove every verse — undoable for five seconds"
               />
             )}
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rows.length === 0 && (
               <ListEmpty>
-                Readings you add will wait here — type a reference above, then <b>+ Add</b>.
+                No verses yet — enter a reference above and add it with <b>+ Add</b>.
               </ListEmpty>
             )}
             {rows.map((r) => (

@@ -33,7 +33,8 @@ export function useClock(): string {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const p = (n: number): string => (n < 10 ? '0' : '') + n;
-  return `${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+  const h = now.getHours() % 12 || 12;
+  return `${h}:${p(now.getMinutes())} ${now.getHours() < 12 ? 'AM' : 'PM'}`;
 }
 export function useVideoState(): VideoStateWire {
   const [s, setS] = useState<VideoStateWire>({ key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false });
