@@ -376,6 +376,10 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
       onArrow: stepPara,
       onGoLive: goLive,
       onDelete: () => {
+        // Only while the schedule is the list actually on screen. A query swaps the rail
+        // over to search results while the selection made before it survives underneath,
+        // so without this guard Delete would remove quotes the operator cannot see.
+        if (norm(q)) return;
         if (sel.selectedIds.length > 0) removeQuotes(sel.selectedIds);
       }
     };

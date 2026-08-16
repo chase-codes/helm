@@ -1910,6 +1910,33 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     expect(quoteRemoveMany).not.toHaveBeenCalled()
   })
 
+  it('Delete does nothing while a search has swapped the schedule off screen', async () => {
+    const { resolveChapter, quoteRemoveMany } = installHelmStub(NOTHING_LIVE, [], {
+      tape: TAPE_M,
+      quoteSchedule: QS,
+      search: { tapes: [], quotes: [] }
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    // Typing a query replaces the schedule with search results; the selection survives
+    // underneath, but Delete must not act on rows the operator cannot see.
+    fireEvent.change(screen.getByPlaceholderText('Search tapes & quotes…'), { target: { value: 'faith' } })
+    await waitFor(() => expect(document.querySelectorAll('[data-quote-row]')).toHaveLength(0))
+
+    act(() => keyHandlerRef.current?.onDelete?.())
+    expect(quoteRemoveMany).not.toHaveBeenCalled()
+
+    // Clearing the query brings the schedule — and the delete — back.
+    fireEvent.change(screen.getByPlaceholderText('Search tapes & quotes…'), { target: { value: '' } })
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q2', 'q3']))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q2', 'q3']))
+  })
+
   it('Delete on the message track never touches the scripture schedule', async () => {
     const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE_READINGS, {
       tape: TAPE_M,
