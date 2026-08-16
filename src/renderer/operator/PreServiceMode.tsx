@@ -233,13 +233,20 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     justifyContent: 'center',
     gap: '7px'
   };
+  // Green = go, the same convention SermonCenter and SongsMode use for their Go live
+  // buttons (#91). Start loop is this page's equivalent verb, so it wears the same colour.
+  // Stop loop drops back to the accent rather than turning red: red is take-down, and
+  // stopping the rotation leaves the current card lit — see `takeDown` above.
+  const loopBtn: CSSProperties = engaged
+    ? primaryBtn
+    : { ...primaryBtn, background: T.go, color: '#fff' };
   // "Show this card" — the deliberate single-card takeover. Reads as an action while the
   // selection is armed, and falls back to a quiet ghost once that card is already live so
   // it never competes with Start loop for attention.
-  // The min-width is load-bearing, not cosmetic: "Show this card" and "On screen" are very
-  // different lengths, and without it the whole centred row — Take down included — slides
-  // sideways the moment a card goes live, moving controls out from under the operator's
-  // pointer mid-service. Sized to the longer label so neither state reflows the row.
+  // The label no longer reports state ("On screen") the way it used to: every toggle in
+  // the app now says what the click DOES, and the ● ON SCREEN badge on the card already
+  // says what is up (#92). That also makes the row's width constant across both states,
+  // which the min-width below used to have to fake.
   const showBtn: CSSProperties = armed
     ? { ...primaryBtn, minWidth: '150px', background: 'transparent', color: T.accent, boxShadow: `inset 0 0 0 1.5px ${T.accent}` }
     : { ...ghostBtn, minWidth: '150px', cursor: 'default' };
@@ -547,10 +554,10 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             disabled={!armed}
             title={armed ? 'Put this card on the audience screen now — no rotation' : 'This card is already on screen'}
           >
-            {armed ? 'Show this card' : 'On screen'}
+            Show this card
           </button>
           <button
-            style={primaryBtn}
+            style={loopBtn}
             onClick={() => (engaged ? window.helm.preservice.disengage() : window.helm.preservice.engage())}
           >
             {engaged ? 'Stop loop' : 'Start loop'}

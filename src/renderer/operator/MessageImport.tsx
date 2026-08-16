@@ -1,5 +1,6 @@
-import { useContext, useRef, useState, type ChangeEvent, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import { useContext, useRef, useState, type ChangeEvent, type CSSProperties, type JSX } from 'react';
 import { ThemeCtx } from './ThemeCtx';
+import { ModalShell } from './ModalShell';
 import type { MessageImportResult, MessageMeta } from '../../shared/types';
 
 export interface MessageImportProps {
@@ -81,31 +82,6 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
       });
   };
 
-  const stop = (e: ReactMouseEvent): void => e.stopPropagation();
-
-  const overlayStyle: CSSProperties = {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 60,
-    background: 'rgba(8,9,12,.6)',
-    backdropFilter: 'blur(3px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '5vh 4vw'
-  };
-  const modalStyle: CSSProperties = {
-    width: '720px',
-    maxWidth: '96vw',
-    maxHeight: '88vh',
-    background: T.panel,
-    borderRadius: '16px',
-    boxShadow: '0 30px 80px rgba(0,0,0,.5)',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    border: `1px solid ${T.border}`
-  };
   const headerRowStyle: CSSProperties = { padding: '16px 22px', borderBottom: `1px solid ${T.hairline}` };
   const pickRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 22px', borderBottom: `1px solid ${T.hairline}` };
   const pickBtnStyle: CSSProperties = {
@@ -171,87 +147,85 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
   const canSave = !!result && result.paragraphs.length > 0 && !saving;
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={stop}>
-        <div style={headerRowStyle}>
-          <div style={{ fontWeight: 700, fontSize: '18px' }}>Import a message</div>
-          <div style={{ fontSize: '13px', color: T.dim, marginTop: '4px', lineHeight: 1.4 }}>
-            Review the parsed header and paragraphs before saving — this is your chance to fix anything the parser got wrong.
-          </div>
-        </div>
-
-        <div style={pickRowStyle}>
-          <button style={pickBtnStyle} onClick={() => fileInputRef.current?.click()} disabled={busy}>
-            Choose file…
-          </button>
-          <span style={fileNameStyle}>{busy ? 'Parsing…' : fileName || 'No file chosen (.txt or .pdf)'}</span>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.pdf,text/plain,application/pdf"
-            style={{ display: 'none' }}
-            onChange={handlePick}
-            disabled={busy}
-          />
-        </div>
-
-        {error && <div style={{ padding: '10px 22px 0', ...errorStyle }}>{error}</div>}
-
-        {result ? (
-          <>
-            <div style={fieldsRowStyle}>
-              <div style={fieldWrapStyle(2)}>
-                <span style={fieldLabelStyle}>TITLE</span>
-                <input
-                  style={fieldInputStyle}
-                  value={result.title}
-                  onChange={(e) => setResult({ ...result, title: e.target.value })}
-                />
-              </div>
-              <div style={fieldWrapStyle(1)}>
-                <span style={fieldLabelStyle}>TAPE NO</span>
-                <input
-                  style={fieldInputStyle}
-                  value={result.tapeNo}
-                  onChange={(e) => setResult({ ...result, tapeNo: e.target.value })}
-                />
-              </div>
-              <div style={fieldWrapStyle(1)}>
-                <span style={fieldLabelStyle}>DATE</span>
-                <input
-                  style={fieldInputStyle}
-                  value={result.date}
-                  onChange={(e) => setResult({ ...result, date: e.target.value })}
-                />
-              </div>
-            </div>
-            <div style={previewHintStyle}>PREVIEW · {result.paragraphs.length} paragraphs</div>
-            {result.paragraphs.length === 0 ? (
-              <div style={noParasStyle}>No numbered paragraphs found — check the file, or edit the header if this is correct.</div>
-            ) : (
-              <div style={previewListStyle}>
-                {result.paragraphs.map((p, i) => (
-                  <div key={i} style={paraCardStyle}>
-                    <div style={paraLabelStyle}>¶{p.label}</div>
-                    <div style={paraTextStyle}>{p.text}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={emptyStateStyle}>{busy ? 'Parsing…' : 'Choose a .txt or .pdf transcript to preview it here.'}</div>
-        )}
-
-        <div style={footerStyle}>
-          <button style={cancelStyle} onClick={onClose}>
-            Cancel
-          </button>
-          <button style={saveBtnStyle(canSave)} onClick={save} disabled={!canSave}>
-            {saving ? 'Saving…' : 'Save to library'}
-          </button>
+    <ModalShell onClose={onClose} zIndex={60} width="720px" maxWidth="96vw" maxHeight="88vh">
+      <div style={headerRowStyle}>
+        <div style={{ fontWeight: 700, fontSize: '18px' }}>Import a message</div>
+        <div style={{ fontSize: '13px', color: T.dim, marginTop: '4px', lineHeight: 1.4 }}>
+          Review the parsed header and paragraphs before saving — this is your chance to fix anything the parser got wrong.
         </div>
       </div>
-    </div>
+
+      <div style={pickRowStyle}>
+        <button style={pickBtnStyle} onClick={() => fileInputRef.current?.click()} disabled={busy}>
+          Choose file…
+        </button>
+        <span style={fileNameStyle}>{busy ? 'Parsing…' : fileName || 'No file chosen (.txt or .pdf)'}</span>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.pdf,text/plain,application/pdf"
+          style={{ display: 'none' }}
+          onChange={handlePick}
+          disabled={busy}
+        />
+      </div>
+
+      {error && <div style={{ padding: '10px 22px 0', ...errorStyle }}>{error}</div>}
+
+      {result ? (
+        <>
+          <div style={fieldsRowStyle}>
+            <div style={fieldWrapStyle(2)}>
+              <span style={fieldLabelStyle}>TITLE</span>
+              <input
+                style={fieldInputStyle}
+                value={result.title}
+                onChange={(e) => setResult({ ...result, title: e.target.value })}
+              />
+            </div>
+            <div style={fieldWrapStyle(1)}>
+              <span style={fieldLabelStyle}>TAPE NO</span>
+              <input
+                style={fieldInputStyle}
+                value={result.tapeNo}
+                onChange={(e) => setResult({ ...result, tapeNo: e.target.value })}
+              />
+            </div>
+            <div style={fieldWrapStyle(1)}>
+              <span style={fieldLabelStyle}>DATE</span>
+              <input
+                style={fieldInputStyle}
+                value={result.date}
+                onChange={(e) => setResult({ ...result, date: e.target.value })}
+              />
+            </div>
+          </div>
+          <div style={previewHintStyle}>PREVIEW · {result.paragraphs.length} paragraphs</div>
+          {result.paragraphs.length === 0 ? (
+            <div style={noParasStyle}>No numbered paragraphs found — check the file, or edit the header if this is correct.</div>
+          ) : (
+            <div style={previewListStyle}>
+              {result.paragraphs.map((p, i) => (
+                <div key={i} style={paraCardStyle}>
+                  <div style={paraLabelStyle}>¶{p.label}</div>
+                  <div style={paraTextStyle}>{p.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={emptyStateStyle}>{busy ? 'Parsing…' : 'Choose a .txt or .pdf transcript to preview it here.'}</div>
+      )}
+
+      <div style={footerStyle}>
+        <button style={cancelStyle} onClick={onClose}>
+          Cancel
+        </button>
+        <button style={saveBtnStyle(canSave)} onClick={save} disabled={!canSave}>
+          {saving ? 'Saving…' : 'Save to library'}
+        </button>
+      </div>
+    </ModalShell>
   );
 }

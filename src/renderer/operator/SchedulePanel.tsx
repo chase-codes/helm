@@ -226,7 +226,7 @@ export function SchedulePanel({
             ))}
           </div>
 
-          {undo && <UndoToast label={undo.label} onUndo={undo.onUndo} />}
+          {undo && <UndoToast label={undo.label} onUndo={undo.onUndo} accent={T.scripture} />}
         </>
       )}
     </div>

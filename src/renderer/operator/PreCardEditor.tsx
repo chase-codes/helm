@@ -1,5 +1,6 @@
-import { useContext, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import { useContext, useState, type CSSProperties, type JSX } from 'react';
 import { ThemeCtx } from './ThemeCtx';
+import { ModalShell } from './ModalShell';
 import type { PreCard, PreCardType } from '../../shared/types';
 import { parseRef, formatRef } from '../../shared/scripture/refs';
 import { verseText } from '../../shared/scripture/preVerse';
@@ -40,8 +41,6 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   const [peSubtitle, setPeSubtitle] = useState(card?.subtitle ?? '');
   const [version, setVersion] = useState<string | undefined>(card?.version);
   const [lookupMsg, setLookupMsg] = useState('');
-
-  const stop = (e: ReactMouseEvent): void => e.stopPropagation();
 
   const lookUp = async (): Promise<void> => {
     const parsed = parseRef(peRef);
@@ -107,27 +106,6 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
     onClose();
   };
 
-  const overlayStyle: CSSProperties = {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 50,
-    background: 'rgba(8,9,12,.6)',
-    backdropFilter: 'blur(3px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '5vh 4vw'
-  };
-  const modalStyle: CSSProperties = {
-    width: '100%',
-    maxWidth: '520px',
-    background: T.panel,
-    borderRadius: '16px',
-    padding: '22px 24px',
-    boxShadow: '0 30px 80px rgba(0,0,0,.5)',
-    maxHeight: '90vh',
-    overflowY: 'auto'
-  };
   const fieldLabelStyle: CSSProperties = { fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, marginBottom: '6px' };
   const inputStyle: CSSProperties = {
     width: '100%',
@@ -209,101 +187,99 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   });
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={stop}>
-        <div style={{ fontWeight: 700, fontSize: '18px' }}>{isNew ? 'Add a card to the loop' : 'Edit card'}</div>
-        {isNew && (
-          <div style={{ display: 'flex', gap: '6px', marginTop: '14px' }}>
-            {TYPE_TABS.map((t) => (
-              <button key={t.id} style={tabStyle(t.id === peType)} onClick={() => setPeType(t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
-          <div>
-            <div style={fieldLabelStyle}>CARD NAME</div>
-            <input style={inputStyle} value={peTitle} onChange={(e) => setPeTitle(e.target.value)} placeholder="e.g. Prayer requests" />
-          </div>
-          {peType === 'verse' && (
-            <>
-              <div>
-                <div style={fieldLabelStyle}>REFERENCE</div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    style={{ ...inputStyle, flex: 1 }}
-                    value={peRef}
-                    onChange={(e) => { setPeRef(e.target.value); setVersion(undefined); setLookupMsg(''); }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void lookUp();
-                      }
-                    }}
-                    placeholder="Psalm 122:1"
-                  />
-                  <button style={lookupBtnStyle} onClick={() => void lookUp()}>
-                    Look up
-                  </button>
-                </div>
-                {lookupMsg && <div style={lookupMsgStyle}>{lookupMsg}</div>}
-              </div>
-              <div>
-                <div style={fieldLabelStyle}>VERSE TEXT</div>
-                <textarea
-                  style={areaStyle}
-                  value={peText}
-                  onChange={(e) => { setPeText(e.target.value); setVersion(undefined); setLookupMsg(''); }}
-                  placeholder="I was glad when they said unto me…"
-                />
-              </div>
-            </>
-          )}
-          {peType === 'list' && (
+    <ModalShell onClose={onClose} variant="card" width="100%" maxWidth="520px" maxHeight="90vh">
+      <div style={{ fontWeight: 700, fontSize: '18px' }}>{isNew ? 'Add a card to the loop' : 'Edit card'}</div>
+      {isNew && (
+        <div style={{ display: 'flex', gap: '6px', marginTop: '14px' }}>
+          {TYPE_TABS.map((t) => (
+            <button key={t.id} style={tabStyle(t.id === peType)} onClick={() => setPeType(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+        <div>
+          <div style={fieldLabelStyle}>CARD NAME</div>
+          <input style={inputStyle} value={peTitle} onChange={(e) => setPeTitle(e.target.value)} placeholder="e.g. Prayer requests" />
+        </div>
+        {peType === 'verse' && (
+          <>
             <div>
-              <div style={fieldLabelStyle}>ITEMS — ONE PER LINE</div>
+              <div style={fieldLabelStyle}>REFERENCE</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  style={{ ...inputStyle, flex: 1 }}
+                  value={peRef}
+                  onChange={(e) => { setPeRef(e.target.value); setVersion(undefined); setLookupMsg(''); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void lookUp();
+                    }
+                  }}
+                  placeholder="Psalm 122:1"
+                />
+                <button style={lookupBtnStyle} onClick={() => void lookUp()}>
+                  Look up
+                </button>
+              </div>
+              {lookupMsg && <div style={lookupMsgStyle}>{lookupMsg}</div>}
+            </div>
+            <div>
+              <div style={fieldLabelStyle}>VERSE TEXT</div>
               <textarea
                 style={areaStyle}
-                value={peLines}
-                onChange={(e) => setPeLines(e.target.value)}
-                placeholder="Fellowship dinner — next Sunday after service"
+                value={peText}
+                onChange={(e) => { setPeText(e.target.value); setVersion(undefined); setLookupMsg(''); }}
+                placeholder="I was glad when they said unto me…"
               />
             </div>
-          )}
-          {peType === 'message' && (
-            <>
-              <div>
-                <div style={fieldLabelStyle}>BIG LINE</div>
-                <input style={inputStyle} value={peHeadline} onChange={(e) => setPeHeadline(e.target.value)} placeholder="Welcome" />
-              </div>
-              <div>
-                <div style={fieldLabelStyle}>SMALL LINE</div>
-                <input
-                  style={inputStyle}
-                  value={peSubtitle}
-                  onChange={(e) => setPeSubtitle(e.target.value)}
-                  placeholder="We’re glad you’re here this morning"
-                />
-              </div>
-            </>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '10px', marginTop: '20px', alignItems: 'center' }}>
-          {!isNew && (
-            <button style={removeStyle} onClick={remove}>
-              Remove card
-            </button>
-          )}
-          <div style={{ flex: 1 }} />
-          <button style={smallGhost} onClick={onClose}>
-            Cancel
-          </button>
-          <button style={primaryBtn} onClick={save}>
-            {isNew ? 'Add to loop' : 'Save changes'}
-          </button>
-        </div>
+          </>
+        )}
+        {peType === 'list' && (
+          <div>
+            <div style={fieldLabelStyle}>ITEMS — ONE PER LINE</div>
+            <textarea
+              style={areaStyle}
+              value={peLines}
+              onChange={(e) => setPeLines(e.target.value)}
+              placeholder="Fellowship dinner — next Sunday after service"
+            />
+          </div>
+        )}
+        {peType === 'message' && (
+          <>
+            <div>
+              <div style={fieldLabelStyle}>BIG LINE</div>
+              <input style={inputStyle} value={peHeadline} onChange={(e) => setPeHeadline(e.target.value)} placeholder="Welcome" />
+            </div>
+            <div>
+              <div style={fieldLabelStyle}>SMALL LINE</div>
+              <input
+                style={inputStyle}
+                value={peSubtitle}
+                onChange={(e) => setPeSubtitle(e.target.value)}
+                placeholder="We’re glad you’re here this morning"
+              />
+            </div>
+          </>
+        )}
       </div>
-    </div>
+      <div style={{ display: 'flex', gap: '10px', marginTop: '20px', alignItems: 'center' }}>
+        {!isNew && (
+          <button style={removeStyle} onClick={remove}>
+            Remove card
+          </button>
+        )}
+        <div style={{ flex: 1 }} />
+        <button style={smallGhost} onClick={onClose}>
+          Cancel
+        </button>
+        <button style={primaryBtn} onClick={save}>
+          {isNew ? 'Add to loop' : 'Save changes'}
+        </button>
+      </div>
+    </ModalShell>
   );
 }

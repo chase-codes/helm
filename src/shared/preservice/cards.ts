@@ -1,16 +1,15 @@
 import type { PreCard, Slide } from '../types';
-
-const AMBER = '#e0a341';
+import { CANVAS_AMBER, CANVAS_GOLD } from '../slideAccents';
 
 export function preSlideFor(card: PreCard): Slide {
   switch (card.type) {
     case 'message':
-      return { kind: 'title', accent: AMBER, title: card.headline || 'Welcome', subtitle: card.subtitle ?? '' };
+      return { kind: 'title', accent: CANVAS_AMBER, title: card.headline || 'Welcome', subtitle: card.subtitle ?? '' };
     case 'verse':
       // Canvas gold, same as buildScriptureSlide — not the operator-UI scripture blue (#48).
-      return { kind: 'scripture', accent: '#f0b24a', ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version || 'KJV', text: card.text || '' }] };
+      return { kind: 'scripture', accent: CANVAS_GOLD, ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version || 'KJV', text: card.text || '' }] };
     case 'list':
-      return { kind: 'title', accent: AMBER, title: card.title, points: card.points || [] };
+      return { kind: 'title', accent: CANVAS_AMBER, title: card.title, points: card.points || [] };
     case 'image':
       return { kind: 'image', src: card.src || '' };
     case 'logo':

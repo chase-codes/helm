@@ -121,4 +121,14 @@ describe('ChapterRail scrollRequest', () => {
     rerender(rail({ verseCount: 10, scrollRequest: { v: 4, align: 'start', nonce: 1 }, onScrollConsumed }))
     expect(onScrollConsumed).toHaveBeenCalledWith(1)
   })
+
+  it('tints rows with the active family\'s scripture colour, not a baked-in blue (#91)', () => {
+    // Grove's scripture token is #7fa9e8; Classic dark's is #6f9cf0. Before the ladder was
+    // derived, both families rendered the Classic value because the rgba() was literal.
+    const grove = themeFor('grove', 'dark')
+    render(<ChapterRail {...baseProps} theme={grove} isVerseLive={(v) => v === 3} />)
+    const live = screen.getByText('verse 3 text').closest('button') as HTMLButtonElement
+    // jsdom normalises #7fa9e824 to rgba(127, 169, 232, …).
+    expect(live.style.background).toContain('127, 169, 232')
+  })
 })

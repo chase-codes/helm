@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { DARK, FAMILIES, themeFor, type ThemeFamily, type ThemeMode } from './theme'
 
-/** The 20 palette tokens every family must carry, in both modes. */
+/** The 19 palette tokens every family must carry, in both modes. */
 const TOKENS = [
   'appBg', 'panel', 'panel2', 'panel3',
   'text', 'dim', 'faint', 'hairline', 'border',
   'inputBg', 'accent', 'accentInk', 'live',
-  'scripture', 'sermon', 'message', 'quote',
+  'scripture', 'sermon', 'message',
   'selBg', 'lineDim', 'go'
 ] as const
+
+/** Computed by themeFor rather than carried per-palette. */
+const DERIVED = ['floatShadow', 'modalShadow', 'scrim'] as const
 
 const FAMILY_KEYS = Object.keys(FAMILIES) as ThemeFamily[]
 const MODES: ThemeMode[] = ['dark', 'light']
@@ -22,9 +25,11 @@ describe('themeFor', () => {
       text: '#e8e6e1', dim: '#9a9488', faint: '#736f66',
       hairline: 'rgba(255,255,255,.06)', border: 'rgba(255,255,255,.08)',
       inputBg: '#1c1f25', accent: '#e0a341', accentInk: '#1a1206', live: '#cf6a5e',
-      scripture: '#6f9cf0', sermon: '#6f9c7a', message: '#a88bc4', quote: '#b98cf0',
+      scripture: '#6f9cf0', sermon: '#6f9c7a', message: '#a88bc4',
       selBg: '#221d10', lineDim: '#b4b1aa', go: '#2f9e5b',
-      floatShadow: '0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08)'
+      floatShadow: '0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08)',
+      modalShadow: '0 30px 80px rgba(0,0,0,.5)',
+      scrim: 'rgba(8,9,12,.6)'
     })
   })
 
@@ -57,7 +62,10 @@ describe('themeFor', () => {
         for (const token of TOKENS) {
           expect(t[token], `${family}/${mode}.${token}`).toBeTruthy()
         }
-        expect(Object.keys(t)).toHaveLength(TOKENS.length + 1) // + floatShadow
+        for (const token of DERIVED) {
+          expect(t[token], `${family}/${mode}.${token}`).toBeTruthy()
+        }
+        expect(Object.keys(t)).toHaveLength(TOKENS.length + DERIVED.length)
         expect(t.floatShadow).toContain(t.border)
       }
     }

@@ -1761,7 +1761,11 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
     render(<Harness />)
     resolveChapter()
-    await screen.findByText('Genesis 1:1')
+    // Gate on a SCHEDULE ROW, not on the text: the hero's cursor label and the
+    // "+ Add Genesis 1:1" button carry the same string and are driven by the chapter
+    // fetch, so findByText settles before schedule.list() has landed. On a loaded CI
+    // runner that raced through to a Clear all that did not exist yet.
+    await waitFor(() => rowButton('Genesis 1:1'))
 
     vi.useFakeTimers()
     try {
@@ -1806,7 +1810,11 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
     render(<Harness />)
     resolveChapter()
-    await screen.findByText('Genesis 1:1')
+    // Gate on a SCHEDULE ROW, not on the text: the hero's cursor label and the
+    // "+ Add Genesis 1:1" button carry the same string and are driven by the chapter
+    // fetch, so findByText settles before schedule.list() has landed. On a loaded CI
+    // runner that raced through to a Clear all that did not exist yet.
+    await waitFor(() => rowButton('Genesis 1:1'))
 
     // Clear all is the worst case: one add would otherwise restore the whole schedule.
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
@@ -1823,7 +1831,11 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
     render(<Harness />)
     resolveChapter()
-    await screen.findByText('Genesis 1:1')
+    // Gate on a SCHEDULE ROW, not on the text: the hero's cursor label and the
+    // "+ Add Genesis 1:1" button carry the same string and are driven by the chapter
+    // fetch, so findByText settles before schedule.list() has landed. On a loaded CI
+    // runner that raced through to a Clear all that did not exist yet.
+    await waitFor(() => rowButton('Genesis 1:1'))
 
     // #86: the most destructive in-service control must not be the smallest target.
     const clear = screen.getByRole('button', { name: 'Clear all' })
@@ -1843,7 +1855,11 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
     render(<Harness />)
     resolveChapter()
-    await screen.findByText('Genesis 1:1')
+    // Gate on a SCHEDULE ROW, not on the text: the hero's cursor label and the
+    // "+ Add Genesis 1:1" button carry the same string and are driven by the chapter
+    // fetch, so findByText settles before schedule.list() has landed. On a loaded CI
+    // runner that raced through to a Clear all that did not exist yet.
+    await waitFor(() => rowButton('Genesis 1:1'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 

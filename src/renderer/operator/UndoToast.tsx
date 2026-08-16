@@ -4,10 +4,15 @@ import { ThemeCtx } from './ThemeCtx';
 export interface UndoToastProps {
   label: string;
   onUndo: () => void;
+  /** The host track's colour — T.scripture on Sermon, T.message on Message, T.sermon on
+   *  Slides. The link used to be hardcoded scripture-blue, so an undo offered by the
+   *  Slides track wore the Bible track's colour (#92). Defaults to T.accent for surfaces
+   *  that aren't a track, like pre-service. */
+  accent?: string;
 }
 
 /** Transient "Removed <label> — Undo" bar. Track-agnostic: drop it into any list panel. */
-export function UndoToast({ label, onUndo }: UndoToastProps): JSX.Element {
+export function UndoToast({ label, onUndo, accent }: UndoToastProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const barStyle: CSSProperties = {
     display: 'flex',
@@ -25,7 +30,7 @@ export function UndoToast({ label, onUndo }: UndoToastProps): JSX.Element {
       <span style={{ flex: 1, fontSize: '12px', color: T.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         Removed {label}
       </span>
-      <button style={{ fontSize: '12px', fontWeight: 700, color: T.scripture, padding: '2px 4px' }} onClick={onUndo}>
+      <button style={{ fontSize: '12px', fontWeight: 700, color: accent ?? T.accent, padding: '2px 4px' }} onClick={onUndo}>
         Undo
       </button>
     </div>
