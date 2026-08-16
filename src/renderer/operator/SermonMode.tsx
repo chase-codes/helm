@@ -819,8 +819,12 @@ export function SermonMode({
       // blocking modal down here is the slides track's deck-fallback, reported through
       // its delegate so Enter/Delete can't fire behind it (same contract as QuickAdd).
       isModalOpen: () => (track === 'slides' && slidesKeyRef.current?.isModalOpen()) || false,
+      // Delete/Backspace reaches whichever track's list is on screen (#90/#8). Each track
+      // owns the guard for "is anything selected"; SermonMode only routes.
       onDelete: () => {
-        if (track === 'scripture' && sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
+        if (track === 'scripture') {
+          if (sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
+        } else if (track === 'slides') slidesKeyRef.current?.onDelete();
       },
       onAction: (a: ResolvedHotkey) => {
         if (track !== 'scripture') return;

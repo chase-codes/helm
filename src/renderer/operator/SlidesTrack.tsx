@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -21,8 +20,10 @@ import { SlideCanvas } from '../shared/SlideCanvas';
 import { VideoCanvas } from '../shared/VideoCanvas';
 import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
-import { useTimedUndo } from './useTimedUndo';
+import { useDeferredRemove } from './useDeferredRemove';
+import { useListSelection } from './useListSelection';
 import { UndoToast } from './UndoToast';
+import { ListEmpty } from './ListEmpty';
 import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
 
@@ -41,6 +42,9 @@ export interface SlidesKeyHandler {
   /** True while the deck-fallback modal is up — a blocking modal, so SermonMode reports
    * it and App suppresses Enter/Delete behind it (same contract as SongsMode's QuickAdd). */
   isModalOpen: () => boolean;
+  /** Delete/Backspace: remove the library selection, if any (#90). The media library is a
+   * schedule-shaped list like the scripture rail, so it answers the same key. */
+  onDelete: () => void;
 }
 export type SlidesKeyRef = MutableRefObject<SlidesKeyHandler | null>;
 
@@ -104,7 +108,39 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   const [importing, setImporting] = useState<null | { label: string }>(null);
 
   const contextMenu = useContextMenu();
-  const undo = useTimedUndo<MediaItem>();
+  // Two independent notions of "picked", exactly as the scripture rail has: `selId` is the
+  // CUED item driving the hero, `sel` is the delete-selection a shift-click builds. They
+  // usually agree (a plain click sets both) and deliberately diverge on a shift-click,
+  // which extends the range without moving the cue off the slide on screen.
+  const sel = useListSelection(items.map((i) => i.id));
+  // Deferred commit — the row leaves the rail now, the file is deleted when the undo
+  // window closes, and undo re-reads the library so the order is exactly as it was (#86).
+  const undo = useDeferredRemove<MediaItem>({
+    commit: (batch) => {
+      for (const item of batch) void window.helm.media.remove(item.id).catch(console.error);
+    },
+    restore: () => {
+      // Re-fetch rather than splice the batch back in: the library's order is main's to
+      // know, and re-reading it is what makes the restore exact.
+      void window.helm.media
+        .list()
+        .then((l) => {
+          setItems(l);
+          const back = displacedCueRef.current;
+          displacedCueRef.current = null;
+          if (back) {
+            setSelId(back);
+            setSlideIdx(0);
+          }
+        })
+        .catch(console.error);
+    }
+  });
+
+  // The cued id the pending removal displaced, or null if the cue was untouched by it.
+  // Undo moves the hero back only when the delete is what moved it — deleting some other
+  // row and undoing must not yank the operator off the slide they are looking at.
+  const displacedCueRef = useRef<string | null>(null);
 
   // Initial load: the media library, picking the first item as current.
   useEffect(() => {
@@ -193,55 +229,24 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     setSlideIdx(0);
   };
 
-  // Deferred-commit delete. `useTimedUndo` has a single pending slot and can't distinguish a
-  // user cancel from a timer expiry, so we track the id awaiting real deletion in a ref and
-  // commit it exactly once — on natural expiry, when a newer delete supersedes it, or when
-  // this track unmounts (tab switch) before the toast expires. Dropping any of those would
-  // leave an item the operator saw removed still on disk until the next refresh.
-  const committedRef = useRef<string | null>(null);
-  const commitPending = useCallback((): void => {
-    const id = committedRef.current;
-    committedRef.current = null;
-    if (id) void window.helm.media.remove(id).catch(console.error);
-  }, []);
-
-  const removeItem = (item: MediaItem): void => {
-    contextMenu.close();
-    commitPending(); // a still-pending prior delete is superseded — commit it now, don't drop it
-    const neighborId = pickNeighborId(items, item.id);
-    setItems((l) => l.filter((i) => i.id !== item.id));
-    if (selId === item.id) { setSelId(neighborId); setSlideIdx(0); }
-    committedRef.current = item.id;
-    undo.arm(item);
+  // One remove path for a row's context menu, a shift-click range, and the Delete key
+  // alike — the rows leave the rail immediately and the files go when the undo window
+  // closes (see `undo` above; the expiry/supersede/unmount commit paths live in
+  // useDeferredRemove now, which is where the scripture rail reads them from too).
+  const removeItems = (ids: string[]): void => {
+    const batch = items.filter((i) => ids.includes(i.id));
+    if (!batch.length) return;
+    const cueDisplaced = ids.includes(selId);
+    displacedCueRef.current = cueDisplaced ? selId : null;
+    const neighborId = pickNeighborId(items, ids);
+    setItems((l) => l.filter((i) => !ids.includes(i.id)));
+    if (cueDisplaced) {
+      setSelId(neighborId);
+      setSlideIdx(0);
+    }
+    sel.clear();
+    undo.remove(batch);
   };
-
-  const undoRemove = (): void => {
-    const item = undo.pending;
-    if (!item) return;
-    // Cancel the pending commit BEFORE cancel() flips `undo.pending` to null, so the expiry
-    // effect below sees nothing to commit (an undo and a timer expiry look identical from
-    // `undo.pending`'s perspective).
-    committedRef.current = null;
-    undo.cancel();
-    // Re-fetch to restore the exact prior order rather than guessing an insertion index.
-    void window.helm.media.list().then((l) => {
-      setItems(l);
-      setSelId(item.id);
-    }).catch(console.error);
-  };
-
-  // Commit on natural expiry: `undo.pending` clears while a commit is still armed. (Undo
-  // clears `committedRef` first, so this runs as a no-op in that case.)
-  useEffect(() => {
-    if (undo.pending) return;
-    commitPending();
-  }, [undo.pending, commitPending]);
-
-  // Commit a still-pending delete on unmount. Under SermonMode's track keep-alive this
-  // effectively only fires at app teardown (a track switch no longer unmounts this
-  // component) — the expiry and supersede paths above carry the normal load — but it
-  // stays as the backstop for any future path that does unmount the track.
-  useEffect(() => () => commitPending(), [commitPending]);
 
   const stepSlide = (dir: 1 | -1): void => {
     if (!slides.length) return;
@@ -354,7 +359,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       onArrow: stepSlide,
       onGoLive: goLive,
       onEscape: escapeOverlays,
-      isModalOpen: () => deckFallback !== null
+      isModalOpen: () => deckFallback !== null,
+      onDelete: () => {
+        if (sel.selectedIds.length > 0) removeItems(sel.selectedIds);
+      }
     };
     return () => {
       slidesKeyRef.current = null;
@@ -384,7 +392,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
-  const rowStyle = (isCurrent: boolean): CSSProperties => ({
+  // Same two-state treatment the scripture rail uses: the delete-selection ring wins over
+  // the cued tint, so a shift-click range reads as one block even where it crosses the
+  // cued row.
+  const rowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
@@ -392,8 +403,12 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     padding: '8px 9px',
     borderRadius: '11px',
     cursor: 'pointer',
-    background: isCurrent ? T.panel3 : 'transparent',
-    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.sermon}55` : 'none',
+    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
+    boxShadow: isSelected
+      ? `inset 0 0 0 1.5px ${T.accent}`
+      : isCurrent
+        ? `inset 0 0 0 1px ${T.sermon}55`
+        : 'none',
     userSelect: 'none'
   });
   const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
@@ -436,17 +451,6 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     margin: '4px 2px', padding: '10px 12px', borderRadius: '10px',
     background: T.panel3, color: T.dim, fontSize: '12.5px', fontWeight: 600
   };
-  const emptyStateStyle: CSSProperties = {
-    margin: '8px 2px',
-    padding: '18px 14px',
-    borderRadius: '11px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    color: T.faint,
-    fontSize: '12.5px',
-    lineHeight: 1.5,
-    textAlign: 'center'
-  };
-
   const comingPanelStyle: CSSProperties = { width: `${rightPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const numStyle = (isCued: boolean): CSSProperties => ({
     fontFamily: "'JetBrains Mono',monospace",
@@ -559,18 +563,44 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
             </div>
           )}
           {items.length === 0 && (
-            <div style={emptyStateStyle}>
+            <ListEmpty>
               No media yet — import slides, images, or video with <b>+ Import</b> to get started.
-            </div>
+            </ListEmpty>
           )}
           {items.map((item) => (
             <button
               key={item.id}
               data-media-id={item.id}
-              style={rowStyle(item.id === selId)}
-              onClick={() => selectItem(item)}
-              onDoubleClick={() => { selectItem(item); takeSlideLive(item, 0); }}
-              onContextMenu={(e) => contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeItem(item) }])}
+              style={rowStyle(item.id === selId, sel.isSelected(item.id))}
+              data-selected={sel.isSelected(item.id) || undefined}
+              onClick={(e) => {
+                // Shift-click extends the delete-selection and deliberately leaves the cue
+                // where it is (#90) — same split the scripture rail makes.
+                if (e.shiftKey) sel.selectTo(item.id);
+                else {
+                  selectItem(item);
+                  sel.select(item.id);
+                }
+              }}
+              // Shift-double-click is two range-selection clicks landing fast, not a take:
+              // without the guard, extending a selection could put a slide on screen.
+              onDoubleClick={(e) => {
+                if (e.shiftKey) return;
+                selectItem(item);
+                sel.select(item.id);
+                takeSlideLive(item, 0);
+              }}
+              onContextMenu={(e) => {
+                if (sel.isSelected(item.id) && sel.selectedIds.length > 1) {
+                  const ids = sel.selectedIds;
+                  contextMenu.open(e, [
+                    { label: `Delete ${ids.length} items`, danger: true, onSelect: () => removeItems(ids) }
+                  ]);
+                } else {
+                  sel.select(item.id);
+                  contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeItems([item.id]) }]);
+                }
+              }}
             >
               <div style={thumbBoxStyle}>
                 <SlideCanvas slide={slidesOf(item)[0]} fill />
@@ -586,7 +616,10 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
           ))}
         </div>
         {undo.pending && (
-          <UndoToast label={undo.pending.title} onUndo={undoRemove} />
+          <UndoToast
+            label={undo.pending.length === 1 ? undo.pending[0].title : `${undo.pending.length} items`}
+            onUndo={undo.undo}
+          />
         )}
       </div>
 

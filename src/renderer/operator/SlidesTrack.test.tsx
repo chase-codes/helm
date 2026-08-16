@@ -12,6 +12,8 @@ import type { PanelWidthControl } from './usePanelWidth'
 // this, DOM from one test leaks into the next.
 afterEach(cleanup)
 
+const T = themeFor('classic', 'dark')
+
 const items: MediaItem[] = [
   { id: 'deck1', type: 'deck', title: 'Sermon.pptx', filePath: null, slides: ['deck1/1.png', 'deck1/2.png'], createdAt: 1 },
   { id: 'img1', type: 'image', title: 'Welcome.jpg', filePath: 'img1.jpg', slides: [], createdAt: 2 },
@@ -350,6 +352,143 @@ describe('SlidesTrack', () => {
     fireEvent.click(await screen.findByText('Delete'))
     view.unmount()
     await waitFor(() => expect(window.helm.media.remove).toHaveBeenCalledWith('img1'))
+  })
+
+  it('shift-click selects the contiguous run without moving the cue (#90)', async () => {
+    const { cue } = installHelmStub()
+    renderTrack()
+    const rowFor = (t: string): HTMLButtonElement => screen.getByText(t).closest('button') as HTMLButtonElement
+    await screen.findByText('▤ Sermon.pptx')
+
+    fireEvent.click(rowFor('▤ Sermon.pptx'))
+    cue.mockClear()
+    fireEvent.click(rowFor('▶ Promo.mp4'), { shiftKey: true })
+
+    for (const t of ['▤ Sermon.pptx', '▣ Welcome.jpg', '▶ Promo.mp4']) {
+      expect(rowFor(t).getAttribute('data-selected')).toBe('true')
+    }
+    // The shift-click extends the selection only — the hero stays on the deck.
+    expect(cue).not.toHaveBeenCalled()
+  })
+
+  it('right-click on a multi-row selection offers one batch delete (#90)', async () => {
+    installHelmStub()
+    renderTrack()
+    const rowFor = (t: string): HTMLButtonElement => screen.getByText(t).closest('button') as HTMLButtonElement
+    await screen.findByText('▤ Sermon.pptx')
+
+    fireEvent.click(rowFor('▤ Sermon.pptx'))
+    fireEvent.click(rowFor('▣ Welcome.jpg'), { shiftKey: true })
+    fireEvent.contextMenu(rowFor('▣ Welcome.jpg'))
+
+    fireEvent.click(await screen.findByText('Delete 2 items'))
+    await waitFor(() => expect(screen.queryByText('▤ Sermon.pptx')).toBeNull())
+    expect(screen.queryByText('▣ Welcome.jpg')).toBeNull()
+    expect(screen.getByText('▶ Promo.mp4')).toBeTruthy()
+    expect(await screen.findByText(/2 items/)).toBeTruthy()
+  })
+
+  it('the Delete key removes the selection (#90/#8)', async () => {
+    installHelmStub()
+    const slidesKeyRef = { current: null } as { current: null | { onDelete: () => void } }
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SlidesTrack
+          slidesKeyRef={slidesKeyRef as never}
+          active
+          track="slides"
+          setTrack={() => {}}
+          leftPanel={stubPanel(270)}
+          rightPanel={stubPanel(330)}
+        />
+      </ThemeCtx.Provider>
+    )
+    await screen.findByText('▣ Welcome.jpg')
+    fireEvent.click(screen.getByText('▣ Welcome.jpg').closest('button') as HTMLButtonElement)
+    act(() => slidesKeyRef.current?.onDelete())
+
+    await waitFor(() => expect(screen.queryByText('▣ Welcome.jpg')).toBeNull())
+    expect(await screen.findByText(/Removed/)).toBeTruthy()
+  })
+
+  it('Delete with nothing selected does nothing', async () => {
+    installHelmStub()
+    const slidesKeyRef = { current: null } as { current: null | { onDelete: () => void } }
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SlidesTrack
+          slidesKeyRef={slidesKeyRef as never}
+          active
+          track="slides"
+          setTrack={() => {}}
+          leftPanel={stubPanel(270)}
+          rightPanel={stubPanel(330)}
+        />
+      </ThemeCtx.Provider>
+    )
+    await screen.findByText('▣ Welcome.jpg')
+    act(() => slidesKeyRef.current?.onDelete())
+
+    expect(screen.getByText('▣ Welcome.jpg')).toBeTruthy()
+    expect(screen.queryByText(/Removed/)).toBeNull()
+  })
+
+  it('a batch delete commits every item once the undo window closes', async () => {
+    vi.useFakeTimers()
+    try {
+      installHelmStub()
+      renderTrack()
+      const rowFor = (t: string): HTMLButtonElement => screen.getByText(t).closest('button') as HTMLButtonElement
+      await vi.waitFor(() => expect(screen.getByText('▤ Sermon.pptx')).toBeTruthy())
+
+      fireEvent.click(rowFor('▤ Sermon.pptx'))
+      fireEvent.click(rowFor('▣ Welcome.jpg'), { shiftKey: true })
+      fireEvent.contextMenu(rowFor('▣ Welcome.jpg'))
+      fireEvent.click(screen.getByText('Delete 2 items'))
+
+      expect(window.helm.media.remove).not.toHaveBeenCalled()
+      act(() => {
+        vi.advanceTimersByTime(5200)
+      })
+      expect(window.helm.media.remove).toHaveBeenCalledWith('deck1')
+      expect(window.helm.media.remove).toHaveBeenCalledWith('img1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('undo after deleting the cued item puts the hero back on it', async () => {
+    installHelmStub()
+    renderTrack()
+    const rowFor = (t: string): HTMLButtonElement => screen.getByText(t).closest('button') as HTMLButtonElement
+    await screen.findByText('▣ Welcome.jpg')
+
+    fireEvent.click(rowFor('▣ Welcome.jpg'))
+    fireEvent.contextMenu(rowFor('▣ Welcome.jpg'))
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(await screen.findByText('Undo'))
+
+    // The delete-selection is dropped by the delete itself; what must come back is the
+    // CUE, which is what the hero renders — the cued row carries the sermon-tinted ring.
+    await waitFor(() => expect(rowFor('▣ Welcome.jpg').style.boxShadow).toContain(T.sermon))
+  })
+
+  it('undo after deleting some OTHER row leaves the hero where the operator left it', async () => {
+    installHelmStub()
+    renderTrack()
+    const rowFor = (t: string): HTMLButtonElement => screen.getByText(t).closest('button') as HTMLButtonElement
+    await screen.findByText('▶ Promo.mp4')
+
+    // Cue the video, then delete an unrelated row and undo it.
+    fireEvent.click(rowFor('▶ Promo.mp4'))
+    fireEvent.contextMenu(rowFor('▣ Welcome.jpg'))
+    fireEvent.click(await screen.findByText('Delete'))
+    fireEvent.click(await screen.findByText('Undo'))
+
+    await screen.findByText('▣ Welcome.jpg')
+    // The right-click moved the delete-selection onto Welcome.jpg, but the CUE — which
+    // drives the hero and the deck rail — must still be the video.
+    expect(screen.getByText('Preview plays here muted; the audience hears it once it’s live.')).toBeTruthy()
   })
 
   it('renders both resize dividers wired to the panel controls', async () => {
