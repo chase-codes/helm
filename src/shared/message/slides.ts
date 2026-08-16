@@ -1,6 +1,7 @@
 import type { Message, Slide } from '../types';
+import { MESSAGE_ACCENT } from '../slideAccents';
 
-export const MESSAGE_ACCENT = '#a88bc4';
+export { MESSAGE_ACCENT };
 
 export function keyForMessageQuote(msgId: string, ord: number): string {
   return `msg:${msgId}:${ord}`;

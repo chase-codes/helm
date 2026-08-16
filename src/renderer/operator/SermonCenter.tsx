@@ -299,7 +299,7 @@ export function SermonCenter({
         </button>
         {versionPicker}
         <button style={logoBtnStyle} onClick={onToggleLogo}>
-          {output === 'logo' ? 'Logo on screen' : 'Logo'}
+          {output === 'logo' ? 'Hide logo' : 'Show logo'}
         </button>
       </div>
     </div>

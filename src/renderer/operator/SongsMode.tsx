@@ -15,6 +15,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from './useHelm';
 import { keyForSong, parseSongKey } from '../../shared/presentation/core';
 import { stanzaLabel } from '../../shared/songs/stanza';
+import { CANVAS_AMBER } from '../../shared/slideAccents';
 import { secondaryLyricRows } from '../../shared/songs/secondaryLyric';
 import { chorusJump, labelJump, verseJump } from '../../shared/songs/sectionJump';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
@@ -58,7 +59,7 @@ const CONFIRM_ARM_GUARD_MS = 350;
 function slideFor(song: Song, section: { label: string; lines: string[] }): Slide {
   return {
     kind: 'lyrics',
-    accent: '#e0a341',
+    accent: CANVAS_AMBER,
     label: `${song.title} · ${section.label}`,
     lines: section.lines,
     sectionLabel: section.label,
@@ -920,7 +921,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             {armed ? `⇄ Switch to ${armed.title}` : cuedIsLive ? 'Take down' : 'Go live'}
           </button>
           <button style={logoBtnStyle} onClick={toggleLogo}>
-            {output === 'logo' ? 'Logo on screen' : 'Logo'}
+            {output === 'logo' ? 'Hide logo' : 'Show logo'}
           </button>
         </div>
       </div>

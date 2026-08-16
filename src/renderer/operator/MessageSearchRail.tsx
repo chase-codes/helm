@@ -276,7 +276,7 @@ export function MessageSearchRail({
         </>
       )}
 
-      {undo && <UndoToast label={undo.label} onUndo={undo.onUndo} />}
+      {undo && <UndoToast label={undo.label} onUndo={undo.onUndo} accent={T.message} />}
       {tapePlayer}
     </>
   );

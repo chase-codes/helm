@@ -7,7 +7,7 @@ import { ReleaseToggle } from './ReleaseToggle'
 import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
 import type { IconProps } from '../shared/icons'
-import { MoonIcon, PreServiceIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
+import { MoonIcon, PreServiceIcon, ScreenBlackIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
 
 export interface HeaderProps {
   mode: Mode
@@ -106,6 +106,8 @@ export function Header({
     background: outColor,
     animation: isLive ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
   }
+  // Same verb and same mark as every Take down button (#92) — only the case differs,
+  // because this is a chip inside the header's uppercase-mono status row.
   const takeDownChipStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: '9.5px',
@@ -115,7 +117,10 @@ export function Header({
     background: T.live + '22',
     padding: '3px 7px',
     borderRadius: '6px',
-    marginLeft: '2px'
+    marginLeft: '2px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px'
   }
   const themeBtnStyle: CSSProperties = {
     width: '34px',
@@ -176,7 +181,11 @@ export function Header({
         >
           {outLabel}
         </span>
-        {isLive && <span style={takeDownChipStyle}>✕ TAKE DOWN</span>}
+        {isLive && (
+          <span style={takeDownChipStyle}>
+            <ScreenBlackIcon size={11} /> TAKE DOWN
+          </span>
+        )}
       </button>
       <UpdatePill />
       <button style={themeBtnStyle} onClick={toggleTheme} title="Light/dark">

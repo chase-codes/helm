@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties, type JSX } from 'react'
 import type { Theme } from '../../shared/theme'
+import { railTint } from './railTint'
 
 export interface ChapterRailProps {
   theme: Theme
@@ -114,21 +115,13 @@ export function ChapterRail({
     cursor: 'pointer',
     userSelect: 'none',
     background: selected
-      ? dark
-        ? 'rgba(111,156,240,.18)'
-        : 'rgba(63,107,181,.14)'
+      ? railTint(T.scripture, 'selected', dark)
       : isLive
-        ? dark
-          ? 'rgba(111,156,240,.14)'
-          : 'rgba(63,107,181,.11)'
+        ? railTint(T.scripture, 'live', dark)
         : isCued
-          ? dark
-            ? 'rgba(111,156,240,.09)'
-            : 'rgba(63,107,181,.07)'
+          ? railTint(T.scripture, 'cued', dark)
           : planned
-            ? dark
-              ? 'rgba(111,156,240,.05)'
-              : 'rgba(63,107,181,.045)'
+            ? railTint(T.scripture, 'planned', dark)
             : T.panel2,
     boxShadow: selected
       ? `inset 0 0 0 2px ${T.scripture}`

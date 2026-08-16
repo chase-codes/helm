@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX } from 'react';
 import type { Theme } from '../../shared/theme';
+import { railTint } from './railTint';
 import type { MessageParagraph } from '../../shared/types';
 
 export interface ParagraphRailProps {
@@ -47,17 +48,11 @@ export function ParagraphRail({
     cursor: 'pointer',
     userSelect: 'none',
     background: live
-      ? dark
-        ? 'rgba(168,139,196,.14)'
-        : 'rgba(122,92,150,.11)'
+      ? railTint(T.message, 'live', dark)
       : cued
-        ? dark
-          ? 'rgba(168,139,196,.09)'
-          : 'rgba(122,92,150,.07)'
+        ? railTint(T.message, 'cued', dark)
         : planned
-          ? dark
-            ? 'rgba(168,139,196,.05)'
-            : 'rgba(122,92,150,.045)'
+          ? railTint(T.message, 'planned', dark)
           : T.panel2,
     boxShadow: live
       ? `inset 0 0 0 2px ${T.message}`

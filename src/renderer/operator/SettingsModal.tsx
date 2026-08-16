@@ -4,10 +4,10 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type JSX,
-  type MouseEvent as ReactMouseEvent
+  type JSX
 } from 'react'
 import { ThemeCtx } from './ThemeCtx'
+import { ModalShell } from './ModalShell'
 import { MessageImport } from './MessageImport'
 import { DisplaysSettings } from './DisplaysSettings'
 import { ShortcutsSettings } from './ShortcutsSettings'
@@ -192,31 +192,6 @@ export function SettingsModal({
     }, REMOVE_CONFIRM_MS)
   }
 
-  const stop = (e: ReactMouseEvent): void => e.stopPropagation()
-
-  const overlayStyle: CSSProperties = {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 50,
-    background: 'rgba(8,9,12,.6)',
-    backdropFilter: 'blur(3px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '5vh 4vw'
-  }
-  const modalStyle: CSSProperties = {
-    width: '640px',
-    maxWidth: '96vw',
-    maxHeight: '88vh',
-    background: T.panel,
-    borderRadius: '16px',
-    boxShadow: '0 30px 80px rgba(0,0,0,.5)',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    border: `1px solid ${T.border}`
-  }
   const bodyStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex' }
   const navStyle: CSSProperties = {
     width: '158px',
@@ -441,101 +416,99 @@ export function SettingsModal({
 
   return (
     <>
-      <div style={overlayStyle} onClick={onClose}>
-        <div style={modalStyle} onClick={stop}>
-          <div
-            style={{
-              padding: '16px 22px',
-              borderBottom: `1px solid ${T.hairline}`,
-              fontWeight: 700,
-              fontSize: '18px'
-            }}
-          >
-            Settings
+      <ModalShell onClose={onClose} width="640px" maxWidth="96vw" maxHeight="88vh">
+        <div
+          style={{
+            padding: '16px 22px',
+            borderBottom: `1px solid ${T.hairline}`,
+            fontWeight: 700,
+            fontSize: '18px'
+          }}
+        >
+          Settings
+        </div>
+        <div style={bodyStyle}>
+          <div style={navStyle}>
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                style={{ ...navItemStyle(section === s.id), gap: '8px' }}
+                onClick={() => setSection(s.id)}
+              >
+                <s.Icon size={15} />
+                {s.label}
+              </button>
+            ))}
+            <UpdateFooter />
           </div>
-          <div style={bodyStyle}>
-            <div style={navStyle}>
-              {SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  style={{ ...navItemStyle(section === s.id), gap: '8px' }}
-                  onClick={() => setSection(s.id)}
-                >
-                  <s.Icon size={15} />
-                  {s.label}
-                </button>
-              ))}
-              <UpdateFooter />
-            </div>
-            <div style={contentStyle}>
-              {section === 'appearance' && (
-                <AppearanceSettings
-                  family={family}
-                  onFamilyChange={setFamily}
-                  themeMode={themeMode}
-                  onModeChange={setThemeMode}
-                />
-              )}
-              {section === 'displays' && <DisplaysSettings />}
-              {section === 'shortcuts' && (
-                <ShortcutsSettings overrides={hotkeyOverrides} onChange={onHotkeyOverridesChange} />
-              )}
-              {section === 'bibles' && (
-                <>
-                  <div style={sectionTitleStyle}>Bibles</div>
-                  <div style={sectionHintStyle}>
-                    Installed translations appear in the sermon-mode compare picker. KJV ships with
-                    Helm and can&rsquo;t be removed.
-                  </div>
-                  <div>
-                    {manifest.map((entry) => (
-                      <div key={entry.id} style={rowStyle}>
-                        <span style={abbrChipStyle}>{entry.abbr}</span>
-                        <span style={nameStyle}>{entry.name}</span>
-                        {renderStatus(entry)}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              {section === 'message' && (
-                <>
-                  <div style={sectionTitleStyle}>Message</div>
-                  <div style={sectionHintStyle}>
-                    Import a transcript file by hand and review it before it&rsquo;s added to the
-                    library. Installing the full sermon-tape corpus is coming in a later update.
-                  </div>
-                  <div style={rowStyle}>
-                    <span style={nameStyle}>
-                      {messageCount === null
-                        ? 'Loading…'
-                        : `${messageCount} tape${messageCount === 1 ? '' : 's'} in library`}
-                    </span>
-                    {renderMessageInstallStatus()}
-                  </div>
-                  <div style={sectionHintStyle}>
-                    Downloading from Voice of God Recordings is coming in a later update — use
-                    Import for now.
-                  </div>
-                  <div>
-                    <button
-                      style={{ ...ghostBtnStyle(false), display: 'inline-flex', alignItems: 'center', gap: '7px' }}
-                      onClick={() => setMessageImportOpen(true)}
-                    >
-                      <ImportIcon size={14} /> Import file…
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-          <div style={footerStyle}>
-            <button style={doneBtnStyle} onClick={onClose}>
-              Done
-            </button>
+          <div style={contentStyle}>
+            {section === 'appearance' && (
+              <AppearanceSettings
+                family={family}
+                onFamilyChange={setFamily}
+                themeMode={themeMode}
+                onModeChange={setThemeMode}
+              />
+            )}
+            {section === 'displays' && <DisplaysSettings />}
+            {section === 'shortcuts' && (
+              <ShortcutsSettings overrides={hotkeyOverrides} onChange={onHotkeyOverridesChange} />
+            )}
+            {section === 'bibles' && (
+              <>
+                <div style={sectionTitleStyle}>Bibles</div>
+                <div style={sectionHintStyle}>
+                  Installed translations appear in the sermon-mode compare picker. KJV ships with
+                  Helm and can&rsquo;t be removed.
+                </div>
+                <div>
+                  {manifest.map((entry) => (
+                    <div key={entry.id} style={rowStyle}>
+                      <span style={abbrChipStyle}>{entry.abbr}</span>
+                      <span style={nameStyle}>{entry.name}</span>
+                      {renderStatus(entry)}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {section === 'message' && (
+              <>
+                <div style={sectionTitleStyle}>Message</div>
+                <div style={sectionHintStyle}>
+                  Import a transcript file by hand and review it before it&rsquo;s added to the
+                  library. Installing the full sermon-tape corpus is coming in a later update.
+                </div>
+                <div style={rowStyle}>
+                  <span style={nameStyle}>
+                    {messageCount === null
+                      ? 'Loading…'
+                      : `${messageCount} tape${messageCount === 1 ? '' : 's'} in library`}
+                  </span>
+                  {renderMessageInstallStatus()}
+                </div>
+                <div style={sectionHintStyle}>
+                  Downloading from Voice of God Recordings is coming in a later update — use
+                  Import for now.
+                </div>
+                <div>
+                  <button
+                    style={{ ...ghostBtnStyle(false), display: 'inline-flex', alignItems: 'center', gap: '7px' }}
+                    onClick={() => setMessageImportOpen(true)}
+                  >
+                    <ImportIcon size={14} /> Import file…
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
-      </div>
+        <div style={footerStyle}>
+          <button style={doneBtnStyle} onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </ModalShell>
       {messageImportOpen && (
         <MessageImport
           open={messageImportOpen}

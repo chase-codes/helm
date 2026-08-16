@@ -6,10 +6,10 @@ import {
   useState,
   type CSSProperties,
   type JSX,
-  type MouseEvent as ReactMouseEvent,
   type MutableRefObject
 } from 'react';
 import { ThemeCtx } from './ThemeCtx';
+import { ModalShell } from './ModalShell';
 import { usePresentationState, useVideoState } from './useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
@@ -483,29 +483,6 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: T.dim, fontVariantNumeric: 'tabular-nums'
   };
 
-  // Calm fallback modal for deck import — overlay/card values copied character-exact
-  // from PreCardEditor's shell (the smallest single-purpose modal in the app; see that
-  // file's overlayStyle/modalStyle), not invented fresh.
-  const stopDeckFallbackClick = (e: ReactMouseEvent): void => e.stopPropagation();
-  const deckFallbackOverlayStyle: CSSProperties = {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 50,
-    background: 'rgba(8,9,12,.6)',
-    backdropFilter: 'blur(3px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '5vh 4vw'
-  };
-  const deckFallbackModalStyle: CSSProperties = {
-    width: '100%',
-    maxWidth: '420px',
-    background: T.panel,
-    borderRadius: '16px',
-    padding: '22px 24px',
-    boxShadow: '0 30px 80px rgba(0,0,0,.5)'
-  };
   const deckFallbackCloseBtnStyle: CSSProperties = {
     height: '38px',
     padding: '0 18px',
@@ -623,6 +600,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
           <UndoToast
             label={undo.pending.length === 1 ? undo.pending[0].title : `${undo.pending.length} items`}
             onUndo={undo.undo}
+            accent={T.sermon}
           />
         )}
       </div>
@@ -729,23 +707,21 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       )}
 
       {deckFallback && (
-        <div style={deckFallbackOverlayStyle} onClick={() => setDeckFallback(null)}>
-          <div style={deckFallbackModalStyle} onClick={stopDeckFallbackClick}>
-            <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>
-              {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import PowerPoint"}
-            </div>
-            <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5 }}>
-              {deckFallback === 'no-libreoffice'
-                ? 'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
-                : "Couldn't convert that PowerPoint file."}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
-              <button style={deckFallbackCloseBtnStyle} onClick={() => setDeckFallback(null)}>
-                Close
-              </button>
-            </div>
+        <ModalShell onClose={() => setDeckFallback(null)} variant="card" width="100%" maxWidth="420px">
+          <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>
+            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import PowerPoint"}
           </div>
-        </div>
+          <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5 }}>
+            {deckFallback === 'no-libreoffice'
+              ? 'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
+              : "Couldn't convert that PowerPoint file."}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
+            <button style={deckFallbackCloseBtnStyle} onClick={() => setDeckFallback(null)}>
+              Close
+            </button>
+          </div>
+        </ModalShell>
       )}
 
       {contextMenu.menu}

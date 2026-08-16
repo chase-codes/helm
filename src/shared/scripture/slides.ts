@@ -1,4 +1,5 @@
 import { Slide, SlideColumn } from '../types'
+import { CANVAS_GOLD } from '../slideAccents'
 
 export function keyForScripture(book: string, ch: number, v: number): string {
   return `scr:${book}:${ch}:${v}`
@@ -17,7 +18,7 @@ export function verseCols(
 export function buildScriptureSlide(ref: string, columns: SlideColumn[]): Slide {
   // Canvas gold (SlideCanvas's default accent), not the operator-UI scripture blue: on
   // the dark slide background the blue was the dimmest element on the slide (#48).
-  return { kind: 'scripture', accent: '#f0b24a', ref, label: ref, columns }
+  return { kind: 'scripture', accent: CANVAS_GOLD, ref, label: ref, columns }
 }
 
 // Ported from the prototype's pickVersion (line 1002): toggles `id` in/out of the

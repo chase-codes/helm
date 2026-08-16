@@ -38,7 +38,7 @@ function harness(): {
     // Simulates another flow (e.g. a song) taking the live key, independent of the
     // engine — used to test that preservice yields when it's no longer showing.
     setLive: (k: string | null) => { pres = { ...pres, liveKey: k }; },
-    // Simulates the operator's ✕ TAKE DOWN control (Header.tsx → setOutput('black')):
+    // Simulates the operator's TAKE DOWN chip (Header.tsx → setOutput('black')):
     // the screen goes black but liveKey stays on the pre card.
     takeDown: () => { pres = setOutput(pres, 'black'); },
     // Simulates a song genuinely owning the audience screen (output live + a song key),
@@ -82,7 +82,7 @@ describe('preserviceEngine', () => {
     engine.setDwell(-100); // clamp to min dwell so ticks reach a rotation boundary quickly
     engine.engage();
     expect(presentation().output).toBe('live');
-    takeDown(); // operator hits ✕ TAKE DOWN
+    takeDown(); // operator hits TAKE DOWN
     expect(presentation().output).toBe('black');
     const dwell = engine.getState().dwellS;
     for (let t = 1; t <= dwell + 1; t++) engine.tick(); // tick past a dwell boundary

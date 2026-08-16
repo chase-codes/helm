@@ -194,7 +194,9 @@ describe('PreServiceMode', () => {
       const { showNow } = installHelmStub(baseState, cardLive('a'))
       renderMode()
       await screen.findByText('Greeting')
-      const btn = screen.getByText('On screen').closest('button') as HTMLButtonElement
+      // The label stays the verb in both states (#92) — the disabled flag, not the copy,
+      // is what says the card is already up.
+      const btn = screen.getByText('Show this card').closest('button') as HTMLButtonElement
       expect(btn.disabled).toBe(true)
       fireEvent.click(btn)
       expect(showNow).not.toHaveBeenCalled()
