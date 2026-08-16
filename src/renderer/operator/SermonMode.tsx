@@ -409,12 +409,13 @@ export function SermonMode({
     // main-process `goLive` verb (which blacks when fired on the key already live). The
     // cursor now commits to the screen as it moves, so by the time the operator reaches
     // for the button the verse is usually ALREADY live — under the old toggle, the
-    // trained "tap the verse, then press Go live" two-step took the screen down. The
-    // label reads "■ Take down" exactly when `cuedIsLive`, so branch on the same flag.
-    if (cuedIsLive) {
-      window.helm.presentation.setOutput('black');
-      return;
-    }
+    // trained "tap the verse, then press Go live" two-step took the screen down.
+    //
+    // So this path never blacks (#85): the verb is "put this on screen", and when it is
+    // already there the work is done. The button ghosts in that state and Enter — its
+    // keyboard twin — lands here and stops. Escape and the Take down button, which say
+    // what they do, are the only ways down.
+    if (cuedIsLive) return;
     const slide = buildScriptureSlide(
       formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
       liveCols.length ? liveCols : [{ version: '', text: INSTALL_HINT }]
@@ -422,8 +423,8 @@ export function SermonMode({
     window.helm.presentation.goLive(curKey, slide);
   };
 
-  const toggleLogo = (): void => {
-    window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
+  const takeDown = (): void => {
+    window.helm.presentation.setOutput('black');
   };
 
   const jumpTo = (book: string, ch: number, v: number): void => {
@@ -950,7 +951,7 @@ export function SermonMode({
             onPrev={() => stepVerse(-1)}
             onNext={() => stepVerse(1)}
             onGoLive={goLive}
-            onToggleLogo={toggleLogo}
+            onTakeDown={takeDown}
           />
           <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
           <ChapterRail

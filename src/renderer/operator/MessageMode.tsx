@@ -346,8 +346,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     window.helm.presentation.goLive(keyForReading(msgId), buildReadingSlide(liveMsg, activeOrd));
   };
 
-  const toggleLogo = (): void => {
-    window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
+  const takeDown = (): void => {
+    window.helm.presentation.setOutput('black');
   };
 
   // Clicking a search row does NOT clear the query. It used to, and that unmounted the very
@@ -610,7 +610,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         // No tape loaded means an empty hero; a green, armed-looking Go live over it is a
         // lie a brand-new operator has no way to read (#88).
         canGoLive={liveMsg !== null}
-        onToggleLogo={toggleLogo}
+        onTakeDown={takeDown}
       />
       <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
       <ParagraphRail

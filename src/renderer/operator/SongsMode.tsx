@@ -31,6 +31,7 @@ import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
+import { primaryBtnStyle, transportGhostBtn, verbDividerStyle } from './transport';
 
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
@@ -546,8 +547,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const curKey = activeSong ? keyForSong(activeSong.id, clampedSection) : null;
   const cuedIsLive = output === 'live' && liveKey === curKey;
 
+  // The primary verb only ever means "put this on screen" (#85). When the cued section is
+  // already the one up there it has nothing left to do, so it stops here rather than
+  // reaching main's `goLive` — which reads a repeat of the live key as a take-down. The
+  // button ghosts in the same state, and Enter, its keyboard twin, lands here and stops.
   const goLive = (): void => {
-    if (!activeSong || !currentSectionObj || !curKey) return;
+    if (!activeSong || !currentSectionObj || !curKey || cuedIsLive) return;
     window.helm.presentation.goLive(curKey, slideFor(activeSong, currentSectionObj));
   };
 
@@ -581,10 +586,6 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
   const takeDown = (): void => {
     window.helm.presentation.setOutput('black');
-  };
-
-  const toggleLogo = (): void => {
-    window.helm.presentation.setOutput(output === 'logo' ? 'live' : 'logo');
   };
 
   const step = (dir: number): void => {
@@ -778,46 +779,13 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     letterSpacing: '-0.012em',
     color: T.text
   };
-  const ghostBtn: CSSProperties = {
-    height: '46px',
-    padding: '0 16px',
-    borderRadius: '11px',
-    background: T.panel2,
-    boxShadow: `inset 0 0 0 1px ${T.hairline}`,
-    fontSize: '14px',
-    fontWeight: 600,
-    color: T.dim,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '7px'
-  };
-  const goLiveStyle: CSSProperties = {
-    height: '46px',
-    padding: '0 20px',
-    borderRadius: '11px',
-    background: !armed && cuedIsLive ? T.live : T.go,
-    color: '#fff',
-    fontSize: '14.5px',
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '7px',
-    whiteSpace: 'nowrap'
-  };
-  const logoBtnStyle: CSSProperties = {
-    height: '46px',
-    padding: '0 14px',
-    borderRadius: '11px',
-    background: 'transparent',
-    boxShadow: `inset 0 0 0 1px ${output === 'logo' ? T.accent + '66' : T.border}`,
-    fontSize: '13px',
-    fontWeight: 600,
-    color: output === 'logo' ? T.accent : T.dim,
-    display: 'flex',
-    alignItems: 'center'
-  };
+  const ghostBtn = transportGhostBtn(T);
+  // A switch is always something to put on screen, so an arm re-arms the primary slot even
+  // when the cued section is the live one.
+  const canGoLive = !!armed || (!!activeSong && !!currentSectionObj && !cuedIsLive);
+  const canTakeDown = output === 'live';
+  const goLiveStyle = primaryBtnStyle(T, canGoLive ? 'go' : 'ghost');
+  const takeDownStyle = primaryBtnStyle(T, canTakeDown ? 'down' : 'ghost');
   return (
     <div style={rootStyle}>
       <SongSearchRail
@@ -897,7 +865,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexShrink: 0 }}>
+        {/* Fixed slots (#85). Take down is always here — the panic control cannot move, or
+            arrive only once something is armed — and the primary slot never takes on its
+            meaning. The armed song's title rides in the tooltip rather than the label,
+            because a label that names a song makes the bar's width a function of the song
+            library; the rail's gold NEXT badge already says which song is queued. */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexShrink: 0 }} data-transport-bar>
           <button style={ghostBtn} onClick={() => step(-1)}>
             ‹ Prev
           </button>
@@ -905,23 +878,26 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
             Cue next ›
           </button>
           <div style={{ flex: 1 }} />
-          {armed && (
-            <button
-              style={{ ...goLiveStyle, background: T.live, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-              onClick={takeDown}
-            >
-              <ScreenBlackIcon size={14} /> Take down
-            </button>
-          )}
           <button
-            style={{ ...goLiveStyle, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-            onClick={armed ? commitSwitch : goLive}
+            style={takeDownStyle}
+            onClick={takeDown}
+            disabled={!canTakeDown}
+            title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
           >
-            {!armed && (cuedIsLive ? <ScreenBlackIcon size={14} /> : <GoLiveIcon size={14} />)}
-            {armed ? `⇄ Switch to ${armed.title}` : cuedIsLive ? 'Take down' : 'Go live'}
+            <ScreenBlackIcon size={14} /> Take down
           </button>
-          <button style={logoBtnStyle} onClick={toggleLogo}>
-            {output === 'logo' ? 'Hide logo' : 'Show logo'}
+          <div style={verbDividerStyle(T)} />
+          <button
+            style={goLiveStyle}
+            onClick={armed ? commitSwitch : goLive}
+            disabled={!canGoLive}
+            title={armed ? `Switch to ${armed.title}` : cuedIsLive ? 'Already on screen' : undefined}
+          >
+            {armed ? '⇄ Switch' : (
+              <>
+                <GoLiveIcon size={14} /> Go live
+              </>
+            )}
           </button>
         </div>
       </div>
