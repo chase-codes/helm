@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup, act, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SongsMode } from './SongsMode';
+import { HERO_LINE_FONT, SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
 import { themeFor } from '../../shared/theme';
 import { dispatchModeKey } from './keyDispatch';
@@ -1230,5 +1230,74 @@ describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
 
     fireEvent.mouseEnter(screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement);
     expect(screen.queryByText('NEXT?')).toBeNull();
+  });
+});
+
+describe('SongsMode hero — auto-fit confidence monitor', () => {
+  it('hero lines carry the projector contract: nowrap + the fitted font formula', async () => {
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode({ current: null });
+    await screen.findAllByText('Amazing grace');
+
+    const hero = screen.getByTestId('song-hero');
+    const line = within(hero).getByText('Amazing grace') as HTMLElement;
+    // nowrap distinguishes the hero copy from the rail copy, which wraps freely.
+    expect(line.style.whiteSpace).toBe('nowrap');
+    // jsdom's cssstyle drops declarations with container-query units, so the font
+    // formula is pinned via the exported constant (same pattern as SLIDE_HERO_WIDTH).
+    expect(HERO_LINE_FONT).toBe('max(14px, var(--helm-fit-size, 7.4cqmin))');
+  });
+
+  it('the rail copy of the same line does NOT get nowrap (cards keep wrapping)', async () => {
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode({ current: null });
+    const copies = await screen.findAllByText('Amazing grace');
+    expect(copies.some((el) => (el as HTMLElement).style.whiteSpace !== 'nowrap')).toBe(true);
+  });
+});
+
+describe('SongsMode — collapsible section rail', () => {
+  afterEach(() => {
+    localStorage.removeItem('helmSectionRailCollapsed');
+  });
+
+  it('collapses to a stub, restores on stub click, and never loses the hero', async () => {
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode({ current: null });
+    await screen.findAllByText('Amazing grace');
+
+    fireEvent.click(screen.getByTitle('Hide sections — bigger lyrics'));
+    expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
+    // The hero (the confidence monitor) is untouched.
+    expect(within(screen.getByTestId('song-hero')).getByText('Amazing grace')).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('Show sections'));
+    expect(screen.getByText('SECTIONS — TAP TO SING')).toBeTruthy();
+  });
+
+  it('persists the collapsed state across a remount', async () => {
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    const first = renderMode({ current: null });
+    await screen.findAllByText('Amazing grace');
+    fireEvent.click(screen.getByTitle('Hide sections — bigger lyrics'));
+    first.unmount();
+
+    installHelmStubWith(SONGS, NOTHING_LIVE);
+    renderMode({ current: null });
+    await screen.findAllByText('Amazing grace');
+    expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
+    expect(screen.getByTitle('Show sections')).toBeTruthy();
+  });
+
+  it('section hotkey jumps still work while the rail is collapsed', async () => {
+    localStorage.setItem('helmSectionRailCollapsed', '1');
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const h = installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode(keyHandlerRef);
+    await screen.findByText('NOW SINGING · Verse 1');
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'song.chorus' }));
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus')).toBeTruthy());
+    expect(h.cue).toHaveBeenCalledWith('song:s2:1', expect.objectContaining({ sectionLabel: 'Chorus' }));
   });
 });
