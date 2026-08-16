@@ -138,13 +138,22 @@ describe('useFitText', () => {
     );
   }
 
-  it('walks descending and lands on the largest candidate that actually fits — not first, not last', () => {
-    // Of [8, 7, 6, 5, 4]cqmin only 6, 5, 4 fit the fake 100-tall box (see LayoutProbe).
-    // A `candidates[0]` stand-in would report 8; an inverted fit comparison would also
-    // report 8 (fits on the first, largest, candidate instead of stopping descent at the
-    // real fit). Only a correct descending walk lands on 6.
+  it('walks descending, then refines to the exact fit boundary — not first, not last, not the coarse step', () => {
+    // The fake 100-tall box fits anything up to exactly 6.25cqmin (see LayoutProbe). Of
+    // [8, 7, 6, 5, 4] the walk lands on 6; the continuous refinement then bisects the
+    // [6, 7] bracket up to the true boundary. A `candidates[0]` stand-in would report 8;
+    // an inverted fit comparison would also report 8; a walk without refinement reports
+    // the quantized 6 — the visible stair-step this exists to remove.
     const { getByTestId } = render(<LayoutProbe candidates={[8, 7, 6, 5, 4]} />);
-    expect(getByTestId('root').style.getPropertyValue(FIT_SIZE_VAR)).toBe('6cqmin');
+    expect(getByTestId('root').style.getPropertyValue(FIT_SIZE_VAR)).toBe('6.25cqmin');
+  });
+
+  it('does not refine the degrade case — nothing fits stays pinned at the smallest candidate', () => {
+    // scrollHeight of applied*16 never fits a 100-tall box for any of [10, 9, 8]; the
+    // walk degrades to 8, and refinement must not run — its bracket invariant (lo fits)
+    // would be violated, and "something must go on screen" means exactly the band minimum.
+    const { getByTestId } = render(<LayoutProbe candidates={[10, 9, 8]} />);
+    expect(getByTestId('root').style.getPropertyValue(FIT_SIZE_VAR)).toBe('8cqmin');
   });
 
   it('does not re-measure when a re-render leaves the deps referentially unchanged', () => {

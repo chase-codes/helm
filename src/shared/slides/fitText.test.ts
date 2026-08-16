@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bandCandidates, fitFontSize } from './fitText';
+import { bandCandidates, fitFontSize, refineFitSize } from './fitText';
 
 describe('bandCandidates', () => {
   it('descends from max to min inclusive', () => {
@@ -53,5 +53,36 @@ describe('fitFontSize', () => {
   });
   it('throws on an empty candidate list', () => {
     expect(() => fitFontSize([], () => true)).toThrow();
+  });
+});
+
+describe('refineFitSize', () => {
+  const fitsUpTo = (boundary: number) => (c: number) => c <= boundary;
+
+  it('converges to the true boundary within the default precision', () => {
+    const out = refineFitSize(6, 7, fitsUpTo(6.6));
+    expect(out).toBeLessThanOrEqual(6.6);
+    expect(out).toBeGreaterThan(6.6 - 0.02);
+  });
+  it('returns a size that actually fits, never the failing bound', () => {
+    const fits = fitsUpTo(6.001);
+    expect(fits(refineFitSize(6, 7, fits))).toBe(true);
+  });
+  it('returns the known fit unchanged when nothing between fits', () => {
+    // Boundary sits exactly on the lower bracket: every probe fails, lo never moves.
+    expect(refineFitSize(6, 7, fitsUpTo(6))).toBe(6);
+  });
+  it('finds an exact boundary landed on by a probe', () => {
+    // 6.25 is a bisection midpoint of [6, 7], so the walk hits the boundary exactly.
+    expect(refineFitSize(6, 7, fitsUpTo(6.25))).toBe(6.25);
+  });
+  it('respects a custom precision with a bounded number of probes', () => {
+    let probes = 0;
+    refineFitSize(3.5, 10.5, (c) => {
+      probes++;
+      return c <= 7.1;
+    });
+    // ceil(log2(7 / 0.02)) = 9 halvings of the bracket.
+    expect(probes).toBeLessThanOrEqual(9);
   });
 });

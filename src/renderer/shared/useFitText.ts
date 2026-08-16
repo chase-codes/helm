@@ -1,5 +1,5 @@
 import { useLayoutEffect, type RefObject } from 'react';
-import { fitFontSize } from '../../shared/slides/fitText';
+import { fitFontSize, refineFitSize } from '../../shared/slides/fitText';
 
 /**
  * Custom property carrying the fitted size. Set on the slide container; read by the text
@@ -85,13 +85,24 @@ export function useFitText(
         root.style.removeProperty(FIT_SIZE_VAR);
         return;
       }
-      const size = fitFontSize(candidates, (cqmin) => {
+      const check = (cqmin: number): boolean => {
         root.style.setProperty(FIT_SIZE_VAR, `${cqmin}cqmin`);
         // `content` is a child of the overflow-hidden root, so its own scroll size is its
         // natural content height — compare that against the box it has to live in.
         return content.scrollHeight <= root.clientHeight && content.scrollWidth <= root.clientWidth;
-      });
-      root.style.setProperty(FIT_SIZE_VAR, `${size}cqmin`);
+      };
+      const coarse = fitFontSize(candidates, check);
+      const idx = candidates.indexOf(coarse);
+      const last = candidates.length - 1;
+      // Refine between the found candidate and the next larger one, so the size tracks
+      // the box continuously instead of stepping by the band's 0.25cqmin. Skippable
+      // exactly when there is nothing to refine toward: the largest candidate fit
+      // (idx === 0), or nothing fit at all — the walk's degrade case, distinguishable
+      // from a genuine smallest-candidate fit only by re-probing when idx === last.
+      const size = idx > 0 && (idx < last || check(coarse)) ? refineFitSize(coarse, candidates[idx - 1], check) : coarse;
+      // Round for var readability/determinism; 3 decimals ≈ 0.001cqmin, far inside the
+      // refinement precision.
+      root.style.setProperty(FIT_SIZE_VAR, `${Number(size.toFixed(3))}cqmin`);
     };
 
     // Must stay synchronous: this runs in a layout effect specifically so the fitted size
@@ -120,10 +131,10 @@ export function useFitText(
       };
     }
 
-    // Coalesce through a frame: each measure() walk forces a synchronous style+layout
-    // flush per candidate (up to 29 of them), and dragging the operator window edge fires
-    // many ResizeObserver notifications in quick succession. Only the last one before a
-    // frame paints needs to actually run.
+    // Coalesce through a frame: each measure() forces a synchronous style+layout flush
+    // per probe (the walk's up-to-29 candidates plus ~4 refinement bisections), and
+    // dragging the operator window edge fires many ResizeObserver notifications in quick
+    // succession. Only the last one before a frame paints needs to actually run.
     let raf = 0;
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(raf);
