@@ -101,7 +101,14 @@ export function SchedulePanel({
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    // The label names the reference it will file, so it grows with the typed entry. Full
+    // width already keeps the chip from widening; clipping keeps a long one from wrapping
+    // to a second line and shoving the schedule down (#85).
+    padding: '0 10px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   };
   const rowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
     display: 'flex',

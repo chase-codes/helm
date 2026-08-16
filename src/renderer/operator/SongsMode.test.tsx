@@ -1206,3 +1206,29 @@ describe('SongsMode — the transport is stable ground (#85)', () => {
     expect(primary.title).toBe('Switch to Blessed Assurance');
   });
 });
+
+describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
+  it('offers NEXT? on hover only while a song holds the screen', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    const railRow = screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement;
+    fireEvent.mouseEnter(railRow);
+    expect(screen.getByText('NEXT?')).toBeTruthy();
+
+    // Committing the arm replaces the forecast with the real badge.
+    fireEvent.click(railRow);
+    expect(screen.queryByText('NEXT?')).toBeNull();
+    expect(screen.getByText('NEXT')).toBeTruthy();
+  });
+
+  it('stays quiet when nothing is live — a click there only moves the cue', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+
+    fireEvent.mouseEnter(screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement);
+    expect(screen.queryByText('NEXT?')).toBeNull();
+  });
+});

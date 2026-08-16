@@ -808,6 +808,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
         }}
         onImportSongs={() => setImportOpen(true)}
         libraryEmpty={library.length === 0}
+        locked={locked}
         onRowContextMenu={onSongContextMenu}
         inputRef={searchInputRef}
       />

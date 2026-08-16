@@ -152,3 +152,22 @@ describe('SchedulePanel', () => {
     expect(screen.queryByText(/Readings you add will wait here/)).toBeNull()
   })
 })
+
+// #85. Dynamic copy is fine as long as the container's footprint doesn't move. The chip is
+// already full-width, so a long reference can't widen it — but without clipping it wraps to
+// a second line, which pushes the schedule below it down instead.
+describe('SchedulePanel — the + Add chip holds a fixed footprint (#85)', () => {
+  it('clips a long reference to one line rather than growing taller', () => {
+    render(
+      <SchedulePanel
+        {...baseProps}
+        canAdd
+        addLabel="+ Add 1 Chronicles 12:23–40 (Amplified Classic Edition)"
+      />
+    )
+    const chip = screen.getByText(/^\+ Add 1 Chronicles/).closest('button') as HTMLButtonElement
+    expect(chip.style.whiteSpace).toBe('nowrap')
+    expect(chip.style.overflow).toBe('hidden')
+    expect(chip.style.textOverflow).toBe('ellipsis')
+  })
+})

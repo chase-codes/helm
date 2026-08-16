@@ -106,3 +106,59 @@ describe('SongSearchRail', () => {
     expect(screen.queryByText(/No songs yet/)).toBeNull()
   })
 })
+
+// #89. While a song holds the screen, one click gesture carries three meanings — arm,
+// disarm, or back-to-base on the live row — and nothing distinguished them until after the
+// click. Hover now says which one you are about to get.
+describe('SongSearchRail — hover forecasts what a click will do while locked (#89)', () => {
+  const LOCKED = [
+    { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false },
+    { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: false }
+  ]
+  const row = (title: string): HTMLButtonElement =>
+    screen.getByText(title).closest('button') as HTMLButtonElement
+
+  it('shows a ghost NEXT? on a row that a click would arm', () => {
+    render(<SongSearchRail {...baseProps} rows={LOCKED} locked />)
+    expect(screen.queryByText('NEXT?')).toBeNull()
+    fireEvent.mouseEnter(row('Blessed Assurance'))
+    expect(screen.getByText('NEXT?')).toBeTruthy()
+    fireEvent.mouseLeave(row('Blessed Assurance'))
+    expect(screen.queryByText('NEXT?')).toBeNull()
+  })
+
+  it('leaves the live row alone — a click there only returns to base', () => {
+    render(<SongSearchRail {...baseProps} rows={LOCKED} locked />)
+    fireEvent.mouseEnter(row('Amazing Grace'))
+    expect(screen.queryByText('NEXT?')).toBeNull()
+    expect(row('Amazing Grace').title).toBe('Already on screen')
+  })
+
+  it('does not forecast arming when nothing is live — a click there just selects', () => {
+    render(<SongSearchRail {...baseProps} rows={LOCKED} />)
+    fireEvent.mouseEnter(row('Blessed Assurance'))
+    expect(screen.queryByText('NEXT?')).toBeNull()
+  })
+
+  it('keeps NEXT on the armed row and says the click would clear it', () => {
+    const armed = LOCKED.map((r) => (r.id === 's2' ? { ...r, isArmed: true } : r))
+    render(<SongSearchRail {...baseProps} rows={armed} locked />)
+    fireEvent.mouseEnter(row('Blessed Assurance'))
+    expect(screen.getByText('NEXT')).toBeTruthy()
+    expect(screen.queryByText('NEXT?')).toBeNull()
+    expect(row('Blessed Assurance').title).toBe('Clear this — nothing queued next')
+  })
+
+  it('forecasts on the "also in lyrics" rows too — the same click, the same meaning', () => {
+    render(
+      <SongSearchRail
+        {...baseProps}
+        rows={[LOCKED[0]]}
+        secondaryRows={[{ ...LOCKED[1], id: 's9', title: 'Solid Rock' }]}
+        locked
+      />
+    )
+    fireEvent.mouseEnter(row('Solid Rock'))
+    expect(screen.getByText('NEXT?')).toBeTruthy()
+  })
+})
