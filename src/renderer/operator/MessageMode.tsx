@@ -21,6 +21,9 @@ import { type SermonTrack } from './SchedulePanel';
 import { SermonCenter } from './SermonCenter';
 import { TapePlayer } from './TapePlayer';
 import { TrackTabs } from './TrackTabs';
+import { useContextMenu } from './useContextMenu';
+import { useDeferredRemove } from './useDeferredRemove';
+import { useListSelection } from './useListSelection';
 import type { PanelWidthControl } from './usePanelWidth';
 
 /** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
@@ -46,6 +49,8 @@ function audioFileUrl(path: string): string {
 export interface MessageKeyHandler {
   onArrow: (dir: 1 | -1) => void;
   onGoLive: () => void;
+  /** Delete/Backspace: remove the quote-schedule selection, if any (#90/#8). */
+  onDelete: () => void;
 }
 export type MessageKeyRef = MutableRefObject<MessageKeyHandler | null>;
 
@@ -60,6 +65,8 @@ export interface MessageModeProps {
   // tracks rather than each track remembering (or resetting) its own.
   leftPanel: PanelWidthControl;
   rightPanel: PanelWidthControl;
+  /** Message import lives in Settings; the no-tapes empty state needs a way there (#88). */
+  onOpenSettings: () => void;
 }
 
 /** Message track: a single left rail (track tabs + search/scope the tape corpus, owned
@@ -67,7 +74,7 @@ export interface MessageModeProps {
  * see TrackTabs/MessageSearchRail doc comments), the cued quote as the center hero, and
  * the current tape's paragraphs (planned quotes highlighted) on the right. Ported
  * character-exact from Lectern.pretty.html's `trackIsMessage` branch. */
-export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack, leftPanel, rightPanel }: MessageModeProps): JSX.Element {
+export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack, leftPanel, rightPanel, onOpenSettings }: MessageModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const dark = themeMode === 'dark';
   const { output, liveKey } = usePresentationState();
@@ -97,6 +104,36 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const [timing, setTiming] = useState<TimingMap>([]);
   const [activeOrd, setActiveOrd] = useState(0);
   const [downloading, setDownloading] = useState(false);
+
+  // The standard list kit (#90/#8), same three pieces the scripture and media rails use:
+  // range selection, a right-click menu, and a deferred-commit delete whose undo restores
+  // the schedule's original order.
+  const contextMenu = useContextMenu();
+  const sel = useListSelection(schedule.map((it) => it.id));
+  const undo = useDeferredRemove<QuoteScheduleItem>({
+    commit: (batch) => {
+      window.helm.quoteSchedule
+        .removeMany(batch.map((it) => it.id))
+        .then(setSchedule)
+        .catch((err: unknown) => {
+          console.error(err);
+          window.helm.quoteSchedule.list().then(setSchedule).catch(console.error);
+        });
+    },
+    restore: () => {
+      window.helm.quoteSchedule.list().then(setSchedule).catch(console.error);
+    }
+  });
+
+  // Mirrors SermonMode's removeReadings: the rows leave the rail on the gesture, the
+  // delete lands when the undo window closes.
+  const removeQuotes = (ids: string[]): void => {
+    const batch = schedule.filter((it) => ids.includes(it.id));
+    if (!batch.length) return;
+    setSchedule((rows) => rows.filter((it) => !ids.includes(it.id)));
+    if (ids.some((id) => sel.isSelected(id))) sel.clear();
+    undo.remove(batch);
+  };
 
   // Initial load: the tape list (picking the first as current) and the quote schedule.
   // `live` guards each against unmount (track switched away) before the promise resolves.
@@ -335,7 +372,13 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // for the same reason that one is: an imperative handle must not lag its commit.
   useLayoutEffect(() => {
     if (!active) return;
-    messageKeyRef.current = { onArrow: stepPara, onGoLive: goLive };
+    messageKeyRef.current = {
+      onArrow: stepPara,
+      onGoLive: goLive,
+      onDelete: () => {
+        if (sel.selectedIds.length > 0) removeQuotes(sel.selectedIds);
+      }
+    };
     return () => {
       messageKeyRef.current = null;
     };
@@ -446,8 +489,31 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     title: it.title,
     meta: `¶${it.label} · Tape ${it.tapeNo}`,
     isCurrent: it.msgId === msgId && it.ord === msgIdx,
-    onClick: () => selectQuote(it.msgId, it.ord),
-    onDoubleClick: () => activateQuote(it.msgId, it.ord)
+    isSelected: sel.isSelected(it.id),
+    onClick: (e) => {
+      // Shift-click extends the delete-selection and deliberately leaves the cue alone —
+      // the same split the scripture and media rails make.
+      if (e.shiftKey) sel.selectTo(it.id);
+      else {
+        sel.select(it.id);
+        selectQuote(it.msgId, it.ord);
+      }
+    },
+    // Shift-double-click is two range-selection clicks landing fast, not a take.
+    onDoubleClick: (e) => {
+      if (!e.shiftKey) activateQuote(it.msgId, it.ord);
+    },
+    onContextMenu: (e) => {
+      if (sel.isSelected(it.id) && sel.selectedIds.length > 1) {
+        const ids = sel.selectedIds;
+        contextMenu.open(e, [
+          { label: `Delete ${ids.length} quotes`, danger: true, onSelect: () => removeQuotes(ids) }
+        ]);
+      } else {
+        sel.select(it.id);
+        contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeQuotes([it.id]) }]);
+      }
+    }
   }));
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
@@ -496,6 +562,19 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
           quoteRows={quoteRows}
           scheduleRows={scheduleRows}
           tapePlayer={tapePlayer}
+          hasTapes={list.length > 0}
+          onImportMessages={onOpenSettings}
+          undo={
+            undo.pending
+              ? {
+                  label:
+                    undo.pending.length === 1
+                      ? `¶${undo.pending[0].label}`
+                      : `${undo.pending.length} quotes`,
+                  onUndo: undo.undo
+                }
+              : undefined
+          }
         />
       </div>
       <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
@@ -516,6 +595,9 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         onPrev={() => stepPara(-1)}
         onNext={() => stepPara(1)}
         onGoLive={goLive}
+        // No tape loaded means an empty hero; a green, armed-looking Go live over it is a
+        // lie a brand-new operator has no way to read (#88).
+        canGoLive={liveMsg !== null}
         onToggleLogo={toggleLogo}
       />
       <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
@@ -532,6 +614,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         onSelect={showPara}
         onActivate={activateParagraph}
       />
+      {contextMenu.menu}
     </div>
   );
 }

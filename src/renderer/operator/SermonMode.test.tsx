@@ -74,6 +74,8 @@ function installHelmStub(
   add: ReturnType<typeof vi.fn>
   removeMany: ReturnType<typeof vi.fn>
   scheduleList: ReturnType<typeof vi.fn>
+  quoteScheduleList: ReturnType<typeof vi.fn>
+  quoteRemoveMany: ReturnType<typeof vi.fn>
   cue: ReturnType<typeof vi.fn>
   mediaList: ReturnType<typeof vi.fn>
   messageList: ReturnType<typeof vi.fn>
@@ -91,6 +93,8 @@ function installHelmStub(
   // A spy, not an inline arrow: undo now restores by RE-READING the schedule rather than
   // re-adding rows, so tests need to see this call.
   const scheduleList = vi.fn(() => Promise.resolve(schedule))
+  const quoteScheduleList = vi.fn(() => Promise.resolve(opts.quoteSchedule ?? []))
+  const quoteRemoveMany = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
   const mediaList = vi.fn(() => Promise.resolve(opts.media ?? []))
   const messageList = vi.fn(() =>
@@ -152,7 +156,7 @@ function installHelmStub(
         Promise.resolve(typeof opts.search === 'function' ? opts.search(q, scope) : (opts.search ?? { tapes: [], quotes: [] })),
       onAudioProgress: () => () => {}
     },
-    quoteSchedule: { list: () => Promise.resolve(opts.quoteSchedule ?? []) },
+    quoteSchedule: { list: quoteScheduleList, add: vi.fn(() => Promise.resolve([])), remove: vi.fn(() => Promise.resolve([])), removeMany: quoteRemoveMany },
     media: {
       list: mediaList,
       importImages: vi.fn(),
@@ -181,6 +185,8 @@ function installHelmStub(
     add,
     removeMany,
     scheduleList,
+    quoteScheduleList,
+    quoteRemoveMany,
     cue,
     mediaList,
     messageList,
@@ -1793,5 +1799,144 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     const empty = await screen.findByText(/Readings you add will wait here/)
     expect(empty.textContent).toMatch(/\+ Add/)
     expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
+  })
+})
+
+describe('SermonMode — quote schedule list kit (#90/#8)', () => {
+  const TAPE_M = TAPE
+  const THREE_READINGS: ScriptureReading[] = [
+    { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+    { id: 'r2', book: 'Genesis', ch: 1, from: 2, to: 2 }
+  ]
+  const QS: QuoteScheduleItem[] = [
+    { id: 'q1', msgId: 'm1', ord: 0, label: '1', tapeNo: '47-0412', title: 'Faith Is The Substance' },
+    { id: 'q2', msgId: 'm1', ord: 1, label: '2', tapeNo: '47-0412', title: 'Faith Is The Substance' },
+    { id: 'q3', msgId: 'm1', ord: 2, label: '3', tapeNo: '47-0412', title: 'Faith Is The Substance' }
+  ]
+  const quoteRow = (label: string): HTMLElement =>
+    screen.getByText(`¶${label} · Tape 47-0412`).closest('button') as HTMLElement
+  const quoteRowIds = (): string[] =>
+    Array.from(document.querySelectorAll('[data-quote-row]')).map((el) => el.getAttribute('data-quote-row') ?? '')
+
+  const openMessageTrack = async (): Promise<void> => {
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await screen.findByText('¶1 · Tape 47-0412')
+  }
+
+  it('shift-click selects the contiguous run of quotes', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    fireEvent.click(quoteRow('3'), { shiftKey: true })
+    for (const l of ['1', '2', '3']) {
+      expect(quoteRow(l).getAttribute('data-selected')).toBe('true')
+    }
+  })
+
+  it('right-click on a multi-row selection deletes the batch with one undo toast', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    fireEvent.click(quoteRow('2'), { shiftKey: true })
+    fireEvent.contextMenu(quoteRow('2'))
+    fireEvent.click(await screen.findByText('Delete 2 quotes'))
+
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q3']))
+    expect(await screen.findByText(/2 quotes/)).toBeTruthy()
+  })
+
+  it('the Delete key removes the quote selection (#8)', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('2'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q3']))
+    await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/¶2/))
+  })
+
+  it('defers the real removeMany until the undo window closes', async () => {
+    const { resolveChapter, quoteRemoveMany } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(quoteRow('1'))
+      fireEvent.click(quoteRow('2'), { shiftKey: true })
+      act(() => keyHandlerRef.current?.onDelete?.())
+      expect(quoteRemoveMany).not.toHaveBeenCalled()
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(quoteRemoveMany).toHaveBeenCalledTimes(1)
+      expect(quoteRemoveMany).toHaveBeenCalledWith(['q1', 'q2'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('undo restores the quotes in their original order and cancels the delete', async () => {
+    const { resolveChapter, quoteRemoveMany, quoteScheduleList } = installHelmStub(NOTHING_LIVE, [], {
+      tape: TAPE_M,
+      quoteSchedule: QS
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+    const listCallsBefore = quoteScheduleList.mock.calls.length
+
+    fireEvent.click(quoteRow('1'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(quoteScheduleList.mock.calls.length).toBe(listCallsBefore + 1))
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q2', 'q3']))
+    expect(quoteRemoveMany).not.toHaveBeenCalled()
+  })
+
+  it('Delete on the message track never touches the scripture schedule', async () => {
+    const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE_READINGS, {
+      tape: TAPE_M,
+      quoteSchedule: QS
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('1'))
+    act(() => keyHandlerRef.current?.onDelete?.())
+
+    await waitFor(() => expect(quoteRowIds()).toEqual(['q2', 'q3']))
+    expect(removeMany).not.toHaveBeenCalled()
+  })
+
+  it('ghosts Go live on the message track when no tape is installed (#88)', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+
+    const messagePanel = document.querySelector('[data-track-panel="message"]') as HTMLElement
+    const goLive = within(messagePanel).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(goLive.disabled).toBe(true)
+    expect(screen.getByText(/No messages yet/)).toBeTruthy()
   })
 })

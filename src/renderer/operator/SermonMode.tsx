@@ -824,7 +824,8 @@ export function SermonMode({
       onDelete: () => {
         if (track === 'scripture') {
           if (sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
-        } else if (track === 'slides') slidesKeyRef.current?.onDelete();
+        } else if (track === 'message') messageKeyRef.current?.onDelete();
+        else if (track === 'slides') slidesKeyRef.current?.onDelete();
       },
       onAction: (a: ResolvedHotkey) => {
         if (track !== 'scripture') return;
@@ -876,6 +877,7 @@ export function SermonMode({
           setTrack={setTrack}
           leftPanel={leftPanel}
           rightPanel={rightPanel}
+          onOpenSettings={onOpenSettings}
         />
       </div>
       <div style={panelStyle('slides')} data-track-panel="slides">

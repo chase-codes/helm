@@ -24,6 +24,11 @@ export interface SermonCenterProps {
   onPrev: () => void;
   onNext: () => void;
   onGoLive: () => void;
+  /** False when there is nothing cued to take — a Message track with no tapes installed,
+   * or an empty media library. The button then ghosts and stops responding rather than
+   * sitting there green and armed over an empty hero (#88). Defaults to true, so the
+   * scripture track (whose hero always has a cursor) needs no opinion. */
+  canGoLive?: boolean;
   onToggleLogo: () => void;
   variant: 'verse' | 'quote' | 'slide';
   /** verse-only */
@@ -74,6 +79,7 @@ export function SermonCenter({
   onPrev,
   onNext,
   onGoLive,
+  canGoLive = true,
   onToggleLogo
 }: SermonCenterProps): JSX.Element {
   const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
@@ -184,8 +190,10 @@ export function SermonCenter({
     height: '46px',
     padding: '0 20px',
     borderRadius: '11px',
-    background: cuedIsLive ? T.live : T.go,
-    color: '#fff',
+    background: canGoLive ? (cuedIsLive ? T.live : T.go) : 'transparent',
+    boxShadow: canGoLive ? 'none' : `inset 0 0 0 1px ${T.border}`,
+    color: canGoLive ? '#fff' : T.faint,
+    cursor: canGoLive ? 'pointer' : 'default',
     fontSize: '14.5px',
     fontWeight: 700,
     display: 'flex',
@@ -283,6 +291,8 @@ export function SermonCenter({
         <button
           style={{ ...goLiveStyle, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           onClick={onGoLive}
+          disabled={!canGoLive}
+          title={canGoLive ? undefined : 'Nothing to take — there is nothing cued yet'}
         >
           {cuedIsLive ? <ScreenBlackIcon size={14} /> : <GoLiveIcon size={14} />}
           {cuedIsLive ? 'Take down' : 'Go live'}

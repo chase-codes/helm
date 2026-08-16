@@ -642,6 +642,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         onPrev={() => stepSlide(-1)}
         onNext={() => stepSlide(1)}
         onGoLive={goLive}
+        // An empty library renders the fallback logo in the hero; Go live would be a no-op,
+        // so it must not sit there looking armed (#88).
+        canGoLive={selected !== null && slides.length > 0}
         onToggleLogo={toggleLogo}
       />
 
