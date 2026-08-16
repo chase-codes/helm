@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, cleanup } from '@testing-library/react';
 import { afterEach, expect, test } from 'vitest';
-import { SlideCanvas, SCRIPTURE_BAND } from './SlideCanvas';
+import { SlideCanvas, SCRIPTURE_BAND, TITLE_BAND } from './SlideCanvas';
 
 afterEach(cleanup);
 
@@ -106,6 +106,38 @@ test('the px ceilings that caused BUG-007 are gone', () => {
   // nothing else. Their presence is the defect; assert they cannot come back.
   render(<SlideCanvas slide={{ kind: 'lyrics', lines: ['Amazing grace!'] }} />);
   expect((screen.getByText('Amazing grace!') as HTMLElement).style.fontSize).not.toContain('72px');
+});
+
+test('title slides size from the fit property with no px ceiling (#49)', () => {
+  render(<SlideCanvas slide={{ kind: 'title', title: 'Announcements', subtitle: 'This week' }} />);
+  const title = screen.getByText('Announcements') as HTMLElement;
+  expect(title.style.fontSize).toBe('max(14px, var(--helm-fit-size, 9.2cqmin))');
+  expect(title.style.fontSize).not.toContain('clamp');
+});
+
+test('list bullet points scale with the fitted size, floored, with the 28px ceiling gone (#49)', () => {
+  // The 28px cap made an announcement bullet's MAXIMUM smaller than a lyric line's
+  // most-cramped fitted size, and pinned 4K output at 28px. Same defect class as BUG-007.
+  render(<SlideCanvas slide={{ kind: 'title', title: 'Announcements', points: ['Potluck sign-up'] }} />);
+  const point = screen.getByText('Potluck sign-up') as HTMLElement;
+  expect(point.style.fontSize).toBe('max(9px, calc(var(--helm-fit-size, 9.2cqmin) * 0.37))');
+  expect(point.style.fontSize).not.toContain('clamp');
+});
+
+test('title subtitle scales with the fitted size (0.39x the title), floored, with no px ceiling', () => {
+  render(<SlideCanvas slide={{ kind: 'title', title: 'Welcome', subtitle: 'Glad you are here' }} />);
+  const sub = screen.getByText('Glad you are here') as HTMLElement;
+  expect(sub.style.fontSize).toBe('max(9px, calc(var(--helm-fit-size, 9.2cqmin) * 0.39))');
+  expect(sub.style.fontSize).not.toContain('clamp');
+});
+
+test('the title fit band reaches low enough for a long list', () => {
+  // fitFontSize degrades to the smallest candidate when nothing fits, and the output has
+  // no scrolling — a 9-item announcement list must be able to keep shrinking until it
+  // fits rather than clipping. The band's ceiling stays at the 9.2cqmin design size:
+  // fitting shrinks crowded slides, it never balloons a short one past the design.
+  expect(TITLE_BAND[0]).toBe(9.2);
+  expect(TITLE_BAND[TITLE_BAND.length - 1]).toBe(2.2);
 });
 
 test('non-fitted slide kinds keep their own sizing', () => {

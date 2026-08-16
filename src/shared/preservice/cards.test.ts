@@ -21,6 +21,13 @@ describe('preSlideFor', () => {
     expect(preSlideFor({ ...base, type: 'list', title: 'Announcements', points: ['a', 'b'] } as PreCard))
       .toEqual({ kind: 'title', accent: '#e0a341', title: 'Announcements', points: ['a', 'b'] });
   });
+  it('list cards saved with typed markers heal on render (#50)', () => {
+    // Cards entered before the editor stripped markers are already stored with "- " baked
+    // into the point text; the slide builder must clean them so they render with a single
+    // bullet without being re-edited.
+    expect(preSlideFor({ ...base, type: 'list', title: 'Announcements', points: ['- a', '• b', 'c', '-'] } as PreCard))
+      .toEqual({ kind: 'title', accent: '#e0a341', title: 'Announcements', points: ['a', 'b', 'c'] });
+  });
   it('logo → logo slide', () => {
     expect(preSlideFor({ ...base, type: 'logo' } as PreCard)).toEqual({ kind: 'logo', title: 'HELM' });
   });

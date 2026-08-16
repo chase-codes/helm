@@ -22,6 +22,15 @@ const LYRICS_BAND = bandCandidates(10.5, 3.5);
 // extra candidates cost nothing unless the content actually needs them. Exported for
 // the test that pins the floor.
 export const SCRIPTURE_BAND = bandCandidates(10, 1.5);
+// Title/list slides fit as one block — title, subtitle, and points — because a three-item
+// list and a nine-item list genuinely want different sizes (#49; same defect class as
+// BUG-007: the old static clamp's 28px bullet ceiling made announcements *relatively
+// smaller the better the projector*). The ceiling is the 9.2cqmin design size: fitting
+// shrinks a crowded slide, it never balloons a short one past the design. The 2.2cqmin
+// floor (a whole number of 0.25 steps below 9.2) is the degrade case for a very long
+// list — the output has no scrolling, so the walk must be able to keep shrinking until
+// the slide fits.
+export const TITLE_BAND = bandCandidates(9.2, 2.2);
 
 export interface SlideCanvasProps {
   slide: Slide;
@@ -189,13 +198,16 @@ export function SlideCanvas({
 
   const titleStyle: CSSProperties = {
     fontWeight: 800,
-    fontSize: 'clamp(14px,9.2cqmin,90px)',
+    // The fitted base for the title block; subtitle and points scale off it so the whole
+    // block moves as one unit (and the fit walk stays monotonic). No px ceiling (#49).
+    fontSize: `max(14px, ${fitSizeValue('9.2cqmin')})`,
     lineHeight: 1.04,
     letterSpacing: '-0.02em'
   };
   const subtitleStyle: CSSProperties = {
     fontWeight: 500,
-    fontSize: 'clamp(9px,3.6cqmin,30px)',
+    // 0.39: the subtitle's original proportion against the title (3.6cqmin / 9.2cqmin).
+    fontSize: fitSizeScaled(9, '9.2cqmin', 0.39),
     color: 'rgba(255,255,255,.58)',
     marginTop: '1.4cqmin'
   };
@@ -211,7 +223,10 @@ export function SlideCanvas({
     alignItems: 'center',
     gap: '2cqmin',
     fontWeight: 500,
-    fontSize: 'clamp(9px,3.4cqmin,28px)',
+    // 0.37: the points' original proportion against the title (3.4cqmin / 9.2cqmin). The
+    // 28px ceiling this replaces capped an announcement bullet's maximum below a lyric
+    // line's most-cramped fitted size, and pinned 4K output at 28px (#49).
+    fontSize: fitSizeScaled(9, '9.2cqmin', 0.37),
     color: 'rgba(255,255,255,.85)'
   };
   const pointDotStyle: CSSProperties = {
@@ -392,13 +407,15 @@ export function SlideCanvas({
   const columns = s.columns || [];
   const points = s.points || [];
 
-  // Only lyrics and scripture auto-fit; every other kind passes null and keeps its clamp.
-  const fitBand = isLyrics ? LYRICS_BAND : isScripture ? SCRIPTURE_BAND : null;
+  // Lyrics, scripture, and title/list slides auto-fit; every other kind passes null and
+  // keeps its own clamp.
+  const fitBand = isLyrics ? LYRICS_BAND : isScripture ? SCRIPTURE_BAND : isTitle ? TITLE_BAND : null;
   useFitText(rootRef, fitRef, fitBand, [
     kind,
     fitBand,
     lines.join('\n'),
     columns.map((c) => c.text).join('\n'),
+    [s.title ?? '', s.subtitle ?? '', ...points].join('\n'),
     variant
   ]);
 
@@ -439,7 +456,7 @@ export function SlideCanvas({
       )}
 
       {isTitle && (
-        <div style={contentStyle}>
+        <div ref={fitRef} style={contentStyle}>
           <div style={titleStyle}>{s.title || ''}</div>
           <div style={subtitleStyle}>{s.subtitle || ''}</div>
           {hasPoints && (

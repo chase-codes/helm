@@ -4,6 +4,7 @@ import { ModalShell } from './ModalShell';
 import type { PreCard, PreCardType } from '../../shared/types';
 import { parseRef, formatRef } from '../../shared/scripture/refs';
 import { verseText } from '../../shared/scripture/preVerse';
+import { cleanListPoints } from '../../shared/preservice/listPoints';
 
 export interface PreCardEditorProps {
   card: PreCard | null;
@@ -82,10 +83,9 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
         type: 'list',
         enabled,
         title: peTitle.trim() || 'List',
-        points: peLines
-          .split('\n')
-          .map((x) => x.trim())
-          .filter(Boolean)
+        // cleanListPoints, not a bare trim: the slide renderer draws its own bullet, so a
+        // typed "- " marker would render doubled (#50).
+        points: cleanListPoints(peLines.split('\n'))
       });
     } else {
       window.helm.preservice.saveCard({
@@ -246,6 +246,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
               onChange={(e) => setPeLines(e.target.value)}
               placeholder="Fellowship dinner — next Sunday after service"
             />
+            <div style={lookupMsgStyle}>One item per line — a leading “-” is optional</div>
           </div>
         )}
         {peType === 'message' && (
