@@ -50,20 +50,26 @@ function installHelmStub(
   takeCard: ReturnType<typeof vi.fn>
   removeCard: ReturnType<typeof vi.fn>
   restoreCard: ReturnType<typeof vi.fn>
+  step: ReturnType<typeof vi.fn>
+  disengage: ReturnType<typeof vi.fn>
+  setOutput: ReturnType<typeof vi.fn>
 } {
   const showCard = vi.fn()
   const showNow = vi.fn()
   const takeCard = vi.fn()
   const removeCard = vi.fn()
   const restoreCard = vi.fn()
+  const step = vi.fn()
+  const disengage = vi.fn()
+  const setOutput = vi.fn()
   ;(window as unknown as { helm: unknown }).helm = {
     preservice: {
       getState: () => Promise.resolve(state),
       onState: () => () => {},
       engage: vi.fn(),
-      disengage: vi.fn(),
+      disengage,
       showCard,
-      step: vi.fn(),
+      step,
       showNow,
       takeCard,
       toggleLoop: vi.fn(),
@@ -75,18 +81,29 @@ function installHelmStub(
     },
     presentation: {
       get: () => Promise.resolve(pres),
-      onState: () => () => {}
+      onState: () => () => {},
+      setOutput
     }
   }
-  return { showCard, showNow, takeCard, removeCard, restoreCard }
+  return { showCard, showNow, takeCard, removeCard, restoreCard, step, disengage, setOutput }
 }
 
-const renderMode = (keyHandlerRef: ModeKeyHandlerRef = { current: null }): ReturnType<typeof render> =>
+const renderMode = (
+  keyHandlerRef: ModeKeyHandlerRef = { current: null },
+  theme = themeFor('classic', 'dark')
+): ReturnType<typeof render> =>
   render(
-    <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+    <ThemeCtx.Provider value={theme}>
       <PreServiceMode active keyHandlerRef={keyHandlerRef} />
     </ThemeCtx.Provider>
   )
+
+/** jsdom reads inline colours back as `rgb(r, g, b)`, so palette hexes need converting
+ * before they can be compared against a rendered style. */
+const rgb = (hex: string): string => {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+}
 
 describe('PreServiceMode', () => {
   beforeEach(() => {
@@ -328,23 +345,6 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     expect(keyHandlerRef.current?.onEscape()).toBe(false)
   })
 
-  it('never takes the screen from the keyboard', async () => {
-    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
-    const { showCard, showNow, takeCard } = installHelmStub(THREE)
-    renderMode(keyHandlerRef)
-    await screen.findByText('Announcements')
-
-    // Pre-service has never answered arrows or Enter, and must not start here: a keystroke
-    // that begins projecting from a dark screen is the BUG-018 class of defect.
-    act(() => {
-      keyHandlerRef.current?.onArrow(1)
-      keyHandlerRef.current?.onGoLive()
-    })
-    expect(showCard).not.toHaveBeenCalled()
-    expect(showNow).not.toHaveBeenCalled()
-    expect(takeCard).not.toHaveBeenCalled()
-  })
-
   it('Remove card in the editor lands in the same undo bar', async () => {
     const { removeCard } = installHelmStub(THREE)
     renderMode()
@@ -420,5 +420,175 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     act(() => keyHandlerRef.current?.onDelete?.())
     expect(removeCard).not.toHaveBeenCalled()
     expect(screen.queryByText(/Removed/)).toBeNull()
+  })
+})
+
+// #87: the page used to speak its own dialect — a hard-coded green for on-air, no
+// take-down verb, and a keyboard delegate whose arrows and Enter were no-ops.
+describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  describe('on-air colour', () => {
+    // Red means "the congregation sees this" on every other page. Pinned against a
+    // second family so a re-hard-coded constant can't pass by matching one palette.
+    it.each(['classic', 'contrast'] as const)('paints PROJECTING with %s live', async (family) => {
+      const theme = themeFor(family, 'dark')
+      installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
+      const { container } = renderMode({ current: null }, theme)
+
+      const bar = (await screen.findByText('PROJECTING')).closest('div') as HTMLElement
+      expect(bar.style.color).toBe(rgb(theme.live))
+      const dot = bar.querySelector('span') as HTMLElement
+      expect(dot.style.background).toBe(rgb(theme.live))
+      expect(container.innerHTML).not.toContain('3fb950')
+    })
+
+    // The bar reports THIS page's claim on the screen; the header carries the global
+    // on-air state. Off screen stays quiet rather than borrowing the live red.
+    it('stays faint while pre-service does not own the screen', async () => {
+      const theme = themeFor('classic', 'dark')
+      installHelmStub(baseState, NOTHING_LIVE)
+      renderMode({ current: null }, theme)
+
+      const bar = (await screen.findByText('OFF SCREEN')).closest('div') as HTMLElement
+      expect(bar.style.color).toBe(rgb(theme.faint))
+    })
+  })
+
+  describe('Take down', () => {
+    const takeDownBtn = (): HTMLButtonElement =>
+      screen.getByText('Take down').closest('button') as HTMLButtonElement
+
+    it('clears the screen and stops the loop', async () => {
+      const { setOutput, disengage } = installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
+      renderMode()
+      await screen.findByText('Greeting')
+
+      fireEvent.click(takeDownBtn())
+      expect(setOutput).toHaveBeenCalledWith('black')
+      // Explicit, not left to the engine's next tick: `engaged` has to clear now, or the
+      // loop keeps claiming a screen the operator just took down for up to a second.
+      expect(disengage).toHaveBeenCalledTimes(1)
+    })
+
+    it('is inert while nothing is on screen', async () => {
+      const { setOutput, disengage } = installHelmStub(baseState, NOTHING_LIVE)
+      renderMode()
+      await screen.findByText('Greeting')
+
+      expect(takeDownBtn().disabled).toBe(true)
+      fireEvent.click(takeDownBtn())
+      expect(setOutput).not.toHaveBeenCalled()
+      expect(disengage).not.toHaveBeenCalled()
+    })
+
+    // Same reach as the header chip and SongsMode's Escape rung: whoever owns the screen,
+    // this clears it.
+    it('reaches a screen another flow owns', async () => {
+      const { setOutput } = installHelmStub(baseState, SONG_LIVE)
+      renderMode()
+      await screen.findByText('Greeting')
+
+      expect(takeDownBtn().disabled).toBe(false)
+      fireEvent.click(takeDownBtn())
+      expect(setOutput).toHaveBeenCalledWith('black')
+    })
+  })
+
+  describe('keyboard delegate', () => {
+    it('steps the loop on the arrows, exactly as the ‹ › buttons do', async () => {
+      const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+      const { step, showNow, takeCard } = installHelmStub(baseState)
+      renderMode(keyHandlerRef)
+      await screen.findByText('Greeting')
+
+      act(() => {
+        keyHandlerRef.current?.onArrow(1)
+        keyHandlerRef.current?.onArrow(-1)
+      })
+      expect(step.mock.calls.map((c) => c[0])).toEqual([1, -1])
+      // `step` routes through the engine's navigate-only path, which refuses to light a
+      // dark screen (BUG-018) — so arrows can never start projecting.
+      expect(showNow).not.toHaveBeenCalled()
+      expect(takeCard).not.toHaveBeenCalled()
+    })
+
+    it('Enter puts the armed card on screen', async () => {
+      const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+      const { showNow } = installHelmStub(baseState, NOTHING_LIVE)
+      renderMode(keyHandlerRef)
+      await screen.findByText('Greeting')
+
+      act(() => keyHandlerRef.current?.onGoLive())
+      expect(showNow).toHaveBeenCalledTimes(1)
+    })
+
+    it('Enter is inert once that card is already on screen', async () => {
+      const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+      const { showNow, setOutput } = installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
+      renderMode(keyHandlerRef)
+      await screen.findByText('Greeting')
+
+      // Mirrors the disabled "On screen" button — Enter is never a take-down here.
+      act(() => keyHandlerRef.current?.onGoLive())
+      expect(showNow).not.toHaveBeenCalled()
+      expect(setOutput).not.toHaveBeenCalled()
+    })
+
+    describe('the Escape ladder', () => {
+      const THREE: PreState = {
+        ...baseState,
+        cards: [
+          ...cards,
+          { id: 'c', type: 'list', title: 'Announcements', points: ['Potluck'], enabled: true }
+        ]
+      }
+
+      it('clears a delete-selection before it touches the screen', async () => {
+        const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+        const { setOutput } = installHelmStub({ ...THREE, engaged: true }, cardLive('a'))
+        renderMode(keyHandlerRef)
+        await screen.findByText('Announcements')
+
+        const row = screen.getByText('Announcements').closest('button') as HTMLElement
+        fireEvent.click(row)
+        expect(row.getAttribute('data-selected')).toBe('true')
+
+        let consumed = false
+        act(() => {
+          consumed = keyHandlerRef.current?.onEscape() ?? false
+        })
+        expect(consumed).toBe(true)
+        expect(row.getAttribute('data-selected')).toBeNull()
+        expect(setOutput).not.toHaveBeenCalled()
+      })
+
+      it('takes the screen down once nothing else is pending', async () => {
+        const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+        const { setOutput, disengage } = installHelmStub({ ...THREE, engaged: true }, cardLive('a'))
+        renderMode(keyHandlerRef)
+        await screen.findByText('Announcements')
+
+        let consumed = false
+        act(() => {
+          consumed = keyHandlerRef.current?.onEscape() ?? false
+        })
+        expect(consumed).toBe(true)
+        expect(setOutput).toHaveBeenCalledWith('black')
+        expect(disengage).toHaveBeenCalledTimes(1)
+      })
+
+      it('does not consume Escape when the screen is already dark', async () => {
+        const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+        const { setOutput } = installHelmStub(THREE, NOTHING_LIVE)
+        renderMode(keyHandlerRef)
+        await screen.findByText('Announcements')
+
+        expect(keyHandlerRef.current?.onEscape()).toBe(false)
+        expect(setOutput).not.toHaveBeenCalled()
+      })
+    })
   })
 })
