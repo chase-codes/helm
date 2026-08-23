@@ -49,12 +49,15 @@ goal is to land the cursor on the right verse fast, not to enumerate every occur
   cost 80–150 ms on the main process and could delay a go-live (see the search-perf
   spike, §1).
 - **Search the primary version** (`versions[0]`). Results carry the translation abbr.
-- **Selecting a hit sets the builder to its reference.** Enter/click on `Luke 19:2`
+- **Selecting a hit sets the builder to its reference.** Enter on `Luke 19:2`
   jumps the cursor there *and* puts `Luke 19:2` in the entry — so `+ Add`, Go live,
   Shift+Enter and rail range selection all work on the hit exactly as if it had been
   typed. A passage hit sets a range (`Luke 15:11-32`). The results list goes away
   because the entry no longer shows a search; retyping is cheap and the chapter rail
-  now shows the context the operator actually wants.
+  now shows the context the operator actually wants. A mouse **click** only previews —
+  cursor and highlight move, the entry and the results stay put — because a click that
+  closed the list would unmount the row before the second half of a double-click could
+  land on it. Enter commits; the click is a rail tap.
 - **Arrow keys move a highlight, never the cursor.** Moving the cursor while output is
   live changes the projector; browsing hits must be silent.
 - **Matched words are bolded in verse snippets.** The one new rendering behaviour: for
@@ -212,8 +215,11 @@ scripture, the schedule header + list are replaced by `ScriptureSearchResults` (
 - `PASSAGES` group (≤3): title, meta `Luke 15:11–32`.
 - `VERSES` group (10 rows): ref in bold, text clamped to 2 lines with matched words
   bolded (`highlightTokens(text, qts)` — a small shared helper in `src/shared/search/`).
-- Row states: highlighted (keyboard), hover. Click = `onPick`, double-click =
-  `onActivate` (take live).
+- Row states: highlighted (keyboard), hover. Click = preview (highlight + cursor, search
+  stays open); double-click = activate. Enter = commit the ref into the entry;
+  Shift+Enter = activate. Activation goes through the **idempotent take verb**
+  (`presentation.take`, the #58 path), never `goLive` — `goLive` toggles, so on the verse
+  already live it would black the projector.
 
 `SermonMode`:
 

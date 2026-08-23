@@ -41,7 +41,7 @@ import type {
   VerseSearchResult
 } from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
-import type { ScriptureSearchState } from './ScriptureSearchResults';
+import { SEARCH_VERSE_ROWS, type ScriptureSearchState } from './ScriptureSearchResults';
 import { SermonCenter } from './SermonCenter';
 import { VersionPicker } from './VersionPicker';
 import { ChapterRail } from './ChapterRail';
@@ -339,9 +339,20 @@ export function SermonMode({
     };
   }, [query, primaryVersion]);
 
+  // Usable only when it answers THIS query in THIS translation: switching the primary
+  // version re-runs the effect, and until it lands the old translation's hits would sit
+  // under the new abbr in the header.
+  const fresh =
+    query !== null && verseRes && verseRes.q === query && verseRes.res.versionId === primaryVersion
+      ? verseRes.res
+      : null;
   const passageHits: Passage[] = query !== null ? matchPassages(query) : [];
-  const verseHits: VerseHit[] = query !== null && verseRes && verseRes.q === query ? verseRes.res.hits : [];
-  const verseTotal = query !== null && verseRes && verseRes.q === query ? verseRes.res.total : 0;
+  // Capped to the rows the rail actually RENDERS. Main returns up to 50; the keyboard
+  // index, `+ Add` and the visible list have to be one list, or ArrowDown walks past the
+  // last row on screen and `+ Add` names a hit nobody can see. The header's `total` is the
+  // full match count and is deliberately not capped.
+  const verseHits: VerseHit[] = fresh ? fresh.hits.slice(0, SEARCH_VERSE_ROWS) : [];
+  const verseTotal = fresh ? fresh.total : 0;
   const resultCount = passageHits.length + verseHits.length;
   const highlighted = hiState.q === query ? hiState.i : 0;
   const hi = resultCount ? Math.min(highlighted, resultCount - 1) : 0;
@@ -563,39 +574,6 @@ export function SermonMode({
     window.helm.presentation.goLive(key, slide);
   };
 
-  // Enter/click on a search hit: the entry becomes that reference (so + Add / Go live /
-  // Shift+Enter work on it exactly as if typed) and the cursor jumps to its first verse.
-  // Declared down HERE, not beside `resultRef` up top, for the same React Compiler reason
-  // `activateVerse` is declared where it is: `activateResult` reads `goLiveWithChapter`,
-  // and reaching forward to something declared further down the component body makes the
-  // compiler bail out of memoizing the `useCallback`s in between (`Existing memoization
-  // could not be preserved`), which `npm run lint` treats as an error.
-  const pickResult = (i: number): void => {
-    const p = resultRef(i);
-    if (!p) return;
-    setBuilder(fromParsedRef(p));
-    jumpTo(p.book, p.ch, p.from);
-    requestRailScroll(p.from, 'start');
-  };
-  // Shift+Enter / double-click: pick, then put its first verse on screen. Same
-  // resolve-the-chapter-first shape (and `beginTake` guard) as `activateReading`.
-  const activateResult = (i: number): void => {
-    const p = resultRef(i);
-    if (!p) return;
-    pickResult(i);
-    const wanted = beginTake();
-    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
-      goLiveWithChapter(p, chapter);
-      return;
-    }
-    window.helm.bibles
-      .getChapter(p.book, p.ch)
-      .then((c) => {
-        if (wanted()) goLiveWithChapter(p, c);
-      })
-      .catch(console.error);
-  };
-
   // Double-click a verse card (#58). `take` is idempotent, so double-clicking the verse
   // already on screen is a no-op rather than the take-down `goLive` would perform. The
   // click that precedes it has already moved the cursor via `onSelectVerse`, so the rail,
@@ -607,6 +585,55 @@ export function SermonMode({
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
     window.helm.presentation.take(keyForScripture(book, ch, v), slide);
+  };
+
+  // Enter on a search hit: the entry becomes that reference (so + Add / Go live /
+  // Shift+Enter and rail range selection all work on it exactly as if it had been typed)
+  // and the cursor jumps to its first verse. The results go away with the search stage,
+  // which is exactly why a plain CLICK does not do this — see `previewResult`.
+  const pickResult = (i: number): void => {
+    const p = resultRef(i);
+    if (!p) return;
+    setBuilder(fromParsedRef(p));
+    jumpTo(p.book, p.ch, p.from);
+    requestRailScroll(p.from, 'start');
+  };
+
+  // A single CLICK on a result row. Deliberately NOT `pickResult`: setting the builder ends
+  // the search stage, so the row would unmount under the pointer and the second half of a
+  // double-click would land on whichever schedule row had taken its place — firing
+  // `jumpToReading`, a cursor move that reaches the projector. A click previews instead:
+  // highlight plus cursor, the same gesture as a rail tap (quiet while the output is down,
+  // following the cursor onto the screen while it is live — Helm's cursor model). The
+  // search stays open, so the double-click can still reach the row it started on.
+  const previewResult = (i: number): void => {
+    const p = resultRef(i);
+    if (!p) return;
+    setHighlighted(i);
+    jumpTo(p.book, p.ch, p.from);
+    requestRailScroll(p.from, 'start');
+  };
+
+  // Shift+Enter / double-click: this hit on screen, now. `take`, not `goLive` — `goLive`
+  // TOGGLES (it blacks the projector when fired on the key already live, see
+  // shared/presentation/core.ts), and "put this hit up" must never be a way to take the
+  // screen down. Same resolve-the-chapter-first shape and `beginTake` guard as
+  // `activateReading`, and the same idempotent verb the #58 double-click paths use.
+  const activateResult = (i: number): void => {
+    const p = resultRef(i);
+    if (!p) return;
+    pickResult(i);
+    const wanted = beginTake();
+    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
+      takeVerseLive(p.book, p.ch, p.from, chapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(p.book, p.ch)
+      .then((c) => {
+        if (wanted()) takeVerseLive(p.book, p.ch, p.from, c);
+      })
+      .catch(console.error);
   };
 
   // The rail previews the builder's book+chapter when resolved, else the cued chapter.
@@ -802,7 +829,7 @@ export function SermonMode({
           onHover: (i) => {
             if (i !== null) setHighlighted(i);
           },
-          onPick: pickResult,
+          onPick: previewResult,
           onActivate: activateResult,
           noVersion: !primaryVersion || !manifest.some((m) => m.id === primaryVersion && m.installed)
         };

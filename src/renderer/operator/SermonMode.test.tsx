@@ -139,8 +139,10 @@ function installHelmStub(
   const getChapter = vi.fn((book: string, ch: number) =>
     second && book === second.book && ch === second.ch ? (secondPending as Promise<ChapterData>) : pending
   )
+  // Deferred into a `.then` so a `verseSearch` that THROWS becomes a rejected promise —
+  // that is how a test drives the IPC-failure path, not a synchronous throw at the call.
   const search = vi.fn((q: string, versionId: string) =>
-    Promise.resolve({ ...(opts.verseSearch?.(q) ?? { hits: [], total: 0 }), versionId })
+    Promise.resolve().then(() => ({ ...(opts.verseSearch?.(q) ?? { hits: [], total: 0 }), versionId }))
   )
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
@@ -2109,13 +2111,18 @@ describe('SermonMode — verse text search from the entry', () => {
         ], total: 2 }
       : { hits: [], total: 0 }
 
-  const resultRow = (label: string): HTMLButtonElement =>
-    screen.getByText(label).closest('button') as HTMLButtonElement
-  // "zacch" fuzzy-matches three curated passages (Zacchaeus, Gethsemane, Peter's Great
-  // Catch) ahead of the two verse hits, so a hard-coded number of presses would encode the
-  // passage table's current contents rather than the behaviour under test. Walk the
-  // highlight down to the row the test is about instead — which is itself the assertion
-  // that ArrowDown moves the highlight at all.
+  // Scoped to the results rail on purpose: a click moves the cursor, so the ref a row
+  // shows ("Luke 19:5") is then ALSO the hero's label — a bare getByText would find two.
+  const resultRow = (label: string): HTMLButtonElement => {
+    const rows = Array.from(document.querySelectorAll('[data-search-row]')) as HTMLButtonElement[]
+    const row = rows.find((r) => r.firstElementChild?.textContent === label)
+    if (!row) throw new Error(`no search result row titled "${label}"`)
+    return row
+  }
+  // Curated passages sort ahead of the verse hits, and how many of them a query matches is
+  // the passage table's business, not this test's — a hard-coded number of presses would
+  // encode that table's current contents. Walk the highlight down to the row the test is
+  // about instead, which is itself the assertion that ArrowDown moves the highlight.
   const arrowTo = (label: string): void => {
     for (let i = 0; i < 20; i++) {
       if (resultRow(label).getAttribute('data-highlighted') === 'true') return
@@ -2167,8 +2174,8 @@ describe('SermonMode — verse text search from the entry', () => {
     await waitFor(() => expect(entryValue()).toBe('Luke 15:11-32'))
   })
 
-  it('Shift+Enter on a verse hit goes live with that verse', async () => {
-    const { resolveChapter, resolveSecondChapter, goLive } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
+  it('Shift+Enter on a verse hit takes that verse to the screen', async () => {
+    const { resolveChapter, resolveSecondChapter, take, goLive } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
     render(<Harness />)
     resolveChapter()
     resolveSecondChapter()
@@ -2178,8 +2185,113 @@ describe('SermonMode — verse text search from the entry', () => {
     await waitFor(() => expect(screen.getByText('Luke 19:2')).toBeTruthy())
     arrowTo('Luke 19:2')
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
-    await waitFor(() => expect(goLive).toHaveBeenCalled())
-    expect(goLive.mock.calls[0][0]).toBe('scr:Luke:19:2')
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(take.mock.calls[0][0]).toBe('scr:Luke:19:2')
+    // `goLive` would have blacked the projector on the verse already live; the take verb
+    // is idempotent, which is the whole reason activation uses it.
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Enter on the verse already live does not take the screen down', async () => {
+    const LUKE_19_2_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'scr:Luke:19:2',
+      liveSnap: { kind: 'scripture', accent: '#6f9cf0', ref: 'Luke 19:2', label: 'Luke 19:2', columns: [] },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { resolveChapter, resolveSecondChapter, take, goLive, setOutput } = installHelmStub(LUKE_19_2_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
+    render(<Harness />)
+    resolveChapter()
+    resolveSecondChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('zacch')
+    await waitFor(() => expect(screen.getByText('Luke 19:2')).toBeTruthy())
+    arrowTo('Luke 19:2')
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(take.mock.calls[0][0]).toBe('scr:Luke:19:2')
+    expect(goLive).not.toHaveBeenCalled()
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+
+  it('clicking a result row previews it and leaves the search open', async () => {
+    const { resolveChapter, resolveSecondChapter, show } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
+    render(<Harness />)
+    resolveChapter()
+    resolveSecondChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('zacch')
+    await waitFor(() => expect(screen.getByText('Luke 19:5')).toBeTruthy())
+    fireEvent.click(resultRow('Luke 19:5'))
+    // A click is a cursor move, exactly like a rail tap — so it reaches the projector.
+    await waitFor(() => expect(show.mock.calls.some((c) => c[0] === 'scr:Luke:19:5')).toBe(true))
+    // ...and the results stay up, with the entry still holding the query.
+    expect(screen.getByText('2 VERSES · KJV')).toBeTruthy()
+    expect(resultRow('Luke 19:5').getAttribute('data-highlighted')).toBe('true')
+    expect(entryValue()).toBe('zacch')
+  })
+
+  it('double-clicking a result row takes it to the screen', async () => {
+    const { resolveChapter, resolveSecondChapter, take, goLive } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
+    render(<Harness />)
+    resolveChapter()
+    resolveSecondChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('zacch')
+    await waitFor(() => expect(screen.getByText('Luke 19:2')).toBeTruthy())
+    // The captured node, not a re-query: the point of the click-previews model is that the
+    // row the first click landed on is still mounted for the second half of the gesture.
+    const row = resultRow('Luke 19:2')
+    fireEvent.click(row)
+    fireEvent.doubleClick(row)
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(take.mock.calls[0][0]).toBe('scr:Luke:19:2')
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  it('+ Add names the highlighted hit and follows the highlight', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('zacch')
+    await waitFor(() => expect(screen.getByText('Luke 19:5')).toBeTruthy())
+    expect(screen.getByText('+ Add Luke 19:1–10')).toBeTruthy() // the Zacchaeus passage, highlighted first
+    arrowTo('Luke 19:5')
+    expect(screen.getByText('+ Add Luke 19:5')).toBeTruthy()
+  })
+
+  it('withholds + Add entirely when a search matches nothing', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { verseSearch: () => ({ hits: [], total: 0 }) })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('qqqq')
+    await waitFor(() => expect(screen.getByText(/No verses match/)).toBeTruthy())
+    expect(screen.queryByText(/^\+ Add/)).toBeNull()
+  })
+
+  it('a failed search shows the empty state and keeps the query in the entry', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], {
+      verseSearch: () => {
+        throw new Error('bibles:search failed')
+      }
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('qqqq')
+    await waitFor(() => expect(screen.getByText(/No verses match/)).toBeTruthy())
+    expect(entryValue()).toBe('qqqq')
+    spy.mockRestore()
   })
 
   it('Escape clears a search and brings the schedule back', async () => {

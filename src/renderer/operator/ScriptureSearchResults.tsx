@@ -17,7 +17,11 @@ export interface ScriptureSearchState {
   /** Index into the combined list: passages first, then verses. */
   highlighted: number;
   onHover: (index: number | null) => void;
+  /** Single click: a PREVIEW — the caller moves the highlight and the cursor and leaves the
+   * search open, so the row survives long enough for a double-click to land on it. Enter
+   * (not click) is what commits the hit into the entry. */
   onPick: (index: number) => void;
+  /** Double click: take this hit to the screen, via the idempotent take verb. */
   onActivate: (index: number) => void;
   noVersion: boolean;
 }
@@ -52,6 +56,10 @@ function Row({ index, title, body, bodySegs, theme: T, highlighted, onHover, onP
   return (
     <button
       style={rowStyle(T, highlighted)}
+      // Marks this as a RESULT row (the schedule's rows carry `data-schedule-row`): the ref
+      // a hit shows also appears in the hero once the cursor lands on it, so a test looking
+      // for "Luke 19:5" needs a way to mean this list and not the whole mode.
+      data-search-row={index}
       data-highlighted={highlighted || undefined}
       onMouseEnter={() => onHover(index)}
       onMouseLeave={() => onHover(null)}
