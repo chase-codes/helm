@@ -24,6 +24,10 @@ export interface ScriptureSearchState {
   /** Double click: take this hit to the screen, via the idempotent take verb. */
   onActivate: (index: number) => void;
   noVersion: boolean;
+  /** True once a reply for THIS query has landed. False while a search is still in flight —
+   * the rows below may still be the previous query's, and an empty list means "not yet",
+   * not "nothing matches", so the empty state waits for this. */
+  settled: boolean;
 }
 
 const headerStyle = (T: Theme): CSSProperties => ({
@@ -84,7 +88,9 @@ export const SEARCH_VERSE_ROWS = 10;
 export function ScriptureSearchResults({ theme: T, search: s }: { theme: Theme; search: ScriptureSearchState }): JSX.Element {
   const count = `${s.total} ${s.total === 1 ? 'VERSE' : 'VERSES'}${s.abbr ? ` · ${s.abbr}` : ''}`;
   const verses = s.verses.slice(0, SEARCH_VERSE_ROWS);
-  const nothing = s.passages.length === 0 && verses.length === 0;
+  // Only an ANSWERED query can be empty. While one is in flight the list area stays blank
+  // rather than claiming "No verses match" for a query nothing has looked at yet.
+  const nothing = s.settled && s.passages.length === 0 && verses.length === 0;
   return (
     <>
       <div style={headerStyle(T)}>{count}</div>

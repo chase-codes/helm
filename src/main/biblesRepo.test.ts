@@ -300,3 +300,27 @@ test('search: an en-dash compound name is indexed solid; the returned text keeps
   expect(hits.map((h) => `${h.book} ${h.chapter}:${h.verse}`)).toEqual(['Genesis 35:19'])
   expect(hits[0].text).toBe('And Rachel died, and was buried in the way to Ephrath, which is Beth\u2013lehem.')
 })
+
+test('search: total counts SCORED hits, not the coarser FTS candidates', () => {
+  repo.install(kjv)
+  // FTS's `"wo"*` prefix-matches "word" in John 1:1, but the scorer gives no prefix
+  // credit below 3 characters — so the gate rejects the only candidate. The header must
+  // say 0, not 1: a total with an empty list under it is a lie the operator can see.
+  const r = repo.search('beginning wo', 'kjv')
+  expect(r.hits).toEqual([])
+  expect(r.total).toBe(0)
+})
+
+test('search: limit pages the hits; total stays the full scored count', () => {
+  repo.install(lukeKjv)
+  const all = repo.search('"which was"', 'kjv2')
+  expect(all.hits.map((h) => h.verse)).toEqual([2, 10])
+  const one = repo.search('"which was"', 'kjv2', 1)
+  expect(one.hits).toHaveLength(1)
+  expect(one.total).toBe(2) // rankVerses' own default limit must not cap the count
+})
+
+test('search: a query with no token of 3+ characters matches nothing', () => {
+  repo.install(kjv)
+  expect(repo.search('th', 'kjv')).toEqual({ hits: [], total: 0, versionId: 'kjv' })
+})

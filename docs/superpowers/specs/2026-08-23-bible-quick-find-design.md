@@ -136,8 +136,14 @@ still filtered to one version.
   3. MATCH = tokens joined with `AND`, each token `("a"* OR "b" OR …)`.
      `SELECT … WHERE verse_fts MATCH ? AND version_id = ? ORDER BY bm25(verse_fts)
      LIMIT 1000` (bm25 only decides which candidates survive the cut), plus
-     `SELECT count(*)` for `total`.
-  4. `rankVerses(q, candidates, limit)` from `verseScore.ts`.
+     `SELECT count(*)` for `total` — used only when the cut was hit.
+  4. `rankVerses(q, candidates)` from `verseScore.ts` scores EVERY candidate; `hits` is the
+     first `limit` of them. `total` is the exact scored count when the candidate cut wasn't
+     hit, else the FTS count (the best estimate available) — FTS is the coarser gate, so its
+     count over-reports whenever the scorer rejects a prefix or typo-expanded candidate. A
+     query with no token of 3+ characters returns nothing without touching FTS: `matchDist`
+     gives no prefix credit below 3 characters, so the scorer would reject every candidate
+     anyway, and the unfiltered scan is the expensive kind.
 
 The `"tok"*` MATCH-string builder and the `LIMIT 1000` constant move into a shared
 helper (`src/main/ftsQuery.ts`) used by songs, messages and verses — the third copy is
@@ -235,7 +241,7 @@ scripture, the schedule header + list are replaced by `ScriptureSearchResults` (
 - `addRef` while searching = highlighted hit's reference (so `+ Add` is labelled and
   files it); `canAdd` false when there are no hits.
 - `+ Add`/Go live button behaviour otherwise unchanged.
-- Placeholder: `John 3:16 — or a word to search`.
+- Placeholder: `Add verse — John 3:16, or search a word`.
 
 ## Error handling
 

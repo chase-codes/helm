@@ -45,6 +45,11 @@ const GEN_1_1_LIVE: PresentationState = {
   cuedSnap: null
 }
 
+interface VerseSearchStub {
+  hits: { book: string; chapter: number; verse: number; text: string }[]
+  total: number
+}
+
 function installHelmStub(
   pres: PresentationState = NOTHING_LIVE,
   schedule: ScriptureReading[] = [],
@@ -59,8 +64,10 @@ function installHelmStub(
     search?:
       | { tapes: TapeRow[]; quotes: QuoteRow[] }
       | ((q: string, scope: string | null) => { tapes: TapeRow[]; quotes: QuoteRow[] })
-    // What `bibles.search` resolves to for any query (Task 10). Default: no hits.
-    verseSearch?: (q: string) => { hits: { book: string; chapter: number; verse: number; text: string }[]; total: number }
+    // What `bibles.search` resolves to for any query (Task 10). Default: no hits. May
+    // return a PROMISE instead of a value, so a test can leave one query's reply in flight
+    // (the real IPC round-trip) while a later keystroke lands.
+    verseSearch?: (q: string) => VerseSearchStub | Promise<VerseSearchStub>
   } = {},
   // Optional second chapter, keyed by its own book/ch, with its own release — lets a test
   // fetch a DIFFERENT chapter than the default Genesis 1 (e.g. activateReading's async
@@ -142,7 +149,9 @@ function installHelmStub(
   // Deferred into a `.then` so a `verseSearch` that THROWS becomes a rejected promise —
   // that is how a test drives the IPC-failure path, not a synchronous throw at the call.
   const search = vi.fn((q: string, versionId: string) =>
-    Promise.resolve().then(() => ({ ...(opts.verseSearch?.(q) ?? { hits: [], total: 0 }), versionId }))
+    Promise.resolve()
+      .then(() => opts.verseSearch?.(q) ?? { hits: [], total: 0 })
+      .then((r) => ({ ...r, versionId }))
   )
   ;(window as unknown as { helm: unknown }).helm = {
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
@@ -2323,6 +2332,32 @@ describe('SermonMode — verse text search from the entry', () => {
     expect(entryValue()).toBe('')
     expect(screen.queryByText('2 VERSES · KJV')).toBeNull()
     expect(screen.getByText('SCRIPTURE SCHEDULE')).toBeTruthy()
+  })
+
+  it('holds the last results while the next keystroke is still in flight', async () => {
+    // Between a keystroke and its IPC reply there is nothing to be empty ABOUT: blanking
+    // to "0 VERSES · No verses match" and refilling on every letter reads as the search
+    // breaking. The previous query's rows stay up until the new answer lands.
+    let land: () => void = () => {}
+    const pending = new Promise<{ hits: never[]; total: number }>((res) => {
+      land = () => res({ hits: [], total: 0 })
+    })
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], {
+      verseSearch: (q) => (q === 'zacchq' ? pending : hits(q))
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('zacch')
+    await waitFor(() => expect(screen.getByText('2 VERSES · KJV')).toBeTruthy())
+    typeInEntry('q') // 'zacchq' — no curated passage, and its verse reply is held
+    await waitFor(() => expect(entryValue()).toBe('zacchq'))
+    expect(resultRow('Luke 19:2')).toBeTruthy() // last answer still on screen
+    expect(screen.queryByText(/No verses match/)).toBeNull()
+    land()
+    await waitFor(() => expect(screen.getByText(/No verses match/)).toBeTruthy())
+    expect(screen.getByText('0 VERSES · KJV')).toBeTruthy()
   })
 
   it('a reference keeps working exactly as before (no search for "ma")', async () => {

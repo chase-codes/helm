@@ -181,7 +181,7 @@ describe('SchedulePanel — search results rail', () => {
         search={{
           query: 'zacch', tokens: ['zacch'], abbr: 'KJV', total: 1, passages: [],
           verses: [{ key: 'v', ref: 'Luke 19:2', text: 'a man named Zaccheus' }],
-          highlighted: 0, onHover: vi.fn(), onPick: vi.fn(), onActivate: vi.fn(), noVersion: false
+          highlighted: 0, onHover: vi.fn(), onPick: vi.fn(), onActivate: vi.fn(), noVersion: false, settled: true
         }}
       />
     )

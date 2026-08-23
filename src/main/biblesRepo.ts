@@ -152,15 +152,26 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
       }
     },
     search(q, versionId, limit = 50) {
-      const { tokens, phrase } = parseVerseQuery(q)
+      const { tokens } = parseVerseQuery(q)
       if (!tokens.length) return { hits: [], total: 0, versionId }
+      // Nothing under 3 characters can match meaningfully: matchDist gives prefix credit
+      // only at >= 3 chars, so the scorer's gate rejects every candidate FTS's `"th"*`
+      // returns — and that unfiltered scan cost ~60 ms on the main process, on the
+      // keystroke that produced it. Answer it here instead of paying for an empty list.
+      if (!tokens.some((t) => t.length >= 3)) return { hits: [], total: 0, versionId }
       const groups = tokens.map(expandToken)
       const match = andGroupsMatch(groups)
       const rows = selectHits.all(match, versionId) as VerseHit[]
-      const ranked = rankVerses(q, rows)
+      // Score EVERY candidate (rankVerses' default limit is 50 — letting it apply here
+      // would cap the count, not just the page) and page the hits ourselves.
+      const ranked = rankVerses(q, rows, rows.length)
       const hits = ranked.slice(0, limit)
-      const total = phrase && rows.length < FTS_CANDIDATE_LIMIT
-        ? ranked.length // the scorer's phrase gate dropped candidates; exact when the cut wasn't hit
+      // FTS is a coarser gate than the scorer: prefix terms and typo expansion return
+      // verses the scorer then rejects, so the FTS count over-reports. Trust the scored
+      // count whenever every candidate was scored; only a query that hit the candidate
+      // cut has to fall back to the FTS count as the best estimate available.
+      const total = rows.length < FTS_CANDIDATE_LIMIT
+        ? ranked.length
         : (countHits.get(match, versionId) as { n: number }).n
       return { hits, total, versionId }
     }

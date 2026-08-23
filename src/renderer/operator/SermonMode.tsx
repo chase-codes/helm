@@ -339,20 +339,30 @@ export function SermonMode({
     };
   }, [query, primaryVersion]);
 
-  // Usable only when it answers THIS query in THIS translation: switching the primary
-  // version re-runs the effect, and until it lands the old translation's hits would sit
-  // under the new abbr in the header.
-  const fresh =
-    query !== null && verseRes && verseRes.q === query && verseRes.res.versionId === primaryVersion
-      ? verseRes.res
-      : null;
+  // `settled` = the reply on screen answers THIS query in THIS translation. Until it does,
+  // the rail is still waiting: the empty state must not render (see ScriptureSearchResults),
+  // because between a keystroke and the IPC reply there is nothing to be empty ABOUT.
+  const settled =
+    query !== null &&
+    // Nothing to wait for: with no primary version the search effect never runs, so the
+    // INSTALL_HINT empty state is the settled answer and should show at once.
+    (!primaryVersion ||
+      (verseRes !== null && verseRes.q === query && verseRes.res.versionId === primaryVersion));
+  // What the rail SHOWS: the last reply for this translation, even when a newer query is
+  // already in flight. Holding the previous query's hits for a frame reads as a list
+  // catching up; blanking to "0 VERSES · No verses match" and refilling on every keystroke
+  // reads as the search breaking (SongsMode holds its rows the same way). Still gated on
+  // the translation: switching the primary version would otherwise sit the old
+  // translation's hits under the new abbr in the header.
+  const shown =
+    query !== null && verseRes && verseRes.res.versionId === primaryVersion ? verseRes.res : null;
   const passageHits: Passage[] = query !== null ? matchPassages(query) : [];
   // Capped to the rows the rail actually RENDERS. Main returns up to 50; the keyboard
   // index, `+ Add` and the visible list have to be one list, or ArrowDown walks past the
   // last row on screen and `+ Add` names a hit nobody can see. The header's `total` is the
   // full match count and is deliberately not capped.
-  const verseHits: VerseHit[] = fresh ? fresh.hits.slice(0, SEARCH_VERSE_ROWS) : [];
-  const verseTotal = fresh ? fresh.total : 0;
+  const verseHits: VerseHit[] = shown ? shown.hits.slice(0, SEARCH_VERSE_ROWS) : [];
+  const verseTotal = shown ? shown.total : 0;
   const resultCount = passageHits.length + verseHits.length;
   const highlighted = hiState.q === query ? hiState.i : 0;
   const hi = resultCount ? Math.min(highlighted, resultCount - 1) : 0;
@@ -834,7 +844,8 @@ export function SermonMode({
           },
           onPick: previewResult,
           onActivate: activateResult,
-          noVersion: !primaryVersion || !manifest.some((m) => m.id === primaryVersion && m.installed)
+          noVersion: !primaryVersion || !manifest.some((m) => m.id === primaryVersion && m.installed),
+          settled
         };
 
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {

@@ -22,6 +22,7 @@ const state = (over: Partial<ScriptureSearchState> = {}): ScriptureSearchState =
   onPick: vi.fn(),
   onActivate: vi.fn(),
   noVersion: false,
+  settled: true,
   ...over
 })
 
@@ -67,6 +68,13 @@ describe('ScriptureSearchResults', () => {
     expect(screen.getByText(/No verses match “xyzzy”/)).toBeTruthy()
     rerender(<ScriptureSearchResults theme={T} search={state({ passages: [], verses: [], total: 0, noVersion: true, abbr: '' })} />)
     expect(screen.getByText(/Install a Bible/)).toBeTruthy()
+  })
+
+  it('while a search is in flight, no empty state renders (the header still does)', () => {
+    render(<ScriptureSearchResults theme={T} search={state({ passages: [], verses: [], total: 0, query: 'zacche', settled: false })} />)
+    expect(screen.queryByText(/No verses match/)).toBeNull()
+    expect(screen.queryByText(/Install a Bible/)).toBeNull()
+    expect(screen.getByText('0 VERSES · KJV')).toBeTruthy()
   })
 
   it('singular count copy', () => {
