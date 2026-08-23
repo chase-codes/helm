@@ -171,3 +171,23 @@ describe('SchedulePanel — the + Add chip holds a fixed footprint (#85)', () =>
     expect(chip.style.textOverflow).toBe('ellipsis')
   })
 })
+
+describe('SchedulePanel — search results rail', () => {
+  it('renders search results in place of the schedule while searching', () => {
+    render(
+      <SchedulePanel
+        {...baseProps}
+        value="zacch"
+        search={{
+          query: 'zacch', tokens: ['zacch'], abbr: 'KJV', total: 1, passages: [],
+          verses: [{ key: 'v', ref: 'Luke 19:2', text: 'a man named Zaccheus' }],
+          highlighted: 0, onHover: vi.fn(), onPick: vi.fn(), onActivate: vi.fn(), noVersion: false
+        }}
+      />
+    )
+    expect(screen.getByText('1 VERSE · KJV')).toBeTruthy()
+    expect(screen.queryByText('SCRIPTURE SCHEDULE')).toBeNull()
+    expect(screen.queryByText('John 3:16')).toBeNull() // the schedule row is not shown
+    expect(screen.getByPlaceholderText(/Add verse/)).toBeTruthy() // entry stays
+  })
+})

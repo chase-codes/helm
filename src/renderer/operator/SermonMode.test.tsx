@@ -257,7 +257,7 @@ const clickTab = (label: string): void => {
   fireEvent.click(screen.getAllByText(label)[0])
 }
 
-const entry = (): HTMLElement => screen.getByPlaceholderText('Add verse — John 3:16')
+const entry = (): HTMLElement => screen.getByPlaceholderText('Add verse — John 3:16, or search a word')
 const entryValue = (): string => (entry() as HTMLInputElement).value
 const verseCard = (n: number): HTMLElement =>
   screen.getByText(`Verse ${n}`).closest('button') as HTMLElement
@@ -274,7 +274,7 @@ describe('SermonMode — direct preview to live', () => {
     // The entry field is rendered by SchedulePanel unconditionally, synchronously on
     // mount, regardless of the chapter fetch — so waiting for it is a cheap way to let
     // mount effects run without depending on anything chapter-fetch-shaped.
-    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16, or search a word')).toBeTruthy())
     expect(show).not.toHaveBeenCalled()
 
     resolveChapter()
@@ -363,7 +363,7 @@ describe('SermonMode — direct preview to live', () => {
     // Move the cursor off the live verse (1) via a rail tap on verse 3, same as test 2 —
     // now addRef (the cursor) is Genesis 1:3, which is not the live key.
     fireEvent.click(verseCard(3))
-    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16, or search a word')).toBeTruthy())
 
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
     await waitFor(() => expect(goLive).toHaveBeenCalled())
@@ -643,7 +643,7 @@ describe('SermonMode — the book-name ghost is wired to the entry', () => {
     const { resolveChapter } = installHelmStub()
     render(<Harness />)
     resolveChapter()
-    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16')).toBeTruthy())
+    await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16, or search a word')).toBeTruthy())
 
     fireEvent.focus(entry())
     typeInEntry('ma')
