@@ -22,14 +22,26 @@ import {
   toParsedRef,
   refGhost,
   EMPTY_EXTENT,
+  isSearch,
+  searchQuery,
   type RefBuilderState
 } from '../../shared/scripture/refBuilder';
+import { matchPassages, type Passage } from '../../shared/scripture/passages';
+import { parseVerseQuery } from '../../shared/search/verseScore';
 import { railSelect, addTarget, type Cursor } from '../../shared/scripture/selection';
 import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
 import { sameKind } from '../../shared/presentation/core';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
-import type { BibleManifestEntry, BookExtent, ChapterData, ScriptureReading } from '../../shared/types';
+import type {
+  BibleManifestEntry,
+  BookExtent,
+  ChapterData,
+  ScriptureReading,
+  VerseHit,
+  VerseSearchResult
+} from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
+import type { ScriptureSearchState } from './ScriptureSearchResults';
 import { SermonCenter } from './SermonCenter';
 import { VersionPicker } from './VersionPicker';
 import { ChapterRail } from './ChapterRail';
@@ -300,6 +312,51 @@ export function SermonMode({
     };
   }, [builder.book, scrBook, bookExtents]);
 
+  // --- Verse text search (refBuilder `search` stage). Results carry the query they were
+  // fetched for so a slow round-trip can't label stale hits under a newer query.
+  const query = isSearch(builder) ? searchQuery(builder) : null;
+  const [verseRes, setVerseRes] = useState<{ q: string; res: VerseSearchResult } | null>(null);
+  // Highlight is keyed by the query it was set for, so a new query reads as 0 without a
+  // reset effect (the repo's lint rejects set-state-in-effect) and a shrinking list is
+  // clamped below on the same render.
+  const [hiState, setHiState] = useState<{ q: string | null; i: number }>({ q: null, i: 0 });
+  const primaryVersion = versions[0] ?? null;
+
+  useEffect(() => {
+    if (query === null || !primaryVersion) return;
+    let live = true;
+    void window.helm.bibles
+      .search(query, primaryVersion)
+      .then((res) => {
+        if (live) setVerseRes({ q: query, res });
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        if (live) setVerseRes({ q: query, res: { hits: [], total: 0, versionId: primaryVersion } });
+      });
+    return () => {
+      live = false;
+    };
+  }, [query, primaryVersion]);
+
+  const passageHits: Passage[] = query !== null ? matchPassages(query) : [];
+  const verseHits: VerseHit[] = query !== null && verseRes && verseRes.q === query ? verseRes.res.hits : [];
+  const verseTotal = query !== null && verseRes && verseRes.q === query ? verseRes.res.total : 0;
+  const resultCount = passageHits.length + verseHits.length;
+  const highlighted = hiState.q === query ? hiState.i : 0;
+  const hi = resultCount ? Math.min(highlighted, resultCount - 1) : 0;
+  const setHighlighted = (i: number): void => setHiState({ q: query, i });
+
+  // The reference a picked result stands for (passages first, then verses).
+  const resultRef = (i: number): ParsedRef | null => {
+    if (i < passageHits.length) {
+      const p = passageHits[i];
+      return { book: p.book, ch: p.ch, from: p.from, to: p.to };
+    }
+    const v = verseHits[i - passageHits.length];
+    return v ? { book: v.book, ch: v.chapter, from: v.verse, to: v.verse } : null;
+  };
+
   const curExtent = builder.book ? bookExtents[builder.book] ?? EMPTY_EXTENT : EMPTY_EXTENT;
 
   const abbrOf = useCallback(
@@ -506,6 +563,39 @@ export function SermonMode({
     window.helm.presentation.goLive(key, slide);
   };
 
+  // Enter/click on a search hit: the entry becomes that reference (so + Add / Go live /
+  // Shift+Enter work on it exactly as if typed) and the cursor jumps to its first verse.
+  // Declared down HERE, not beside `resultRef` up top, for the same React Compiler reason
+  // `activateVerse` is declared where it is: `activateResult` reads `goLiveWithChapter`,
+  // and reaching forward to something declared further down the component body makes the
+  // compiler bail out of memoizing the `useCallback`s in between (`Existing memoization
+  // could not be preserved`), which `npm run lint` treats as an error.
+  const pickResult = (i: number): void => {
+    const p = resultRef(i);
+    if (!p) return;
+    setBuilder(fromParsedRef(p));
+    jumpTo(p.book, p.ch, p.from);
+    requestRailScroll(p.from, 'start');
+  };
+  // Shift+Enter / double-click: pick, then put its first verse on screen. Same
+  // resolve-the-chapter-first shape (and `beginTake` guard) as `activateReading`.
+  const activateResult = (i: number): void => {
+    const p = resultRef(i);
+    if (!p) return;
+    pickResult(i);
+    const wanted = beginTake();
+    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
+      goLiveWithChapter(p, chapter);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(p.book, p.ch)
+      .then((c) => {
+        if (wanted()) goLiveWithChapter(p, c);
+      })
+      .catch(console.error);
+  };
+
   // Double-click a verse card (#58). `take` is idempotent, so double-clicking the verse
   // already on screen is a no-op rather than the take-down `goLive` would perform. The
   // click that precedes it has already moved the cursor via `onSelectVerse`, so the rail,
@@ -612,8 +702,14 @@ export function SermonMode({
   // What `+ Add` and Enter would file: the typed ref when the entry holds one, else the
   // cursor's verse. Always something, so the button is always offered — a mouse-only
   // operator never has to know the keyboard flow to schedule what they're looking at.
-  const addRef = addTarget(builder, cursor);
+  // While the entry is a text search the button files the HIGHLIGHTED hit instead — the
+  // label names it, so the mouse-only operator sees exactly what `+ Add` will write. With
+  // no hits there is nothing to name, so the button is withheld rather than quietly
+  // falling back to a cursor verse nobody pointed at.
+  const picked = query !== null ? resultRef(hi) : null;
+  const addRef = picked ?? addTarget(builder, cursor);
   const addLabel = `+ Add ${formatRef(addRef)}`;
+  const canAdd = query === null || picked !== null;
 
   // The operator has typed something that is not yet a reference — "Rom" (no book match
   // yet), or "Romans" (book matched, no chapter). `addTarget` falls back to the cursor in
@@ -682,7 +778,54 @@ export function SermonMode({
     }
   };
 
+  // What the results rail renders, or null when the entry is not a text search — which is
+  // also what tells SchedulePanel to show the schedule instead.
+  const searchState: ScriptureSearchState | null =
+    query === null
+      ? null
+      : {
+          query,
+          tokens: parseVerseQuery(query).tokens,
+          abbr: primaryVersion ? abbrOf(primaryVersion) : '',
+          total: verseTotal,
+          passages: passageHits.map((p) => ({
+            key: `p:${p.book}:${p.ch}:${p.from}`,
+            title: p.title,
+            meta: formatRef({ book: p.book, ch: p.ch, from: p.from, to: p.to })
+          })),
+          verses: verseHits.map((v) => ({
+            key: `v:${v.book}:${v.chapter}:${v.verse}`,
+            ref: formatRef({ book: v.book, ch: v.chapter, from: v.verse, to: v.verse }),
+            text: v.text
+          })),
+          highlighted: hi,
+          onHover: (i) => {
+            if (i !== null) setHighlighted(i);
+          },
+          onPick: pickResult,
+          onActivate: activateResult,
+          noVersion: !primaryVersion || !manifest.some((m) => m.id === primaryVersion && m.installed)
+        };
+
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
+    // While searching, the arrows move a HIGHLIGHT, never the cursor: the cursor commits to
+    // the projector as it moves (see the show effect), so browsing results must not.
+    if (query !== null) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (resultCount)
+          setHighlighted(Math.max(0, Math.min(resultCount - 1, hi + (e.key === 'ArrowDown' ? 1 : -1))));
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!resultCount) return;
+        if (e.shiftKey) activateResult(hi);
+        else pickResult(hi);
+        return;
+      }
+      // Escape / Backspace / printable fall through to the existing handling below.
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       // Enter is blind — no label naming what it will file — so it refuses a half-typed
@@ -918,10 +1061,12 @@ export function SermonMode({
             onEntryChange={onEntryChange}
             onEntryKeyDown={onEntryKeyDown}
             ghost={ghost}
-            // Unconditional on purpose: `+ Add` is always there for an operator who only
-            // uses the GUI. Its label names the verse it will file, so it stays honest even
-            // while the entry holds a half-typed reference (see `builderUnresolved`).
-            canAdd
+            // Unconditional outside a search on purpose: `+ Add` is always there for an
+            // operator who only uses the GUI. Its label names the verse it will file, so it
+            // stays honest even while the entry holds a half-typed reference (see
+            // `builderUnresolved`). A search with no hits is the one case with nothing to
+            // name — see `canAdd`.
+            canAdd={canAdd}
             addLabel={addLabel}
             onAdd={addToSchedule}
             rows={scheduleRows}
@@ -938,6 +1083,7 @@ export function SermonMode({
             }
             onClearAll={() => removeReadings(schedule.map((r) => r.id))}
             entryRef={entryRef}
+            search={searchState}
           />
           <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
           <SermonCenter
