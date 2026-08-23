@@ -30,9 +30,14 @@ goal is to land the cursor on the right verse fast, not to enumerate every occur
   the repo — no external dataset, no licensing. Names and places (`Zacchaeus`,
   `Bethlehem`) need no dataset: they are literally in the verses.
 - **FTS5 candidate gate + JS scorer**, same architecture as songs/quotes: a new
-  `verse_fts` table gates candidates, bm25 is a tie-break signal, and
+  `verse_fts` table gates candidates (bm25 picks which candidates survive the cut), and
   `src/shared/search/verseScore.ts` decides the order with a fixed ladder ending in
   canonical order so results never depend on insertion order.
+- **Canonical order, not bm25, settles ties.** bm25's length normalisation would put
+  `zaccheus` on Luke 19:5 ("Zaccheus, make haste…") ahead of 19:2 where the story
+  starts; for single-word queries it is length noise. Phrase run and coverage lift the
+  best verse for multi-word queries; after that, book/chapter/verse order is what every
+  presentation tool shows for keyword hits and is what an operator can predict.
 - **AND across words.** Every query word must match (prefix or fuzzy). Partial matches
   are noise in a quick-find ("prodigal son" must not list every verse with "son").
   Quoted queries require the words in order. No OR/partial fallback for now.
@@ -73,7 +78,6 @@ Transitions **into** search (all from `printable`):
 |---|---|---|
 | book stage | letter/digit, and the new `bookQuery` contains a letter but `matchBook(bookQuery) === null` | search, query = new `bookQuery` (`"prod"`) |
 | book stage | `"` (or any non-alnum printable other than `.`) | search, query = `bookQuery + key` — the explicit escape for `john`, `mark`, `acts`; `.` stays ignored so `jn.` doesn't flip modes |
-| book stage | space with no completion and no digit in the query (today: dropped) | search, query = `bookQuery + ' '` |
 | chapter stage, `chapter === null` | a letter | search, query = `typedBook + ' ' + key` |
 
 `typedBook` is what the operator actually typed before the commit (`"the"`, `"jhn"`),
@@ -124,9 +128,10 @@ still filtered to one version.
      `tok.length >= 3`, `terms = vocabTerms.filter(t => matchDist(tok, t) <= matchTol)`
      (reusing `fuzzy.ts`); still empty → the query returns no hits.
   3. MATCH = tokens joined with `AND`, each token `("a"* OR "b" OR …)`.
-     `SELECT … , -bm25(verse_fts) AS rel … WHERE verse_fts MATCH ? AND version_id = ?
-     ORDER BY rel DESC LIMIT 1000`, plus `SELECT count(*)` for `total`.
-  4. `rankVerses(q, candidates, rel, phrase, limit)` from `verseScore.ts`.
+     `SELECT … WHERE verse_fts MATCH ? AND version_id = ? ORDER BY bm25(verse_fts)
+     LIMIT 1000` (bm25 only decides which candidates survive the cut), plus
+     `SELECT count(*)` for `total`.
+  4. `rankVerses(q, candidates, limit)` from `verseScore.ts`.
 
 The `"tok"*` MATCH-string builder and the `LIMIT 1000` constant move into a shared
 helper (`src/main/ftsQuery.ts`) used by songs, messages and verses — the third copy is
@@ -138,23 +143,24 @@ invalidated when a version is installed.
 ## Ranking: `src/shared/search/verseScore.ts`
 
 ```ts
-interface ScoredVerse { book, chapter, verse, text, score, phrase, covWeight, rel, tf }
-scoreVerse(qts, verse): signals via textSignals([verseWords], qts)
+interface VerseSignals { score, phrase, covWeight, tf }
+scoreVerse(qts, phrase, text): signals via textSignals([verseWords], qts)
 ```
 
 - Gate: `matched === qts.length`; for phrase queries additionally `phrase === qts.length`.
   Fails → score 0, dropped.
 - `score = 300 + 12 * matched` (quote-scorer shape; constant across survivors, kept for
   parity and so a future partial band has somewhere to go).
-- Ladder: `score ↓ → phrase ↓ → covWeight ↓ → rel ↓ → tf ↓ → canonical ↑`
-  (`bookIndex`, `chapter`, `verse`). Canonical last makes the order independent of FTS
-  return order.
+- Ladder: `score ↓ → phrase ↓ → covWeight ↓ → tf ↓ → canonical ↑` (`bookIndex`,
+  `chapter`, `verse`). Canonical last makes the order independent of FTS return order;
+  bm25 is deliberately not in the ladder (see Decisions).
 - `textSignals`' fuzzy matching is what makes a vocab-expanded typo actually score
   (`zaccheus` vs `zacchaeus` is Levenshtein 1 within tolerance 2).
 
 Expected behaviour on the gold set: phrase runs dominate ("for god so loved" → John 3:16,
 "in the beginning" → Gen 1:1 then John 1:1 by canonical tie, "the lord is my shepherd" →
-Ps 23:1), single names rank short verses with the name first, then canonical.
+Ps 23:1); exact repeats lift "new heaven and a new earth" → Rev 21:1 over Isaiah's
+"new heavens"; single names list in canonical order ("zaccheus" → Luke 19:2, 19:5, 19:8).
 
 ## Passages: `src/shared/scripture/passages.ts`
 
@@ -223,7 +229,7 @@ scripture, the schedule header + list are replaced by `ScriptureSearchResults` (
 | File | Covers |
 |---|---|
 | `refBuilder.test.ts` | every transition in the table above; Backspace restore; quote escape; `.` ignored; `the l`; `1 jo` digit clause unchanged; existing tests still pass (only `bookQuery: ''` after commit assertions change) |
-| `verseScore.test.ts` | gate, phrase gate, ladder, order-independence (shuffle candidates → same order) |
+| `verseScore.test.ts` | gate, phrase gate, ladder (phrase → cov → tf → canonical), order-independence (shuffle candidates → same order) |
 | `passages.test.ts` | fuzzy title/alias match, all-tokens gate, every range within `bookExtent` of the bundled KJV |
 | `biblesRepo.test.ts` | FTS rows on install/remove, `ensureSearchIndex` backfill, `search`: prefix, AND, quoted phrase, typo expansion, version filter, `total` |
 | `bibleSearchRanking.test.ts` | **gold set** over the bundled KJV (`resources/bibles/kjv.json`, installed once per file): ~25 queries with expected top-1 / top-3 — famous phrases, names, places, typos (`zaccheus`, `bethlehem`, `jesus wept`, `for god so loved`, `in the beginning`, `lord is my shepherd`, `faith hope love`, `be still`, `prodigal` (→ 0 verses, passage hit), `lazarus`, `nicodemus`, `road to damascus` (→ passage)) |
