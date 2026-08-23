@@ -29,6 +29,23 @@ test('ties break by title length then canonical order, independent of table orde
   expect(a.length).toBeGreaterThan(5)
 })
 
+test('a closer match hides fuzzier ones: zacch is Zacchaeus, not Gethsemane via watch', () => {
+  const hits = matchPassages('zacch')
+  expect(hits).toHaveLength(1)
+  expect(hits[0].title).toBe('Zacchaeus')
+})
+
+test('a typo-only query still works when nothing closer exists', () => {
+  expect(matchPassages('beattitudes')[0].title).toBe('The Beatitudes')
+})
+
+test('several exact hits keep all of them', () => {
+  const hits = matchPassages('lost', 3)
+  expect(hits).toHaveLength(3)
+  const titles = hits.map((p) => p.title)
+  expect(titles).toEqual(expect.arrayContaining(['The Lost Sheep', 'The Lost Coin', 'The Prodigal Son']))
+})
+
 test('every passage names a real book and a range inside the bundled KJV', () => {
   const raw = JSON.parse(readFileSync(join(__dirname, '../../../resources/bibles/kjv.json'), 'utf-8')) as {
     books: { name: string; chapters: { chapter: number; verses: { verse: number }[] }[] }[]

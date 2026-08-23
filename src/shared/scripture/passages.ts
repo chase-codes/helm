@@ -346,15 +346,20 @@ const INDEX: Indexed[] = PASSAGES.map((p) => ({
   segs: [p.title, ...p.aliases].map((s) => norm(s).split(' ').filter(Boolean)),
 }))
 
-/** Every query word must match (prefix/fuzzy, same rules as verse search); order by phrase
- * run ↓, matched weight ↓, dist ↑ (an exact alias hit outranks a fuzzy one over the same
- * words), title length ↑, then canonical ↑ so the table's order never leaks into the
- * result. */
+/** Every query word must match (prefix/fuzzy, same rules as verse search); only the nearest
+ * dist tier survives — a closer match hides fuzzier ones: 'zacch' is Zacchaeus, not
+ * Gethsemane via 'watch'. Then order by phrase run ↓, matched weight ↓, dist ↑ (a no-op
+ * within the surviving tier, kept for clarity), title length ↑, then canonical ↑ so the
+ * table's order never leaks into the result. */
 export function matchPassages(q: string, limit = 3): Passage[] {
   const { tokens } = parseVerseQuery(q)
   if (!tokens.length) return []
-  return INDEX.map(({ p, segs }) => ({ p, s: textSignals(segs, tokens) }))
-    .filter((x) => x.s.matched === tokens.length)
+  const hits = INDEX.map(({ p, segs }) => ({ p, s: textSignals(segs, tokens) })).filter(
+    (x) => x.s.matched === tokens.length,
+  )
+  const minDist = hits.reduce((m, x) => Math.min(m, x.s.dist), Infinity)
+  return hits
+    .filter((x) => x.s.dist === minDist)
     .sort((a, b) => {
       if (b.s.phrase !== a.s.phrase) return b.s.phrase - a.s.phrase
       if (b.s.covWeight !== a.s.covWeight) return b.s.covWeight - a.s.covWeight
