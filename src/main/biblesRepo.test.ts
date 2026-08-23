@@ -214,3 +214,59 @@ test('verse_vocab lists the indexed terms', () => {
   expect(terms).toContain('beginning')
   expect(terms).toContain('word')
 })
+
+const lukeKjv: NormalizedBible = {
+  id: 'kjv2', abbr: 'KJV', name: 'KJV (Luke)', language: 'en',
+  books: [{ name: 'Luke', chapters: [{ n: 19, verses: [
+    { n: 2, text: 'And, behold, there was a man named Zaccheus, which was the chief among the publicans, and he was rich.' },
+    { n: 5, text: 'Zaccheus, make haste, and come down; for to day I must abide at thy house.' },
+    { n: 10, text: 'For the Son of man is come to seek and to save that which was lost.' }
+  ] }] }, { name: 'John', chapters: [{ n: 11, verses: [{ n: 35, text: 'Jesus wept.' }] }] }]
+}
+
+test('search: prefix match, total, version filter', () => {
+  repo.install(kjv)
+  repo.install(esv)
+  const r = repo.search('begin', 'kjv')
+  expect(r.versionId).toBe('kjv')
+  expect(r.total).toBe(2)
+  expect(r.hits.map((h) => `${h.book} ${h.chapter}:${h.verse}`)).toEqual(['Genesis 1:1', 'John 1:1'])
+  expect(repo.search('heavens', 'kjv').total).toBe(0) // "heavens" is ESV-only
+})
+
+test('search: AND across words', () => {
+  repo.install(kjv)
+  expect(repo.search('beginning word', 'kjv').hits.map((h) => h.book)).toEqual(['John'])
+  expect(repo.search('beginning zebra', 'kjv').total).toBe(0)
+})
+
+test('search: quoted phrase requires the run', () => {
+  repo.install(kjv)
+  expect(repo.search('"the beginning was"', 'kjv').hits.map((h) => h.book)).toEqual(['John'])
+  expect(repo.search('"beginning the"', 'kjv').total).toBe(0)
+})
+
+test('search: a misspelt word that no term starts with is expanded via the vocabulary', () => {
+  repo.install(lukeKjv)
+  expect(repo.search('zacchaeus', 'kjv2').hits.map((h) => h.verse)).toEqual([2, 5])
+  expect(repo.search('wepts', 'kjv2').hits.map((h) => h.book)).toEqual(['John'])
+})
+
+test('search: a word with prefix matches is NOT fuzzed (no pollution)', () => {
+  repo.install(lukeKjv)
+  // "los" prefixes "lost" → only Luke 19:10; it must not also fuzz to "son"/"for"
+  expect(repo.search('los', 'kjv2').hits.map((h) => h.verse)).toEqual([10])
+})
+
+test('search: empty / punctuation-only query returns nothing', () => {
+  repo.install(kjv)
+  expect(repo.search('', 'kjv')).toEqual({ hits: [], total: 0, versionId: 'kjv' })
+  expect(repo.search('"', 'kjv')).toEqual({ hits: [], total: 0, versionId: 'kjv' })
+})
+
+test('search: vocabulary cache is refreshed by a later install', () => {
+  repo.install(kjv)
+  expect(repo.search('zacchaeus', 'kjv2').total).toBe(0) // kjv2 not installed; also warms the vocab cache
+  repo.install(lukeKjv)
+  expect(repo.search('zacchaeus', 'kjv2').total).toBe(2)
+})
