@@ -87,6 +87,9 @@ export function registerIpc(
     const versionId = biblesRepo.installed()[0]?.id
     return versionId ? biblesRepo.bookExtent(book, versionId) : { chapters: 0, verseCounts: [] }
   });
+  ipcMain.handle(CH.biblesSearch, (_e, q: string, versionId: string) =>
+    biblesRepo.search(q, versionId),
+  );
   ipcMain.handle(CH.scheduleList, () => scheduleRepo.list());
   ipcMain.handle(CH.scheduleAdd, (_e, r: Omit<ScriptureReading, 'id'>) => scheduleRepo.add(r));
   ipcMain.handle(CH.scheduleRemove, (_e, id: string) => scheduleRepo.remove(id));

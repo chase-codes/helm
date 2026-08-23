@@ -40,6 +40,7 @@ const api: HelmApi = {
     uninstall: (id) => ipcRenderer.invoke(CH.biblesUninstall, id),
     getChapter: (book, chapter) => ipcRenderer.invoke(CH.biblesGetChapter, book, chapter),
     bookExtent: (book) => ipcRenderer.invoke(CH.biblesBookExtent, book),
+    search: (q, versionId) => ipcRenderer.invoke(CH.biblesSearch, q, versionId),
     onProgress: sub(CH.biblesProgress),
   },
   schedule: {

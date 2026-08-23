@@ -195,6 +195,7 @@ export const CH = {
   biblesProgress: 'bibles:progress',  // main → all windows
   biblesGetChapter: 'bibles:getChapter',
   biblesBookExtent: 'bibles:bookExtent',
+  biblesSearch: 'bibles:search',
   scheduleList: 'schedule:list', scheduleAdd: 'schedule:add', scheduleRemove: 'schedule:remove',
   scheduleRemoveMany: 'schedule:removeMany',
   settingsGet: 'settings:get', settingsSet: 'settings:set',
@@ -316,6 +317,7 @@ export interface HelmApi {
     uninstall(id: string): Promise<BibleManifestEntry[]>;
     getChapter(book: string, chapter: number): Promise<ChapterData>;
     bookExtent(book: string): Promise<BookExtent>;
+    search(q: string, versionId: string): Promise<VerseSearchResult>;
     onProgress(cb: (p: BibleInstallProgress) => void): () => void;
   };
   schedule: {
