@@ -270,3 +270,33 @@ test('search: vocabulary cache is refreshed by a later install', () => {
   repo.install(lukeKjv)
   expect(repo.search('zacchaeus', 'kjv2').total).toBe(2)
 })
+
+const weptVsWent: NormalizedBible = {
+  id: 'kjv3', abbr: 'KJV', name: 'KJV (wept/went)', language: 'en',
+  books: [{ name: 'John', chapters: [{ n: 11, verses: [
+    { n: 35, text: 'Jesus wept.' }
+  ] }] }, { name: 'Matthew', chapters: [{ n: 4, verses: [
+    { n: 23, text: 'And Jesus went about all Galilee.' }
+  ] }] }]
+}
+
+test('search: a typo expands to only the nearest-tier vocabulary terms', () => {
+  repo.install(weptVsWent)
+  // "wepts" is 1 edit from "wept", 2 from "went" — only the 1-away term should join the
+  // OR group, so a fixture holding both must return only the "wept" verse.
+  expect(repo.search('wepts', 'kjv3').hits.map((h) => `${h.book} ${h.chapter}:${h.verse}`)).toEqual(['John 11:35'])
+})
+
+const bethlehemKjv: NormalizedBible = {
+  id: 'kjv4', abbr: 'KJV', name: 'KJV (Bethlehem)', language: 'en',
+  books: [{ name: 'Genesis', chapters: [{ n: 35, verses: [
+    { n: 19, text: 'And Rachel died, and was buried in the way to Ephrath, which is Beth\u2013lehem.' }
+  ] }] }]
+}
+
+test('search: an en-dash compound name is indexed solid; the returned text keeps the dash', () => {
+  repo.install(bethlehemKjv)
+  const hits = repo.search('bethlehem', 'kjv4').hits
+  expect(hits.map((h) => `${h.book} ${h.chapter}:${h.verse}`)).toEqual(['Genesis 35:19'])
+  expect(hits[0].text).toBe('And Rachel died, and was buried in the way to Ephrath, which is Beth\u2013lehem.')
+})

@@ -29,17 +29,19 @@ test('rankVerses: phrase run beats scattered words, then canonical order', () =>
   ];
   const out = rankVerses('in the beginning', rows).map(verseKey);
   // phrase run of 3 in Genesis and John; Proverbs has the words but only a run of 2 → last
-  // Genesis and John tie on phrase/cov/tf → canonical order puts Genesis first
+  // Genesis and John tie on phrase/cov/dist (every token matches exactly in both) →
+  // canonical order puts Genesis first
   expect(out).toEqual(['Genesis:1:1', 'John:1:1', 'Proverbs:8:23']);
 });
 
-test('rankVerses: exact repeats (tf) lift a verse before canonical order decides', () => {
+test('rankVerses: exact match beats prefix match, before canonical order decides', () => {
   const rows = [
     v('Isaiah', 65, 17, 'For, behold, I create new heavens and a new earth: and the former shall not be remembered.'),
     v('Revelation', 21, 1, 'And I saw a new heaven and a new earth: for the first heaven and the first earth were passed away.'),
   ];
-  // both carry the 6-word run ("heavens" prefix-matches "heaven"); Revelation repeats
-  // heaven/earth exactly → higher tf → first despite canonical order
+  // both carry the 6-word run — Isaiah only via "heavens" prefix-matching "heaven" (dist 1);
+  // Revelation's own word is the exact "heaven" (dist 0) → lower total dist → first, despite
+  // canonical order (and despite Isaiah coming first in the book order)
   expect(rankVerses('new heaven and a new earth', rows).map(verseKey)).toEqual(['Revelation:21:1', 'Isaiah:65:17']);
 });
 

@@ -3,7 +3,7 @@ import type { BookExtent, ChapterData, InstalledVersion, NormalizedBible, VerseS
 import { VERSE_FTS_COLUMNS } from './schema'
 import { andGroupsMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery'
 import { matchDist, matchTol } from '../shared/search/fuzzy'
-import { parseVerseQuery, rankVerses, type VerseHit } from '../shared/search/verseScore'
+import { foldCompoundNames, parseVerseQuery, rankVerses, type VerseHit } from '../shared/search/verseScore'
 
 export interface BiblesRepo {
   installed(): InstalledVersion[]
@@ -47,10 +47,16 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
     'SELECT chapter, MAX(verse) AS mv FROM verses WHERE version_id = ? AND book = ? GROUP BY chapter ORDER BY chapter'
   )
   // bm25 orders the CUT only (best candidates survive the LIMIT); the scorer's ladder
-  // decides the final order and ends in canonical order — see verseScore.ts.
+  // decides the final order and ends in canonical order — see verseScore.ts. verse_fts.text
+  // is the compound-name-folded copy used for matching/scoring only (see foldCompoundNames);
+  // the join back to `verses` returns the original text — dashes intact — for display.
   const selectHits = db.prepare(
-    `SELECT book, chapter, verse, text FROM verse_fts
-     WHERE verse_fts MATCH ? AND version_id = ? ORDER BY bm25(verse_fts) LIMIT ${FTS_CANDIDATE_LIMIT}`
+    `SELECT verse_fts.book AS book, verse_fts.chapter AS chapter, verse_fts.verse AS verse, v.text AS text
+     FROM verse_fts JOIN verses v
+       ON v.version_id = verse_fts.version_id AND v.book = verse_fts.book
+      AND v.chapter = verse_fts.chapter AND v.verse = verse_fts.verse
+     WHERE verse_fts MATCH ? AND verse_fts.version_id = ?
+     ORDER BY bm25(verse_fts) LIMIT ${FTS_CANDIDATE_LIMIT}`
   )
   const countHits = db.prepare('SELECT count(*) AS n FROM verse_fts WHERE verse_fts MATCH ? AND version_id = ?')
   const selectVocab = db.prepare('SELECT term FROM verse_vocab')
@@ -64,14 +70,25 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
   const getVocab = (): string[] => (vocab ??= (selectVocab.all() as { term: string }[]).map((r) => r.term))
 
   // A typed word that no vocabulary term starts with is a likely typo: expand it to the
-  // terms within edit tolerance. Words that DO have prefix matches are left alone — fuzzing
-  // "los" into "son"/"for" would pollute a perfectly good prefix query.
+  // NEAREST tier of terms within edit tolerance — only those at the smallest distance
+  // found (ties included), not everything within tolerance. "wepts" is 1 edit from
+  // "wept" and 2 from "went"; without this, the 2-away "went" would join the OR group
+  // too and pollute both retrieval and (via a coincidental phrase/tf tie) ranking.
+  // Words that DO have prefix matches are left alone — fuzzing "los" into "son"/"for"
+  // would pollute a perfectly good prefix query.
   const expandToken = (tok: string): string[] => {
     const terms = getVocab()
     if (terms.some((t) => t.startsWith(tok))) return [tok]
     if (tok.length < 3) return [tok]
     const tol = matchTol(tok.length)
-    const near = terms.filter((t) => matchDist(tok, t) <= tol)
+    let best = Infinity
+    let near: string[] = []
+    for (const t of terms) {
+      const d = matchDist(tok, t)
+      if (d > tol) continue
+      if (d < best) { best = d; near = [t] }
+      else if (d === best) near.push(t)
+    }
     return [tok, ...near]
   }
 
@@ -86,7 +103,7 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
           for (const chapter of book.chapters) {
             for (const verse of chapter.verses) {
               insertVerse.run(bible.id, book.name, chapter.n, verse.n, verse.text)
-              insertFts.run(bible.id, book.name, chapter.n, verse.n, verse.text)
+              insertFts.run(bible.id, book.name, chapter.n, verse.n, foldCompoundNames(verse.text))
             }
           }
         }
@@ -125,7 +142,7 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
             const rows = db
               .prepare('SELECT book, chapter, verse, text FROM verses WHERE version_id = ?')
               .all(id) as { book: string; chapter: number; verse: number; text: string }[]
-            for (const r of rows) insertFts.run(id, r.book, r.chapter, r.verse, r.text)
+            for (const r of rows) insertFts.run(id, r.book, r.chapter, r.verse, foldCompoundNames(r.text))
           })()
           invalidateVocab()
         } catch (err) {

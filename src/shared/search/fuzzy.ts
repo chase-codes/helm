@@ -57,6 +57,9 @@ export interface TextSignals {
   covWeight: number; // Σ length of matched tokens — a rare word outweighs two stopwords
   tf: number;        // total exact occurrences of query tokens
   phrase: number;    // longest run of consecutive query tokens found consecutively in a segment
+  dist: number;      // Σ best match distance of each matched token (exact 0, prefix 1, fuzzy
+                     // edit distance) — lower means closer/more exact matches overall.
+                     // Additive: existing consumers (song/message scorers) ignore it.
 }
 
 // Shared relevance pass for the song and message scorers. One fuzzy pass over the
@@ -80,9 +83,9 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
     }
     if (mask) wordMask.set(w, mask);
   }
-  let matched = 0; let strong = 0; let covWeight = 0; let tf = 0;
+  let matched = 0; let strong = 0; let covWeight = 0; let tf = 0; let dist = 0;
   for (let j = 0; j < qts.length; j++) {
-    if (bestDist[j] < 99) { matched++; covWeight += qts[j].length; if (qts[j].length >= 3) strong++; }
+    if (bestDist[j] < 99) { matched++; covWeight += qts[j].length; if (qts[j].length >= 3) strong++; dist += bestDist[j]; }
     tf += counts.get(qts[j]) ?? 0;
   }
   // Longest run of consecutive query tokens appearing consecutively in a segment:
@@ -101,5 +104,5 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       const swap = prev; prev = cur; cur = swap;
     }
   }
-  return { matched, strong, covWeight, tf, phrase };
+  return { matched, strong, covWeight, tf, phrase, dist };
 }
