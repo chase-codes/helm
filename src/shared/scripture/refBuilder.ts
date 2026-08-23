@@ -2,7 +2,7 @@ import type { BookExtent } from '../types'
 import { matchBook, matchBookExact, type ParsedRef } from './refs'
 import { norm } from '../search/fuzzy'
 
-export type BuilderStage = 'book' | 'chapter' | 'verse' | 'endVerse'
+export type BuilderStage = 'book' | 'chapter' | 'verse' | 'endVerse' | 'search'
 export interface RefBuilderState {
   stage: BuilderStage
   bookQuery: string
@@ -10,6 +10,11 @@ export interface RefBuilderState {
   chapter: number | null
   startVerse: number | null
   endVerse: number | null
+  /** Search stage only: the state the entry was in before the keystroke that turned it
+   * into a text search. Backspace returns to it once the query shrinks back to where the
+   * search began (`prior`'s rendered length), so "prod"⌫ ghosts Proverbs again and
+   * "john t"⌫ is John, committed, awaiting a chapter. Null in every other stage. */
+  prior: RefBuilderState | null
 }
 
 export const EMPTY_EXTENT: BookExtent = { chapters: 0, verseCounts: [] }
@@ -21,8 +26,22 @@ export function initialBuilder(): RefBuilderState {
     book: null,
     chapter: null,
     startVerse: null,
-    endVerse: null
+    endVerse: null,
+    prior: null
   }
+}
+
+/** The entry is a text search, not a reference. In this stage `bookQuery` holds the query
+ * (so `renderBuilder` shows it unchanged) and every other field is null. */
+export function isSearch(s: RefBuilderState): boolean {
+  return s.stage === 'search'
+}
+export function searchQuery(s: RefBuilderState): string {
+  return s.stage === 'search' ? s.bookQuery : ''
+}
+
+function enterSearch(prior: RefBuilderState, query: string): RefBuilderState {
+  return { ...initialBuilder(), stage: 'search', bookQuery: query, prior }
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(Math.max(n, lo), hi)
@@ -108,7 +127,8 @@ export function fromParsedRef(p: ParsedRef): RefBuilderState {
     book: p.book,
     chapter: p.ch,
     startVerse: p.from,
-    endVerse: isRange ? p.to : null
+    endVerse: isRange ? p.to : null,
+    prior: null
   }
 }
 
@@ -135,9 +155,14 @@ export function applyKey(
 }
 
 /** Commit a resolved book and move to the chapter stage. Shared by space and Tab so the
- * two accept keys cannot drift apart. */
+ * two accept keys cannot drift apart.
+ *
+ * `bookQuery` is kept (not cleared): it is what the operator typed, and if the next key is
+ * a letter the entry becomes a text search of THAT ("acts l"), not of the committed name
+ * ("Acts l"). Nothing reads it while `book` is set — bookCompletion guards on
+ * `book === null` and renderBuilder prefers `book`. */
 function commitBook(s: RefBuilderState, book: string): RefBuilderState {
-  return { ...s, stage: 'chapter', book, bookQuery: '', chapter: null }
+  return { ...s, stage: 'chapter', book, chapter: null }
 }
 
 function printable(s: RefBuilderState, key: string, extent: BookExtent): RefBuilderState {
@@ -147,12 +172,28 @@ function printable(s: RefBuilderState, key: string, extent: BookExtent): RefBuil
         const b = bookCompletion(s)
         if (b !== null) return commitBook(s, b)
         if (/\d/.test(s.bookQuery)) return { ...s, bookQuery: s.bookQuery + ' ' }
+        // Letters with no completion can't reach here (they entered search on the letter);
+        // an empty entry just ignores the space, as today.
         return s
       }
-      if (isAlnum(key)) return { ...s, bookQuery: s.bookQuery + key }
-      return s
+      if (isAlnum(key)) {
+        const q = s.bookQuery + key
+        // Letters that no book starts with: the operator is typing words, not a reference.
+        // Digits-only queries stay on the numbered-book path ("1" → "1 jo").
+        if (/[a-z]/i.test(q) && matchBook(q) === null) return enterSearch(s, q)
+        return { ...s, bookQuery: q }
+      }
+      if (key === '.') return s // "jn." — a dotted abbreviation, not a search
+      // Any other printable (a quote above all) is the explicit "I mean text" escape:
+      // `"john` searches verses for john instead of ghosting the gospel.
+      return enterSearch(s, s.bookQuery + key)
     }
     case 'chapter': {
+      if (s.chapter === null && /^[a-z]$/i.test(key)) {
+        // A letter right after the book committed: "john t" / "acts l" — words, not a
+        // chapter. Search what was TYPED plus this key; the committed state is `prior`.
+        return enterSearch(s, `${s.bookQuery || s.book} ${key}`)
+      }
       if (isDigit(key)) {
         const c = clampChapter((s.chapter ?? 0) * 10 + Number(key), extent)
         return { ...s, chapter: c || null }
@@ -175,11 +216,26 @@ function printable(s: RefBuilderState, key: string, extent: BookExtent): RefBuil
       }
       return s
     }
+    case 'search':
+      return { ...s, bookQuery: s.bookQuery + key }
   }
 }
 
 function backspace(s: RefBuilderState): RefBuilderState {
   switch (s.stage) {
+    case 'search': {
+      const q = s.bookQuery.slice(0, -1)
+      const prior = s.prior ?? initialBuilder()
+      // The query shrinks back to where the search began → the pre-search state returns.
+      // `entryLen` is what the entry showed from `prior` plus the committed-book space when
+      // the search was entered from the chapter stage (`"acts "` → length 5).
+      const entryLen =
+        prior.stage === 'chapter'
+          ? (prior.bookQuery || prior.book || '').length + 1
+          : prior.bookQuery.length
+      if (q.length <= entryLen) return prior
+      return { ...s, bookQuery: q }
+    }
     case 'book':
       return s.bookQuery ? { ...s, bookQuery: s.bookQuery.slice(0, -1) } : s
     case 'chapter':

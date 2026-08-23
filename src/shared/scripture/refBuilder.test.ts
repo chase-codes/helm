@@ -13,6 +13,8 @@ import {
   setEnd,
   bookCompletion,
   refGhost,
+  isSearch,
+  searchQuery,
   type RefBuilderState,
   type RefGhost
 } from './refBuilder'
@@ -26,7 +28,8 @@ test('initialBuilder starts empty at the book stage', () => {
     book: null,
     chapter: null,
     startVerse: null,
-    endVerse: null
+    endVerse: null,
+    prior: null
   })
 })
 
@@ -110,7 +113,8 @@ test('fromParsedRef loads single and range refs', () => {
     book: 'John',
     chapter: 3,
     startVerse: 16,
-    endVerse: null
+    endVerse: null,
+    prior: null
   })
   expect(fromParsedRef({ book: 'Genesis', ch: 1, from: 1, to: 10 })).toEqual({
     stage: 'endVerse',
@@ -118,7 +122,8 @@ test('fromParsedRef loads single and range refs', () => {
     book: 'Genesis',
     chapter: 1,
     startVerse: 1,
-    endVerse: 10
+    endVerse: 10,
+    prior: null
   })
 })
 
@@ -131,7 +136,7 @@ test('round-trip toParsedRef(fromParsedRef(p)) === p', () => {
 })
 
 // Helper: feed a string of single-char keys through applyKey.
-function type(s: RefBuilderState, keys: string, extent: BookExtent): RefBuilderState {
+function type(s: RefBuilderState, keys: string, extent: BookExtent = james): RefBuilderState {
   let st = s
   for (const k of keys) st = applyKey(st, k, false, extent).state
   return st
@@ -143,11 +148,13 @@ test('space swallowed at every stage', () => {
 
 test('book: prefix completion advances (jame -> James)', () => {
   const st = applyKey(type(initialBuilder(), 'jame', james), ' ', false, james).state
-  expect(st).toMatchObject({ stage: 'chapter', book: 'James', bookQuery: '' })
+  expect(st).toMatchObject({ stage: 'chapter', book: 'James', bookQuery: 'jame' })
 })
 
 test('book: unresolved space stays in book', () => {
-  const st = applyKey(type(initialBuilder(), 'zz', james), ' ', false, james).state
+  // Digits never trigger a search (a separate rule keeps "1 " on the numbered-book path),
+  // so an unmatched digit query is the case that still just sits in the book stage.
+  const st = applyKey(type(initialBuilder(), '99', james), ' ', false, james).state
   expect(st.stage).toBe('book')
   expect(st.book).toBeNull()
 })
@@ -266,7 +273,8 @@ const base: RefBuilderState = {
   book: 'James',
   chapter: 1,
   startVerse: 3,
-  endVerse: null
+  endVerse: null,
+  prior: null
 }
 
 test('setStart sets a fresh single-verse selection', () => {
@@ -382,7 +390,7 @@ test('ghost: numbered books stay silent until they resolve', () => {
 
 test('Tab commits the book when a ghost is showing', () => {
   const r = applyKey(atBook('ma'), 'Tab', false, EMPTY_EXTENT)
-  expect(r.state).toMatchObject({ stage: 'chapter', book: 'Matthew', bookQuery: '' })
+  expect(r.state).toMatchObject({ stage: 'chapter', book: 'Matthew', bookQuery: 'ma' })
   expect(r.preventDefault).toBe(true)
 })
 
@@ -405,7 +413,7 @@ test('Shift+Tab still commits the ghost — deliberate, not a bug: applyKey igno
   // the Tab branch, so Shift+Tab does not move focus backwards while a ghost is showing.
   // This pins that choice so a future reader doesn't "fix" it into an unhandled shift.
   const r = applyKey(atBook('ma'), 'Tab', true, EMPTY_EXTENT)
-  expect(r.state).toMatchObject({ stage: 'chapter', book: 'Matthew', bookQuery: '' })
+  expect(r.state).toMatchObject({ stage: 'chapter', book: 'Matthew', bookQuery: 'ma' })
   expect(r.preventDefault).toBe(true)
 })
 
@@ -423,4 +431,109 @@ test('Tab and space commit identically wherever a ghost shows', () => {
     const viaSpace = applyKey(s, ' ', false, EMPTY_EXTENT).state
     expect(viaTab, `"${q}"`).toEqual(viaSpace)
   }
+})
+
+// --- Search stage -----------------------------------------------------------------------
+
+test('initialBuilder carries prior: null', () => {
+  expect(initialBuilder().prior).toBeNull()
+})
+
+test('letters that cannot be a book enter the search stage with the typed text', () => {
+  const st = type(initialBuilder(), 'prod')
+  expect(isSearch(st)).toBe(true)
+  expect(searchQuery(st)).toBe('prod')
+  expect(renderBuilder(st)).toBe('prod')
+  expect(toParsedRef(st)).toBeNull()
+  expect(bookCompletion(st)).toBeNull()
+  expect(refGhost(st)).toBeNull()
+})
+
+test('"pro" is still a book prefix (Proverbs); "prod" is the first search keystroke', () => {
+  expect(isSearch(type(initialBuilder(), 'pro'))).toBe(false)
+  expect(bookCompletion(type(initialBuilder(), 'pro'))).toBe('Proverbs')
+  expect(isSearch(type(initialBuilder(), 'prod'))).toBe(true)
+})
+
+test('Backspace out of search restores the state the search started from', () => {
+  const st = type(initialBuilder(), 'prod')
+  const back = applyKey(st, 'Backspace', false, james).state
+  expect(isSearch(back)).toBe(false)
+  expect(back).toMatchObject({ stage: 'book', bookQuery: 'pro', book: null })
+  expect(bookCompletion(back)).toBe('Proverbs')
+})
+
+test('Backspace inside search pops one character until the entry point', () => {
+  const st = type(initialBuilder(), 'prodigal')
+  const once = applyKey(st, 'Backspace', false, james).state
+  expect(isSearch(once)).toBe(true)
+  expect(searchQuery(once)).toBe('prodiga')
+})
+
+test('a letter right after a committed book reverts to a search of what was typed', () => {
+  // "acts " commits Acts (prefix); the next letter means the operator is typing words, so
+  // the search is for "acts l", not "Acts l".
+  const committed = type(initialBuilder(), 'acts ')
+  expect(committed).toMatchObject({ stage: 'chapter', book: 'Acts', chapter: null })
+  const st = applyKey(committed, 'l', false, james).state
+  expect(isSearch(st)).toBe(true)
+  expect(searchQuery(st)).toBe('acts l')
+  // and Backspace brings the committed book back
+  const back = applyKey(st, 'Backspace', false, james).state
+  expect(back).toMatchObject({ stage: 'chapter', book: 'Acts', chapter: null })
+})
+
+test('"john t" searches for john t (typed alias preserved: "jhn t")', () => {
+  expect(searchQuery(type(initialBuilder(), 'john t'))).toBe('john t')
+  expect(searchQuery(type(initialBuilder(), 'jhn t'))).toBe('jhn t')
+})
+
+test('a letter after chapter digits stays ignored (no search from "John 3x")', () => {
+  const st = type(initialBuilder(), 'john 3x')
+  expect(isSearch(st)).toBe(false)
+  expect(st).toMatchObject({ stage: 'chapter', book: 'John', chapter: 3 })
+})
+
+test('a quote forces search even on a book word', () => {
+  const st = type(initialBuilder(), '"john')
+  expect(isSearch(st)).toBe(true)
+  expect(searchQuery(st)).toBe('"john')
+})
+
+test('"." in the book stage stays ignored (jn. 3:16 keeps working)', () => {
+  const st = type(initialBuilder(), 'jn.')
+  expect(isSearch(st)).toBe(false)
+  expect(st.bookQuery).toBe('jn')
+})
+
+test('a letter no book starts with is already a search; the space then appends', () => {
+  expect(isSearch(type(initialBuilder(), 'x'))).toBe(true)
+  expect(searchQuery(type(initialBuilder(), 'x '))).toBe('x ')
+  // a leading space on an empty entry still does nothing
+  expect(type(initialBuilder(), ' ')).toEqual(initialBuilder())
+})
+
+test('digits alone never search ("1 " keeps the numbered-book path)', () => {
+  const st = type(initialBuilder(), '1 ')
+  expect(isSearch(st)).toBe(false)
+  expect(st.bookQuery).toBe('1 ')
+  expect(isSearch(type(st, 'jo'))).toBe(false)
+  expect(bookCompletion(type(st, 'jo'))).toBe('1 John')
+})
+
+test('in search every printable appends, including spaces, digits and punctuation', () => {
+  const st = type(initialBuilder(), "god's love 3")
+  expect(searchQuery(st)).toBe("god's love 3")
+})
+
+test('Tab is not swallowed in search', () => {
+  const r = applyKey(type(initialBuilder(), 'prod'), 'Tab', false, james)
+  expect(r.preventDefault).toBe(false)
+})
+
+test('commitBook keeps the typed book text (nothing downstream reads it)', () => {
+  const st = type(initialBuilder(), 'jhn ')
+  expect(st).toMatchObject({ stage: 'chapter', book: 'John', bookQuery: 'jhn' })
+  expect(renderBuilder(st)).toBe('John')
+  expect(bookCompletion(st)).toBeNull()
 })
