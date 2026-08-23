@@ -83,12 +83,12 @@ Transitions **into** search (all from `printable`):
 | book stage | `"` (or any non-alnum printable other than `.`) | search, query = `bookQuery + key` — the explicit escape for `john`, `mark`, `acts`; `.` stays ignored so `jn.` doesn't flip modes |
 | chapter stage, `chapter === null` | a letter | search, query = `typedBook + ' ' + key` |
 
-`typedBook` is what the operator actually typed before the commit (`"the"`, `"jhn"`),
+`typedBook` is what the operator actually typed before the commit (`"he"`, `"jhn"`),
 not the committed name. `commitBook` therefore keeps `bookQuery` instead of clearing it
 (nothing reads it after commit: `bookCompletion` guards on `book === null`,
-`renderBuilder` prefers `book`). This is what makes `"the l"` a search for `the l`
-rather than for `1 Thessalonians l`, and `"he said"` a search for `he said`. The entry
-shows `1 Thessalonians` for exactly one keystroke in that case — accepted.
+`renderBuilder` prefers `book`). This is what makes `"he s"` a search for `he s`
+rather than for `Hebrews s`, and `"he said"` a search for `he said`. The entry
+shows `Hebrews` for exactly one keystroke in that case — accepted.
 
 Letters in later stages (chapter typed, verse, endVerse) stay ignored as today.
 

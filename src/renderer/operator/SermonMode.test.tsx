@@ -2234,6 +2234,23 @@ describe('SermonMode — verse text search from the entry', () => {
     expect(entryValue()).toBe('zacch')
   })
 
+  it('clicking a result row hands focus back to the entry', async () => {
+    const { resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
+    render(<Harness />)
+    resolveChapter()
+    resolveSecondChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('zacch')
+    await waitFor(() => expect(screen.getByText('Luke 19:5')).toBeTruthy())
+    fireEvent.click(resultRow('Luke 19:5'))
+    // jsdom doesn't run the app's blurOnPointerClick policy, so this asserts the fix's own
+    // re-focus call rather than a recovery from a blur that never happened here.
+    expect(document.activeElement).toBe(entry())
+    await waitFor(() => expect(resultRow('Luke 19:5').getAttribute('data-highlighted')).toBe('true'))
+    expect(document.activeElement).toBe(entry())
+  })
+
   it('double-clicking a result row takes it to the screen', async () => {
     const { resolveChapter, resolveSecondChapter, take, goLive } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
     render(<Harness />)

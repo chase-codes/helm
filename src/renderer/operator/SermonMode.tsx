@@ -612,6 +612,9 @@ export function SermonMode({
     setHighlighted(i);
     jumpTo(p.book, p.ch, p.from);
     requestRailScroll(p.from, 'start');
+    // The pointer-click blur policy just dropped focus to BODY; a preview is part of a
+    // keyboard flow, so hand focus straight back to the entry or the arrows go dead.
+    entryRef.current?.focus();
   };
 
   // Shift+Enter / double-click: this hit on screen, now. `take`, not `goLive` — `goLive`
