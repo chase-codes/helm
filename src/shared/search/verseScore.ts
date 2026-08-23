@@ -19,6 +19,13 @@ export function parseVerseQuery(q: string): { tokens: string[]; phrase: boolean 
   return { tokens, phrase };
 }
 
+// tf counts exact repeats, but only for tokens with real content (length >= 4). Short
+// query words ("in", "the", "art"...) repeat by grammatical accident in any long verse —
+// letting them decide a tie would rank a verse ahead of a phrase's own source purely
+// because it happens to be a longer sentence. bm25 is deliberately not this filter's
+// job: it's a candidate-limit cut, not a tie-break (see rankVerses below).
+const CONTENT_TOKEN_MIN = 4;
+
 /** Flat primary score (every token matches or the verse is out), plus the sub-signals that
  * order the plateau — same shape as scoreQuote. One segment: a verse is one unit. */
 export function scoreVerse(qts: string[], phrase: boolean, text: string): VerseSignals {
@@ -27,7 +34,11 @@ export function scoreVerse(qts: string[], phrase: boolean, text: string): VerseS
   const s = textSignals([words], qts);
   if (s.matched < qts.length) return { score: 0, phrase: 0, covWeight: 0, tf: 0 };
   if (phrase && s.phrase < qts.length) return { score: 0, phrase: 0, covWeight: 0, tf: 0 };
-  return { score: 300 + s.matched * 12, phrase: s.phrase, covWeight: s.covWeight, tf: s.tf };
+  const counts = new Map<string, number>();
+  for (const w of words) counts.set(w, (counts.get(w) ?? 0) + 1);
+  let tf = 0;
+  for (const t of qts) if (t.length >= CONTENT_TOKEN_MIN) tf += counts.get(t) ?? 0;
+  return { score: 300 + s.matched * 12, phrase: s.phrase, covWeight: s.covWeight, tf };
 }
 
 /** Order: score ↓, phrase run ↓, covWeight ↓, tf ↓, then canonical (book, chapter, verse) ↑
