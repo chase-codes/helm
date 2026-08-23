@@ -18,6 +18,7 @@ function fakeRepo(installedIds: string[] = []): BiblesRepo & { installCalls: Nor
     },
     getChapter: () => ({ book: '', chapter: 0, verseCount: 0, verses: {} }),
     bookExtent: () => ({ chapters: 0, verseCounts: [] }),
+    ensureSearchIndex: () => {},
     installCalls
   }
 }

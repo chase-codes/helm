@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import type { BookExtent, ChapterData, InstalledVersion, NormalizedBible } from '../shared/types'
+import { VERSE_FTS_COLUMNS } from './schema'
 
 export interface BiblesRepo {
   installed(): InstalledVersion[]
@@ -8,6 +9,10 @@ export interface BiblesRepo {
   getChapter(book: string, chapter: number): ChapterData
   isInstalled(id: string): boolean
   bookExtent(book: string, versionId: string): BookExtent
+  /** Backfill verse_fts for any version installed before the index existed. Called once at
+   * startup from openDb — not lazily on first search, where a half-second stall would land
+   * on the first keystroke mid-service. Idempotent. */
+  ensureSearchIndex(): void
 }
 
 interface VerseRow {
@@ -25,6 +30,10 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
   )
   const deleteVerses = db.prepare('DELETE FROM verses WHERE version_id = ?')
   const deleteVersion = db.prepare('DELETE FROM bible_versions WHERE id = ?')
+  const insertFts = db.prepare(
+    `INSERT INTO verse_fts (${VERSE_FTS_COLUMNS.join(', ')}) VALUES (?,?,?,?,?)`
+  )
+  const deleteFts = db.prepare('DELETE FROM verse_fts WHERE version_id = ?')
   const selectChapter = db.prepare(
     'SELECT version_id, verse, text FROM verses WHERE book = ? AND chapter = ?'
   )
@@ -43,6 +52,7 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
           for (const chapter of book.chapters) {
             for (const verse of chapter.verses) {
               insertVerse.run(bible.id, book.name, chapter.n, verse.n, verse.text)
+              insertFts.run(bible.id, book.name, chapter.n, verse.n, verse.text)
             }
           }
         }
@@ -50,6 +60,7 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
     },
     uninstall(id) {
       db.transaction(() => {
+        deleteFts.run(id)
         deleteVerses.run(id)
         deleteVersion.run(id)
       })()
@@ -67,6 +78,24 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
     bookExtent(book, versionId) {
       const rows = selectExtent.all(versionId, book) as { chapter: number; mv: number }[]
       return { chapters: rows.length, verseCounts: rows.map((r) => r.mv) }
+    },
+    ensureSearchIndex() {
+      const versions = db.prepare('SELECT id FROM bible_versions').all() as { id: string }[]
+      for (const { id } of versions) {
+        const have = (db.prepare('SELECT count(*) AS n FROM verse_fts WHERE version_id = ?').get(id) as { n: number }).n
+        if (have > 0) continue
+        try {
+          db.transaction(() => {
+            const rows = db
+              .prepare('SELECT book, chapter, verse, text FROM verses WHERE version_id = ?')
+              .all(id) as { book: string; chapter: number; verse: number; text: string }[]
+            for (const r of rows) insertFts.run(id, r.book, r.chapter, r.verse, r.text)
+          })()
+        } catch (err) {
+          // Leave this version unsearchable rather than failing boot.
+          console.error(`verse_fts backfill failed for ${id}`, err)
+        }
+      }
     }
   }
 }

@@ -178,3 +178,39 @@ test('bookExtent returns {0, []} for an unknown book', () => {
   repo.install(multi)
   expect(repo.bookExtent('Nahum', 'kjvx')).toEqual({ chapters: 0, verseCounts: [] })
 })
+
+const ftsCount = (versionId: string): number =>
+  (db.prepare('SELECT count(*) AS n FROM verse_fts WHERE version_id = ?').get(versionId) as { n: number }).n
+
+test('install writes one verse_fts row per verse; uninstall removes them', () => {
+  repo.install(kjv)
+  expect(ftsCount('kjv')).toBe(3)
+  repo.uninstall('kjv')
+  expect(ftsCount('kjv')).toBe(0)
+})
+
+test('verse_fts MATCH finds verse text for the right version only', () => {
+  repo.install(kjv)
+  repo.install(esv)
+  const rows = db
+    .prepare('SELECT version_id AS v, book, chapter, verse FROM verse_fts WHERE verse_fts MATCH ? AND version_id = ?')
+    .all('"heaven"', 'kjv') as { v: string; book: string }[]
+  expect(rows).toEqual([{ v: 'kjv', book: 'Genesis', chapter: 1, verse: 1 }])
+})
+
+test('ensureSearchIndex backfills a version installed before the index existed', () => {
+  repo.install(kjv)
+  db.exec("DELETE FROM verse_fts WHERE version_id = 'kjv'") // simulate a pre-index install
+  expect(ftsCount('kjv')).toBe(0)
+  repo.ensureSearchIndex()
+  expect(ftsCount('kjv')).toBe(3)
+  repo.ensureSearchIndex() // idempotent
+  expect(ftsCount('kjv')).toBe(3)
+})
+
+test('verse_vocab lists the indexed terms', () => {
+  repo.install(kjv)
+  const terms = (db.prepare('SELECT term FROM verse_vocab').all() as { term: string }[]).map((r) => r.term)
+  expect(terms).toContain('beginning')
+  expect(terms).toContain('word')
+})
