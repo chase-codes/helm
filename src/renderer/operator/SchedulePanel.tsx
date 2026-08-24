@@ -5,6 +5,7 @@ import { TrackTabs } from './TrackTabs';
 import { UndoToast } from './UndoToast';
 import { DangerGhostButton } from './DangerGhostButton';
 import { ListEmpty } from './ListEmpty';
+import { ScriptureSearchResults, type ScriptureSearchState } from './ScriptureSearchResults';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
@@ -53,6 +54,9 @@ export interface SchedulePanelProps {
   onClearAll?: () => void;
   /** Lets SermonMode focus the reading entry (scripture-lookup hotkey, '/'). */
   entryRef?: RefObject<HTMLInputElement | null>;
+  /** Non-null while the entry is a text search (refBuilder `search` stage): the schedule
+   * header/list are replaced by the results rail; the entry and `+ Add` stay. */
+  search?: ScriptureSearchState | null;
 }
 
 /** Left rail: track switcher + (Scripture only, for now) the add-reading input and
@@ -73,7 +77,8 @@ export function SchedulePanel({
   rows,
   undo,
   onClearAll,
-  entryRef
+  entryRef,
+  search
 }: SchedulePanelProps): JSX.Element {
   // The ghost is derived from builder state alone and knows nothing about focus, but "space
   // commits the book" is only true while this input has focus — when it doesn't, space goes
@@ -159,7 +164,7 @@ export function SchedulePanel({
                   onKeyDown={onEntryKeyDown}
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
-                  placeholder="Add verse — John 3:16"
+                  placeholder="Add verse — John 3:16, or search a word"
                 />
                 {ghost && focused && (
                   // A transparent copy of the typed text advances the dim completion to
@@ -195,43 +200,49 @@ export function SchedulePanel({
               </button>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 8px', flexShrink: 0 }}>
-            <span style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>
-              SCRIPTURE SCHEDULE
-            </span>
-            {onClearAll && rows.length > 0 && (
-              <DangerGhostButton
-                label="Clear all"
-                onClick={onClearAll}
-                title="Remove every verse — undoable for five seconds"
-              />
-            )}
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {rows.length === 0 && (
-              <ListEmpty>
-                No verses yet — enter a reference above and add it with <b>+ Add</b>.
-              </ListEmpty>
-            )}
-            {rows.map((r) => (
-              <button
-                key={r.id}
-                style={rowStyle(r.isCurrent, r.isSelected)}
-                data-schedule-row={r.id}
-                data-selected={r.isSelected || undefined}
-                onClick={r.onClick}
-                onDoubleClick={r.onDoubleClick}
-                onContextMenu={r.onContextMenu}
-              >
-                <div style={iconStyle}>&#10013;</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
-                  <div style={{ fontSize: '11px', color: T.faint, marginTop: '1px' }}>{r.meta}</div>
-                </div>
-                {r.isCurrent && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
-              </button>
-            ))}
-          </div>
+          {search ? (
+            <ScriptureSearchResults theme={T} search={search} />
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 8px', flexShrink: 0 }}>
+                <span style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>
+                  SCRIPTURE SCHEDULE
+                </span>
+                {onClearAll && rows.length > 0 && (
+                  <DangerGhostButton
+                    label="Clear all"
+                    onClick={onClearAll}
+                    title="Remove every verse — undoable for five seconds"
+                  />
+                )}
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {rows.length === 0 && (
+                  <ListEmpty>
+                    No verses yet — enter a reference above and add it with <b>+ Add</b>.
+                  </ListEmpty>
+                )}
+                {rows.map((r) => (
+                  <button
+                    key={r.id}
+                    style={rowStyle(r.isCurrent, r.isSelected)}
+                    data-schedule-row={r.id}
+                    data-selected={r.isSelected || undefined}
+                    onClick={r.onClick}
+                    onDoubleClick={r.onDoubleClick}
+                    onContextMenu={r.onContextMenu}
+                  >
+                    <div style={iconStyle}>&#10013;</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
+                      <div style={{ fontSize: '11px', color: T.faint, marginTop: '1px' }}>{r.meta}</div>
+                    </div>
+                    {r.isCurrent && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {undo && <UndoToast label={undo.label} onUndo={undo.onUndo} accent={T.scripture} />}
         </>

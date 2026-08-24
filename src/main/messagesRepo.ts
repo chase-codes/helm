@@ -5,6 +5,7 @@ import { rankQuotes, rankTapes, type QuoteRow, type TapeRow } from '../shared/se
 import { parseTapeNo } from '../shared/message/tapeNo';
 import type { Message, MessageMeta, TimingMap } from '../shared/types';
 import type { MessageImportResult } from '../shared/message/parseImport';
+import { orPrefixMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery';
 
 export interface SermonIndexEntry { id: string; tapeNo: string; title: string; date: string; durationS: number }
 
@@ -113,7 +114,7 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
     const tokens = norm(q).split(' ').filter(Boolean);
     if (!tokens.length) return { tapes, quotes: [] };
 
-    const match = tokens.map((t) => `"${t}"*`).join(' OR ');
+    const match = orPrefixMatch(tokens);
     // bm25 gives TF-IDF relevance the JS scorer can't (#53): negated so higher =
     // better. Paragraphs FTS didn't match simply carry no prior.
     // LIMIT keeps a common-token query's hit list under the bound-variable cap of the
@@ -122,7 +123,7 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
       SELECT p.rowid AS rowid, p.message_id AS msgId, p.ord AS ord, -bm25(paragraph_fts) AS rel
       FROM paragraph_fts JOIN paragraphs p ON p.rowid = paragraph_fts.rowid
       WHERE paragraph_fts MATCH ?${scope ? ' AND p.message_id = ?' : ''}
-      ORDER BY rel DESC LIMIT 1000
+      ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}
     `;
     const hits = (
       scope ? db.prepare(ftsSql).all(match, scope) : db.prepare(ftsSql).all(match)

@@ -6,6 +6,7 @@ import { norm } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
 import { lyricsOf, lyricsOfSections } from '../shared/songs/lyrics';
+import { orPrefixMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery';
 
 export interface SongsRepo {
   list(): Song[];
@@ -97,14 +98,14 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     search(q, field) {
       const tokens = norm(q).split(' ').filter(Boolean);
       if (!tokens.length) return rankSongs('', list(), field);
-      const match = tokens.map((t) => `"${t}"*`).join(' OR ');
+      const match = orPrefixMatch(tokens);
       // bm25 gives TF-IDF relevance the JS scorer can't (#53): stopwords are IDF-damped
       // and repeated terms count. Column weights per field; negated so higher = better.
       // Songs FTS didn't match simply carry no prior. `field` arrives over IPC, so it is
       // whitelisted before touching SQL text. The LIMIT keeps a common-token query's hit
       // list under the bound-variable cap of the IN() below — best-ranked hits survive.
       const bm25 = Object.hasOwn(BM25, field) ? BM25[field] : BM25.all;
-      const hits = db.prepare(`SELECT s.rowid AS rowid, s.id AS id, -${bm25} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT 1000`)
+      const hits = db.prepare(`SELECT s.rowid AS rowid, s.id AS id, -${bm25} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}`)
         .all(match) as { rowid: number; id: string; rel: number }[];
       const rel = new Map(hits.map((h) => [h.id, h.rel]));
       let candidates: Song[];

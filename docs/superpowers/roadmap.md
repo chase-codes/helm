@@ -13,11 +13,11 @@ The open items formerly logged here:
 | Issue | Title |
 |---|---|
 | [#2](https://github.com/chase-codes/helm/issues/2) | Assignable hotkey system + hotkey recorder (incl. songs hotkeys, go-live/take-down bindings) |
-| [#3](https://github.com/chase-codes/helm/issues/3) | Reusable scripture-search component (extract from `SermonMode`) |
+| [#3](https://github.com/chase-codes/helm/issues/3) | Reusable scripture-search component (extract from `SermonMode`) — verse text search shipped via the scripture entry (spec 2026-08-23-bible-quick-find); extraction/pre-service reuse still open. |
 | [#4](https://github.com/chase-codes/helm/issues/4) | Songs: right-click → Edit, with fast in-place quick edit |
 | [#5](https://github.com/chase-codes/helm/issues/5) | Move song import entry point into Settings → Songs (except on an empty library) |
 | [#6](https://github.com/chase-codes/helm/issues/6) | Verify EasyWorship import against a real library (Windows) |
-| [#7](https://github.com/chase-codes/helm/issues/7) | Pre-service: dedicated scripture-search item |
+| [#7](https://github.com/chase-codes/helm/issues/7) | Pre-service: dedicated scripture-search item — verse text search shipped via the scripture entry (spec 2026-08-23-bible-quick-find); extraction/pre-service reuse still open. |
 | [#8](https://github.com/chase-codes/helm/issues/8) | Selectable schedule items with delete — remaining tracks (message, slides) |
 | [#9](https://github.com/chase-codes/helm/issues/9) | Scroll the scheduled reading to the top of the preview on select |
 | [#10](https://github.com/chase-codes/helm/issues/10) | Background choices for scripture (and similar) audience output |

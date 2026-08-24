@@ -4,6 +4,8 @@
 // Single source of truth for song_fts column order — songsRepo's bm25() weights are
 // positional, so the DDL and the weight table must agree; both derive from this list.
 export const SONG_FTS_COLUMNS = ['title', 'author', 'lyrics'] as const;
+// verse_fts column order — biblesRepo's INSERT is positional against this list.
+export const VERSE_FTS_COLUMNS = ['version_id', 'book', 'chapter', 'verse', 'text'] as const;
 
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS songs (
@@ -29,6 +31,11 @@ CREATE TABLE IF NOT EXISTS verses (
   PRIMARY KEY (version_id, book, chapter, verse)
 );
 CREATE INDEX IF NOT EXISTS idx_verses_chapter ON verses (book, chapter, version_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS verse_fts USING fts5(
+  version_id UNINDEXED, book UNINDEXED, chapter UNINDEXED, verse UNINDEXED, text,
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS verse_vocab USING fts5vocab(verse_fts, 'row');
 CREATE TABLE IF NOT EXISTS services (id TEXT PRIMARY KEY, title TEXT NOT NULL, date TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS service_items (
   id TEXT PRIMARY KEY, service_id TEXT NOT NULL, kind TEXT NOT NULL,
