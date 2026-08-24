@@ -58,4 +58,15 @@ describe('UpdatePill', () => {
     })
     expect(screen.queryByRole('button')).toBeNull()
   })
+
+  it('hides while the screens are released to a guest, and returns on take (#66)', async () => {
+    render(<UpdatePill />)
+    await act(async () => {
+      updateCb({ state: 'ready', version: '0.2.0' })
+      displaysCb({ outputs: 0, displays: [], released: true })
+    })
+    expect(screen.queryByRole('button')).toBeNull()
+    await act(async () => displaysCb({ outputs: 0, displays: [], released: false }))
+    expect(screen.getByRole('button', { name: /update ready/i })).toBeTruthy()
+  })
 })

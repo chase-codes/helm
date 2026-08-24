@@ -227,4 +227,16 @@ describe('release / take (#51)', () => {
     expect(displayStatus().released).toBe(false);
     expect(displayStatus().outputs).toBe(2);
   });
+
+  it('take restores only the displays that are not off (#68)', () => {
+    initDisplays(() => null, memRepo({ 'displays:roles': { 'label:EXT2': 'off' } }).repo);
+    expect(displayStatus().outputs).toBe(1);
+
+    toggleOutputsReleased();
+    expect(displayStatus().outputs).toBe(0);
+
+    toggleOutputsReleased();
+    expect(displayStatus().outputs).toBe(1);
+    expect(displayStatus().displays.find((d) => d.id === 2)?.role).toBe('off');
+  });
 });
