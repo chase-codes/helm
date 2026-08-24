@@ -206,7 +206,7 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
   };
 
   return (
-    <ModalShell onClose={onClose} width="860px" maxWidth="96vw" maxHeight="88vh">
+    <ModalShell onClose={onClose} width="860px" maxWidth="96vw" height="88vh">
       <div style={{ padding: '16px 22px 0', borderBottom: `1px solid ${T.hairline}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ fontWeight: 700, fontSize: '18px', flex: 1 }}>{editing ? 'Edit song' : 'Add a song'}</div>
@@ -217,7 +217,10 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
               </button>
               <button
                 style={qaTab(tab === 'paste', false)}
-                onClick={() => { searchSeq.current++; setTab('paste'); }}
+                // Cancelling the request (seq bump) and cancelling its UI state are one
+                // act: leaving 'loading' behind stranded the tab on "Searching…" forever,
+                // since openSearchTab only re-runs from 'idle' (#32).
+                onClick={() => { searchSeq.current++; setSearchState('idle'); setTab('paste'); }}
               >
                 Paste lyrics
               </button>

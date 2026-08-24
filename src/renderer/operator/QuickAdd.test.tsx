@@ -230,6 +230,37 @@ describe('QuickAdd Search online tab', () => {
     const titleInput = screen.getByPlaceholderText('Song title') as HTMLInputElement;
     expect(titleInput.value).toBe('');
   });
+
+  it('switching tabs mid-search does not leave the tab stuck on "Searching…" (#32)', async () => {
+    const search = vi.fn(() => new Promise(() => {})); // never resolves
+    stubSources({ search: search as unknown as ReturnType<typeof vi.fn> });
+    renderQuickAdd();
+    fireEvent.click(screen.getByText('Search online'));
+    const box = screen.getByPlaceholderText(/Search by title/) as HTMLInputElement;
+    fireEvent.change(box, { target: { value: 'way maker' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(screen.getByText('Searching…')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Paste lyrics'));
+    fireEvent.click(screen.getByText('Search online'));
+    // Coming back re-runs the search (the eager path) instead of showing a dead "Searching…"
+    // with no request behind it — the request count proves the state was reset.
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('the modal is a fixed frame, so hovering results cannot resize it under the pointer (#31)', async () => {
+    stubSources();
+    renderQuickAdd();
+    fireEvent.click(screen.getByText('Search online'));
+    const box = screen.getByPlaceholderText(/Search by title/) as HTMLInputElement;
+    fireEvent.change(box, { target: { value: 'way maker' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await screen.findByText(CANDIDATES[0].title);
+    // The card is the first ancestor of the title that carries a height (the overlay has none).
+    let el: HTMLElement | null = screen.getByText('Add a song');
+    while (el && !el.style.height) el = el.parentElement;
+    expect(el?.style.height).toBe('88vh');
+  });
 });
 
 const EDIT_SONG = {
