@@ -46,11 +46,34 @@ function enterSearch(prior: RefBuilderState, query: string): RefBuilderState {
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(Math.max(n, lo), hi)
 
+/** An extent with no chapters is UNKNOWN (not yet fetched), not "a book with no chapters":
+ * the clamps pass digits through unchanged rather than collapsing them to 0 → null (#17,
+ * BUG-010). The caller re-clamps with `reclamp` once the real extent lands. */
 export function clampChapter(n: number, extent: BookExtent): number {
+  if (extent.chapters === 0) return Math.max(n, 1)
   return clamp(n, 1, extent.chapters)
 }
 export function clampVerse(n: number, chapter: number, extent: BookExtent): number {
-  return clamp(n, 1, extent.verseCounts[chapter - 1] ?? 0)
+  const max = extent.verseCounts[chapter - 1]
+  if (extent.chapters === 0 || max === undefined) return Math.max(n, 1)
+  return clamp(n, 1, max)
+}
+
+/** Clamp every numeric field of a builder against `extent`, in dependency order (a clamped
+ * chapter changes which verse count the verses clamp to). Identity when nothing changes,
+ * so it is safe as a setState updater. Used when a book's extent arrives after the digits
+ * were typed, and on paste (#19b: "Genesis 99:1" must not reach the projector as-is). */
+export function reclamp(s: RefBuilderState, extent: BookExtent): RefBuilderState {
+  if (extent.chapters === 0 || s.book === null) return s
+  const chapter = s.chapter === null ? null : clampChapter(s.chapter, extent)
+  const startVerse =
+    s.startVerse === null || chapter === null
+      ? s.startVerse
+      : clampVerse(s.startVerse, chapter, extent)
+  const endVerse =
+    s.endVerse === null || chapter === null ? s.endVerse : clampVerse(s.endVerse, chapter, extent)
+  if (chapter === s.chapter && startVerse === s.startVerse && endVerse === s.endVerse) return s
+  return { ...s, chapter, startVerse, endVerse }
 }
 
 export function renderBuilder(s: RefBuilderState): string {
@@ -142,7 +165,10 @@ export function applyKey(
   _shift: boolean,
   extent: BookExtent
 ): Applied {
-  if (key === 'Backspace') return { state: backspace(s), preventDefault: true }
+  // Delete alongside Backspace (#18): the builder has no caret, so forward-delete is the
+  // same "drop the trailing token" — better than the browser deleting text the controlled
+  // input then snaps back.
+  if (key === 'Backspace' || key === 'Delete') return { state: backspace(s), preventDefault: true }
   if (key === 'Tab') {
     // Accept only what the operator can SEE. With no ghost, Tab is not swallowed — focus
     // moves as it normally would, rather than the field eating a key for nothing.

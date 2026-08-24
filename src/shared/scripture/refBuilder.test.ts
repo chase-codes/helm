@@ -5,6 +5,7 @@ import {
   initialBuilder,
   clampChapter,
   clampVerse,
+  reclamp,
   renderBuilder,
   toParsedRef,
   fromParsedRef,
@@ -33,19 +34,42 @@ test('initialBuilder starts empty at the book stage', () => {
   })
 })
 
-test('clampChapter clamps to [1, chapters]; 0 when no chapters', () => {
+test('clampChapter clamps to [1, chapters]; passes through when the extent is unknown', () => {
   expect(clampChapter(3, james)).toBe(3)
   expect(clampChapter(9, james)).toBe(5)
   expect(clampChapter(0, james)).toBe(1)
-  expect(clampChapter(3, EMPTY_EXTENT)).toBe(0)
+  expect(clampChapter(3, EMPTY_EXTENT)).toBe(3) // #17: not yet fetched ≠ zero chapters
+  expect(clampChapter(0, EMPTY_EXTENT)).toBe(1)
 })
 
-test('clampVerse clamps to [1, verseCount(chapter)]; 0 when unknown', () => {
+test('clampVerse clamps to [1, verseCount(chapter)]; passes through when unknown', () => {
   expect(clampVerse(10, 1, james)).toBe(10)
   expect(clampVerse(99, 1, james)).toBe(27)
   expect(clampVerse(5, 2, james)).toBe(5)
   expect(clampVerse(0, 1, james)).toBe(1)
-  expect(clampVerse(5, 9, james)).toBe(0) // chapter out of range
+  expect(clampVerse(5, 9, james)).toBe(5) // chapter out of range: no count to clamp to
+  expect(clampVerse(5, 1, EMPTY_EXTENT)).toBe(5)
+})
+
+test('reclamp: digits typed before the extent landed clamp once it does', () => {
+  const st = type(
+    applyKey(type(initialBuilder(), 'james', EMPTY_EXTENT), ' ', false, EMPTY_EXTENT).state,
+    '12:99',
+    EMPTY_EXTENT
+  )
+  expect(renderBuilder(st)).toBe('James 12:99')
+  const clamped = reclamp(st, james)
+  expect(clamped.chapter).toBe(5)
+  expect(clamped.startVerse).toBe(20) // James 5 has 20 verses
+  expect(reclamp(clamped, james)).toBe(clamped) // identity when nothing changes
+  expect(reclamp(st, EMPTY_EXTENT)).toBe(st) // unknown extent: nothing to clamp against
+})
+
+test('Delete drops the trailing token like Backspace (#18)', () => {
+  const st = type(applyKey(type(initialBuilder(), 'james', james), ' ', false, james).state, '3', james)
+  const r = applyKey(st, 'Delete', false, james)
+  expect(r.preventDefault).toBe(true)
+  expect(r.state.chapter).toBeNull()
 })
 
 test('renderBuilder renders each stage', () => {
@@ -258,13 +282,13 @@ test('backspace deletes within a numeric token then steps back', () => {
   expect(st.bookQuery).toBe('James')
 })
 
-test('no extent: cannot advance past chapter clamp', () => {
+test('no extent: digits are kept, not swallowed (#17)', () => {
   const st = type(
     applyKey(type(initialBuilder(), 'james', EMPTY_EXTENT), ' ', false, EMPTY_EXTENT).state,
     '3',
     EMPTY_EXTENT
   )
-  expect(st.chapter).toBeNull() // clampChapter(3, EMPTY) === 0 -> null
+  expect(st.chapter).toBe(3)
 })
 
 const base: RefBuilderState = {

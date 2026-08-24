@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SermonMode } from './SermonMode'
 import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
+import { INSTALL_HINT } from '../../shared/scripture/labels'
 import { themeFor } from '../../shared/theme'
 import type {
   ChapterData,
+  BookExtent,
   MediaItem,
   Message,
   PresentationState,
@@ -68,6 +70,13 @@ function installHelmStub(
     // return a PROMISE instead of a value, so a test can leave one query's reply in flight
     // (the real IPC round-trip) while a later keystroke lands.
     verseSearch?: (q: string) => VerseSearchStub | Promise<VerseSearchStub>
+    // What `bibles.bookExtent` resolves to. Default: 50 chapters × 31 verses, resolved at
+    // once. Return a PROMISE the test holds to reproduce digits typed before the extent
+    // lands (#17).
+    bookExtent?: (book: string) => BookExtent | Promise<BookExtent>
+    // Override the installed-bibles manifest (default: KJV installed). `installed: false`
+    // is the no-bible state whose INSTALL_HINT must NOT fire for a merely absent chapter (#19).
+    installed?: boolean
   } = {},
   // Optional second chapter, keyed by its own book/ch, with its own release — lets a test
   // fetch a DIFFERENT chapter than the default Genesis 1 (e.g. activateReading's async
@@ -157,9 +166,10 @@ function installHelmStub(
     settings: { get: () => Promise.resolve(['kjv']), set: vi.fn() },
     schedule: { list: scheduleList, add, remove: vi.fn(() => Promise.resolve([])), removeMany },
     bibles: {
-      manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
+      manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: opts.installed ?? true }]),
       getChapter,
-      bookExtent: () => Promise.resolve({ chapters: 50, verseCounts: Array(50).fill(31) }),
+      bookExtent: (book: string) =>
+        Promise.resolve(opts.bookExtent ? opts.bookExtent(book) : { chapters: 50, verseCounts: Array(50).fill(31) }),
       search,
       onProgress: () => () => {}
     },
@@ -744,9 +754,8 @@ describe('SermonMode — a half-typed reference is not a commit', () => {
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
-    // Space resolves the book; the chapter/verse digits then clamp against that book's
-    // extent, so let the extent fetch land before typing them (see the prefetch effect's
-    // comment in SermonMode.tsx — digits typed against an absent extent are swallowed).
+    // Space resolves the book; digits typed before its extent lands are kept and re-clamped
+    // later (#17), but let the fetch settle here so the test is about the commit, not that.
     typeInEntry('Romans ')
     await waitFor(() => expect(entryValue()).toBe('Romans'))
     typeInEntry('8:2')
@@ -915,23 +924,129 @@ describe('SermonMode — scripture track rails are resizable', () => {
   })
 })
 
+describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', () => {
+  it('digits typed before the book extent lands are kept, then clamped when it does (#17)', async () => {
+    let releaseExtent: () => void = () => {}
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], {
+      bookExtent: (book) =>
+        book === 'Romans'
+          ? new Promise<BookExtent>((res) => {
+              releaseExtent = () => res({ chapters: 16, verseCounts: Array(16).fill(20) })
+            })
+          : { chapters: 50, verseCounts: Array(50).fill(31) }
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    // Typed at speed: the book resolves on the space and the digits follow in the same
+    // breath, before Romans' extent IPC has returned. Every digit must land.
+    typeInEntry('Romans 8:28')
+    expect(entryValue()).toBe('Romans 8:28')
+
+    // Now the extent arrives: Romans 8 has 20 verses in this stub, so :28 clamps to :20.
+    releaseExtent()
+    await waitFor(() => expect(entryValue()).toBe('Romans 8:20'))
+  })
+
+  it('an emptying edit (select-all + delete, cut) clears the entry (#18)', async () => {
+    const { resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    typeInEntry('Romans 8')
+    await waitFor(() => expect(entryValue()).toBe('Romans 8'))
+    fireEvent.change(entry(), { target: { value: '' } })
+    expect(entryValue()).toBe('')
+  })
+
+  it('a pasted out-of-range chapter clamps to the book, and never puts INSTALL_HINT on screen (#19b)', async () => {
+    const { goLive, resolveChapter } = installHelmStub()
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    fireEvent.change(entry(), { target: { value: 'Genesis 99:1' } })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 50:1'))
+    expect(goLive.mock.calls.every((c) => JSON.stringify(c[1]).indexOf(INSTALL_HINT) === -1)).toBe(true)
+  })
+
+  it('an absent chapter in an installed bible shows nothing rather than the install hint (#19)', async () => {
+    const { show, goLive, getChapter, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], {}, {
+      book: 'Genesis',
+      ch: 2,
+      data: { book: 'Genesis', chapter: 2, verseCount: 0, verses: {} }
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    fireEvent.change(entry(), { target: { value: 'Genesis 2:1' } })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 2:1'))
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    resolveSecondChapter()
+    await waitFor(() => expect(getChapter).toHaveBeenCalledWith('Genesis', 2))
+    await act(async () => {})
+    const slides = [...show.mock.calls, ...goLive.mock.calls].map((c) => JSON.stringify(c[1]))
+    expect(slides.some((sl) => sl.indexOf(INSTALL_HINT) !== -1)).toBe(false)
+  })
+
+  it('with no bible installed the install hint still goes live (the hint\'s one honest case)', async () => {
+    const { goLive, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], { installed: false }, {
+      book: 'Genesis',
+      ch: 2,
+      data: { book: 'Genesis', chapter: 2, verseCount: 0, verses: {} }
+    })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+
+    fireEvent.change(entry(), { target: { value: 'Genesis 2:1' } })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 2:1'))
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    resolveSecondChapter()
+    await waitFor(() => expect(goLive).toHaveBeenCalled())
+    expect(JSON.stringify(goLive.mock.calls[0][1])).toContain(INSTALL_HINT)
+  })
+
+  it('with no bible installed an arrow press does not collapse the cursor to verse 1 (#19a)', async () => {
+    const { show, resolveChapter } = installHelmStub(NOTHING_LIVE, [{ id: 'r1', book: 'Genesis', ch: 1, from: 5, to: 5 }], {
+      installed: false
+    })
+    render(<Harness />)
+    const row = await screen.findByText('Genesis 1:5')
+    fireEvent.click(row.closest('button') as HTMLElement)
+    resolveChapter()
+    await waitFor(() => expect(show).toHaveBeenCalled())
+    show.mockClear()
+    fireEvent.click(screen.getByText('Next verse ›'))
+    fireEvent.click(screen.getByText('Next verse ›'))
+    expect(show.mock.calls.every((c) => c[0] !== 'scr:Genesis:1:1')).toBe(true)
+  })
+})
+
 describe('SermonMode — arrows during the stale-chapter tick', () => {
-  it('ignores Next verse rather than collapsing the cursor to verse 1', async () => {
-    // Chapter deliberately left unresolved for the whole interaction: liveChapter is null,
-    // so verseCount falls back to 1 and an unguarded step would clamp the cursor to 1.
+  it('queues Next verse and applies it when the chapter lands (#21), never collapsing to verse 1', async () => {
+    // Chapter deliberately left unresolved while the operator presses: liveChapter is null,
+    // so there is no verse count to clamp against. The press must not be dropped (the old
+    // behaviour — silently inert) nor clamp against a fake count of 1.
     const { show, resolveChapter } = installHelmStub(NOTHING_LIVE, [
-      { id: 'r1', book: 'Genesis', ch: 1, from: 5, to: 5 }
+      { id: 'r1', book: 'Genesis', ch: 1, from: 3, to: 3 }
     ])
     render(<Harness />)
 
-    const row = await screen.findByText('Genesis 1:5')
+    const row = await screen.findByText('Genesis 1:3')
     fireEvent.click(row.closest('button') as HTMLElement)
+    fireEvent.click(screen.getByText('Next verse ›'))
     fireEvent.click(screen.getByText('Next verse ›'))
     expect(show).not.toHaveBeenCalled()
 
     resolveChapter()
     await waitFor(() => expect(show).toHaveBeenCalled())
+    // Two presses queued → two verses on, applied in the same batch as the chapter data.
     expect(show.mock.calls[0][0]).toBe('scr:Genesis:1:5')
+    expect(show.mock.calls.every((c) => c[0] !== 'scr:Genesis:1:1')).toBe(true)
   })
 })
 
