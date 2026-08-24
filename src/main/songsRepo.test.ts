@@ -24,6 +24,20 @@ test('search finds by typo’d lyric via re-rank fallback', () => {
   const r = repo.search('only beleive', 'all');
   expect(r[0].song.title).toBe('Only Believe');
 });
+test('a typo in the distinguishing token is rescued even when a common token clears the 30-hit gate (#13)', () => {
+  // 30 decoys all match "holy"; the target matches only "reckless", and only fuzzily.
+  for (let i = 0; i < 30; i++) repo.add({ title: `Holy Hymn ${i}`, text: `Verse 1\nHoly, holy is the Lord number ${i}` });
+  repo.add({ title: 'Reckless Love', text: 'Chorus\nOh the overwhelming never-ending reckless love of God' });
+  const r = repo.search('holy reckelss', 'all').map((x) => x.song.title);
+  expect(r).toContain('Reckless Love');
+});
+test('accented songs are found by accented and unaccented queries (#12)', () => {
+  repo.add({ title: 'Renuévame', text: 'Coro\nRenuévame Señor Jesús, no quiero ser igual' });
+  repo.add({ title: 'Holy Holy Holy', text: 'Verse 1\nHoly, holy, holy! Lord God Almighty!' });
+  expect(repo.search('renuevame', 'all')[0]?.song.title).toBe('Renuévame');
+  expect(repo.search('Renuévame', 'all')[0]?.song.title).toBe('Renuévame');
+  expect(repo.search('señor', 'lyric')[0]?.song.title).toBe('Renuévame');
+});
 test('empty query lists everything', () => {
   repo.add({ title: 'A', text: 'x' });
   repo.add({ title: 'B', text: 'y' });

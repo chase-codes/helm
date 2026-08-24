@@ -131,6 +131,9 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
     const rel = new Map(hits.map((h) => [`${h.msgId}:${h.ord}`, h.rel]));
 
     let candidates: QuoteRow[];
+    // Deliberately NOT the per-token typo gate songsRepo has (#13): rankQuotes requires
+    // every token to match, so a rescuable paragraph always contains the common token and
+    // is already among the FTS hits. Songs rank partial matches, which is what needs it.
     if (hits.length >= 30) {
       const qs = hits.map(() => '?').join(',');
       candidates = db.prepare(`

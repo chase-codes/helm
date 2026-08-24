@@ -7,6 +7,12 @@ describe('norm', () => {
     expect(norm("I'd Rather")).toBe('id rather');
     expect(norm('It wasn’t me, I’d say')).toBe('it wasnt me id say');
   });
+  test('folds accents instead of splitting words on them (#12)', () => {
+    expect(norm('Renuévame')).toBe('renuevame');
+    expect(norm('Señor, Dios')).toBe('senor dios');
+    expect(norm('Größe Ærø Łódź')).toBe('grosse aero lodz');
+    expect(norm('café crème')).toBe('cafe creme');
+  });
 });
 describe('lev', () => {
   test('edit distances', () => {
