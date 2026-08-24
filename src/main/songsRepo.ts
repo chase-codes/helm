@@ -6,7 +6,7 @@ import { norm } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
 import { lyricsOf, lyricsOfSections } from '../shared/songs/lyrics';
-import { orPrefixMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery';
+import { orPrefixMatch, ftsTerm, FTS_CANDIDATE_LIMIT } from './ftsQuery';
 
 export interface SongsRepo {
   list(): Song[];
@@ -98,6 +98,8 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     search(q, field) {
       const tokens = norm(q).split(' ').filter(Boolean);
       if (!tokens.length) return rankSongs('', list(), field);
+      const tokenHasHit = (t: string): boolean =>
+        (db.prepare('SELECT 1 FROM song_fts WHERE song_fts MATCH ? LIMIT 1').get(ftsTerm(t, true)) as unknown) !== undefined;
       const match = orPrefixMatch(tokens);
       // bm25 gives TF-IDF relevance the JS scorer can't (#53): stopwords are IDF-damped
       // and repeated terms count. Column weights per field; negated so higher = better.
@@ -109,10 +111,14 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
         .all(match) as { rowid: number; id: string; rel: number }[];
       const rel = new Map(hits.map((h) => [h.id, h.rel]));
       let candidates: Song[];
-      if (hits.length >= 30) {
+      // Typo detection is per TOKEN, not per hit count (#13): "holy reckelss" clears 30
+      // hits on "holy" alone, and the song that matches only the misspelled token is then
+      // never a candidate for the fuzzy scorer to rescue. Any token with no FTS hit of its
+      // own → scan the library (FTS rows keep their bm25 prior via `rel`).
+      if (hits.length >= 30 && tokens.every((t) => tokenHasHit(t))) {
         const qs = hits.map(() => '?').join(',');
         candidates = (db.prepare(`SELECT rowid, * FROM songs WHERE rowid IN (${qs})`).all(...hits.map((h) => h.rowid)) as Row[]).map(toSong);
-      } else candidates = list(); // sparse FTS hits → typo likely; scan library, scorer handles fuzz
+      } else candidates = list(); // sparse hits or an unmatched token → typo likely; scorer handles fuzz
       return rankSongs(q, candidates, field, rel, 50);
     },
   };

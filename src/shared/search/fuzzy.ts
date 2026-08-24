@@ -1,5 +1,19 @@
+// Letters with no combining-mark decomposition (NFD leaves them whole), folded by hand.
+const FOLD: Record<string, string> = { ß: 'ss', ø: 'o', đ: 'd', ł: 'l', æ: 'ae', œ: 'oe', þ: 'th' };
+
+/** Fold to [a-z0-9 ]: accents are STRIPPED, not replaced by spaces — `Renuévame` must norm
+ * to `renuevame`, not `renu vame`, or the fuzzy scorer never matches the word and the song
+ * drops out of results entirely (#12). Matches what FTS does (`remove_diacritics 2`). */
 export function norm(s: string): string {
-  return (s || '').toLowerCase().replace(/['’`]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[ßøđłæœþ]/g, (c) => FOLD[c])
+    .replace(/['’`]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 export function lev(a: string, b: string): number {
   const m = a.length, n = b.length;
