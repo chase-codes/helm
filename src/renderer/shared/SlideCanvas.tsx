@@ -138,7 +138,10 @@ export function SlideCanvas({
     // 8px floor. It still sits inside the measured box: a constant-size child keeps the
     // fit walk monotonic, at the cost of a fixed floor on the block's height.
     // (calc() wrapper only because jsdom's CSSOM drops a bare top-level max().)
-    fontSize: 'calc(max(8px, 2.9cqmin))',
+    // 4cqmin (~43px on 1080p), up from the 2.9cqmin eyebrow the list-slide title still
+    // uses: the congregation reads the chapter and verse off the screen to follow along,
+    // so it has to carry from the back of the room, not just label the block.
+    fontSize: 'calc(max(8px, 4cqmin))',
     letterSpacing: '0.2em',
     textTransform: 'uppercase',
     color: accent,
@@ -212,9 +215,10 @@ export function SlideCanvas({
   const listMode = (kind === 'title' || kind === 'sermon') && (s.points || []).length > 0 && !isLT;
   const titleStyle: CSSProperties = listMode
     ? {
-        // Identical to the scripture ref treatment: same face, size, tracking, and accent
-        // colour, so every pre-service slide speaks one grammar — small label up top, big
-        // content underneath. Fixed size (not the fit var): it is chrome, it holds still
+        // Same treatment as the scripture ref (face, tracking, accent colour) so every
+        // pre-service slide speaks one grammar — small label up top, big content
+        // underneath — but at the smaller eyebrow size: nobody needs to read a list's
+        // title from the back row the way they do a chapter and verse. Fixed size (not the fit var): it is chrome, it holds still
         // while the fitter works, and a constant-size child keeps the fit walk monotonic.
         // (calc() wrapper only because jsdom's CSSOM drops a bare top-level max().)
         fontFamily: "'JetBrains Mono', monospace",
