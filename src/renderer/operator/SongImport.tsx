@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState, type CSSProperties, type JSX } from 'react';
+import { useWindowedList } from '../shared/useWindowedList';
 import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { ImportIcon } from '../shared/icons';
@@ -23,6 +24,9 @@ type Step =
   | { name: 'done'; result: SongImportResult };
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+// Review-row pitch (px): row box + gap. The windowed list assumes exactly this per row.
+const ROW_GAP = 5;
+const ROW_H = 36 + ROW_GAP;
 
 export function SongImport({ open, onClose, onImported, onImportingChange }: SongImportProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
@@ -67,6 +71,13 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
   useEffect(() => {
     onImportingChange?.(step.name === 'importing');
   }, [step.name, onImportingChange]);
+
+  // Windowed over the review rows; a no-op (0 rows) on every other step. Above the early
+  // return so the hook order is stable.
+  const { setEl: setScrollEl, onScroll, start, end, topPad, bottomPad } = useWindowedList(
+    step.name === 'review' ? step.rows.length : 0,
+    ROW_H
+  );
 
   if (!open) return null;
 
@@ -139,10 +150,13 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
     borderRadius: '10px', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.border}`,
     fontSize: '14px', fontWeight: 600, color: T.text
   };
+  // Fixed height, single line: the review list is windowed (#24), and the window is
+  // arithmetic on ROW_H — a wrapping title would put every row below it out of place.
   const rowStyle: CSSProperties = {
-    display: 'flex', alignItems: 'baseline', gap: '10px', padding: '8px 12px',
-    borderRadius: '8px', background: T.panel2, marginBottom: '5px'
+    display: 'flex', alignItems: 'center', gap: '10px', padding: '0 12px', boxSizing: 'border-box',
+    height: `${ROW_H - ROW_GAP}px`, borderRadius: '8px', background: T.panel2, marginBottom: `${ROW_GAP}px`
   };
+  const clipStyle: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const badgeStyle = (color: string): CSSProperties => ({
     fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', letterSpacing: '0.06em',
     color, flexShrink: 0
@@ -174,7 +188,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
         </div>
       </div>
 
-      <div style={bodyStyle}>
+      <div style={bodyStyle} ref={setScrollEl} onScroll={onScroll}>
         {step.name === 'source' && (
           <>
             <div style={{ fontSize: '12px', color: T.faint, marginBottom: '10px' }}>
@@ -210,14 +224,15 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
                   ? ` · ${step.withLayouts.toLocaleString()} WITH EASYWORSHIP LAYOUTS`
                   : ' · NONE WITH EASYWORSHIP LAYOUTS')}
             </div>
-            {step.rows.map((r, i) => (
-              <div key={`${r.title}-${i}`} style={rowStyle}>
+            {topPad > 0 && <div style={{ height: `${topPad}px` }} />}
+            {step.rows.slice(start, end).map((r, j) => (
+              <div key={`${r.title}-${start + j}`} style={rowStyle}>
                 <span style={badgeStyle(r.status === 'new' ? T.accent : r.status === 'duplicate' ? T.faint : T.live)}>
                   {r.status === 'new' ? 'NEW' : r.status === 'duplicate' ? 'IN HELM' : 'UNREADABLE'}
                 </span>
                 {r.sourceStanzas !== undefined && <span style={badgeStyle(T.scripture)}>CHECK</span>}
-                <span style={{ fontSize: '13.5px', color: T.text, flex: 1, minWidth: 0 }}>{r.title}</span>
-                <span style={{ fontSize: '12px', color: T.dim }}>
+                <span style={{ ...clipStyle, fontSize: '13.5px', color: T.text, flex: 1, minWidth: 0 }}>{r.title}</span>
+                <span style={{ ...clipStyle, fontSize: '12px', color: T.dim, maxWidth: '45%' }}>
                   {r.status === 'unreadable'
                     ? r.reason
                     : r.sourceStanzas !== undefined && r.parsedStanzas !== undefined
@@ -226,6 +241,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
                 </span>
               </div>
             ))}
+            {bottomPad > 0 && <div style={{ height: `${bottomPad}px` }} />}
           </>
         )}
 

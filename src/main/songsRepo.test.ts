@@ -38,6 +38,16 @@ test('accented songs are found by accented and unaccented queries (#12)', () => 
   expect(repo.search('Renuévame', 'all')[0]?.song.title).toBe('Renuévame');
   expect(repo.search('señor', 'lyric')[0]?.song.title).toBe('Renuévame');
 });
+test('addBatch isolates a failing song with a savepoint and keeps the rest', () => {
+  const out = repo.addBatch([
+    { title: 'A', text: 'a line' },
+    { title: 'Bad', text: '' },
+    { title: 'C', text: 'c line' }
+  ]);
+  expect(out.map((r) => ('song' in r ? r.song.title : `!${r.error}`))).toEqual(['A', '!Song has no content', 'C']);
+  expect(repo.count()).toBe(2);
+  expect(repo.search('c line', 'lyric')[0]?.song.title).toBe('C'); // FTS row landed too
+});
 test('empty query lists everything', () => {
   repo.add({ title: 'A', text: 'x' });
   repo.add({ title: 'B', text: 'y' });

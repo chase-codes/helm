@@ -55,6 +55,21 @@ describe('SongImport', () => {
     expect(screen.getByText(/no lyrics found/)).toBeTruthy();
   });
 
+  it('windows a large review list: a few thousand rows mount a few dozen nodes (#24)', async () => {
+    const rows: ImportReviewRow[] = Array.from({ length: 3000 }, (_, i) => ({
+      title: `Song number ${i}`, author: '', stanzas: 1, status: 'new'
+    }));
+    installHelm({ token: 't', rows });
+    renderModal();
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    expect(await screen.findByText('Song number 0')).toBeTruthy();
+    expect(screen.getByText(/FOUND 3000 SONGS/)).toBeTruthy();
+    const mounted = screen.getAllByText(/^Song number \d+$/).length;
+    expect(mounted).toBeLessThan(100);
+    expect(screen.queryByText('Song number 2999')).toBeNull();
+    expect(await screen.findByText(/Import 3000 songs/)).toBeTruthy();
+  });
+
   it('says how many songs will actually be imported', async () => {
     installHelm({ token: 't', rows: ROWS });
     renderModal();

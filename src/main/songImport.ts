@@ -14,12 +14,19 @@ import type {
 
 export interface SongImportDeps {
   onProgress?: (p: SongImportProgress) => void;
+  /** Songs per transaction / per event-loop turn (tests shrink it). */
+  chunkSize?: number;
 }
+
+/** Default commit chunk: one fsync and one event-loop yield per this many songs. Large
+ * enough that a 3000-song library is ~30 transactions, small enough that the main
+ * process answers a Go live / blank IPC within a few ms of it arriving. */
+export const COMMIT_CHUNK = 100;
 
 export interface SongImport {
   sources(): ImportSourceInfo[];
   scan(sourceId: string): Promise<SongImportScanResult>;
-  commit(token: string): SongImportResult;
+  commit(token: string): Promise<SongImportResult>;
 }
 
 interface Pending {
@@ -37,6 +44,7 @@ export function createSongImport(
   deps: SongImportDeps = {}
 ): SongImport {
   const emit = deps.onProgress ?? ((): void => {});
+  const chunkSize = Math.max(1, deps.chunkSize ?? COMMIT_CHUNK);
   const pending = new Map<string, Pending>();
 
   return {
@@ -94,7 +102,7 @@ export function createSongImport(
       return { token, rows, ...(outcome.withLayouts === undefined ? {} : { withLayouts: outcome.withLayouts }) };
     },
 
-    commit(token) {
+    async commit(token) {
       const job = pending.get(token);
       if (!job) throw new Error(`songImport.commit: unknown or already-spent token "${token}"`);
       pending.delete(token);
@@ -102,24 +110,28 @@ export function createSongImport(
       let imported = 0;
       const unreadable = [...job.unreadable];
       const total = job.songs.length;
-      for (let i = 0; i < total; i++) {
-        const song = job.songs[i];
-        try {
-          // repo.add owns splitToSlides, the insert transaction and the FTS index; going
-          // around it yields songs that exist but can never be found by search.
-          repo.add({
-            title: song.title,
-            author: song.author,
-            text: song.text,
-            source: job.sourceId
-          });
-          imported++;
-        } catch (err) {
-          // One bad song must never abort a library migration — but the operator still needs
-          // to know which song and why, not just a count.
-          unreadable.push({ title: song.title, reason: err instanceof Error ? err.message : String(err) });
-        }
-        emit({ done: i + 1, total });
+      // Chunked, not one big loop (#23): a few thousand per-song transactions run back to
+      // back held the main process's only thread for the whole import, so every
+      // presentation IPC (Go live, blank, video) queued behind it. Each chunk is one
+      // transaction (one fsync instead of `chunkSize`), and between chunks the loop
+      // yields a macrotask so queued IPC — and the progress events — get serviced.
+      //
+      // NOT one transaction for the whole run: one bad song must never abort a library
+      // migration. `addBatch` keeps per-song isolation with a SAVEPOINT each.
+      for (let start = 0; start < total; start += chunkSize) {
+        const chunk = job.songs.slice(start, start + chunkSize);
+        // repo owns splitToSlides, the insert transaction and the FTS index; going around
+        // it yields songs that exist but can never be found by search.
+        const results = repo.addBatch(
+          chunk.map((song) => ({ title: song.title, author: song.author, text: song.text, source: job.sourceId }))
+        );
+        results.forEach((r, j) => {
+          if ('song' in r) imported++;
+          // The operator still needs to know which song and why, not just a count.
+          else unreadable.push({ title: chunk[j].title, reason: r.error });
+          emit({ done: start + j + 1, total });
+        });
+        if (start + chunkSize < total) await new Promise<void>((r) => setImmediate(r));
       }
       return { imported, skipped: job.skipped, unreadable };
     }
