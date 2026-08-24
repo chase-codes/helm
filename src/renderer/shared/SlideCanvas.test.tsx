@@ -41,7 +41,7 @@ test('scripture ref is a fixed container-relative size, independent of the fitte
   // proportional (BUG-007); the fit var must not appear or the jitter returns.
   render(<SlideCanvas slide={{ kind: 'scripture', ref: 'John 3:16', columns: [{ version: 'KJV', text: 'For God so loved…' }] }} />);
   const ref = screen.getByText('John 3:16') as HTMLElement;
-  expect(ref.style.fontSize).toBe('calc(max(8px,2.9cqmin))');
+  expect(ref.style.fontSize).toBe('calc(max(8px,4cqmin))');
   expect(ref.style.fontSize).not.toContain('--helm-fit-size');
   expect(ref.style.fontSize).not.toContain('clamp');
 });
