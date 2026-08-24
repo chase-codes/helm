@@ -22,6 +22,7 @@ import {
   toParsedRef,
   refGhost,
   EMPTY_EXTENT,
+  reclamp,
   isSearch,
   searchQuery,
   type RefBuilderState
@@ -103,6 +104,32 @@ export function SermonMode({
   // once per book, so this never grows unbounded or re-fetches.
   const [bookExtents, setBookExtents] = useState<Record<string, BookExtent>>({});
   const [chapter, setChapter] = useState<ChapterData | null>(null);
+  // Arrow/Prev/Next presses made while the chapter is unresolved (#21); see stepVerse and
+  // the chapter fetch effect. `from` is the cursor when the first press queued.
+  const pendingStep = useRef<{ from: number; delta: number } | null>(null);
+
+  // One-shot scroll commands for ChapterRail — see its scrollRequest prop doc. `railScroll`
+  // itself is never cleared after use (nonces only ever go up, so re-passing the same
+  // object is harmless while ChapterRail stays mounted — its own effect no-ops on an
+  // unchanged nonce/verseCount pair). The problem is remounting: switching the Sermon
+  // track away and back unmounts/remounts ChapterRail, and a mount effect always runs
+  // once regardless of whether its deps "changed" from some previous instance — so
+  // without `consumedNonce`, the last already-applied request would fire again on every
+  // remount. `consumedNonce` tracks the highest nonce ChapterRail has confirmed (via
+  // `onScrollConsumed`, below) actually landed a scroll; `scrollRequest` is withheld once
+  // its nonce is no longer greater than that. State rather than a ref deliberately — a
+  // ref can't be read while computing the JSX prop below (that's a render-phase ref read,
+  // which this repo's lint config rejects), and the setState below lives in a plain
+  // callback invoked by the child, not inside one of this component's own effects, so it
+  // doesn't run into the set-state-in-effect rule either. A genuinely fresh nonce (e.g.
+  // goLiveFromBuilder switching track and requesting a scroll in the same commit) always
+  // clears the `>` check and fires on the fresh mount as it should.
+  const [railScroll, setRailScroll] = useState<{ v: number; align: 'start' | 'nearest'; nonce: number } | null>(
+    null
+  );
+  const [consumedNonce, setConsumedNonce] = useState(0);
+  const requestRailScroll = (v: number, align: 'start' | 'nearest'): void =>
+    setRailScroll((p) => ({ v, align, nonce: (p?.nonce ?? 0) + 1 }));
   const [schedule, setSchedule] = useState<ScriptureReading[]>([]);
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([]);
 
@@ -271,12 +298,27 @@ export function SermonMode({
 
   // Chapter cache: refetch on book/chapter change, and whenever the installed-version
   // set changes (a version installed mid-service wasn't in the last fetch).
+  //
+  // Also drains `pendingStep` (#21): arrow/Prev/Next presses that landed while this fetch
+  // was in flight are applied against the real verse count the moment it arrives, in the
+  // same batch as `setChapter`, so the show effect puts the settled verse on screen once.
+  // The queue is cleared when a fetch BEGINS: a press queued against the previous chapter
+  // must not carry into the next one.
   useEffect(() => {
     let live = true;
+    pendingStep.current = null;
     void window.helm.bibles
       .getChapter(scrBook, scrCh)
       .then((c) => {
-        if (live) setChapter(c);
+        if (!live) return;
+        setChapter(c);
+        const pend = pendingStep.current;
+        pendingStep.current = null;
+        if (pend && c.verseCount > 0) {
+          const nv = Math.max(1, Math.min(c.verseCount, pend.from + pend.delta));
+          setScrV(nv);
+          requestRailScroll(nv, 'nearest');
+        }
       })
       .catch(console.error);
     return () => {
@@ -289,12 +331,12 @@ export function SermonMode({
   // scrBook`, same fallback `previewBook` uses below).
   //
   // The extent is what `applyKey` clamps typed digits against (clampChapter/clampVerse in
-  // refBuilder.ts), and an absent one is EMPTY_EXTENT — which clamps every digit to 0, i.e.
-  // back to null, so keystrokes are silently swallowed. Fetching on `builder.book` alone
-  // would always lose that race: the book resolves the instant the operator hits space, and
-  // the chapter digits follow in the same breath, well before an IPC round trip lands. The
-  // `?? scrBook` fallback prefetches the cued book's extent up front, so continuing in the
-  // book already on screen — the common case — types cleanly from the first digit.
+  // refBuilder.ts). While it is absent (EMPTY_EXTENT) the clamps pass digits through
+  // unchanged — the book resolves the instant the operator hits space and the chapter
+  // digits follow in the same breath, well before an IPC round trip lands, and swallowing
+  // them lost "Romans 8:28" down to "Romans" (#17). When the extent arrives, `reclamp`
+  // applies the bounds to whatever was typed meanwhile. The `?? scrBook` fallback still
+  // prefetches the cued book so the common case clamps live from the first digit.
   // Version-agnostic — main resolves the installed version.
   useEffect(() => {
     const b = builder.book ?? scrBook;
@@ -305,6 +347,7 @@ export function SermonMode({
       .then((ext) => {
         if (!live) return;
         setBookExtents((prev) => ({ ...prev, [b]: ext }));
+        setBuilder((prev) => (prev.book === b ? reclamp(prev, ext) : prev));
       })
       .catch(console.error);
     return () => {
@@ -394,6 +437,12 @@ export function SermonMode({
   // fetch resolves. Reading it unguarded would show the old book's verse text mislabeled
   // under the new ref. Only trust it once it actually matches where we're looking.
   const liveChapter = chapter && chapter.book === scrBook && chapter.chapter === scrCh ? chapter : null;
+  // `getChapter` echoes a verse-less ChapterData for data it doesn't have, which covers two
+  // very different states: no bible installed at all (the INSTALL_HINT slide is the right
+  // thing to show) and an out-of-range chapter in an installed bible ("Genesis 99" — #19),
+  // where the hint would be a lie. Tell them apart by the manifest.
+  const anyInstalled = manifest.some((m) => m.installed);
+  const chapterMissing = (c: ChapterData): boolean => c.verseCount === 0 && anyInstalled;
 
   // The cursor's route to the screen: `show` on every book/chapter/verse/version/
   // chapter-data change. Unlike the `cue` this replaced, it follows across chapters and
@@ -424,7 +473,7 @@ export function SermonMode({
   // inactive mode's scripture cursor onto the projector.
   useEffect(() => {
     if (!active || track !== 'scripture') return;
-    if (!liveChapter) return;
+    if (!liveChapter || chapterMissing(liveChapter)) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
     const cols = verseCols(liveChapter.verses[scrV] ?? {}, versions, abbrOf);
     const slide = buildScriptureSlide(
@@ -432,7 +481,7 @@ export function SermonMode({
       cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
     );
     window.helm.presentation.show(key, slide);
-  }, [scrBook, scrCh, scrV, versions, liveChapter, abbrOf, output, active, track]);
+  }, [scrBook, scrCh, scrV, versions, liveChapter, anyInstalled, abbrOf, output, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
   // `sameKind`, not key equality: while scripture is live the show effect above puts every
@@ -441,38 +490,22 @@ export function SermonMode({
   // equality here made the button flash green for the gap between our send and the
   // liveKey broadcast returning, then ghost again.
   const cuedIsLive = output === 'live' && sameKind(liveKey, curKey);
-  const verseCount = liveChapter?.verseCount || 1;
+  // 0 while the chapter is unresolved or absent — never a fake 1, which collapsed the cursor
+  // to verse 1 on the first arrow press with no bible installed (#19a).
+  const verseCount = liveChapter?.verseCount ?? 0;
   const liveCols = verseCols(liveChapter?.verses[scrV] ?? {}, versions, abbrOf);
-
-  // One-shot scroll commands for ChapterRail — see its scrollRequest prop doc. `railScroll`
-  // itself is never cleared after use (nonces only ever go up, so re-passing the same
-  // object is harmless while ChapterRail stays mounted — its own effect no-ops on an
-  // unchanged nonce/verseCount pair). The problem is remounting: switching the Sermon
-  // track away and back unmounts/remounts ChapterRail, and a mount effect always runs
-  // once regardless of whether its deps "changed" from some previous instance — so
-  // without `consumedNonce`, the last already-applied request would fire again on every
-  // remount. `consumedNonce` tracks the highest nonce ChapterRail has confirmed (via
-  // `onScrollConsumed`, below) actually landed a scroll; `scrollRequest` is withheld once
-  // its nonce is no longer greater than that. State rather than a ref deliberately — a
-  // ref can't be read while computing the JSX prop below (that's a render-phase ref read,
-  // which this repo's lint config rejects), and the setState below lives in a plain
-  // callback invoked by the child, not inside one of this component's own effects, so it
-  // doesn't run into the set-state-in-effect rule either. A genuinely fresh nonce (e.g.
-  // goLiveFromBuilder switching track and requesting a scroll in the same commit) always
-  // clears the `>` check and fires on the fresh mount as it should.
-  const [railScroll, setRailScroll] = useState<{ v: number; align: 'start' | 'nearest'; nonce: number } | null>(
-    null
-  );
-  const [consumedNonce, setConsumedNonce] = useState(0);
-  const requestRailScroll = (v: number, align: 'start' | 'nearest'): void =>
-    setRailScroll((p) => ({ v, align, nonce: (p?.nonce ?? 0) + 1 }));
 
   const stepVerse = (dir: 1 | -1): void => {
     // Same stale-chapter guard as `goLive` and the show effect. While `liveChapter` is
-    // null, `verseCount` falls back to 1, so `Math.min(verseCount, v + dir)` would
-    // collapse the cursor to verse 1 — and the show effect would then put verse 1 on the
-    // projector. Ignore the arrow for that tick; the operator can press again.
-    if (!liveChapter) return;
+    // null there is no verse count to clamp against, so the press is QUEUED rather than
+    // dropped (#21): the chapter fetch effect applies the accumulated delta against the
+    // real count when the rows land. A fast double-press advances two verses, not zero.
+    if (!liveChapter) {
+      const q = pendingStep.current;
+      pendingStep.current = { from: q?.from ?? scrV, delta: (q?.delta ?? 0) + dir };
+      return;
+    }
+    if (verseCount === 0) return;
     const nv = Math.max(1, Math.min(verseCount, scrV + dir));
     setScrV(nv);
     requestRailScroll(nv, 'nearest');
@@ -488,7 +521,8 @@ export function SermonMode({
     // case is unaffected: getChapter still resolves to a (verse-less) ChapterData,
     // so liveChapter is non-null, this guard passes, liveCols is legitimately empty,
     // and the install-hint slide goes live, which is then the correct thing to show.
-    if (!liveChapter) return;
+    // An absent chapter in an installed bible is not that case (#19): nothing to show.
+    if (!liveChapter || chapterMissing(liveChapter)) return;
     // Do exactly what the button says, rather than re-deriving the decision inside the
     // main-process `goLive` verb (which blacks when fired on the key already live). The
     // cursor now commits to the screen as it moves, so by the time the operator reaches
@@ -575,6 +609,7 @@ export function SermonMode({
   // cue effect lands scrV) — not the whole reading range, so the on-screen ref/label
   // ("Genesis 1:1") matches what the hero and the cue effect would independently produce.
   const goLiveWithChapter = (p: ParsedRef, c: ChapterData): void => {
+    if (chapterMissing(c)) return;
     const key = keyForScripture(p.book, p.ch, p.from);
     const cols = verseCols(c.verses[p.from] ?? {}, versions, abbrOf);
     const slide = buildScriptureSlide(
@@ -589,6 +624,7 @@ export function SermonMode({
   // click that precedes it has already moved the cursor via `onSelectVerse`, so the rail,
   // the hero, and the projector agree by the time this fires.
   const takeVerseLive = (book: string, ch: number, v: number, c: ChapterData): void => {
+    if (chapterMissing(c)) return;
     const cols = verseCols(c.verses[v] ?? {}, versions, abbrOf);
     const slide = buildScriptureSlide(
       formatRef({ book, ch, from: v, to: v }),
@@ -731,10 +767,18 @@ export function SermonMode({
   // a spurious CUED badge, or a misleading LIVE badge.
   const railIsCued = previewBook === scrBook && previewCh === scrCh;
 
-  // Paste / IME: if the whole field parses as a ref, load it structurally.
+  // Paste / IME: if the whole field parses as a ref, load it structurally — clamped against
+  // the book's extent when it is known (a pasted "Genesis 99:1" must not reach the
+  // projector, #19b; the extent effect reclamps later if it isn't known yet). An emptying
+  // edit (select-all + delete, cut) clears the builder (#18): parseRef('') is null, and
+  // discarding that edit snapped the controlled input back to its old value.
   const onEntryChange = (v: string): void => {
+    if (v.trim() === '') {
+      setBuilder(initialBuilder());
+      return;
+    }
     const p = parseRef(v);
-    if (p) setBuilder(fromParsedRef(p));
+    if (p) setBuilder(reclamp(fromParsedRef(p), bookExtents[p.book] ?? EMPTY_EXTENT));
   };
 
   // The cursor, as the pure selection helpers want it.

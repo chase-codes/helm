@@ -90,6 +90,8 @@ test('installing a second version merges into the same chapter map', () => {
   expect(ch.verses[1].esv).toContain('heavens')
 })
 
+// verseCount 0 is the "absent" signal SermonMode reads (#19): no bible, or a chapter the
+// installed bibles don't have. Consumers decide which; the repo just reports no rows.
 test('getChapter with no data returns verseCount 0 and empty map', () => {
   const ch = repo.getChapter('Revelation', 22)
   expect(ch.verseCount).toBe(0)
