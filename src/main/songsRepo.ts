@@ -12,6 +12,10 @@ export interface SongsRepo {
   list(): Song[];
   get(id: string): Song | null;
   add(input: NewSongInput): Song;
+  /** Insert many songs under ONE transaction (one fsync), with per-song failure isolation:
+   * each song runs inside its own SAVEPOINT, so a bad one rolls back alone and its
+   * neighbours still land. Result is positional — `{ song }` or `{ error }` per input. */
+  addBatch(inputs: NewSongInput[]): ({ song: Song } | { error: string })[];
   update(id: string, input: UpdateSongInput): Song;
   /** Permanent removal from the library (#90). Deletes the FTS row in the same
    * transaction — song_fts is a plain external-content-free fts5 table with no triggers,
@@ -47,6 +51,16 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   // FTS row first, while `songs` still holds the rowid the subquery resolves through.
   const deleteFts = db.prepare('DELETE FROM song_fts WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
   const deleteSong = db.prepare('DELETE FROM songs WHERE id = ?');
+  // The insert itself, transaction-free: `add` wraps it in one, `addBatch` in a SAVEPOINT.
+  const insertOne = (input: NewSongInput): Song => {
+    const sections = splitToSlides(input.text);
+    if (!sections.length) throw new Error('Song has no content');
+    const key = input.key?.trim();
+    const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
+    insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
+    insertFts.run(song.id, song.title, song.author, lyricsOf(song));
+    return song;
+  };
   const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSong);
   const get = (id: string): Song | null => {
     const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined;
@@ -57,15 +71,27 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     get,
     count: () => (db.prepare('SELECT COUNT(*) AS n FROM songs').get() as { n: number }).n,
     add(input) {
-      const sections = splitToSlides(input.text);
-      if (!sections.length) throw new Error('Song has no content');
-      const key = input.key?.trim();
-      const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
+      return db.transaction(() => insertOne(input))();
+    },
+    addBatch(inputs) {
+      const out: ({ song: Song } | { error: string })[] = [];
       db.transaction(() => {
-        insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
-        insertFts.run(song.id, song.title, song.author, lyricsOf(song));
+        for (const input of inputs) {
+          // Raw SAVEPOINT rather than a nested db.transaction(): better-sqlite3 would
+          // savepoint for us, but the node:sqlite test shim is non-nested, and the two
+          // must behave identically for the isolation tests to mean anything.
+          db.exec('SAVEPOINT song');
+          try {
+            out.push({ song: insertOne(input) });
+            db.exec('RELEASE song');
+          } catch (err) {
+            db.exec('ROLLBACK TO song');
+            db.exec('RELEASE song');
+            out.push({ error: err instanceof Error ? err.message : String(err) });
+          }
+        }
       })();
-      return song;
+      return out;
     },
     update(id, input) {
       const existing = get(id);
