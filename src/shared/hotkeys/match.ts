@@ -32,6 +32,13 @@ const hasRealModifier = (binding: string): boolean => {
 const bindingsOf = (a: HotkeyAction, overrides: HotkeyOverrides): string[] =>
   a.fixed ? a.defaults : (overrides[a.id] ?? a.defaults)
 
+/** Effective bindings for an action once user overrides are applied (fixed actions
+ * ignore overrides). Empty when the user cleared the binding. */
+export function bindingsFor(actionId: string, overrides: HotkeyOverrides): string[] {
+  const a = HOTKEY_ACTIONS.find((x) => x.id === actionId)
+  return a ? bindingsOf(a, overrides) : []
+}
+
 /** Keydown → action id. Mode scope is checked before global so a rebind can shadow a
  * global key on one page without touching the other. While typing in a field, only
  * Mod/Alt bindings resolve (the typing guard). */

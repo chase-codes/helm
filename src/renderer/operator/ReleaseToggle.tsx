@@ -1,16 +1,18 @@
 import { useContext, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from './useHelm'
-import { formatBinding } from '../../shared/hotkeys/match'
-import { HOTKEY_ACTIONS } from '../../shared/hotkeys/actions'
+import { bindingsFor, formatBinding } from '../../shared/hotkeys/match'
+import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 
 /** Transient release/take of every output screen (#51): releasing destroys all output
  * windows so another app can present, without touching saved roles; taking back re-syncs.
  * State lives in main and arrives via displayStatus, so every window agrees. */
-export function ReleaseToggle(): JSX.Element {
+export function ReleaseToggle({ hotkeyOverrides }: { hotkeyOverrides: HotkeyOverrides }): JSX.Element {
   const T = useContext(ThemeCtx)
   const { released } = useDisplayStatus()
-  const chip = formatBinding(HOTKEY_ACTIONS.find((a) => a.id === 'displays.release')!.defaults[0])
+  // Resolved through the user's rebinds (#67); the chip is dropped if they cleared it.
+  const binding = bindingsFor('displays.release', hotkeyOverrides)[0]
+  const chip = binding ? ` (${formatBinding(binding)})` : ''
   const style: CSSProperties = {
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: '10px',
@@ -30,9 +32,7 @@ export function ReleaseToggle(): JSX.Element {
       aria-pressed={released}
       onClick={() => window.helm.displays.toggleReleased()}
       title={
-        released
-          ? `Take the screens back (${chip})`
-          : `Release every screen to other apps (${chip})`
+        released ? `Take the screens back${chip}` : `Release every screen to other apps${chip}`
       }
     >
       {released ? 'SCREENS RELEASED · TAKE BACK' : 'RELEASE SCREENS'}

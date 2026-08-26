@@ -1,16 +1,17 @@
 import { useContext, useEffect, useState, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import type { UpdateStatus } from '../../shared/types'
+import type { DisplayStatus, UpdateStatus } from '../../shared/types'
 
 /**
  * Quiet "restart when you like" affordance. Deliberately invisible unless an
- * update is downloaded AND no output window is up — the operator must never
- * see update chrome mid-service.
+ * update is downloaded AND no output window is up AND the screens aren't released
+ * to a guest presenter (#66) — the operator must never see update chrome
+ * mid-service, and installing relaunches, which would re-claim released screens.
  */
 export function UpdatePill(): JSX.Element | null {
   const T = useContext(ThemeCtx)
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle', version: null })
-  const [outputs, setOutputs] = useState(0)
+  const [displays, setDisplays] = useState<DisplayStatus>({ outputs: 0, displays: [], released: false })
 
   useEffect(() => {
     // A pushed onStatus event is always at least as fresh as the in-flight
@@ -30,15 +31,15 @@ export function UpdatePill(): JSX.Element | null {
     let gotPush = false
     const off = window.helm.displays.onStatus((d) => {
       gotPush = true
-      setOutputs(d.outputs)
+      setDisplays(d)
     })
     void window.helm.displays.get().then((d) => {
-      if (!gotPush) setOutputs(d.outputs)
+      if (!gotPush) setDisplays(d)
     })
     return off
   }, [])
 
-  if (status.state !== 'ready' || outputs > 0) return null
+  if (status.state !== 'ready' || displays.outputs > 0 || displays.released) return null
 
   const pillStyle: CSSProperties = {
     height: '28px',

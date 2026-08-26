@@ -1,5 +1,6 @@
 import { useContext, useRef, useState, type CSSProperties, type JSX } from 'react'
 import type { Mode, ThemeMode } from './App'
+import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
@@ -15,6 +16,7 @@ export interface HeaderProps {
   themeMode: ThemeMode
   toggleTheme: () => void
   onOpenSettings: () => void
+  hotkeyOverrides: HotkeyOverrides
 }
 
 const MODE_TABS: Array<{ id: Mode; label: string; Icon: (p: IconProps) => JSX.Element }> = [
@@ -28,7 +30,8 @@ export function Header({
   setMode,
   themeMode,
   toggleTheme,
-  onOpenSettings
+  onOpenSettings,
+  hotkeyOverrides
 }: HeaderProps): JSX.Element {
   const T = useContext(ThemeCtx)
   const { output, liveSnap } = usePresentationState()
@@ -152,7 +155,7 @@ export function Header({
         ))}
       </div>
       <div style={{ flex: 1 }} />
-      <ReleaseToggle />
+      <ReleaseToggle hotkeyOverrides={hotkeyOverrides} />
       <div ref={outputsContainerRef} style={{ position: 'relative' }}>
         <button
           style={{ ...outputsChipStyle, cursor: 'pointer', background: 'transparent' }}

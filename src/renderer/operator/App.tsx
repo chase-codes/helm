@@ -141,7 +141,7 @@ function App(): JSX.Element {
   return (
     <ThemeCtx.Provider value={theme}>
       <div style={rootStyle}>
-        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} />
+        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} hotkeyOverrides={hotkeyOverrides} />
         <div style={mainStyle}>
           {/* Unlike Songs/Sermon, Pre-service is mounted only while it's the active page
               — the brief gives it no keep-alive, since its whole state lives in main and
