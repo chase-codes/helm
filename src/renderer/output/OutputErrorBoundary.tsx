@@ -1,9 +1,9 @@
 import React from 'react';
 
-interface Props { fallback: React.ReactNode; resetKey: string; children: React.ReactNode }
+interface Props { fallback: React.ReactNode; resetKey: string; children: React.ReactNode; logMessage?: string }
 interface State { failed: boolean; failedKey: string | null }
 
-/** The only error boundary in the app (BUG-009): a crash in a view must degrade the
+/** Output boundary (BUG-009): a crash in a view must degrade the
  *  output to the plain slides render, never blank a screen the congregation is watching.
  *  Re-arms once resetKey (the payload's view) moves away from the view that failed — not on
  *  any resetKey change — because a crash and a resetKey change often land in the same commit
@@ -14,7 +14,7 @@ export class OutputErrorBoundary extends React.Component<Props, State> {
   state: State = { failed: false, failedKey: null };
   static getDerivedStateFromError(): Partial<State> { return { failed: true }; }
   componentDidCatch(error: unknown): void {
-    console.error('[helm] output view crashed, falling back to slides:', error);
+    console.error(this.props.logMessage ?? '[helm] output view crashed, falling back to slides:', error);
     this.setState({ failedKey: this.props.resetKey });
   }
   componentDidUpdate(): void {

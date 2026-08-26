@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { Header } from './Header';
+import { ModeErrorBoundary } from './ModeErrorBoundary';
 import { dispatchModeKey } from './keyDispatch';
 import { PreServiceMode } from './PreServiceMode';
 import { SermonMode } from './SermonMode';
@@ -147,24 +148,32 @@ function App(): JSX.Element {
               — the brief gives it no keep-alive, since its whole state lives in main and
               is re-read on mount. It still takes `keyHandlerRef` so Delete and Escape
               reach its card rail like every other list surface (#90). */}
-          {mode === 'pre' && <PreServiceMode active={mode === 'pre'} keyHandlerRef={keyHandlerRef} />}
+          {mode === 'pre' && (
+            <ModeErrorBoundary label="Pre-service">
+              <PreServiceMode active={mode === 'pre'} keyHandlerRef={keyHandlerRef} />
+            </ModeErrorBoundary>
+          )}
           {/* Songs and Sermon stay mounted at all times (keep-alive contract) so operator
               state — cued song/section, sermon reading, schedule — survives tab switches.
               The inactive one is hidden via `display:none`; `display:contents` while active
               keeps it transparent to mainStyle's flex layout. Each receives `active` and
               only registers its keyboard delegate while it's the one on screen. */}
           <div style={{ display: mode === 'songs' ? 'contents' : 'none' }}>
-            <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
+            <ModeErrorBoundary label="Songs">
+              <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
+            </ModeErrorBoundary>
           </div>
           <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>
-            <SermonMode
-              themeMode={themeMode}
-              keyHandlerRef={keyHandlerRef}
-              active={mode === 'sermon'}
-              onOpenSettings={() => setSettingsOpen(true)}
-              biblesRevision={biblesRevision}
-              lookupNonce={lookupNonce}
-            />
+            <ModeErrorBoundary label="Sermon">
+              <SermonMode
+                themeMode={themeMode}
+                keyHandlerRef={keyHandlerRef}
+                active={mode === 'sermon'}
+                onOpenSettings={() => setSettingsOpen(true)}
+                biblesRevision={biblesRevision}
+                lookupNonce={lookupNonce}
+              />
+            </ModeErrorBoundary>
           </div>
         </div>
         {settingsOpen && (
