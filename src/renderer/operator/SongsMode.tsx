@@ -822,7 +822,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     fontSize: '12px',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
-    color: cuedIsLive ? T.accent : T.faint,
+    color: cuedIsLive ? T.accent : T.dim,
     fontWeight: 500
   };
   // The fit-measurement box (same shape as LeaderView's heroMiddle): containerType for

@@ -131,11 +131,11 @@ export function SermonCenter({
     fontSize: '12px',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
-    color: cuedIsLive ? accent : T.faint,
+    color: cuedIsLive ? accent : T.dim,
     fontWeight: 500
   };
   const verseCols = cols ?? [];
-  const verseVerStyle: CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', letterSpacing: '0.14em', color: T.faint, marginBottom: '8px' };
+  const verseVerStyle: CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', letterSpacing: '0.14em', color: T.dim, marginBottom: '8px' };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
     fontSize: 'clamp(26.0px, 2.70vw, 38.0px)',
@@ -155,7 +155,7 @@ export function SermonCenter({
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: '11.5px',
     letterSpacing: '0.08em',
-    color: T.faint,
+    color: T.dim,
     marginTop: '18px',
     textAlign: 'left'
   };
@@ -205,7 +205,7 @@ export function SermonCenter({
                   ))}
                 </div>
               ) : (
-                <div style={{ marginTop: '18px', fontSize: '13px', color: T.faint }}>{INSTALL_HINT}</div>
+                <div style={{ marginTop: '18px', fontSize: '13px', color: T.dim }}>{INSTALL_HINT}</div>
               )}
             </div>
           ) : variant === 'quote' ? (

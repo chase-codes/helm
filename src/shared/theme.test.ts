@@ -91,3 +91,28 @@ describe('themeFor', () => {
     expect(FAMILIES.grove.presetName).toEqual({ dark: 'Cedar', light: 'Sage' })
   })
 })
+
+describe('contrast floors (#47)', () => {
+  /** WCAG 2.1 relative luminance; hex-only — rgba() tokens (hairline/border/scrim) must not be fed in. */
+  const luminance = (hex: string): number => {
+    const c = [1, 3, 5]
+      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+  }
+  const contrast = (fg: string, bg: string): number => {
+    const [a, b] = [luminance(fg), luminance(bg)]
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+  }
+
+  it('secondary label text (dim) clears 4.5:1 on panel in every family and mode', () => {
+    // The hero verse/section labels use `dim` when cued-but-not-live (#47). A future
+    // family must not regress the label below WCAG AA body-text contrast.
+    for (const family of FAMILY_KEYS) {
+      for (const mode of MODES) {
+        const t = themeFor(family, mode)
+        expect(contrast(t.dim, t.panel), `${family}/${mode} dim on panel`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+})

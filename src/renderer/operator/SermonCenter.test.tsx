@@ -129,3 +129,31 @@ describe('SermonCenter — the transport is stable ground (#85)', () => {
     expect(btn(/Go live/).style.width).toBeTruthy()
   })
 })
+
+// #47: the hero label is the leader's handle on what's on screen; when cued-but-not-live
+// it must use `dim` (≥4.5:1 on panel in every palette), not decorative `faint`.
+describe('SermonCenter — hero labels readable when cued but not live (#47)', () => {
+  const T = themeFor('classic', 'dark')
+  // jsdom reads inline colours back as rgb(r, g, b)
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+
+  it('verse hero label and version tag use dim, not faint', () => {
+    render(<SermonCenter {...baseProps('verse')} />)
+    expect(screen.getByText('Label').style.color).toBe(rgb(T.dim))
+    expect(screen.getByText('KJV').style.color).toBe(rgb(T.dim))
+  })
+
+  it('quote label and source line use dim, not faint', () => {
+    render(<SermonCenter {...baseProps('quote')} quoteText="Grace abounds" quoteSource="— Author" />)
+    expect(screen.getByText('Label').style.color).toBe(rgb(T.dim))
+    expect(screen.getByText('— Author').style.color).toBe(rgb(T.dim))
+  })
+
+  it('the live hero label still uses the track accent', () => {
+    render(<SermonCenter {...baseProps('verse')} cuedIsLive />)
+    expect(screen.getByText('Label').style.color).toBe(rgb('#c9a55c'))
+  })
+})
