@@ -1330,3 +1330,19 @@ describe('SongsMode — collapsible section rail', () => {
     expect(h.cue).toHaveBeenCalledWith('song:s2:1', expect.objectContaining({ sectionLabel: 'Chorus' }));
   });
 });
+
+// #47: the section label ("NOW SINGING · …") must stay readable while cued-but-not-live —
+// `dim` clears 4.5:1 on panel in every palette; `faint` fails in 8 of 10.
+describe('song section label readable when not live (#47)', () => {
+  it('uses dim, not faint, when the song is not live', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const T = themeFor('classic', 'dark');
+    const n = parseInt(T.dim.slice(1), 16);
+    expect(screen.getByText('NOW SINGING · Verse 1').style.color).toBe(
+      `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+    );
+  });
+});
