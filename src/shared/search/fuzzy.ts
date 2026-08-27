@@ -78,9 +78,11 @@ export interface TextSignals {
                       // Lets a caller see WHICH token missed (the trailing-token band
                       // exemption in songScore). Additive: other consumers ignore it.
   strongSolid: number; // strong tokens whose match is "solid": exact, prefix, or a fuzz
-                       // into a word at least as long as the token. Fuzzing INTO a
-                       // shorter word (hand→and, your→you) is the stopword-noise
-                       // signature and cannot anchor the partial band on its own (W2).
+                       // into a word at least as long as the token — OR a single-edit
+                       // fuzz onto a word of 5+ chars (too long to be stopword-noise,
+                       // e.g. an insertion typo like recukless→reckless). Fuzzing INTO
+                       // a shorter word that's itself stopword-length (hand→and,
+                       // your→you) cannot anchor the partial band on its own (W2).
 }
 
 // Shared relevance pass for the song and message scorers. One fuzzy pass over the
