@@ -63,7 +63,7 @@ function evalQuery(b: Built, query: LabeledQuery): Eval {
 function pct(n: number, d: number): string { return d ? `${((100 * n) / d).toFixed(0)}%` : 'n/a'; }
 
 test('song search spike — measured evaluation', () => {
-  const corpus = buildCorpus(300); // ~346 songs total
+  const corpus = buildCorpus(300); // 356 songs total
   const b = build(corpus);
   console.log(`\n=== CORPUS: ${corpus.length} songs (${QUERIES.length} labeled queries) ===`);
 
@@ -91,9 +91,9 @@ test('song search spike — measured evaluation', () => {
   console.log(`unweighted p@1=${pct(uHit1, evals.length)}  (${uHit1}/${evals.length})`);
 
   // ---- RATCHET: quality floors — tighten in ratchet.ts whenever a fix improves them ----
-  expect(uHit1).toBeGreaterThanOrEqual(RATCHET.unweightedP1Min);
-  expect((100 * wP1) / wSum).toBeGreaterThanOrEqual(RATCHET.weightedP1MinPct);
-  expect((100 * wRec) / wSum).toBeGreaterThanOrEqual(RATCHET.recall50MinPct);
+  expect.soft(uHit1).toBeGreaterThanOrEqual(RATCHET.unweightedP1Min);
+  expect.soft((100 * wP1) / wSum).toBeGreaterThanOrEqual(RATCHET.weightedP1MinPct);
+  expect.soft((100 * wRec) / wSum).toBeGreaterThanOrEqual(RATCHET.recall50MinPct);
 
   // ---- Failures (rank != 1), with localization ----
   console.log('\n=== NOTABLE OUTCOMES: p@1 misses (rank>1 or absent) ===');

@@ -1,8 +1,8 @@
 // Keystroke replay over every labeled query: measures (a) top-1 churn — how often
 // the row Enter would cue changes under the operator's fingers — and (b)
-// monotonicity violations — the target held rank 1, then a CORRECT added
-// character demoted it. Both are asserted against RATCHET so accuracy work can
-// only improve them. Run with the harness config:
+// monotonicity violations — the target held rank 1, then a further keystroke of
+// the labeled query demoted it. Both are asserted against RATCHET so accuracy
+// work can only improve them. Run with the harness config:
 //   npx vitest run -c scratch/search-spike/vitest.config.ts --disableConsoleIntercept
 import { test, expect } from 'vitest';
 import { openTestDb } from '../../src/main/testDb';
