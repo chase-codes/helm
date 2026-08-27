@@ -141,3 +141,21 @@ test('remove of an unknown id is a no-op', () => {
   const a = repo.add({ title: 'A', text: 'Verse 1\nx' });
   expect(repo.remove('nope').map((s) => s.id)).toEqual([a.id]);
 });
+
+test('FTS-path candidate order matches list() order, so full ties rank identically on both paths (W7)', () => {
+  const db = openTestDb();
+  const r = createSongsRepo(db);
+  // Two byte-identical arrangements: every relevance signal ties, so candidate
+  // order is the only decider. Give the LATER rowid the EARLIER created_at.
+  const a = r.add({ title: 'Duplicate Anthem', text: 'Verse 1\nduplicate light shines' });
+  const b = r.add({ title: 'Duplicate Anthem', text: 'Verse 1\nduplicate light shines' });
+  db.prepare('UPDATE songs SET created_at = ? WHERE id = ?').run(1000, b.id);
+  db.prepare('UPDATE songs SET created_at = ? WHERE id = ?').run(2000, a.id);
+  // 30 decoys sharing the token, so the FTS path (not the full scan) runs.
+  for (let i = 0; i < 30; i++) r.add({ title: `Filler ${i}`, text: 'Verse 1\nduplicate voices sing' });
+  const viaFts = r.search('duplicate', 'all').map((x) => x.song.id);
+  expect(viaFts.indexOf(b.id)).toBeLessThan(viaFts.indexOf(a.id)); // created_at order, like list()
+  // and the full-scan path agrees ("duplicqte" has no FTS hit → library scan)
+  const viaScan = r.search('duplicqte', 'all').map((x) => x.song.id);
+  expect(viaScan.indexOf(b.id)).toBeLessThan(viaScan.indexOf(a.id));
+});

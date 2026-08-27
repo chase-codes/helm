@@ -15,6 +15,9 @@ export interface ScoredSong {
                            // section boundaries block) — a verbatim phrase wins (#53)
   coverage: number;        // # query tokens matched anywhere in the blob
   covWeight: number;       // Σ length of matched tokens — rare words outweigh stopwords (higher wins)
+  dist: number;            // Σ best match distance of matched tokens (exact 0, prefix 1,
+                           // fuzzy = edit distance) — lower wins; the only match-quality
+                           // signal that survives into lyric mode (W5)
   rel: number;             // -bm25 relevance from FTS (0 when FTS didn't match) (#53)
   tf: number;              // total exact occurrences of query tokens (higher wins)
   titleStartsWith: boolean;// title begins with the whole query (wins)
@@ -57,7 +60,7 @@ export function scoreSong(query: string, song: Song, field: SearchField, rel = 0
 function scoreSignals(query: string, song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredSong {
   const q = norm(query);
   const title = norm(song.title);
-  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
+  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, dist: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
   if (!q) return empty;
   const qts = q.split(' ');
 
@@ -67,14 +70,32 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   const segs: string[][] = [];
   if (field === 'title') segs.push(title.split(' '));
   else {
-    if (field !== 'lyric') { const tw = norm(`${song.title} ${song.author}`).split(' ').filter(Boolean); if (tw.length) segs.push(tw); }
+    if (field !== 'lyric') {
+      // Title and author are separate segments (W9): "grace john" must not earn a
+      // phrase run bridging "Amazing Grace" into "John Newton".
+      const tw = title.split(' ').filter(Boolean);
+      if (tw.length) segs.push(tw);
+      const aw = norm(song.author).split(' ').filter(Boolean);
+      if (aw.length) segs.push(aw);
+    }
     for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
   }
 
-  const { matched, strong, covWeight, tf, phrase } = textSignals(segs, qts);
+  const { matched, strong, covWeight, tf, phrase, dist } = textSignals(segs, qts);
 
   let score = 0;
-  if (field !== 'lyric') { if (title === q) score = 1200; else if (title.includes(q)) score = 1000 - title.indexOf(q); }
+  // Title-substring band anchors at a WORD START (W3): "art" may hit "How Great
+  // Thou Art" but never the inside of "Heart". A word-start hit at index i keeps
+  // the exact legacy weight 1000 - i, so earlier-in-title still ranks higher and
+  // word-start type-ahead ("wor" → Worship) is unchanged.
+  if (field !== 'lyric') {
+    if (title === q) score = 1200;
+    else if (title.startsWith(q)) score = 1000;
+    else {
+      const i = title.indexOf(` ${q}`);
+      if (i >= 0) score = 1000 - (i + 1);
+    }
+  }
   if (matched === qts.length && matched > 0) score = Math.max(score, 380 + matched * 12);
   // The partial band needs at least one significant matched token — 1-2 char stopwords
   // fuzz into nearly anything and must not qualify a song on their own.
@@ -90,7 +111,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const t of qts) { const d = bestMatch(t, titleWords); if (d < 99) { titleCoverage++; titleCloseness += d; } }
   }
   const titleStartsWith = field !== 'lyric' && title.startsWith(q);
-  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, rel, tf, titleStartsWith, titleLen: title.length, title };
+  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, dist, rel, tf, titleStartsWith, titleLen: title.length, title };
 }
 
 // Order by primary score, then by relevance sub-signals, then lexicographically by
@@ -98,8 +119,9 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
 function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
+  if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched (W1) — stopwords weigh less
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
-  if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched, stopwords weigh less
+  if (a.dist !== b.dist) return a.dist - b.dist;                     // closer/more exact matches win (W5)
   if (b.phrase !== a.phrase) return b.phrase - a.phrase;             // …then contiguity of what matched
   if (b.coverage !== a.coverage) return b.coverage - a.coverage;
   if (b.rel !== a.rel) return b.rel - a.rel;

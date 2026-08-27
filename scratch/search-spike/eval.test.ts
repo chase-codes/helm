@@ -148,6 +148,9 @@ test('song search spike — measured evaluation', () => {
   expect(ftsProbe(b.db, 'praise recukless').fallback).toBe(true);
   expect(ftsProbe(b.db, 'holy reckelss').fallback).toBe(true);
 
+  // W3 guard (all-field): a word-interior substring must not fabricate a result.
+  expect(b.repo.search('and', 'all').map((r) => r.song.title)).not.toContain('Standing Firm');
+
   console.log('interpretation: a token with no FTS hit of its own forces the full scan (#13),');
   console.log('so these queries DO reach the fuzzy scorer; their rank-1 misses are comparator-level (see W1).');
 

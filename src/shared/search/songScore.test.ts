@@ -177,3 +177,49 @@ test('term frequency breaks ties when phrase and coverage are equal', () => {
     expect(rankSongs('hallelujah glory', lib, 'lyric')[0].song.id).toBe('many');
   }
 });
+
+// --- W1: how much of the query matched outranks how closely one title word matched ---
+test('more of the query matched beats a closer single-word title fuzz (W1)', () => {
+  // "praise" matches Rise Praise exactly (tClose 0) but covers 6 chars of the query;
+  // "recukless"~"reckless" is 1 edit (tClose 1) but covers 9. The fuller match wins.
+  const praise = song('praise', 'Rise Praise', '', [['V', ['rise up and praise']]]);
+  const reckless = song('reckless', 'Reckless Love', '', [['V', ['oh the overwhelming never ending reckless love of god']]]);
+  for (const lib of [[praise, reckless], [reckless, praise]]) {
+    expect(rankSongs('praise recukless', lib, 'all')[0].song.id).toBe('reckless');
+  }
+});
+
+// --- W3: the title-substring band must anchor at a word start ---
+test('a word-interior substring does not take the title band: "art" vs "Heart" (W3)', () => {
+  const heart = song('heart', 'Heart of Worship', '', [['V', ['when the music fades']]]);
+  const thouArt = song('thouart', 'How Great Thou Art', '', [['V', ['then sings my soul']]]);
+  for (const lib of [[heart, thouArt], [thouArt, heart]]) {
+    expect(rankSongs('art', lib, 'all')[0].song.id).toBe('thouart');
+  }
+  // and the interior hit contributes no title band at all
+  expect(scoreSong('art', heart, 'all').score).toBe(0);
+});
+
+test('word-start type-ahead keeps its exact band values (W3)', () => {
+  const wellspring = song('wellspring', 'Wellspring', '', [['V', ['water rises']]]);
+  expect(scoreSong('well', wellspring, 'all').score).toBe(1000);           // startsWith
+  const itIsWell = song('itiswell', 'It Is Well With My Soul', '', [['V', ['it is well']]]);
+  expect(scoreSong('well', itIsWell, 'all').score).toBe(994);              // ' well' at index 6 → 1000-6
+});
+
+// --- W5: lyric mode gains edit-distance discrimination via the dist signal ---
+test('an exact match outranks an equally covered fuzzy match in lyric mode (W5)', () => {
+  // Constructed so every pre-dist signal ties: both match both tokens (covW 10),
+  // both have a 2-run phrase, and tf ties at 2 ("sanor" is not an exact occurrence
+  // but "jesus" appears twice). Pre-fix the shorter title wins; dist must decide.
+  const exact = song('exact', 'Alphabet Song', '', [['V', ['senor jesus reigns']]]);
+  const fuzz = song('fuzz', 'Beta', '', [['V', ['sanor jesus jesus']]]);
+  for (const lib of [[exact, fuzz], [fuzz, exact]]) {
+    expect(rankSongs('senor jesus', lib, 'lyric')[0].song.id).toBe('exact');
+  }
+});
+
+// --- W9: phrase runs must not bridge from title into author ---
+test('a phrase run cannot bridge title into author (W9)', () => {
+  expect(scoreSong('grace john', AMAZING, 'all').phrase).toBe(1);
+});
