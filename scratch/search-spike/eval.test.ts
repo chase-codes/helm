@@ -30,13 +30,19 @@ function build(corpus: CorpusSong[]): Built {
   return { repo, db, keyToRowid, keyToId };
 }
 
-// Replicate repo's FTS candidate selection to localize failures.
+// Replicate the repo's REAL candidate-path decision (songsRepo.search) to localize
+// failures: the FTS set is used only when hits >= 30 AND every token has at least
+// one prefix hit of its own (#13). Anything else full-scans, so the fuzzy scorer
+// DOES see the whole library in those cases.
 function ftsProbe(db: Database.Database, q: string): { hitRowids: Set<number>; count: number; fallback: boolean } {
   const tokens = norm(q).split(' ').filter(Boolean);
   if (!tokens.length) return { hitRowids: new Set(), count: 0, fallback: true };
   const match = tokens.map((t) => `"${t}"*`).join(' OR ');
   const rowids = (db.prepare('SELECT rowid FROM song_fts WHERE song_fts MATCH ?').all(match) as { rowid: number }[]).map((r) => r.rowid);
-  return { hitRowids: new Set(rowids), count: rowids.length, fallback: rowids.length < 30 };
+  const tokenHasHit = (t: string): boolean =>
+    db.prepare('SELECT 1 FROM song_fts WHERE song_fts MATCH ? LIMIT 1').get(`"${t}"*`) !== undefined;
+  const fallback = !(rowids.length >= 30 && tokens.every(tokenHasHit));
+  return { hitRowids: new Set(rowids), count: rowids.length, fallback };
 }
 
 interface Eval { query: LabeledQuery; rank: number; top1: string; targetScore: number; ftsHit: boolean; ftsCount: number; fallback: boolean; }
@@ -121,10 +127,8 @@ test('song search spike — measured evaluation', () => {
     console.log(`  "${q}": ftsCount=${fp.count} fallback=${fp.fallback}`);
   }
   console.log('multi-token typo where a COMMON correctly-spelled token alone yields >=30 hits:');
-  // Constructed guaranteed-exclusion repro: target "Reckless Love" contains neither
-  // "praise" nor any word prefixed by the typo "recukless" → excluded from FTS hits,
-  // and "praise" alone returns >=30 → fallback never fires → scorer never sees target,
-  // even though lev("recukless","reckless")=1 would have matched.
+  // A typo token with no FTS hit forces full-scan fallback (#13), so the scorer
+  // DOES see the target; the miss is comparator-level (see W1 / accuracy report).
   for (const q of ['praise recukless', 'holy reckelss', 'god goodnes']) {
     const fp = ftsProbe(b.db, q);
     const recklessRowid = b.keyToRowid.get('reckless-love')!;
@@ -132,8 +136,14 @@ test('song search spike — measured evaluation', () => {
     const rank = res.findIndex((r) => r.song.id === b.keyToId.get('reckless-love')) + 1;
     console.log(`  "${q}": ftsCount=${fp.count} fallback=${fp.fallback} targetInFtsHits=${fp.hitRowids.has(recklessRowid)} → Reckless Love rank=${rank || 'ABSENT'}`);
   }
-  console.log('interpretation: when >=30 correctly-typed hits suppress the fallback, a distinguishing');
-  console.log('misspelled token cannot be recovered — the fuzzy pass that would catch it never runs.');
+  // GUARD: the probe must mirror the REAL gate (#13, songsRepo.search): a token with
+  // no FTS hit of its own forces the full scan even when another token clears 30 hits.
+  // The pre-#13 probe reported fallback=false here and blamed the wrong layer.
+  expect(ftsProbe(b.db, 'praise recukless').fallback).toBe(true);
+  expect(ftsProbe(b.db, 'holy reckelss').fallback).toBe(true);
+
+  console.log('interpretation: a token with no FTS hit of its own forces the full scan (#13),');
+  console.log('so these queries DO reach the fuzzy scorer; their rank-1 misses are comparator-level (see W1).');
 
   // ---- Tie-break fragility: is Enter's rank-1 a real winner or an insertion-order coin flip? ----
   // The A1 fix keeps the flat primary `score` buckets and breaks ties by relevance
