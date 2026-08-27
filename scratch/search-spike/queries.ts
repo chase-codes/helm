@@ -11,7 +11,8 @@ export type Intent =
   | 'wrong-word-order'       // title words out of order / partial rearrangement
   | 'inflected-form'         // praise vs praising, etc.
   | 'accented-text'          // multilingual / diacritics
-  | 'audible-partial';       // very short prefix under time pressure
+  | 'audible-partial'        // very short prefix under time pressure
+  | 'author-recall';         // knows the artist, not the title
 
 export interface LabeledQuery {
   intent: Intent;
@@ -31,6 +32,7 @@ export const INTENT_WEIGHT: Record<Intent, number> = {
   'wrong-word-order': 2,
   'inflected-form': 1,
   'accented-text': 1,
+  'author-recall': 1,
 };
 
 export const QUERIES: LabeledQuery[] = [
@@ -104,4 +106,20 @@ export const QUERIES: LabeledQuery[] = [
     note: 'German ß in "Großer Gott"' },
   { intent: 'accented-text', q: 'senor', field: 'lyric', target: 'sublime-gracia',
     note: 'lyric "Señor" — unaccented query should still hit' },
+
+  // --- Adversarial additions (2026-08-27 accuracy investigation) ---
+  { intent: 'misspelled-title', q: 'praise recukless', field: 'all', target: 'reckless-love',
+    note: 'W1: an exactly-matched common word must not beat the near-matched rare one' },
+  { intent: 'misspelled-title', q: 'holy reckelss', field: 'all', target: 'reckless-love',
+    note: 'W1 companion (the original #13 shape, now comparator-bound)' },
+  { intent: 'audible-partial', q: 'art', field: 'all', target: 'how-great-thou-art',
+    note: 'W3: word-interior substring ("Heart", "Departed") must not outrank the word-start match' },
+  { intent: 'audible-partial', q: 'son', field: 'all', target: 'son-of-god',
+    note: 'W3: "Person of Peace" word-interior trap' },
+  { intent: 'audible-partial', q: 'well', field: 'all', target: 'wellspring',
+    note: 'W3: word-START "Wellspring" is legitimate type-ahead; "Farewell" is not' },
+  { intent: 'forgot-title-lyric', q: 'give me your hand', field: 'all', target: 'take-my-hand',
+    note: 'W2: the user-reported stopword-fuzz bug; also replayed per-keystroke in stability.test.ts' },
+  { intent: 'author-recall', q: 'asbury worship', field: 'all', target: 'reckless-love',
+    note: 'W6 (unfixed, follow-up issue): exact author match cannot win a band tie today — expected miss' },
 ];
