@@ -70,7 +70,14 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   const segs: string[][] = [];
   if (field === 'title') segs.push(title.split(' '));
   else {
-    if (field !== 'lyric') { const tw = norm(`${song.title} ${song.author}`).split(' ').filter(Boolean); if (tw.length) segs.push(tw); }
+    if (field !== 'lyric') {
+      // Title and author are separate segments (W9): "grace john" must not earn a
+      // phrase run bridging "Amazing Grace" into "John Newton".
+      const tw = title.split(' ').filter(Boolean);
+      if (tw.length) segs.push(tw);
+      const aw = norm(song.author).split(' ').filter(Boolean);
+      if (aw.length) segs.push(aw);
+    }
     for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
   }
 

@@ -218,3 +218,8 @@ test('an exact match outranks an equally covered fuzzy match in lyric mode (W5)'
     expect(rankSongs('senor jesus', lib, 'lyric')[0].song.id).toBe('exact');
   }
 });
+
+// --- W9: phrase runs must not bridge from title into author ---
+test('a phrase run cannot bridge title into author (W9)', () => {
+  expect(scoreSong('grace john', AMAZING, 'all').phrase).toBe(1);
+});
