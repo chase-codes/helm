@@ -11,6 +11,7 @@ import { norm } from '../../src/shared/search/fuzzy';
 import { scoreSong } from '../../src/shared/search/songScore';
 import { buildCorpus, type CorpusSong } from './corpus';
 import { QUERIES, INTENT_WEIGHT, type Intent, type LabeledQuery } from './queries';
+import { RATCHET } from './ratchet';
 
 interface Built { repo: SongsRepo; db: Database.Database; keyToRowid: Map<string, number>; keyToId: Map<string, string>; }
 
@@ -88,6 +89,11 @@ test('song search spike — measured evaluation', () => {
   console.log(`weighted p@1=${pct(wP1, wSum)}  p@3=${pct(wP3, wSum)}  recall@50=${pct(wRec, wSum)}  MRR=${(wMrr / wSum).toFixed(2)}`);
   const uHit1 = evals.filter((e) => hitAt(e, 1)).length;
   console.log(`unweighted p@1=${pct(uHit1, evals.length)}  (${uHit1}/${evals.length})`);
+
+  // ---- RATCHET: quality floors — tighten in ratchet.ts whenever a fix improves them ----
+  expect(uHit1).toBeGreaterThanOrEqual(RATCHET.unweightedP1Min);
+  expect((100 * wP1) / wSum).toBeGreaterThanOrEqual(RATCHET.weightedP1MinPct);
+  expect((100 * wRec) / wSum).toBeGreaterThanOrEqual(RATCHET.recall50MinPct);
 
   // ---- Failures (rank != 1), with localization ----
   console.log('\n=== NOTABLE OUTCOMES: p@1 misses (rank>1 or absent) ===');
@@ -215,6 +221,7 @@ test('song search spike — measured evaluation', () => {
     const ns = Number(process.hrtime.bigint() - start);
     const perSearch = ns / 1e6 / (REPS * QUERIES.length);
     console.log(`  ${String(size).padStart(4)} songs: ${perSearch.toFixed(2)} ms/search`);
+    if (size === 3000) expect(perSearch).toBeLessThanOrEqual(RATCHET.latencyMs3000Max);
   }
 
   expect(evals.length).toBe(QUERIES.length);
