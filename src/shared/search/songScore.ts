@@ -82,7 +82,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   }
 
   const sig = textSignals(segs, qts);
-  const { matched, strong, covWeight, tf, phrase, dist } = sig;
+  const { matched, strongSolid, covWeight, tf, phrase, dist } = sig;
 
   let score = 0;
   // Title-substring band anchors at a WORD START (W3): "art" may hit "How Great
@@ -106,7 +106,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   if ((matched === qts.length || trailingExempt) && matched > 0) score = Math.max(score, 380 + matched * 12);
   // The partial band needs at least one significant matched token — 1-2 char stopwords
   // fuzz into nearly anything and must not qualify a song on their own.
-  else if (strong > 0 && field !== 'title') score = Math.max(score, 360);
+  else if (strongSolid > 0 && field !== 'title') score = Math.max(score, 360);
   const snippet = withSnippet && score > 0 && field !== 'title' ? bestSnippet(qts, song.sections) : '';
 
   // Tie-break signals. Title-based signals only apply when the title is in scope; a

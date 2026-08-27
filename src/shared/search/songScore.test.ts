@@ -242,3 +242,11 @@ test('a short trailing mid-word token keeps the full-match band (W2)', () => {
   // only the TRAILING token is exempt — an unmatched short middle token is not
   expect(scoreSong('give zx your hand', s, 'all').score).toBe(360);
 });
+
+// --- W2: stopword-fuzz alone cannot open the partial band ---
+test('a fuzz into a shorter stopword cannot open the partial band (W2)', () => {
+  // "hand" edit-matches "and" — present in essentially every worship lyric; that
+  // alone must not admit a song
+  const s = song('andsong', 'Faithful Anthem', '', [['V', ['faithful and true forever']]]);
+  expect(scoreSong('give me your hand', s, 'all').score).toBe(0);
+});

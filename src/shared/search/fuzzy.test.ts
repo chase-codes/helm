@@ -50,3 +50,11 @@ describe('textSignals bestDist', () => {
     expect(s.bestDist).toEqual([0, 0, 99]);
   });
 });
+describe('textSignals strongSolid', () => {
+  test('a fuzz into a SHORTER word is not solid; equal-or-longer is', () => {
+    expect(textSignals([['and']], ['hand']).strongSolid).toBe(0);   // hand→and (4→3): noise signature
+    expect(textSignals([['sweet']], ['swet']).strongSolid).toBe(1); // swet→sweet (4→5): typo fix
+    expect(textSignals([['reckless']], ['reckelss']).strongSolid).toBe(1);
+    expect(textSignals([['the']], ['the']).strongSolid).toBe(1);    // exact match is always solid
+  });
+});

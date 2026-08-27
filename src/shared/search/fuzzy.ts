@@ -77,6 +77,10 @@ export interface TextSignals {
   bestDist: number[]; // per query token: best admissible match distance, 99 = unmatched.
                       // Lets a caller see WHICH token missed (the trailing-token band
                       // exemption in songScore). Additive: other consumers ignore it.
+  strongSolid: number; // strong tokens whose match is "solid": exact, prefix, or a fuzz
+                       // into a word at least as long as the token. Fuzzing INTO a
+                       // shorter word (hand→and, your→you) is the stopword-noise
+                       // signature and cannot anchor the partial band on its own (W2).
 }
 
 // Shared relevance pass for the song and message scorers. One fuzzy pass over the
@@ -88,6 +92,7 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
   const counts = new Map<string, number>();
   for (const seg of segs) for (const w of seg) counts.set(w, (counts.get(w) ?? 0) + 1);
   const bestDist: number[] = qts.map(() => 99);
+  const solid: boolean[] = qts.map(() => false);
   const wordMask = new Map<string, number>();
   for (const w of counts.keys()) {
     let mask = 0;
@@ -96,13 +101,22 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       if (d <= matchTol(qts[j].length)) {
         if (j < PHRASE_MAX_TOKENS) mask |= 1 << j;
         if (d < bestDist[j]) bestDist[j] = d;
+        // Solid: equal-or-longer word (exact/prefix/typo-fix), OR a single-edit fuzz
+        // that landed on a WORD long enough (>=5) not to be stopword-noise — an
+        // insertion typo (queried token one char too long, e.g. "recukless") is
+        // structurally identical to a stopword fuzz (hand->and) in length delta, but
+        // only stopwords are short; a 5+ char word one edit away is a typo, not noise.
+        if (w.length >= qts[j].length || (w.length >= 5 && d <= 1)) solid[j] = true;
       }
     }
     if (mask) wordMask.set(w, mask);
   }
-  let matched = 0; let strong = 0; let covWeight = 0; let tf = 0; let dist = 0;
+  let matched = 0; let strong = 0; let strongSolid = 0; let covWeight = 0; let tf = 0; let dist = 0;
   for (let j = 0; j < qts.length; j++) {
-    if (bestDist[j] < 99) { matched++; covWeight += qts[j].length; if (qts[j].length >= 3) strong++; dist += bestDist[j]; }
+    if (bestDist[j] < 99) {
+      matched++; covWeight += qts[j].length; dist += bestDist[j];
+      if (qts[j].length >= 3) { strong++; if (solid[j]) strongSolid++; }
+    }
     tf += counts.get(qts[j]) ?? 0;
   }
   // Longest run of consecutive query tokens appearing consecutively in a segment:
@@ -121,5 +135,5 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       const swap = prev; prev = cur; cur = swap;
     }
   }
-  return { matched, strong, covWeight, tf, phrase, dist, bestDist };
+  return { matched, strong, strongSolid, covWeight, tf, phrase, dist, bestDist };
 }
