@@ -177,3 +177,14 @@ test('term frequency breaks ties when phrase and coverage are equal', () => {
     expect(rankSongs('hallelujah glory', lib, 'lyric')[0].song.id).toBe('many');
   }
 });
+
+// --- W1: how much of the query matched outranks how closely one title word matched ---
+test('more of the query matched beats a closer single-word title fuzz (W1)', () => {
+  // "praise" matches Rise Praise exactly (tClose 0) but covers 6 chars of the query;
+  // "recukless"~"reckless" is 1 edit (tClose 1) but covers 9. The fuller match wins.
+  const praise = song('praise', 'Rise Praise', '', [['V', ['rise up and praise']]]);
+  const reckless = song('reckless', 'Reckless Love', '', [['V', ['oh the overwhelming never ending reckless love of god']]]);
+  for (const lib of [[praise, reckless], [reckless, praise]]) {
+    expect(rankSongs('praise recukless', lib, 'all')[0].song.id).toBe('reckless');
+  }
+});

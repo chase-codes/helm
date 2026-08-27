@@ -98,8 +98,8 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
 function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
+  if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched (W1) — stopwords weigh less
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
-  if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched, stopwords weigh less
   if (b.phrase !== a.phrase) return b.phrase - a.phrase;             // …then contiguity of what matched
   if (b.coverage !== a.coverage) return b.coverage - a.coverage;
   if (b.rel !== a.rel) return b.rel - a.rel;
