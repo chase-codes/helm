@@ -210,7 +210,7 @@ test('song search spike — measured evaluation', () => {
     // warm up
     for (const q of QUERIES) bb.repo.search(q.q, q.field);
     const start = process.hrtime.bigint();
-    const REPS = 5;
+    const REPS = 2;
     for (let r = 0; r < REPS; r++) for (const q of QUERIES) bb.repo.search(q.q, q.field);
     const ns = Number(process.hrtime.bigint() - start);
     const perSearch = ns / 1e6 / (REPS * QUERIES.length);
@@ -218,7 +218,7 @@ test('song search spike — measured evaluation', () => {
   }
 
   expect(evals.length).toBe(QUERIES.length);
-}, 60000);
+}, 300000);
 
 function CURATED_LEN(): number {
   // curated count, imported lazily to avoid a second import line up top

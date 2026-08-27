@@ -120,9 +120,28 @@ const MID = ['of', 'is', 'the', 'my', 'our', 'in', 'to', 'and', 'be'];
 const TAIL = ['Grace', 'God', 'King', 'Love', 'Saviour', 'Redeemer', 'Light', 'Praise',
   'Glory', 'Mercy', 'Kingdom', 'Hope', 'Name', 'Song', 'Cross', 'Blood', 'Spirit',
   'Freedom', 'Wonder', 'Majesty', 'Nations', 'Heaven', 'Grace Alone', 'Faithfulness'];
-const LYRIC_WORDS = ['grace', 'mercy', 'love', 'holy', 'praise', 'glory', 'jesus', 'lord',
-  'saviour', 'redeemer', 'mighty', 'faithful', 'forever', 'worthy', 'kingdom', 'freedom',
-  'salvation', 'righteousness', 'hallelujah', 'wonderful', 'everlasting', 'shepherd'];
+const LYRIC_WORDS = [
+  // content words
+  'grace', 'mercy', 'love', 'holy', 'praise', 'glory', 'jesus', 'lord', 'saviour',
+  'redeemer', 'mighty', 'faithful', 'forever', 'worthy', 'kingdom', 'freedom',
+  'salvation', 'righteousness', 'hallelujah', 'wonderful', 'everlasting', 'shepherd',
+  'heart', 'soul', 'sing', 'voice', 'raise', 'hands', 'lift', 'high', 'above',
+  'heaven', 'earth', 'mountain', 'valley', 'river', 'ocean', 'fire', 'light',
+  'darkness', 'morning', 'evening', 'night', 'shining', 'hope', 'joy', 'peace',
+  'rest', 'breath', 'life', 'living', 'risen', 'alive', 'blood', 'cross', 'crown',
+  'throne', 'king', 'father', 'spirit', 'name', 'word', 'truth', 'way', 'strong',
+  'tower', 'refuge', 'shelter', 'shield', 'victory', 'power', 'honour', 'majesty',
+  'wisdom', 'wonder', 'beauty', 'call', 'answer', 'seek', 'find', 'know', 'trust',
+  'believe', 'follow', 'surrender', 'worship', 'bow', 'kneel', 'stand', 'walk',
+  'run', 'dance', 'shout', 'whisper', 'cry', 'tears', 'blessing', 'promise',
+  'anchor', 'storm', 'wind', 'waves', 'deep', 'wide', 'broken', 'healed', 'whole',
+  'free', 'chains', 'door', 'gates', 'garden', 'vine', 'bread', 'water', 'fountain',
+  'rain', 'desert', 'wilderness', 'home', 'again', 'always', 'never', 'every',
+  'within', 'through', 'before', 'beyond',
+  // stopwords — real lyric density, and the fuzz pressure the W2/W4 cases need
+  'the', 'and', 'of', 'my', 'your', 'our', 'is', 'in', 'to', 'we', 'you', 'me',
+  'all', 'will', 'with', 'for', 'are', 'be', 'his', 'him',
+];
 
 // Deterministic PRNG (no Math.random — keeps runs reproducible).
 function mulberry32(seed: number): () => number {
@@ -141,26 +160,32 @@ export function makeFiller(n: number, seed = 12345): CorpusSong[] {
   const out: CorpusSong[] = [];
   const seen = new Set<string>();
   let i = 0;
+  const line = (): string => {
+    const w: string[] = [];
+    const len = 6 + Math.floor(rnd() * 4); // 6-9 words per line
+    for (let k = 0; k < len; k++) w.push(pick(LYRIC_WORDS));
+    return w.join(' ');
+  };
+  const section = (label: string): string => {
+    const lines: string[] = [];
+    const nLines = 4 + Math.floor(rnd() * 4); // 4-7 lines per section
+    for (let l = 0; l < nLines; l++) lines.push(line());
+    return `${label}\n${lines.join('\n')}`;
+  };
   while (out.length < n) {
     i++;
     const parts = rnd() < 0.5
       ? [pick(LEAD), pick(MID), pick(TAIL)]
       : [pick(LEAD), pick(TAIL)];
-    const title = parts.join(' ');
-    if (seen.has(title)) continue;
+    let title = parts.join(' ');
+    // LEAD×MID×TAIL is only ~5.8k combinations; the old skip-on-duplicate loop spun
+    // forever once the space was exhausted. A deterministic suffix keeps titles
+    // unique (and keeps the leading-word collision pressure) at any n.
+    if (seen.has(title)) title = `${title} ${out.length + 1}`;
     seen.add(title);
-    const lines: string[] = [];
-    for (let l = 0; l < 6; l++) {
-      const w: string[] = [];
-      for (let k = 0; k < 6; k++) w.push(pick(LYRIC_WORDS));
-      lines.push(w.join(' '));
-    }
-    out.push({
-      key: `filler-${i}`,
-      title,
-      author: `Author ${i}`,
-      text: `Verse 1\n${lines.slice(0, 3).join('\n')}\n\nChorus\n${lines.slice(3).join('\n')}`,
-    });
+    const chorus = section('Chorus'); // repeated verbatim — realistic term frequency
+    const text = [section('Verse 1'), chorus, section('Verse 2'), chorus, section('Verse 3'), section('Bridge')].join('\n\n');
+    out.push({ key: `filler-${i}`, title, author: `Author ${i}`, text });
   }
   return out;
 }
