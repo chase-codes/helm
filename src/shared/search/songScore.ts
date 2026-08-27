@@ -81,7 +81,8 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
   }
 
-  const { matched, strong, covWeight, tf, phrase, dist } = textSignals(segs, qts);
+  const sig = textSignals(segs, qts);
+  const { matched, strong, covWeight, tf, phrase, dist } = sig;
 
   let score = 0;
   // Title-substring band anchors at a WORD START (W3): "art" may hit "How Great
@@ -96,7 +97,13 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
       if (i >= 0) score = 1000 - (i + 1);
     }
   }
-  if (matched === qts.length && matched > 0) score = Math.max(score, 380 + matched * 12);
+  // Mid-word type-ahead: the operator's unfinished LAST token (<3 chars — too short
+  // for prefix credit, fuzz-blind) must not collapse the full-match band the query
+  // held one keystroke ago ("give me your ha" after "give me your h") (W2).
+  const last = qts.length - 1;
+  const trailingExempt = qts.length > 1 && qts[last].length < 3
+    && sig.bestDist[last] === 99 && matched === qts.length - 1;
+  if ((matched === qts.length || trailingExempt) && matched > 0) score = Math.max(score, 380 + matched * 12);
   // The partial band needs at least one significant matched token — 1-2 char stopwords
   // fuzz into nearly anything and must not qualify a song on their own.
   else if (strong > 0 && field !== 'title') score = Math.max(score, 360);

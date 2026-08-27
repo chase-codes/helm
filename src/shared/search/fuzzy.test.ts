@@ -44,3 +44,9 @@ describe('textSignals dist', () => {
     expect(textSignals([['jesus', 'wonderful', 'grasey']], ['jesus', 'wonder', 'grace']).dist).toBe(0 + 1 + 2);
   });
 });
+describe('textSignals bestDist', () => {
+  test('exposes per-token best distance, 99 for unmatched', () => {
+    const s = textSignals([['give', 'me', 'your', 'hand']], ['give', 'your', 'zz']);
+    expect(s.bestDist).toEqual([0, 0, 99]);
+  });
+});

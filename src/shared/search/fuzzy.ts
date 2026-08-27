@@ -74,6 +74,9 @@ export interface TextSignals {
   dist: number;      // Σ best match distance of each matched token (exact 0, prefix 1, fuzzy
                      // edit distance) — lower means closer/more exact matches overall.
                      // Additive: existing consumers (song/message scorers) ignore it.
+  bestDist: number[]; // per query token: best admissible match distance, 99 = unmatched.
+                      // Lets a caller see WHICH token missed (the trailing-token band
+                      // exemption in songScore). Additive: other consumers ignore it.
 }
 
 // Shared relevance pass for the song and message scorers. One fuzzy pass over the
@@ -118,5 +121,5 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       const swap = prev; prev = cur; cur = swap;
     }
   }
-  return { matched, strong, covWeight, tf, phrase, dist };
+  return { matched, strong, covWeight, tf, phrase, dist, bestDist };
 }

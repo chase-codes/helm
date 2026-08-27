@@ -232,3 +232,13 @@ test('a 1-2 char query token earns no title relevance credit (W2)', () => {
   expect(r.titleCoverage).toBe(1);   // "sing" only
   expect(r.titleCloseness).toBe(0);
 });
+
+// --- W2: the operator's unfinished trailing token must not collapse the band ---
+test('a short trailing mid-word token keeps the full-match band (W2)', () => {
+  // "ha" (2 chars) cannot match "hand" yet; the three complete tokens still carry
+  // the band ("give me your h" held 428 one keystroke earlier)
+  const s = song('takemyhand', 'Take My Hand', '', [['V', ['give me your hand tonight']]]);
+  expect(scoreSong('give me your ha', s, 'all').score).toBe(416); // 380 + 3*12
+  // only the TRAILING token is exempt — an unmatched short middle token is not
+  expect(scoreSong('give zx your hand', s, 'all').score).toBe(360);
+});

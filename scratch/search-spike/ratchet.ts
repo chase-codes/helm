@@ -9,8 +9,8 @@ export const RATCHET = {
   weightedP1MinPct: 92,             // intent-weighted p@1, percent (exact 92.86%, floored)
   recall50MinPct: 97,               // intent-weighted recall@50, percent
   // Stability ceilings (stability.test.ts)
-  churnMax: 148,                    // top-1 changes across all replayed keystrokes
-  monotonicityMax: 23,              // target held rank 1, then a further keystroke of the labeled query demoted it
+  churnMax: 144,                    // top-1 changes across all replayed keystrokes
+  monotonicityMax: 21,              // target held rank 1, then a further keystroke of the labeled query demoted it
   giveMeYourHandRegressionsMax: 1,  // hit→miss regressions replaying the reported bug
   // Perf ceiling (eval.test.ts latency loop)
   latencyMs3000Max: 330,            // avg ms/search at 3000 songs (pinned from the slowest observed run)
