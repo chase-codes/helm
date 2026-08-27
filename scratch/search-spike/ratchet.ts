@@ -5,12 +5,12 @@
 // not a CI benchmark.
 export const RATCHET = {
   // Quality floors (eval.test.ts)
-  unweightedP1Min: 46,              // count of rank-1 hits over QUERIES
-  weightedP1MinPct: 88,             // intent-weighted p@1, percent (exact 88.10%, floored)
+  unweightedP1Min: 48,              // count of rank-1 hits over QUERIES
+  weightedP1MinPct: 92,             // intent-weighted p@1, percent (exact 92.86%, floored)
   recall50MinPct: 97,               // intent-weighted recall@50, percent
   // Stability ceilings (stability.test.ts)
-  churnMax: 164,                    // top-1 changes across all replayed keystrokes
-  monotonicityMax: 27,              // target held rank 1, then a further keystroke of the labeled query demoted it
+  churnMax: 162,                    // top-1 changes across all replayed keystrokes
+  monotonicityMax: 26,              // target held rank 1, then a further keystroke of the labeled query demoted it
   giveMeYourHandRegressionsMax: 1,  // hit→miss regressions replaying the reported bug
   // Perf ceiling (eval.test.ts latency loop)
   latencyMs3000Max: 410,            // avg ms/search at 3000 songs (pinned from the slowest observed run)

@@ -135,3 +135,10 @@ test('a bare substring inside a longer word does not put a song in results', () 
   const hits = repo.search('and', 'lyric').map((r) => r.song.id);
   expect(hits).not.toContain(ids.get('standing'));
 });
+
+test('a word-interior title substring does not put a song in ALL-field results (W3)', () => {
+  // the existing 'and' guard at the end of this file only proves the LYRIC field;
+  // 'all' is what operators actually use, and pre-fix "Standing Firm" scored 998 here
+  const hits = repo.search('and', 'all').map((r) => r.song.id);
+  expect(hits).not.toContain(ids.get('standing'));
+});

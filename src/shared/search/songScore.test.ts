@@ -188,3 +188,21 @@ test('more of the query matched beats a closer single-word title fuzz (W1)', () 
     expect(rankSongs('praise recukless', lib, 'all')[0].song.id).toBe('reckless');
   }
 });
+
+// --- W3: the title-substring band must anchor at a word start ---
+test('a word-interior substring does not take the title band: "art" vs "Heart" (W3)', () => {
+  const heart = song('heart', 'Heart of Worship', '', [['V', ['when the music fades']]]);
+  const thouArt = song('thouart', 'How Great Thou Art', '', [['V', ['then sings my soul']]]);
+  for (const lib of [[heart, thouArt], [thouArt, heart]]) {
+    expect(rankSongs('art', lib, 'all')[0].song.id).toBe('thouart');
+  }
+  // and the interior hit contributes no title band at all
+  expect(scoreSong('art', heart, 'all').score).toBe(0);
+});
+
+test('word-start type-ahead keeps its exact band values (W3)', () => {
+  const wellspring = song('wellspring', 'Wellspring', '', [['V', ['water rises']]]);
+  expect(scoreSong('well', wellspring, 'all').score).toBe(1000);           // startsWith
+  const itIsWell = song('itiswell', 'It Is Well With My Soul', '', [['V', ['it is well']]]);
+  expect(scoreSong('well', itIsWell, 'all').score).toBe(994);              // ' well' at index 6 → 1000-6
+});

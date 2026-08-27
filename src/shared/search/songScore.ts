@@ -74,7 +74,18 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   const { matched, strong, covWeight, tf, phrase } = textSignals(segs, qts);
 
   let score = 0;
-  if (field !== 'lyric') { if (title === q) score = 1200; else if (title.includes(q)) score = 1000 - title.indexOf(q); }
+  // Title-substring band anchors at a WORD START (W3): "art" may hit "How Great
+  // Thou Art" but never the inside of "Heart". A word-start hit at index i keeps
+  // the exact legacy weight 1000 - i, so earlier-in-title still ranks higher and
+  // word-start type-ahead ("wor" → Worship) is unchanged.
+  if (field !== 'lyric') {
+    if (title === q) score = 1200;
+    else if (title.startsWith(q)) score = 1000;
+    else {
+      const i = title.indexOf(` ${q}`);
+      if (i >= 0) score = 1000 - (i + 1);
+    }
+  }
   if (matched === qts.length && matched > 0) score = Math.max(score, 380 + matched * 12);
   // The partial band needs at least one significant matched token — 1-2 char stopwords
   // fuzz into nearly anything and must not qualify a song on their own.
