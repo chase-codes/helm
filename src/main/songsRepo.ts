@@ -143,7 +143,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       // own → scan the library (FTS rows keep their bm25 prior via `rel`).
       if (hits.length >= 30 && tokens.every((t) => tokenHasHit(t))) {
         const qs = hits.map(() => '?').join(',');
-        candidates = (db.prepare(`SELECT rowid, * FROM songs WHERE rowid IN (${qs})`).all(...hits.map((h) => h.rowid)) as Row[]).map(toSong);
+        candidates = (db.prepare(`SELECT rowid, * FROM songs WHERE rowid IN (${qs}) ORDER BY created_at, title`).all(...hits.map((h) => h.rowid)) as Row[]).map(toSong);
       } else candidates = list(); // sparse hits or an unmatched token → typo likely; scorer handles fuzz
       return rankSongs(q, candidates, field, rel, 50);
     },
