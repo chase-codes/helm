@@ -109,6 +109,23 @@ export const CURATED: CorpusSong[] = [
     text: 'Coro\nÉl vive él vive\nCristo Jesús vive hoy\nÉl salva y me guarda\ny me guía con su amor' },
   { key: 'grosser-gott', title: 'Großer Gott, Wir Loben Dich', author: 'Ignaz Franz',
     text: 'Verse 1\nGroßer Gott wir loben dich\nHerr wir preisen deine Stärke\nVor dir neigt die Erde sich\nund bewundert deine Werke' },
+  // --- Adversarial targets/competitors (2026-08-27 accuracy investigation) ---
+  { key: 'take-my-hand', title: 'Take My Hand', author: 'Nobody Fictional',
+    text: 'Verse 1\nWhen the road is long and the night is cold\nI will walk beside you still\n\nChorus\nGive me your hand and walk with me\nThrough the valley to the morning light' },
+  { key: 'heart-of-worship', title: 'Heart of Worship', author: 'Matt Redman',
+    text: 'Verse 1\nWhen the music fades all is stripped away\nAnd I simply come\n\nChorus\nI am coming back to the heart of worship\nAnd it is all about You all about You Jesus' },
+  { key: 'son-of-god', title: 'The Son of God', author: 'Traditional',
+    text: 'Verse 1\nThe Son of God goes forth to war\nA kingly crown to gain' },
+  { key: 'person-of-peace', title: 'Person of Peace', author: 'Nobody Fictional',
+    text: 'Verse 1\nA person of peace came near to me\nAnd showed me a better way' },
+  { key: 'wellspring', title: 'Wellspring', author: 'Nobody Fictional',
+    text: 'Verse 1\nWellspring of wonder fountain of life\nOverflowing in my soul' },
+  { key: 'farewell-song', title: 'Farewell Song', author: 'Nobody Fictional',
+    text: 'Verse 1\nSing farewell to the night\nMorning breaks and all is new' },
+  { key: 'standing-firm', title: 'Standing Firm', author: 'Nobody Fictional',
+    text: 'Verse 1\nStanding on the promises\nUpheld forever by his word' },
+  { key: '1000-tongues', title: '1000 Tongues', author: 'Nobody Fictional',
+    text: 'Verse 1\nA thousand tongues could never say\nHow good you are to me' },
 ];
 
 // --- Synthetic filler: plausible worship titles from a controlled vocabulary,
