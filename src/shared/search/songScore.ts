@@ -15,6 +15,9 @@ export interface ScoredSong {
                            // section boundaries block) — a verbatim phrase wins (#53)
   coverage: number;        // # query tokens matched anywhere in the blob
   covWeight: number;       // Σ length of matched tokens — rare words outweigh stopwords (higher wins)
+  dist: number;            // Σ best match distance of matched tokens (exact 0, prefix 1,
+                           // fuzzy = edit distance) — lower wins; the only match-quality
+                           // signal that survives into lyric mode (W5)
   rel: number;             // -bm25 relevance from FTS (0 when FTS didn't match) (#53)
   tf: number;              // total exact occurrences of query tokens (higher wins)
   titleStartsWith: boolean;// title begins with the whole query (wins)
@@ -57,7 +60,7 @@ export function scoreSong(query: string, song: Song, field: SearchField, rel = 0
 function scoreSignals(query: string, song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredSong {
   const q = norm(query);
   const title = norm(song.title);
-  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
+  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, dist: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
   if (!q) return empty;
   const qts = q.split(' ');
 
@@ -71,7 +74,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
   }
 
-  const { matched, strong, covWeight, tf, phrase } = textSignals(segs, qts);
+  const { matched, strong, covWeight, tf, phrase, dist } = textSignals(segs, qts);
 
   let score = 0;
   // Title-substring band anchors at a WORD START (W3): "art" may hit "How Great
@@ -101,7 +104,7 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     for (const t of qts) { const d = bestMatch(t, titleWords); if (d < 99) { titleCoverage++; titleCloseness += d; } }
   }
   const titleStartsWith = field !== 'lyric' && title.startsWith(q);
-  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, rel, tf, titleStartsWith, titleLen: title.length, title };
+  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, dist, rel, tf, titleStartsWith, titleLen: title.length, title };
 }
 
 // Order by primary score, then by relevance sub-signals, then lexicographically by
@@ -111,6 +114,7 @@ function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
   if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched (W1) — stopwords weigh less
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
+  if (a.dist !== b.dist) return a.dist - b.dist;                     // closer/more exact matches win (W5)
   if (b.phrase !== a.phrase) return b.phrase - a.phrase;             // …then contiguity of what matched
   if (b.coverage !== a.coverage) return b.coverage - a.coverage;
   if (b.rel !== a.rel) return b.rel - a.rel;
