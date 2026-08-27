@@ -108,7 +108,11 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   let titleCoverage = 0; let titleCloseness = 0;
   if (field !== 'lyric') {
     const titleWords = title.split(' ');
-    for (const t of qts) { const d = bestMatch(t, titleWords); if (d < 99) { titleCoverage++; titleCloseness += d; } }
+    for (const t of qts) {
+      if (t.length < 3) continue; // mirror `strong`: a 1-2 char stopword fuzzes into any title (W2)
+      const d = bestMatch(t, titleWords);
+      if (d < 99) { titleCoverage++; titleCloseness += d; }
+    }
   }
   const titleStartsWith = field !== 'lyric' && title.startsWith(q);
   return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, dist, rel, tf, titleStartsWith, titleLen: title.length, title };

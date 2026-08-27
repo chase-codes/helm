@@ -204,7 +204,7 @@ test('word-start type-ahead keeps its exact band values (W3)', () => {
   const wellspring = song('wellspring', 'Wellspring', '', [['V', ['water rises']]]);
   expect(scoreSong('well', wellspring, 'all').score).toBe(1000);           // startsWith
   const itIsWell = song('itiswell', 'It Is Well With My Soul', '', [['V', ['it is well']]]);
-  expect(scoreSong('well', itIsWell, 'all').score).toBe(994);              // ' well' at index 6 → 1000-6
+  expect(scoreSong('well', itIsWell, 'all').score).toBe(994);              // ' well' found at index 5 → word starts at 6 → 1000-6
 });
 
 // --- W5: lyric mode gains edit-distance discrimination via the dist signal ---
@@ -222,4 +222,13 @@ test('an exact match outranks an equally covered fuzzy match in lyric mode (W5)'
 // --- W9: phrase runs must not bridge from title into author ---
 test('a phrase run cannot bridge title into author (W9)', () => {
   expect(scoreSong('grace john', AMAZING, 'all').phrase).toBe(1);
+});
+
+// --- W2 hardening: 1-2 char tokens fuzz into any title and earn no title credit ---
+test('a 1-2 char query token earns no title relevance credit (W2)', () => {
+  // pre-fix "me"~"we" (lev 1, tol 1) inflated titleCoverage to 2 / titleCloseness to 1
+  const s = song('wesing', 'We Sing', '', [['V', ['we sing together']]]);
+  const r = scoreSong('me sing', s, 'all');
+  expect(r.titleCoverage).toBe(1);   // "sing" only
+  expect(r.titleCloseness).toBe(0);
 });
