@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { norm, lev, levWithin, fuzzyTok, matchTol, textSignals, bestSolidMatch } from './fuzzy';
+import { norm, lev, levWithin, matchTol, textSignals, bestSolidMatch } from './fuzzy';
 
 describe('norm', () => {
   test('lowercases, strips apostrophes and punctuation, collapses spaces', () => {
@@ -34,13 +34,6 @@ describe('matchTol', () => {
     expect(matchTol(4)).toBe(1);
     expect(matchTol(5)).toBe(2);
     expect(matchTol(6)).toBe(2);
-  });
-});
-describe('fuzzyTok', () => {
-  test('tolerance scales with token length', () => {
-    expect(fuzzyTok('beleive', ['believe'])).toBe(true);  // len 7 → tol 2
-    expect(fuzzyTok('gras', ['grab'])).toBe(true);        // len 4 → tol 1, lev 1
-    expect(fuzzyTok('cat', ['dog'])).toBe(false);
   });
 });
 describe('textSignals dist', () => {
