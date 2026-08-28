@@ -16,5 +16,7 @@ Receives in-app feedback and files it as a GitHub issue so reporters never leave
 Builds without those secrets fall back to opening a prefilled GitHub issue form.
 
 ## What it does not do
-- Store anything about the reporter. No identity, no email (see #63 follow-ups).
+- Store anything about the reporter beyond a per-IP request counter in KV, kept for
+  one hour for rate limiting. No identity, no email, no message content (see #63
+  follow-ups).
 - Authenticate. `CLIENT_KEY` is in the app binary; it only deters casual abuse. Rate limit is 5/IP/hour.

@@ -6,13 +6,13 @@ body:
     id: version
     attributes:
       label: Helm version
-      description: Shown in Help → Report a Problem, or the installer filename
+      description: Shown at the bottom of Settings, or the installer filename
     validations:
       required: false
   - type: input
     id: os
     attributes:
-      label: Windows version
+      label: Operating system
     validations:
       required: false
   - type: textarea

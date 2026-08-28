@@ -23,6 +23,7 @@ jobs:
       - run: npm test
       - run: npm --prefix feedback-worker ci
       - run: npm run test:worker
+      - run: npm --prefix feedback-worker run typecheck
 
   # Test-only on macOS so the suite isn't first exercised there at tag time
   # (release-mac used to be the only macOS run, #105). No vendor/packaging.
