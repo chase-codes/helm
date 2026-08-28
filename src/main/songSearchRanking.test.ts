@@ -12,6 +12,9 @@ const ids = new Map<string, string>();
 const add = (key: string, title: string, text: string): void => {
   ids.set(key, repo.add({ title, author: '', text, source: 'seed' }).id);
 };
+const addBy = (key: string, title: string, author: string, text: string): void => {
+  ids.set(key, repo.add({ title, author, text, source: 'seed' }).id);
+};
 const rankOf = (q: string, field: 'all' | 'title' | 'lyric', key: string): number => {
   const idx = repo.search(q, field).findIndex((r) => r.song.id === ids.get(key));
   return idx < 0 ? -1 : idx + 1;
@@ -86,6 +89,30 @@ beforeAll(() => {
   add('standing', 'Standing Firm', [
     'Verse 1', 'Standing on the promises', 'Upheld forever by his word',
   ].join('\n'));
+
+  // W8 (#122): the canonical typed form "10000" must beat the nearer numeric
+  // title "1000 Tongues" — norm() joins the digit-group comma so the real title
+  // carries a whole word "10000" (title-startsWith band), while "1000" only
+  // fuzz-matches at distance 1.
+  add('ten-thousand', '10,000 Reasons (Bless the Lord)', [
+    'Chorus', 'Bless the Lord O my soul', 'Worship His holy name',
+  ].join('\n'));
+  add('thousand-tongues', '1000 Tongues', [
+    'Verse 1', 'A thousand tongues could never say', 'How good you are to me',
+  ].join('\n'));
+
+  // W6 (#121): "asbury worship" — the exact-author match must win the partial band
+  // over both title matchers ("Heart of Worship") and an author whose NAME contains
+  // the common token ("Hillsong Worship").
+  addBy('reckless', 'Reckless Love', 'Cory Asbury', [
+    'Chorus', 'Oh the overwhelming never ending reckless love of God',
+  ].join('\n'));
+  addBy('heart-of-worship', 'Heart of Worship', 'Matt Redman', [
+    'Verse 1', 'When the music fades all is stripped away',
+  ].join('\n'));
+  addBy('king-of-kings', 'King of Kings', 'Hillsong Worship', [
+    'Verse 1', 'In the darkness we were waiting',
+  ].join('\n'));
 });
 
 test('stopword-heavy phrase outranks scattered stopword matches (lyric field)', () => {
@@ -141,4 +168,13 @@ test('a word-interior title substring does not put a song in ALL-field results (
   // 'all' is what operators actually use, and pre-fix "Standing Firm" scored 998 here
   const hits = repo.search('and', 'all').map((r) => r.song.id);
   expect(hits).not.toContain(ids.get('standing'));
+});
+
+test('W8 (#122): "10000" ranks 10,000 Reasons above the nearer numeric collision', () => {
+  expect(rankOf('10000', 'all', 'ten-thousand')).toBe(1);
+  expect(rankOf('10000', 'all', 'thousand-tongues')).toBeGreaterThan(1);
+});
+
+test('W6 (#121): exact author match wins the partial band over common-token matchers', () => {
+  expect(rankOf('asbury worship', 'all', 'reckless')).toBe(1);
 });

@@ -13,6 +13,14 @@ describe('norm', () => {
     expect(norm('Größe Ærø Łódź')).toBe('grosse aero lodz');
     expect(norm('café crème')).toBe('cafe creme');
   });
+  test('norm joins digit-group commas so "10,000" is one token (W8)', () => {
+    expect(norm('10,000 Reasons (Bless the Lord)')).toBe('10000 reasons bless the lord');
+    expect(norm('1,000,000')).toBe('1000000');
+    // Comma joins ONLY between digits — word commas still split:
+    expect(norm('Holy, Holy, Holy')).toBe('holy holy holy');
+    // Comma followed by a space is a list separator, not a digit group:
+    expect(norm('Psalm 23, 16')).toBe('psalm 23 16');
+  });
 });
 describe('lev', () => {
   test('edit distances', () => {

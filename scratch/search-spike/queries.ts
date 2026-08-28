@@ -56,7 +56,7 @@ export const QUERIES: LabeledQuery[] = [
   { intent: 'audible-partial', q: 'grave', field: 'all', target: 'graves-into-gardens' },
   { intent: 'audible-partial', q: 'cornerst', field: 'all', target: 'cornerstone' },
   { intent: 'audible-partial', q: '10000', field: 'all', target: '10000-reasons',
-    note: 'digits + comma in title "10,000 Reasons"' },
+    note: 'W8 (#122 fixed): norm() joins the digit-group comma; whole-word "10000" wins the title band' },
   { intent: 'audible-partial', q: 'o come to the alt', field: 'all', target: 'o-come-to-the-altar' },
   { intent: 'audible-partial', q: 'no longer', field: 'all', target: 'no-longer-slaves' },
 
@@ -121,5 +121,5 @@ export const QUERIES: LabeledQuery[] = [
   { intent: 'forgot-title-lyric', q: 'give me your hand', field: 'all', target: 'take-my-hand',
     note: 'W2: the user-reported stopword-fuzz bug; also replayed per-keystroke in stability.test.ts' },
   { intent: 'author-recall', q: 'asbury worship', field: 'all', target: 'reckless-love',
-    note: 'W6 (unfixed, follow-up issue): exact author match cannot win a band tie today — expected miss' },
+    note: 'W6 (#121 fixed): rare-token idf tie-break — the exact author match wins the partial band' },
 ];

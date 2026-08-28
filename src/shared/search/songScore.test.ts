@@ -292,3 +292,38 @@ test('buildSongDoc precomputes normalized words for title, author, sections and 
   expect(d.sectionWords[0]).toEqual(['amazing', 'grace', 'how', 'sweet', 'the', 'sound', 'that', 'saved', 'a', 'wretch', 'like', 'me']);
   expect(d.lineWords[0][1]).toEqual(['that', 'saved', 'a', 'wretch', 'like', 'me']);
 });
+
+// W6 (#121): inside the partial band (360), candidates matched DIFFERENT token
+// subsets. A rare matched token (an author name) carries more operator intent than
+// a common one (a word in dozens of titles/lyrics) — regardless of WHICH field
+// matched it. Plain author-field credit is not enough: an author like
+// "Hillsong Worship" earns the same exact author-word hit on the common token.
+test('partial band: the candidate matching the RARE token beats the common-token crowd (W6)', () => {
+  const target = song('target', 'Reckless Love', 'Cory Asbury', [
+    ['Chorus', ['Oh the overwhelming never ending love of God']],
+  ]);
+  const decoys = ['w1', 'w2', 'w3', 'w4'].map((id, i) =>
+    song(id, `${['Heart of', 'Here I Am to', 'Come Now and', 'House of'][i]} Worship`, 'Nobody', [
+      ['Verse 1', ['We sing together in this place']],
+    ]));
+  const authorDecoy = song('kok', 'King of Kings', 'Hillsong Worship', [
+    ['Verse 1', ['In the darkness we were waiting']],
+  ]);
+  const r = rankSongs('asbury worship', [ ...decoys, authorDecoy, target ], 'all');
+  expect(r[0].song.id).toBe('target');
+});
+
+test('idfWeight never reorders bands other than the partial band', () => {
+  // The comparator consults idf only at score 360 (the partial band); candidate `a`
+  // lands in the exact-title band (score 1200) and `b` in a different full-match band
+  // (score 404) — the score inequality alone decides before idf is ever consulted.
+  const a = song('a', 'Amazing Grace', 'John Newton', [
+    ['Verse 1', ['Amazing grace how sweet the sound']],
+  ]);
+  const b = song('b', 'Grace Amazing Anthem', 'Nobody', [
+    ['Verse 1', ['An amazing kind of grace']],
+  ]);
+  const r = rankSongs('amazing grace', [b, a], 'all');
+  expect(r[0].song.id).toBe('a'); // exact-title band, untouched by idf
+  expect(scoreSong('amazing grace', a, 'all').idfWeight).toBe(0); // scoreSong: no candidate set
+});
