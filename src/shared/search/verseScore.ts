@@ -1,13 +1,10 @@
 import { norm, textSignals } from './fuzzy';
-import { BOOKS } from '../scripture/books';
+import { canonicalBookIndex } from '../scripture/books';
 
 export interface VerseHit { book: string; chapter: number; verse: number; text: string }
 export interface VerseSignals { score: number; phrase: number; covWeight: number; dist: number }
 
 export const verseKey = (v: { book: string; chapter: number; verse: number }): string => `${v.book}:${v.chapter}:${v.verse}`;
-
-const BOOK_INDEX = new Map(BOOKS.map((b, i) => [b.name, i]));
-const bookIndex = (name: string): number => BOOK_INDEX.get(name) ?? Number.MAX_SAFE_INTEGER;
 
 // The bundled KJV writes some compound proper nouns with an en dash — "Beth–lehem",
 // "Beer–sheba" — and the shared word tokenizer (norm) treats any dash as a word
@@ -58,7 +55,7 @@ export function rankVerses(q: string, rows: VerseHit[], limit = 50): VerseHit[] 
       if (b.s.phrase !== a.s.phrase) return b.s.phrase - a.s.phrase;
       if (b.s.covWeight !== a.s.covWeight) return b.s.covWeight - a.s.covWeight;
       if (a.s.dist !== b.s.dist) return a.s.dist - b.s.dist;
-      const bi = bookIndex(a.r.book) - bookIndex(b.r.book);
+      const bi = canonicalBookIndex(a.r.book) - canonicalBookIndex(b.r.book);
       if (bi) return bi;
       if (a.r.chapter !== b.r.chapter) return a.r.chapter - b.r.chapter;
       return a.r.verse - b.r.verse;

@@ -4,7 +4,7 @@
 // extra ways people say it. Ranges are validated against the bundled KJV in passages.test.
 import { norm, textSignals } from '../search/fuzzy'
 import { parseVerseQuery } from '../search/verseScore'
-import { BOOKS } from './books'
+import { canonicalBookIndex } from './books'
 
 export interface Passage { title: string; aliases: string[]; book: string; ch: number; from: number; to: number }
 
@@ -335,9 +335,6 @@ export const PASSAGES: Passage[] = [
   P('The River of Life', 'Revelation', 22, 1, 21, 'river of water of life', 'tree of life', 'even so come lord jesus', 'behold i come quickly'),
 ]
 
-const BOOK_INDEX = new Map(BOOKS.map((b, i) => [b.name, i]))
-const bookIndex = (name: string): number => BOOK_INDEX.get(name) ?? Number.MAX_SAFE_INTEGER
-
 interface Indexed { p: Passage; segs: string[][] }
 // Title and each alias are separate segments: a phrase run can't bridge "lost sheep" +
 // "lost coin" into a 3-word match.
@@ -365,7 +362,7 @@ export function matchPassages(q: string, limit = 3): Passage[] {
       if (b.s.covWeight !== a.s.covWeight) return b.s.covWeight - a.s.covWeight
       if (a.s.dist !== b.s.dist) return a.s.dist - b.s.dist
       if (a.p.title.length !== b.p.title.length) return a.p.title.length - b.p.title.length
-      const bi = bookIndex(a.p.book) - bookIndex(b.p.book)
+      const bi = canonicalBookIndex(a.p.book) - canonicalBookIndex(b.p.book)
       if (bi) return bi
       if (a.p.ch !== b.p.ch) return a.p.ch - b.p.ch
       return a.p.from - b.p.from
