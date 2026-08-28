@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { norm, lev, fuzzyTok, matchTol, textSignals, bestSolidMatch } from './fuzzy';
+import { norm, lev, levWithin, fuzzyTok, matchTol, textSignals, bestSolidMatch } from './fuzzy';
 
 describe('norm', () => {
   test('lowercases, strips apostrophes and punctuation, collapses spaces', () => {
@@ -71,5 +71,24 @@ describe('bestSolidMatch', () => {
   });
   test('a fuzz into a shorter stopword-length word is not solid', () => {
     expect(bestSolidMatch('hand', ['and'])).toBe(99);
+  });
+});
+describe('levWithin', () => {
+  test('exact within tolerance, sentinel beyond', () => {
+    expect(levWithin('grace', 'grace', 2)).toBe(0);
+    expect(levWithin('beleive', 'believe', 2)).toBe(2);
+    expect(levWithin('cat', 'dog', 2)).toBeGreaterThan(2);
+    expect(levWithin('abcdefgh', 'a', 2)).toBeGreaterThan(2); // length-gap short-circuit
+    expect(levWithin('', 'ab', 2)).toBe(2);
+  });
+  test('agrees with exact lev for every pair of a realistic word list', () => {
+    const words = ['grace', 'grase', 'graces', 'worship', 'worsh', 'and', 'hand', 'sweet',
+      'swet', 'believe', 'beleive', 'a', '', 'ab', 'faithfulness', 'faithfullness'];
+    for (const a of words) for (const b of words) {
+      const exact = lev(a, b);
+      const banded = levWithin(a, b, 2);
+      if (exact <= 2) expect(banded).toBe(exact);
+      else expect(banded).toBeGreaterThan(2);
+    }
   });
 });

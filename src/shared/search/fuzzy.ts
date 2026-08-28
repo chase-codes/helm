@@ -26,6 +26,33 @@ export function lev(a: string, b: string): number {
   }
   return d[m][n];
 }
+// Levenshtein restricted to distances <= tol: exact inside the band, `tol + 1`
+// beyond it, with a per-row early exit. Two rolling rows instead of the full
+// matrix; cells with |i-j| > tol are clamped to tol+1 (their true distance is at
+// least |i-j|, so the clamp can never fake an admissible path). `lev` stays
+// exported and exact — tests and any caller needing true distances keep using it.
+export function levWithin(a: string, b: string, tol: number): number {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > tol) return tol + 1;
+  if (!m || !n) return Math.max(m, n); // <= tol by the guard above
+  const BIG = tol + 1;
+  let prev = Array.from({ length: n + 1 }, (_, j) => (j <= tol ? j : BIG));
+  let cur = new Array<number>(n + 1);
+  for (let i = 1; i <= m; i++) {
+    let rowMin = BIG;
+    for (let j = 0; j <= n; j++) {
+      if (Math.abs(i - j) > tol) { cur[j] = BIG; continue; }
+      if (j === 0) { cur[0] = i; rowMin = i; continue; }
+      const c = a[i - 1] === b[j - 1] ? 0 : 1;
+      const v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + c);
+      cur[j] = v > BIG ? BIG : v;
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > tol) return BIG;
+    const t = prev; prev = cur; cur = t;
+  }
+  return prev[n] > tol ? BIG : prev[n];
+}
 // Single source of truth for fuzzy-match tolerance by token length: short tokens
 // (≤4) allow 1 edit, longer tokens allow 2. Used by fuzzyTok, songScore, and
 // messageScore so every scorer agrees on len-5 (→ 2) and every other length.
@@ -45,7 +72,9 @@ export function fuzzyTok(tok: string, words: string[]): boolean {
 export function matchDist(t: string, w: string): number {
   if (w === t) return 0;
   if (w.length > t.length && w.startsWith(t) && (t.length >= 3 || /^[0-9]+$/.test(t))) return 1;
-  return Math.abs(w.length - t.length) <= 2 ? lev(t, w) : 99;
+  // No caller admits a distance above 2 (matchTol's ceiling), so the DP may bail
+  // early and report 3 for "too far" instead of computing the exact distance.
+  return Math.abs(w.length - t.length) <= 2 ? levWithin(t, w, 2) : 99;
 }
 
 // Best matchDist of token `t` against any word in `words`, or 99 if nothing is
