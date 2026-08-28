@@ -6,6 +6,7 @@ import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { PreCard, PreState, PresentationState } from '../../shared/types'
+import { settleAndClear } from '../../test/mocks'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -276,7 +277,8 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     await screen.findByText('Announcements')
 
     fireEvent.click(rowFor('Greeting'))
-    showCard.mockClear()
+    // Settle on the showCard the plain click causes before clearing — never on DOM.
+    await settleAndClear(showCard, 0)
     fireEvent.click(rowFor('Announcements'), { shiftKey: true })
 
     for (const t of ['Greeting', 'Psalm 122:1', 'Announcements']) {

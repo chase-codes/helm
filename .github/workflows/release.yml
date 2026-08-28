@@ -4,8 +4,27 @@ on:
     tags: ['v*']
 
 jobs:
+  # Lint/typecheck/test once, up front, so a red suite can never reach the
+  # publish steps below (#105). The packaging jobs need: this and no longer
+  # run the suite inline.
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
   release:
     runs-on: windows-latest
+    needs: verify
     permissions:
       contents: write
     steps:
@@ -24,9 +43,6 @@ jobs:
             exit 1
           fi
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
       - name: Vendor bundled deps (bibles + LibreOffice)
         uses: ./.github/actions/vendor-deps
         timeout-minutes: 25
@@ -49,7 +65,7 @@ jobs:
 
   release-mac:
     runs-on: macos-14
-    needs: release
+    needs: [verify, release]
     permissions:
       contents: write
     steps:
@@ -67,9 +83,6 @@ jobs:
             exit 1
           fi
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
       - name: Vendor bundled deps (bibles + LibreOffice)
         uses: ./.github/actions/vendor-deps
         timeout-minutes: 25

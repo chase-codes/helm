@@ -6,6 +6,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { MediaItem, PresentationState } from '../../shared/types'
 import type { PanelWidthControl } from './usePanelWidth'
+import { settleAndClear } from '../../test/mocks'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -175,8 +176,9 @@ describe('SlidesTrack', () => {
     renderTrack()
     const imgRow = (await screen.findByText('▣ Welcome.jpg')).closest('button') as HTMLButtonElement
     fireEvent.click(imgRow)
-    await screen.findByText('▣ Welcome.jpg')
-    cue.mockClear()
+    // Settle on the cue the click causes, not on the row's text — the cue effect is
+    // passive and can land after the DOM gate would have resolved.
+    await settleAndClear(cue, 'pres:img1:0', expect.anything())
 
     // Simulate a cancelled OS file picker via the explicit `canceled` flag (Task 2's
     // MediaImportResult), not an id-diff heuristic.
@@ -361,7 +363,8 @@ describe('SlidesTrack', () => {
     await screen.findByText('▤ Sermon.pptx')
 
     fireEvent.click(rowFor('▤ Sermon.pptx'))
-    cue.mockClear()
+    // The deck is selected by default, so the only cue to wait out is the mount cue.
+    await settleAndClear(cue, 'pres:deck1:0', expect.anything())
     fireEvent.click(rowFor('▶ Promo.mp4'), { shiftKey: true })
 
     for (const t of ['▤ Sermon.pptx', '▣ Welcome.jpg', '▶ Promo.mp4']) {
