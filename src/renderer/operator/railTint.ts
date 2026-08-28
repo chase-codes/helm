@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Theme } from '../../shared/theme';
+import { MONO } from '../shared/fonts';
 
 /**
  * The background ladder a track rail washes over `T.panel2`: selected > live > cued >
@@ -89,7 +90,7 @@ export function railRowStyle(T: Theme, accent: string, dark: boolean, tier: Rail
 /** Card eyebrow ("VERSE 12", "¶ 3"): accent ink while the row is emphasized. */
 export function railLabelStyle(T: Theme, accent: string, emphasized: boolean): CSSProperties {
   return {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '10.5px',
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
@@ -104,7 +105,7 @@ export function railBadgeStyle(T: Theme, live: boolean): CSSProperties {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '5px',
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '9px',
     letterSpacing: '0.08em',
     fontWeight: 600,

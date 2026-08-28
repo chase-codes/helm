@@ -3,6 +3,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from '../shared/useHelm'
 import { bindingsFor, formatBinding } from '../../shared/hotkeys/match'
 import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
+import { MONO } from '../shared/fonts'
 
 /** Transient release/take of every output screen (#51): releasing destroys all output
  * windows so another app can present, without touching saved roles; taking back re-syncs.
@@ -14,7 +15,7 @@ export function ReleaseToggle({ hotkeyOverrides }: { hotkeyOverrides: HotkeyOver
   const binding = bindingsFor('displays.release', hotkeyOverrides)[0]
   const chip = binding ? ` (${formatBinding(binding)})` : ''
   const style: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '10px',
     letterSpacing: '0.07em',
     fontWeight: 700,

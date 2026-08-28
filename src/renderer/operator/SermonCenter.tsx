@@ -6,6 +6,7 @@ import { INSTALL_HINT } from '../../shared/scripture/labels';
 import { logoSlide } from '../../shared/presentation/core';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import { MONO } from '../shared/fonts';
 
 export interface SermonCenterProps {
   theme: Theme;
@@ -116,7 +117,7 @@ export function SermonCenter({
     boxShadow: cuedIsLive ? `inset 0 0 0 2px ${accent}66` : `inset 0 0 0 1px ${T.hairline}`
   };
   const heroLabelStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '12px',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
@@ -124,7 +125,7 @@ export function SermonCenter({
     fontWeight: 500
   };
   const verseCols = cols ?? [];
-  const verseVerStyle: CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', letterSpacing: '0.14em', color: T.dim, marginBottom: '8px' };
+  const verseVerStyle: CSSProperties = { fontFamily: MONO, fontSize: '11px', letterSpacing: '0.14em', color: T.dim, marginBottom: '8px' };
   const verseTextStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
     fontSize: 'clamp(26.0px, 2.70vw, 38.0px)',
@@ -141,7 +142,7 @@ export function SermonCenter({
     marginTop: '18px'
   };
   const quoteSourceStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11.5px',
     letterSpacing: '0.08em',
     color: T.dim,
@@ -155,7 +156,7 @@ export function SermonCenter({
     justifyContent: 'center',
     padding: '2px 7px',
     borderRadius: '5px',
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '9px',
     letterSpacing: '0.06em',
     fontWeight: 500,
@@ -176,7 +177,7 @@ export function SermonCenter({
     <div style={centerStyle}>
       <div style={nowBarStyle}>
         <span style={projDotStyle} />
-        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
+        <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -225,7 +226,7 @@ export function SermonCenter({
       </div>
 
       <div style={ondeckStyle}>
-        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', letterSpacing: '0.12em', color: T.faint }}>
+        <div style={{ fontFamily: MONO, fontSize: '10px', letterSpacing: '0.12em', color: T.faint }}>
           UP NEXT — TAP OR PRESS →
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '7px' }}>

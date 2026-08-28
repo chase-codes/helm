@@ -7,6 +7,7 @@ import { useFitText, fitSizeValue } from '../shared/useFitText'
 import { usePresentationState } from '../shared/useHelm'
 import { DARK as T } from '../../shared/theme'
 import { SlidesView } from './SlidesView'
+import { MONO } from '../shared/fonts'
 
 
 export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element {
@@ -152,7 +153,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     alignItems: 'center',
     gap: '12px',
     flexShrink: 0,
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontSize: 'max(12px, 2.2cqmin)',
@@ -209,7 +210,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     boxShadow: active ? `inset 0 0 0 2px ${T.accent}` : `inset 0 0 0 1px ${T.hairline}`
   })
   const sectionLabelStyle = (active: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     fontSize: `${Math.max(10.5, railFont * 0.62)}px`,

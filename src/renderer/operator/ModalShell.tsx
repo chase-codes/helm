@@ -1,5 +1,6 @@
 import { useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { ThemeCtx } from './ThemeCtx';
+import { Z_MODAL } from './zLayers';
 
 export interface ModalShellProps {
   /** Backdrop click closes. Omit to make the modal undismissable — SongImport does this
@@ -36,7 +37,7 @@ const stop = (e: ReactMouseEvent): void => e.stopPropagation();
 export function ModalShell({
   onClose,
   variant = 'panel',
-  zIndex = 50,
+  zIndex = Z_MODAL,
   width,
   maxWidth,
   height,

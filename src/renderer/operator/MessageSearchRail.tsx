@@ -3,6 +3,7 @@ import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
+import { MONO } from '../shared/fonts';
 
 export interface MsgScheduleRow {
   id: string;
@@ -194,7 +195,7 @@ export function MessageSearchRail({
               <span>&#10005;</span>
             </button>
           ) : (
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '14px', color: T.message }}>&rsaquo;</span>
+            <span style={{ fontFamily: MONO, fontSize: '14px', color: T.message }}>&rsaquo;</span>
           )}
           <input
             style={{ flex: 1, fontSize: '13.5px', minWidth: 0 }}

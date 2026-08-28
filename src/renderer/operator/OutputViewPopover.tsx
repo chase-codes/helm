@@ -3,6 +3,8 @@ import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from '../shared/useHelm'
 import { DEFAULT_LEADER_SPLIT, LEADER_SPLIT_MAX, LEADER_SPLIT_MIN, OUTPUT_VIEWS } from '../../shared/displays/roles'
 import type { OutputViewMode } from '../../shared/types'
+import { Z_STACKED_MODAL } from './zLayers';
+import { MONO } from '../shared/fonts';
 
 const VIEW_LABEL: Record<OutputViewMode, string> = {
   slides: 'Slides',
@@ -52,7 +54,7 @@ export function OutputViewPopover({
     position: 'absolute',
     top: '46px',
     right: 0,
-    zIndex: 60,
+    zIndex: Z_STACKED_MODAL,
     minWidth: '300px',
     background: T.panel,
     borderRadius: '12px',
@@ -79,7 +81,7 @@ export function OutputViewPopover({
     textOverflow: 'ellipsis'
   }
   const roleStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '10px',
     letterSpacing: '0.08em',
     textTransform: 'uppercase',

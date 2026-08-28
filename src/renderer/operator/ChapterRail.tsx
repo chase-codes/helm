@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type JSX } from 'react'
 import type { Theme } from '../../shared/theme'
 import { railBadgeStyle, railFont, railLabelStyle, railRowStyle, railTextStyle } from './railTint'
+import { MONO } from '../shared/fonts'
 
 export interface ChapterRailProps {
   theme: Theme
@@ -120,7 +121,7 @@ export function ChapterRail({
           </div>
           <div
             style={{
-              fontFamily: "'JetBrains Mono',monospace",
+              fontFamily: MONO,
               fontSize: '10px',
               color: T.scripture
             }}

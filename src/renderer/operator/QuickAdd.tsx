@@ -4,6 +4,7 @@ import { ModalShell } from './ModalShell';
 import { splitToSlides } from '../../shared/songs/splitToSlides';
 import { sectionsToText } from '../../shared/songs/sectionsToText';
 import type { NewSongInput, Song, SongWebCandidate, UpdateSongInput } from '../../shared/types';
+import { MONO } from '../shared/fonts';
 
 export interface QuickAddProps {
   open: boolean;
@@ -334,7 +335,7 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {slides.map((s, i) => (
               <div key={i} style={cardStyle}>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', letterSpacing: '0.06em', color: T.accent, marginBottom: '6px' }}>
+                <div style={{ fontFamily: MONO, fontSize: '10px', letterSpacing: '0.06em', color: T.accent, marginBottom: '6px' }}>
                   {s.label}
                 </div>
                 <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{s.lines.join('\n')}</div>

@@ -4,6 +4,8 @@ import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { ImportIcon } from '../shared/icons';
 import type { ImportReviewRow, ImportSourceInfo, SongImportProgress, SongImportResult } from '../../shared/types';
+import { Z_STACKED_MODAL } from './zLayers';
+import { MONO } from '../shared/fonts';
 
 export interface SongImportProps {
   open: boolean;
@@ -158,7 +160,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
   };
   const clipStyle: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const badgeStyle = (color: string): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', letterSpacing: '0.06em',
+    fontFamily: MONO, fontSize: '10px', letterSpacing: '0.06em',
     color, flexShrink: 0
   });
   const cancelStyle: CSSProperties = {
@@ -179,7 +181,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
       maxWidth="96vw"
       height="88vh"
       overlayPadding="4vh 4vw"
-      zIndex={60}
+      zIndex={Z_STACKED_MODAL}
     >
       <div style={headerStyle}>
         <div style={{ fontWeight: 700, fontSize: '18px' }}>Import songs</div>

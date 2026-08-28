@@ -34,6 +34,7 @@ import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import { MONO } from '../shared/fonts';
 
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
@@ -804,7 +805,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     flexShrink: 0,
     padding: '18px 24px 0',
     textAlign: 'center',
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '12px',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
@@ -869,7 +870,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   };
   const railStubLabelStyle: CSSProperties = {
     writingMode: 'vertical-rl',
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '10px',
     letterSpacing: '0.14em',
     fontWeight: 600
@@ -920,7 +921,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
           </div>
           <div style={projBarStyle}>
             <span style={projDotStyle} />
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
+            <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
           </div>
         </div>
 

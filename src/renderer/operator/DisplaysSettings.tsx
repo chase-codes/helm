@@ -3,6 +3,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus } from '../shared/useHelm'
 import { OUTPUT_ROLES, OUTPUT_VIEWS } from '../../shared/displays/roles'
 import type { OutputRole, OutputViewMode } from '../../shared/types'
+import { MONO } from '../shared/fonts'
 
 const VIEW_LABEL: Record<OutputViewMode, string> = {
   slides: 'Slides',
@@ -34,7 +35,7 @@ export function DisplaysSettings(): JSX.Element {
   }
   const nameStyle: CSSProperties = { fontSize: '13.5px', fontWeight: 600, color: T.text }
   const specChipStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11px',
     color: T.faint
   }

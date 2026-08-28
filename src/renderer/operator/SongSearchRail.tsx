@@ -3,6 +3,7 @@ import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
 import { ImportIcon, SearchIcon } from '../shared/icons';
 import { ListEmpty } from './ListEmpty';
+import { MONO } from '../shared/fonts';
 
 export interface SongRow {
   id: string;
@@ -49,7 +50,7 @@ export interface SongSearchRailProps {
 }
 
 const cueBadgeStyle = (T: Theme, ghost: boolean): CSSProperties => ({
-  fontFamily: "'JetBrains Mono',monospace",
+  fontFamily: MONO,
   fontSize: '9px',
   letterSpacing: '0.08em',
   fontWeight: 700,

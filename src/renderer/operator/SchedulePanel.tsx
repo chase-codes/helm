@@ -6,10 +6,11 @@ import { UndoToast } from './UndoToast';
 import { DangerGhostButton } from './DangerGhostButton';
 import { ListEmpty } from './ListEmpty';
 import { ScriptureSearchResults, type ScriptureSearchState } from './ScriptureSearchResults';
+import { MONO } from '../shared/fonts';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
-const entryFont: CSSProperties = { fontSize: '13.5px', fontFamily: "'JetBrains Mono',monospace" };
+const entryFont: CSSProperties = { fontSize: '13.5px', fontFamily: MONO };
 
 export type SermonTrack = 'scripture' | 'message' | 'slides';
 
@@ -154,7 +155,7 @@ export function SchedulePanel({
         <>
           <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
             <div style={schedInputStyle}>
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
+              <span style={{ fontFamily: MONO, fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
               <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex' }}>
                 <input
                   ref={entryRef}

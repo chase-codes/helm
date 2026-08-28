@@ -11,6 +11,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { useAppearance } from './useAppearance';
 import { sanitizeOverrides, type AppActionId, type HotkeyOverrides } from '../../shared/hotkeys/actions';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
+import { SANS } from '../shared/fonts';
 
 export type Mode = 'pre' | 'songs' | 'sermon';
 export type { ThemeMode } from '../../shared/theme';
@@ -133,7 +134,7 @@ function App(): JSX.Element {
     flexDirection: 'column',
     background: theme.appBg,
     color: theme.text,
-    fontFamily: "'Hanken Grotesk', system-ui, sans-serif",
+    fontFamily: SANS,
     fontSize: '14px',
     overflow: 'hidden'
   };
