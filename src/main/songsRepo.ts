@@ -67,6 +67,9 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   // ~36 ms per keystroke at 10k songs, and object identity is what keys the scorer's
   // per-song doc cache. Writes DELETE from the cache (never insert) so a rolled-back
   // transaction can never leave a ghost — the next read lazily re-caches from the row.
+  // Unbounded by design, never evicted on read: one list() call residents the whole
+  // parsed library, and that IS the point — a song's memory cost is trivial next to
+  // the JSON.parse it saves on every subsequent keystroke. Only a write ever shrinks it.
   const songCache = new Map<string, Song>();
   const toSongCached = (r: Row): Song => {
     const hit = songCache.get(r.id);
@@ -82,7 +85,10 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   // P8: prepare once, not per keystroke (the probe was re-prepared per TOKEN).
   const probeStmt = db.prepare('SELECT 1 FROM song_fts WHERE song_fts MATCH ? LIMIT 1');
   // P7: the FTS query already JOINs songs — select the full row so the second
-  // `rowid IN (...)` query (and the bound-variable dance) disappears.
+  // `rowid IN (...)` query (and the bound-variable dance) disappears. The LIMIT still
+  // earns its keep even with the IN() gone: it caps the candidate set (and therefore
+  // the JS scorer's per-keystroke work) a common token's match count would otherwise
+  // blow past.
   const searchStmt = Object.fromEntries(
     (Object.keys(BM25) as SearchField[]).map((f) => [
       f,
