@@ -1,4 +1,4 @@
-import type { OutputMode, PreCard, PreState, Slide } from '../shared/types';
+import type { PreCard, PreState, Slide } from '../shared/types';
 import type { PreCardsRepo } from './preCardsRepo';
 import { preSlideFor, nextEnabledIdx } from '../shared/preservice/cards';
 
@@ -7,7 +7,8 @@ export interface PresentationSink {
   goLive(key: string, slide: Slide): void;
   show(key: string, slide: Slide): void;
   isLive(key: string): boolean;
-  setOutput(mode: OutputMode): void;
+  /** Content behind `key` no longer exists — see core.invalidate (#40). */
+  invalidate(key: string): void;
 }
 export type { PreState };
 export interface PreserviceEngine {
@@ -142,21 +143,24 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     // Deleting the LAST card while it holds the screen takes the output down (BUG-020):
     // pushShow has nothing to replace it with, and leaving it up would strand the audience
     // on a card that no longer exists with an empty rail — no tap could ever clear it.
-    // Guarded by isLive so emptying the rail never touches a screen another flow owns —
-    // and equally skips the call when pre-service's own screen was already taken down
-    // (output black with a stale pre: key), where blacking again would claim an action
-    // the operator didn't take.
+    //
+    // The deleted card is also forgotten as the live key (#40). `invalidate` is keyed on
+    // the card, so emptying the rail never touches a screen another flow owns, and a
+    // screen pre-service itself took down (black with a stale pre: key) keeps its mode
+    // rather than being blacked again — but the stale key behind it goes, so nothing can
+    // restore a card that no longer exists. Called AFTER pushShow: when a neighbour
+    // replaces the deleted card, `showLive` needs output still 'live' to follow, and once
+    // it has, the deleted key is no longer live and invalidate is a no-op.
     removeCard(id) {
       const selectedId = cards[idx]?.id;
-      const deletedWasLive = sink.isLive(preKey(id));
       cards = repo.remove(id);
       if (selectedId !== undefined && selectedId !== id) {
         const i = cards.findIndex((c) => c.id === selectedId);
         if (i >= 0) idx = i;
       }
       clampIdx();
-      if (cards.length === 0) { if (deletedWasLive) sink.setOutput('black'); }
-      else pushShow();
+      if (cards.length > 0) pushShow();
+      sink.invalidate(preKey(id));
       emit();
     },
     // The undo half of removeCard (#86). Deliberately touches NO screen call, not even

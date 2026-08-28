@@ -183,6 +183,7 @@ export const CH = {
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presTake: 'presentation:take',
   presSetOutput: 'presentation:setOutput',
+  presInvalidate: 'presentation:invalidate',
   presState: 'presentation:state',           // main → all windows
   outputSlide: 'output:slide',               // main → output windows
   displaysGet: 'displays:get', displaysStatus: 'displays:status',
@@ -316,6 +317,10 @@ export interface HelmApi {
     /** Idempotent take-the-screen (double-click). Never blacks the output — see takeLive. */
     take(key: string, slide: Slide): void;
     setOutput(mode: OutputMode): void;
+    /** Content behind `key` (a slide key or an item prefix like `song:<id>`) was deleted:
+     * forget it as the live slide, blacking the screen if it was up (#40). Main's delete
+     * handlers already call this; the renderer only needs it for a delete main can't see. */
+    invalidate(key: string): void;
     onState(cb: (s: PresentationState) => void): () => void;
   };
   output: { onSlide(cb: (p: OutputPayload) => void): () => void };

@@ -92,13 +92,15 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['songs']['get']>(CH.songsGet, (id) => repo.get(id));
   handleApi<HelmApi['songs']['add']>(CH.songsAdd, (input) => repo.add(input));
   handleApi<HelmApi['songs']['update']>(CH.songsUpdate, (id, input) => repo.update(id, input));
-  handleApi<HelmApi['songs']['remove']>(CH.songsRemove, (id) => repo.remove(id));
+  // Deleting a song forgets it as the live slide (#40) — keyed by item so any section goes.
+  handleApi<HelmApi['songs']['remove']>(CH.songsRemove, (id) => { const r = repo.remove(id); presentation.invalidate(`song:${id}`); return r; });
   handleApi<HelmApi['presentation']['get']>(CH.presGet, () => presentation.get());
   onApi<HelmApi['presentation']['cue']>(CH.presCue, (key, slide) => presentation.cue(key, slide));
   onApi<HelmApi['presentation']['goLive']>(CH.presGoLive, (key, slide) => presentation.goLive(key, slide));
   onApi<HelmApi['presentation']['show']>(CH.presShow, (key, slide) => presentation.show(key, slide));
   onApi<HelmApi['presentation']['take']>(CH.presTake, (key, slide) => presentation.take(key, slide));
   onApi<HelmApi['presentation']['setOutput']>(CH.presSetOutput, (mode) => presentation.setOutput(mode));
+  onApi<HelmApi['presentation']['invalidate']>(CH.presInvalidate, (key) => presentation.invalidate(key));
   handleApi<HelmApi['displays']['get']>(CH.displaysGet, () => displayStatus());
   onApi<HelmApi['displays']['openTest']>(CH.displaysOpenTest, () => openTestOutput());
   onApi<HelmApi['displays']['setRole']>(CH.displaysSetRole, (fp, role) => setDisplayRole(fp, role));
@@ -168,7 +170,8 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['media']['importImages']>(CH.mediaImportImages, () => mediaImport.importImages());
   handleApi<HelmApi['media']['importVideo']>(CH.mediaImportVideo, () => mediaImport.importVideo());
   handleApi<HelmApi['media']['importDeck']>(CH.mediaImportDeck, () => mediaImport.importDeck());
-  handleApi<HelmApi['media']['remove']>(CH.mediaRemove, (id) => mediaImport.removeMedia(id));
+  // Runs when the rail's undo window closes — the moment the slides actually cease to exist (#40).
+  handleApi<HelmApi['media']['remove']>(CH.mediaRemove, (id) => { const r = mediaImport.removeMedia(id); presentation.invalidate(`pres:${id}`); return r; });
 
   handleApi<HelmApi['songImport']['sources']>(CH.songImportSources, () => songImport.sources());
   handleApi<HelmApi['songImport']['scan']>(CH.songImportScan, (sourceId) => songImport.scan(sourceId));

@@ -3,6 +3,7 @@ import {
   applyCue,
   goLive,
   initialPresentation,
+  invalidate,
   keyForSong,
   outputPayload,
   parseSongKey,
@@ -172,6 +173,59 @@ test("setOutput 'live' with a live key behind it restores that slide", () => {
   expect(st.output).toBe('live')
   expect(st.liveKey).toBe('song:a:0')
 })
+describe('invalidate (#40)', () => {
+  it('nulls the live pair and blacks the screen when the exact key is live', () => {
+    const live = goLive(initialPresentation(), 'pre:c1', slide('Welcome'))
+    const st = invalidate(live, 'pre:c1')
+    expect(st.output).toBe('black')
+    expect(st.liveKey).toBeNull()
+    expect(st.liveSnap).toBeNull()
+  })
+  it('matches a whole item by prefix — deleting a song drops whichever section is live', () => {
+    const live = goLive(initialPresentation(), 'song:abc:2', slide('V3'))
+    const st = invalidate(live, 'song:abc')
+    expect(st.output).toBe('black')
+    expect(st.liveKey).toBeNull()
+  })
+  it('prefix match is segment-aware: song:ab does not invalidate song:abc', () => {
+    const live = goLive(initialPresentation(), 'song:abc:0', slide('V1'))
+    expect(invalidate(live, 'song:ab')).toBe(live)
+  })
+  it('returns the state by identity when another key is live', () => {
+    const live = goLive(initialPresentation(), 'song:a:0', slide('V1'))
+    const st = invalidate(live, 'pre:c1')
+    expect(st).toBe(live)
+  })
+  it('leaves output and cue alone when the key is cued but not live', () => {
+    let st = goLive(initialPresentation(), 'song:a:0', slide('V1'))
+    st = applyCue(st, 'pre:c1', slide('Welcome'))
+    const out = invalidate(st, 'pre:c1')
+    expect(out.output).toBe('live')
+    expect(out.liveKey).toBe('song:a:0')
+    expect(out.cuedKey).toBe('pre:c1')
+  })
+  it('clears a stale key behind a black screen without touching output', () => {
+    let st = goLive(initialPresentation(), 'pre:c1', slide('Welcome'))
+    st = setOutput(st, 'black')
+    const out = invalidate(st, 'pre:c1')
+    expect(out.output).toBe('black')
+    expect(out.liveKey).toBeNull()
+    // The restore contract can no longer resurrect the deleted card.
+    expect(setOutput(out, 'live').output).toBe('black')
+  })
+  it('clears a stale key behind the logo and keeps the logo up', () => {
+    let st = goLive(initialPresentation(), 'pre:c1', slide('Welcome'))
+    st = setOutput(st, 'logo')
+    const out = invalidate(st, 'pre:c1')
+    expect(out.output).toBe('logo')
+    expect(out.liveKey).toBeNull()
+  })
+  it('is a no-op with nothing live', () => {
+    const st = initialPresentation()
+    expect(invalidate(st, 'pre:c1')).toBe(st)
+  })
+})
+
 test('showLive fills a live-but-empty output (logo toggle can leave liveKey null)', () => {
   const st = showLive(
     { output: 'live', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null },

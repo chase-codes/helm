@@ -3,7 +3,7 @@ import { openTestDb } from './testDb';
 import { createPreCardsRepo } from './preCardsRepo';
 import { createPreserviceEngine, type PresentationSink } from './preserviceEngine';
 import type { PresentationState, Slide } from '../shared/types';
-import { applyCue, goLive, initialPresentation, setOutput, showLive } from '../shared/presentation/core';
+import { applyCue, goLive, initialPresentation, invalidate, setOutput, showLive } from '../shared/presentation/core';
 
 // The fake sink models REAL presentation-state semantics (goLive's toggle-to-black
 // on same-key, applyCue's same-flow hot-update) by delegating to the actual reducer
@@ -29,7 +29,7 @@ function harness(): {
     goLive: (key, slide) => { calls.push({ m: 'goLive', key, slide }); pres = goLive(pres, key, slide); },
     show: (key, slide) => { calls.push({ m: 'show', key, slide }); pres = showLive(pres, key, slide); },
     isLive: (key) => pres.output === 'live' && pres.liveKey === key,
-    setOutput: (mode) => { pres = setOutput(pres, mode); }
+    invalidate: (key) => { pres = invalidate(pres, key); }
   };
   const engine = createPreserviceEngine(repo, sink);
   return {
@@ -381,6 +381,27 @@ describe('preserviceEngine', () => {
       for (const c of repo.list()) engine.removeCard(c.id);
       expect(engine.getState().cards.length).toBe(0);
       expect(presentation().output).toBe('black'); // deleted card must leave the screen
+    });
+
+    it('deleting the last card leaves no dangling live key behind the black (#40)', () => {
+      const { engine, presentation, repo } = harness();
+      engine.showNow();
+      for (const c of repo.list()) engine.removeCard(c.id);
+      expect(presentation().liveKey).toBeNull();
+      expect(presentation().liveSnap).toBeNull();
+      // Nothing can restore the deleted card: a 'live' restore lands on black.
+      expect(setOutput(presentation(), 'live').output).toBe('black');
+    });
+
+    it('deleting a taken-down card forgets it without re-blacking (#40)', () => {
+      const { engine, presentation, takeDown, repo } = harness();
+      engine.showNow();
+      takeDown(); // output black, liveKey still the stale pre: key
+      const stale = repo.list()[0];
+      expect(presentation().liveKey).toBe('pre:' + stale.id);
+      engine.removeCard(stale.id);
+      expect(presentation().output).toBe('black');
+      expect(presentation().liveKey).toBeNull();
     });
 
     it('emptying the rail while a song is live leaves the song alone (BUG-020)', () => {
