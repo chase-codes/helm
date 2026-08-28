@@ -259,6 +259,32 @@ describe('SongsMode', () => {
     fireEvent.click(screen.getByText('Close'));
     await waitFor(() => expect(screen.getByText('Newly Imported Song')).toBeTruthy());
   });
+
+  it('title mode skips the lyric-hint search when title results are not thin', async () => {
+    const rows: SongSearchResult[] = ['t1', 't2', 't3'].map((id, i) => ({
+      song: { ...SONGS[0], id, title: `Grace ${i}` }, score: 1000, snippet: ''
+    }));
+    const { search } = installHelmStub((_q, field) => Promise.resolve(field === 'lyric' ? [] : rows));
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+    fireEvent.click(screen.getByText('Title'));
+    const input = screen.getByPlaceholderText('Search titles…');
+    fireEvent.change(input, { target: { value: 'grace' } });
+    await waitFor(() => expect(screen.getByText('Grace 0')).toBeTruthy());
+    expect(search.mock.calls.filter((c) => c[1] === 'lyric')).toHaveLength(0);
+  });
+
+  it('title mode still fetches the lyric hint when title results are thin', async () => {
+    const HINT: SongSearchResult = { song: { ...SONGS[0], id: 'h1', title: 'Hidden Gem' }, score: 400, snippet: 'a lyric line' };
+    installHelmStub((_q, field) => Promise.resolve(field === 'lyric' ? [HINT] : []));
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+    fireEvent.click(screen.getByText('Title'));
+    fireEvent.change(screen.getByPlaceholderText('Search titles…'), { target: { value: 'gem' } });
+    await waitFor(() => expect(screen.getByText('Hidden Gem')).toBeTruthy());
+  });
 });
 
 describe('SongsMode hotkey jumps', () => {

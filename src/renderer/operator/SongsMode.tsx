@@ -187,31 +187,25 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
   // Re-query on every keystroke / field change. Empty query shows the library instead
   // (displayedRows only reads `results` when the query is non-empty, so no reset needed).
+  // In Title mode the subordinate "Also in lyrics" hint is fetched only AFTER the title
+  // results land and only when they are thin (< SECONDARY_TITLE_MAX) — the common fat
+  // case previously paid a full lyric-scored search per keystroke (~12x the title cost)
+  // and threw the result away (secondaryLyricRows returns [] when titles are not thin).
   useEffect(() => {
     if (!q.trim()) return;
     let live = true;
     void window.helm.songs.search(q, field).then((r) => {
-      if (live) setResults(r);
+      if (!live) return;
+      setResults(r);
+      if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
+        void window.helm.songs
+          .search(q, 'lyric')
+          .then((h) => {
+            if (live) setLyricHint(h);
+          })
+          .catch(console.error);
+      }
     }).catch(console.error);
-    return () => {
-      live = false;
-    };
-  }, [q, field]);
-
-  // In Title mode only, run a parallel lyric-scored pass so a thin title search can show a
-  // subordinate "Also in lyrics" hint (see secondaryLyricRows). Outside Title mode the result
-  // is never consumed (secondaryResults below is gated on field === 'title'), so there's no
-  // need to clear it here — which also keeps this a plain fetch effect with no synchronous
-  // setState in its body.
-  useEffect(() => {
-    if (field !== 'title' || !q.trim()) return;
-    let live = true;
-    void window.helm.songs
-      .search(q, 'lyric')
-      .then((r) => {
-        if (live) setLyricHint(r);
-      })
-      .catch(console.error);
     return () => {
       live = false;
     };
