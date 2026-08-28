@@ -98,7 +98,7 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
       deleteTimings.run(id);
       paragraphs.forEach((p, ord) => {
         insertParagraph.run(id, ord, p.label, p.text);
-        insertFts.run(id, ord, p.text);
+        insertFts.run(id, ord, norm(p.text));
       });
       for (const t of timing) {
         insertTiming.run(id, t.ord, t.tStart, t.tEnd);
@@ -167,7 +167,7 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
       deleteTimings.run(id);
       r.paragraphs.forEach((p, ord) => {
         insertParagraph.run(id, ord, p.label, p.text);
-        insertFts.run(id, ord, p.text);
+        insertFts.run(id, ord, norm(p.text));
       });
     });
     txn();

@@ -129,3 +129,14 @@ describe('messagesRepo', () => {
     expect(r.count()).toBe(1);
   });
 });
+
+// The FTS gate must tokenize the way norm() does: "I'd" is one term "id", not "i"/"d".
+// A pre-norm index split it, so the gate only found apostrophe words via the sparse-hit
+// full scan — correct but O(all paragraphs) on every such keystroke.
+it('indexes paragraphs norm()-tokenized so apostrophe words hit the FTS gate', () => {
+  const db = openTestDb();
+  const r = createMessagesRepo(db);
+  r.installSermon('m1', [{ label: '1', text: "I'd rather have Jesus in my heart" }], []);
+  const n = (db.prepare(`SELECT count(*) AS n FROM paragraph_fts WHERE paragraph_fts MATCH '"id"*'`).get() as { n: number }).n;
+  expect(n).toBe(1);
+});

@@ -1,9 +1,17 @@
 // Letters with no combining-mark decomposition (NFD leaves them whole), folded by hand.
 const FOLD: Record<string, string> = { ß: 'ss', ø: 'o', đ: 'd', ł: 'l', æ: 'ae', œ: 'oe', þ: 'th' };
 
+/** The FTS tables index norm()'d text (see searchIndex.ts), so the on-disk index is a
+ * snapshot of THIS function. Any change to norm()'s output MUST bump this constant —
+ * that's what makes existing installs rebuild their index on next launch; forget it and
+ * their gate silently disagrees with the scorer again. */
+export const NORM_VERSION = 1;
+
 /** Fold to [a-z0-9 ]: accents are STRIPPED, not replaced by spaces — `Renuévame` must norm
  * to `renuevame`, not `renu vame`, or the fuzzy scorer never matches the word and the song
- * drops out of results entirely (#12). Matches what FTS does (`remove_diacritics 2`). */
+ * drops out of results entirely (#12). Also the FTS write-side tokenizer: repos index
+ * norm()'d text so the index tokenizes exactly like query tokens do (apostrophe words —
+ * "I'd" → "id" — stay one term instead of unicode61's "i"/"d" split). */
 export function norm(s: string): string {
   return (s || '')
     .normalize('NFD')

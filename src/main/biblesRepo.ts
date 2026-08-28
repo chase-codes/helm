@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import type { BookExtent, ChapterData, InstalledVersion, NormalizedBible, VerseSearchResult } from '../shared/types'
 import { VERSE_FTS_COLUMNS } from './schema'
 import { andGroupsMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery'
-import { matchDist, matchTol } from '../shared/search/fuzzy'
+import { matchDist, matchTol, norm } from '../shared/search/fuzzy'
 import { foldCompoundNames, parseVerseQuery, rankVerses, type VerseHit } from '../shared/search/verseScore'
 
 export interface BiblesRepo {
@@ -52,8 +52,8 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
   )
   // bm25 orders the CUT only (best candidates survive the LIMIT); the scorer's ladder
   // decides the final order and ends in canonical order — see verseScore.ts. verse_fts.text
-  // is the compound-name-folded copy used for matching/scoring only (see foldCompoundNames);
-  // the join back to `verses` returns the original text — dashes intact — for display.
+  // is the compound-name-folded, norm()'d copy used for matching only (foldCompoundNames +
+  // searchIndex.ts); the join back to `verses` returns the original text for display.
   const selectHits = db.prepare(
     `SELECT verse_fts.book AS book, verse_fts.chapter AS chapter, verse_fts.verse AS verse, v.text AS text
      FROM verse_fts JOIN verses v
@@ -113,7 +113,7 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
           for (const chapter of book.chapters) {
             for (const verse of chapter.verses) {
               insertVerse.run(bible.id, book.name, chapter.n, verse.n, verse.text)
-              insertFts.run(bible.id, book.name, chapter.n, verse.n, foldCompoundNames(verse.text))
+              insertFts.run(bible.id, book.name, chapter.n, verse.n, norm(foldCompoundNames(verse.text)))
             }
           }
         }
@@ -153,7 +153,7 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
             const rows = db
               .prepare('SELECT book, chapter, verse, text FROM verses WHERE version_id = ?')
               .all(id) as { book: string; chapter: number; verse: number; text: string }[]
-            for (const r of rows) insertFts.run(id, r.book, r.chapter, r.verse, foldCompoundNames(r.text))
+            for (const r of rows) insertFts.run(id, r.book, r.chapter, r.verse, norm(foldCompoundNames(r.text)))
           })()
           invalidateVocab()
         } catch (err) {

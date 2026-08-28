@@ -58,7 +58,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     const key = input.key?.trim();
     const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
     insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
-    insertFts.run(song.id, song.title, song.author, lyricsOf(song));
+    insertFts.run(song.id, norm(song.title), norm(song.author), norm(lyricsOf(song)));
     invalidateVocab();
     // No songCache.delete here: the id is freshly minted (randomUUID above), so the
     // cache can hold no stale entry for it.
@@ -99,20 +99,13 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   // Vocabulary of every indexed song term, loaded on first use and dropped whenever
   // song_fts changes — the verse pattern (biblesRepo.expandToken / verse_vocab).
   const selectVocab = db.prepare('SELECT term FROM song_vocab');
-  // { raw, norm } pairs: fts5's tokenizer strips combining-mark diacritics but leaves
-  // letters like ß intact (verified directly against song_vocab), while every query
-  // token is norm()'d before it ever reaches expandToken. Comparing un-normalized
-  // "großer" against normalized "gros" put them 3 edits apart instead of 1 and let an
-  // irrelevant same-distance decoy ("grow") win the nearest tier (measured monotonicity
-  // regression on "grosser gott") — `norm` is what distance compares against, `raw` is
-  // what re-queries FTS (the index still only recognizes its own un-normalized token).
-  let vocab: { raw: string; norm: string }[] | null = null;
+  // The index stores norm()'d text (see searchIndex.ts), so every vocabulary term IS a
+  // norm token: distance comparison and the FTS re-query use the same string. (This
+  // retired the { raw, norm } pair dance the un-normalized index needed for "großer".)
+  let vocab: string[] | null = null;
   const invalidateVocab = (): void => { vocab = null; };
-  const getVocab = (): { raw: string; norm: string }[] =>
-    (vocab ??= (selectVocab.all() as { term: string }[])
-      .map((r) => ({ raw: r.term, norm: norm(r.term) }))
-      // Pure-symbol terms normalize to '' and can never be within tolerance of a ≥3-char token — drop them to keep the scan tight.
-      .filter((v) => v.norm));
+  const getVocab = (): string[] =>
+    (vocab ??= (selectVocab.all() as { term: string }[]).map((r) => r.term));
   // Nearest-tier expansion for a token with NO FTS prefix hit of its own: only the
   // vocabulary terms at the smallest edit distance found join the OR group (ties
   // included) — everything within tolerance would pollute retrieval AND ranking.
@@ -124,10 +117,10 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     let best = Infinity;
     let near: string[] = [];
     for (const t of getVocab()) {
-      const d = matchDist(tok, t.norm);
+      const d = matchDist(tok, t);
       if (d > tol) continue;
-      if (d < best) { best = d; near = [t.raw]; }
-      else if (d === best) near.push(t.raw);
+      if (d < best) { best = d; near = [t]; }
+      else if (d === best) near.push(t);
     }
     return near;
   };
@@ -180,7 +173,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       };
       db.transaction(() => {
         updateSong.run(title, author, JSON.stringify(sections), key, id);
-        updateFts.run(title, author, lyricsOfSections(sections), id);
+        updateFts.run(norm(title), norm(author), norm(lyricsOfSections(sections)), id);
       })();
       songCache.delete(id);
       invalidateVocab();
@@ -203,11 +196,12 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       let match = orPrefixMatch(tokens);
       let hits = stmt.all(match) as (Row & { rel: number })[];
       const noHit = tokens.filter((t) => !tokenHasHit(t));
-      // All-digit tokens can't be vocabulary-expanded: "10,000" indexes as "10"/"000",
-      // no term prefixes "10000" — only matchDist's digit-prefix rule over the full
-      // library rescues it (the measured "10000" regression). The one surviving
-      // full-scan class.
-      if (noHit.some((t) => /^[0-9]+$/.test(t))) {
+      // All-digit tokens keep the full scan even when they hit: matchDist's digit rules
+      // admit numeric neighbors the FTS gate can't see — "1000" is one edit from "10000"
+      // and must still chart below 10,000 Reasons (W8), and a typo'd number has no
+      // nearest-tier expansion worth trusting. The one surviving full-scan class;
+      // digit queries are rare enough to pay it.
+      if (tokens.some((t) => /^[0-9]+$/.test(t))) {
         return rankSongs(q, list(), field, new Map(hits.map((h) => [h.id, h.rel])), 50);
       }
       // Typo handling is per TOKEN (#13), now by vocabulary expansion instead of a

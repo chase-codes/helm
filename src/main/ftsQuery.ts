@@ -1,7 +1,7 @@
 // FTS5 MATCH-string construction shared by the song, quote and verse searches, so the
-// three repos cannot drift on quoting or the candidate cap. Tokens normally arrive from
-// `norm()` ([a-z0-9] only); the quote escaping is for the vocabulary-expanded verse terms,
-// which come from the tokenizer and are not guaranteed to be that tame.
+// three repos cannot drift on quoting or the candidate cap. Tokens arrive from `norm()`
+// ([a-z0-9] only) — and since the index itself stores norm()'d text (searchIndex.ts),
+// vocabulary-expanded terms are equally tame; the quote escaping stays as defense.
 
 /** Max FTS hits taken per query: keeps a common-token query's hit list under SQLite's
  * bound-variable cap for the `IN (...)` that follows — best-ranked hits survive. */
