@@ -12,6 +12,8 @@ import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
+import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
+import { tintChip } from './railTint';
 
 export interface PreServiceModeProps {
   active: boolean;
@@ -206,20 +208,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     background: 'transparent'
   };
 
-  const ghostBtn: CSSProperties = {
-    height: '46px',
-    padding: '0 16px',
-    borderRadius: '11px',
-    background: T.panel2,
-    boxShadow: `inset 0 0 0 1px ${T.hairline}`,
-    fontSize: '14px',
-    fontWeight: 600,
-    color: T.dim,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '7px'
-  };
+  const ghostBtn: CSSProperties = transportGhostBtn(T);
   const primaryBtn: CSSProperties = {
     height: '46px',
     padding: '0 22px',
@@ -254,7 +243,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // the page's escape hatch, not its primary verb. Same `1c`/`55` formula as the on-air bar
   // below, so the two red things on the page read as one signal.
   const takeDownBtn: CSSProperties = canTakeDown
-    ? { ...ghostBtn, color: T.live, background: `${T.live}1c`, boxShadow: `inset 0 0 0 1px ${T.live}55` }
+    ? { ...ghostBtn, ...tintChip(T.live) }
     : { ...ghostBtn, cursor: 'default' };
   const smallGhost: CSSProperties = {
     height: '46px',
@@ -275,24 +264,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // states stay faint on purpose: the bar reports THIS page's claim on the screen, and the
   // header already carries the global on-air state.
   const projColor = preOwnsScreen ? T.live : T.faint;
-  const projBarStyle: CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    height: '30px',
-    padding: '0 13px',
-    borderRadius: '9px',
-    background: `${projColor}1c`,
-    boxShadow: `inset 0 0 0 1px ${projColor}55`,
-    color: projColor
-  };
-  const projDotStyle: CSSProperties = {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: projColor,
-    animation: preOwnsScreen ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
-  };
+  const projBarStyle: CSSProperties = statusChipStyle(projColor);
+  const projDotStyle: CSSProperties = statusDotStyle(projColor, preOwnsScreen);
   const projText = preOwnsScreen ? 'PROJECTING' : output === 'live' ? 'ANOTHER FLOW LIVE' : 'OFF SCREEN';
 
   const dividerStyle: CSSProperties = { width: '1px', height: '28px', background: T.hairline, margin: '0 4px' };

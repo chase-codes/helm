@@ -1,6 +1,6 @@
 import type { CSSProperties, JSX } from 'react';
 import type { Theme } from '../../shared/theme';
-import { railTint } from './railTint';
+import { railBadgeStyle, railLabelStyle, railRowStyle, railTextStyle } from './railTint';
 import type { MessageParagraph } from '../../shared/types';
 
 export interface ParagraphRailProps {
@@ -39,57 +39,13 @@ export function ParagraphRail({
 }: ParagraphRailProps): JSX.Element {
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
 
-  const rowStyle = (live: boolean, cued: boolean, planned: boolean): CSSProperties => ({
-    display: 'block',
-    width: '100%',
-    textAlign: 'left',
-    padding: '11px 13px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    userSelect: 'none',
-    background: live
-      ? railTint(T.message, 'live', dark)
-      : cued
-        ? railTint(T.message, 'cued', dark)
-        : planned
-          ? railTint(T.message, 'planned', dark)
-          : T.panel2,
-    boxShadow: live
-      ? `inset 0 0 0 2px ${T.message}`
-      : cued
-        ? `inset 0 0 0 1.5px ${T.message}66`
-        : planned
-          ? `inset 0 0 0 1px ${T.message}44`
-          : `inset 0 0 0 1px ${T.hairline}`
-  });
-  const labelStyle = (cued: boolean, planned: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: '10.5px',
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    fontWeight: 500,
-    color: cued || planned ? T.message : T.faint
-  });
-  const badgeStyle = (live: boolean): CSSProperties => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: '9px',
-    letterSpacing: '0.08em',
-    fontWeight: 600,
-    color: live ? T.live : T.dim
-  });
-  const textStyle = (cued: boolean, planned: boolean): CSSProperties => ({
-    fontSize: '12.5px',
-    lineHeight: 1.42,
-    fontWeight: 500,
-    color: cued ? T.text : planned ? T.lineDim : T.dim,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden'
-  });
+  const rowStyle = (live: boolean, cued: boolean, planned: boolean): CSSProperties =>
+    railRowStyle(T, T.message, dark, { live, cued, planned });
+  const labelStyle = (cued: boolean, planned: boolean): CSSProperties =>
+    railLabelStyle(T, T.message, cued || planned);
+  const badgeStyle = (live: boolean): CSSProperties => railBadgeStyle(T, live);
+  const textStyle = (cued: boolean, planned: boolean): CSSProperties =>
+    railTextStyle(T, { cued, planned, fontPx: 12.5 });
 
   return (
     <div style={panelStyle}>

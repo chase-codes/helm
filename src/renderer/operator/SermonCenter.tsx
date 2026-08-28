@@ -4,7 +4,7 @@ import type { OutputMode, Slide, SlideColumn } from '../../shared/types';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
-import { primaryBtnStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
 
 export interface SermonCenterProps {
   theme: Theme;
@@ -91,24 +91,12 @@ export function SermonCenter({
   const centerStyle: CSSProperties = { flex: 1, minWidth: 0, background: T.appBg, display: 'flex', flexDirection: 'column', padding: '16px 22px', minHeight: 0 };
   const nowBarStyle: CSSProperties = {
     alignSelf: 'flex-start',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
+    ...statusChipStyle(outColor),
     height: '28px',
     padding: '0 12px',
-    borderRadius: '9px',
-    background: `${outColor}1c`,
-    boxShadow: `inset 0 0 0 1px ${outColor}55`,
-    color: outColor,
     marginBottom: '4px'
   };
-  const projDotStyle: CSSProperties = {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: outColor,
-    animation: output === 'live' ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
-  };
+  const projDotStyle: CSSProperties = statusDotStyle(outColor, output === 'live');
   const heroCardStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,

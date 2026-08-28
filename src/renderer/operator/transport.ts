@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Theme } from '../../shared/theme';
+import { tintChip } from './railTint';
 
 /** Both transport verbs are this wide in every state (#85). Fixed rather than
  * content-sized: "Go live", "Take down" and "⇄ Switch" all have to occupy the same
@@ -31,14 +32,7 @@ export function primaryBtnStyle(T: Theme, kind: VerbKind): CSSProperties {
     whiteSpace: 'nowrap'
   };
   if (kind === 'go') return { ...base, background: T.go, color: '#fff' };
-  if (kind === 'down') {
-    return {
-      ...base,
-      background: `${T.live}1c`,
-      boxShadow: `inset 0 0 0 1px ${T.live}55`,
-      color: T.live
-    };
-  }
+  if (kind === 'down') return { ...base, ...tintChip(T.live) };
   return {
     ...base,
     background: 'transparent',
@@ -64,6 +58,32 @@ export function transportGhostBtn(T: Theme): CSSProperties {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '7px'
+  };
+}
+
+/** The on-air status chip: dot + mono label on the house tint (#137). This base carries
+ * the SongsMode/PreServiceMode footprint; the other surfaces spread their real
+ * differences over it (Header: 7px dot, state-dependent height, cursor; SermonCenter:
+ * 28px height, marginBottom). The label wording stays per-surface on purpose. */
+export function statusChipStyle(color: string): CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    height: '30px',
+    padding: '0 13px',
+    borderRadius: '9px',
+    ...tintChip(color)
+  };
+}
+
+export function statusDotStyle(color: string, pulsing: boolean): CSSProperties {
+  return {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: color,
+    animation: pulsing ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
   };
 }
 

@@ -3,6 +3,7 @@ import type { Mode, ThemeMode } from './App'
 import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 import { ThemeCtx } from './ThemeCtx'
 import { usePresentationState, useDisplayStatus, useClock } from '../shared/useHelm'
+import { statusChipStyle, statusDotStyle } from './transport'
 import { OutputViewPopover } from './OutputViewPopover'
 import { ReleaseToggle } from './ReleaseToggle'
 import { UpdatePill } from './UpdatePill'
@@ -89,24 +90,18 @@ export function Header({
     whiteSpace: 'nowrap'
   }
   const liveStatusStyle: CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
+    ...statusChipStyle(outColor),
     gap: '7px',
     height: isLive ? '32px' : '28px',
     padding: '0 11px',
     borderRadius: '8px',
-    background: outColor + '1c',
-    boxShadow: 'inset 0 0 0 1px ' + outColor + '55',
-    color: outColor,
     cursor: isLive ? 'pointer' : 'default',
     whiteSpace: 'nowrap'
   }
   const liveDotStyle: CSSProperties = {
+    ...statusDotStyle(outColor, isLive),
     width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    background: outColor,
-    animation: isLive ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
+    height: '7px'
   }
   // Same verb and same mark as every Take down button (#92) — only the case differs,
   // because this is a chip inside the header's uppercase-mono status row.
