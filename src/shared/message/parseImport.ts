@@ -48,7 +48,10 @@ export function parseMessageText(raw: string): MessageImportResult {
   }
   let date = '';
   for (const l of header) {
-    if (!l || l === title || parseTapeNo(l) === l) continue;
+    // parseTapeNo uppercases the suffix, so compare against the uppercased line —
+    // a lowercase-suffix tape line ("64-0206b") must still be skipped, not become
+    // the date (#147).
+    if (!l || l === title || parseTapeNo(l) === l.toUpperCase()) continue;
     date = l;
     break;
   }
