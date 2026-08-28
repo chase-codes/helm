@@ -128,5 +128,11 @@ const api: HelmApi = {
   app: {
     version: () => ipcRenderer.invoke(CH.appGetVersion),
   },
+  feedback: {
+    context: () => ipcRenderer.invoke(CH.feedbackContext),
+    send: (p) => ipcRenderer.invoke(CH.feedbackSend, p),
+    fallbackUrl: (p) => ipcRenderer.invoke(CH.feedbackFallbackUrl, p),
+    onOpen: sub(CH.feedbackOpen),
+  },
 };
 contextBridge.exposeInMainWorld('helm', api);

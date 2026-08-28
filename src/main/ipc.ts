@@ -1,5 +1,7 @@
-import { app, ipcMain } from 'electron';
-import { CH, type HelmApi } from '../shared/types';
+import { app, ipcMain, screen } from 'electron';
+import os from 'node:os';
+import { CH, type HelmApi, type FeedbackContext } from '../shared/types';
+import { feedbackUrl, osLabel, sendFeedback } from './feedback';
 import type { SongsRepo } from './songsRepo';
 import type { BiblesRepo } from './biblesRepo';
 import type { ScheduleRepo } from './scheduleRepo';
@@ -193,4 +195,18 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['updates']['check']>(CH.updatesCheck, () => updater.check());
   handleApi<HelmApi['updates']['install']>(CH.updatesInstall, () => updater.install());
   handleApi<HelmApi['app']['version']>(CH.appGetVersion, () => app.getVersion());
+
+  const feedbackContext = (): FeedbackContext => ({
+    version: app.getVersion(),
+    os: osLabel(process.platform, os.release()),
+    arch: process.arch,
+    displays: screen.getAllDisplays().length,
+    hasBibles: biblesRepo.installed().length > 0,
+    hasSongs: repo.count() > 0,
+  });
+  handleApi<HelmApi['feedback']['context']>(CH.feedbackContext, feedbackContext);
+  handleApi<HelmApi['feedback']['send']>(CH.feedbackSend, (p) =>
+    sendFeedback(p, { endpoint: __FEEDBACK_ENDPOINT__, client: __FEEDBACK_CLIENT__ }),
+  );
+  handleApi<HelmApi['feedback']['fallbackUrl']>(CH.feedbackFallbackUrl, (p) => feedbackUrl(p));
 }

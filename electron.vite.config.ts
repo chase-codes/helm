@@ -3,7 +3,13 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: { plugins: [externalizeDepsPlugin()] },
+  main: {
+    plugins: [externalizeDepsPlugin()],
+    define: {
+      __FEEDBACK_ENDPOINT__: JSON.stringify(process.env.HELM_FEEDBACK_ENDPOINT ?? ''),
+      __FEEDBACK_CLIENT__: JSON.stringify(process.env.HELM_FEEDBACK_CLIENT ?? ''),
+    },
+  },
   preload: { plugins: [externalizeDepsPlugin()] },
   renderer: {
     resolve: {

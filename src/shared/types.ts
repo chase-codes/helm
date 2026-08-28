@@ -1,5 +1,6 @@
 import type { MessageImportResult } from './message/parseImport';
 import type { TapeRow, QuoteRow } from './search/messageScore';
+import type { FeedbackContext, FeedbackPayload, FeedbackSendResult } from './feedbackIssue';
 
 export interface SongSection { label: string; lines: string[] }
 export interface Song {
@@ -231,6 +232,9 @@ export const CH = {
   updatesCheck: 'updates:check',
   updatesStatus: 'updates:status',           // main → all windows
   appGetVersion: 'app:getVersion',
+  feedbackContext: 'feedback:context', feedbackSend: 'feedback:send',
+  feedbackFallbackUrl: 'feedback:fallbackUrl',
+  feedbackOpen: 'feedback:open',             // main → operator (Help menu)
 } as const;
 
 /** Payload carried by each main → renderer push channel. Pairing the channel constant
@@ -248,6 +252,7 @@ export interface PushPayloads {
   [CH.videoState]: VideoStateWire;
   [CH.songImportProgress]: SongImportProgress;
   [CH.updatesStatus]: UpdateStatus;
+  [CH.feedbackOpen]: null;
 }
 
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
@@ -257,6 +262,7 @@ export interface ChapterData {
 }
 export interface BookExtent { chapters: number; verseCounts: number[] } // verseCounts[chapterIndex0] = verses in chapter (index+1)
 export type { VerseHit } from './search/verseScore';
+export type { FeedbackContext, FeedbackPayload, FeedbackSendResult, FeedbackType } from './feedbackIssue';
 export interface VerseSearchResult { hits: import('./search/verseScore').VerseHit[]; total: number; versionId: string }
 export interface ScriptureReading { id: string; book: string; ch: number; from: number; to: number }
 export interface NormalizedBible {
@@ -420,5 +426,11 @@ export interface HelmApi {
   };
   app: {
     version(): Promise<string>;
+  };
+  feedback: {
+    context(): Promise<FeedbackContext>;
+    send(p: FeedbackPayload): Promise<FeedbackSendResult>;
+    fallbackUrl(p: FeedbackPayload): Promise<string>;
+    onOpen(cb: (_: null) => void): () => void;
   };
 }
