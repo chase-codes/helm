@@ -14,6 +14,7 @@ import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
 import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
 import { tintChip } from './railTint';
+import { MONO } from '../shared/fonts';
 
 export interface PreServiceModeProps {
   active: boolean;
@@ -183,7 +184,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     justifyContent: 'center',
     padding: '2px 7px',
     borderRadius: '5px',
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '9px',
     letterSpacing: '0.06em',
     fontWeight: 500,
@@ -354,7 +355,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                     : `inset 0 0 0 1px ${T.hairline}`
             };
             const labelStyle: CSSProperties = {
-              fontFamily: "'JetBrains Mono',monospace",
+              fontFamily: MONO,
               fontSize: '10.5px',
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
@@ -381,7 +382,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               boxShadow: `inset 0 0 0 1px ${T.border}`
             };
             const chipStyle: CSSProperties = {
-              fontFamily: "'JetBrains Mono',monospace",
+              fontFamily: MONO,
               fontSize: '9px',
               letterSpacing: '0.06em',
               fontWeight: 600,
@@ -394,7 +395,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               boxShadow: card.enabled ? 'none' : `inset 0 0 0 1px ${T.border}`
             };
             const showingBadge: CSSProperties = {
-              fontFamily: "'JetBrains Mono',monospace",
+              fontFamily: MONO,
               fontSize: '9px',
               letterSpacing: '0.06em',
               fontWeight: 600,
@@ -494,14 +495,14 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
               <span style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PREVIEW — CURRENT CARD</span>
               {armed && (
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '9.5px', letterSpacing: '0.06em', fontWeight: 600, color: T.accent }}>
+                <span style={{ fontFamily: MONO, fontSize: '9.5px', letterSpacing: '0.06em', fontWeight: 600, color: T.accent }}>
                   ● ARMED
                 </span>
               )}
             </span>
             <div style={projBarStyle}>
               <span style={projDotStyle} />
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
+              <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
             </div>
           </div>
           <div
@@ -542,7 +543,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
           <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(-1)}>
             −
           </button>
-          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: T.dim, minWidth: '74px' }}>
+          <span style={{ fontFamily: MONO, fontSize: '12px', color: T.dim, minWidth: '74px' }}>
             {`${dwellS}s / card`}
           </span>
           <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(1)}>

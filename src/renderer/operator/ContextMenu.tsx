@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from 'react';
 import { ThemeCtx } from './ThemeCtx';
+import { Z_MENU } from './zLayers';
 
 export interface ContextMenuItem {
   label: string;
@@ -177,7 +178,7 @@ export function ContextMenu({ open, x, y, items, onClose, restoreFocusTo }: Cont
     position: 'fixed',
     top: `${pos.y}px`,
     left: `${pos.x}px`,
-    zIndex: 61,
+    zIndex: Z_MENU,
     minWidth: '168px',
     background: T.panel3,
     borderRadius: '10px',

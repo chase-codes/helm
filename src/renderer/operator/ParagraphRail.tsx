@@ -2,6 +2,7 @@ import type { CSSProperties, JSX } from 'react';
 import type { Theme } from '../../shared/theme';
 import { railBadgeStyle, railLabelStyle, railRowStyle, railTextStyle } from './railTint';
 import type { MessageParagraph } from '../../shared/types';
+import { MONO } from '../shared/fonts';
 
 export interface ParagraphRailProps {
   theme: Theme;
@@ -52,7 +53,7 @@ export function ParagraphRail({
       <div style={{ padding: '14px 15px 10px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>{title}</div>
-          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', color: T.message }}>{plannedCount} planned</div>
+          <div style={{ fontFamily: MONO, fontSize: '10px', color: T.message }}>{plannedCount} planned</div>
         </div>
         <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45 }}>{HINT}</div>
       </div>

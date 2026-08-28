@@ -2,6 +2,7 @@ import type { CSSProperties, JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import type { Slide } from '../../shared/types';
 import { MESSAGE_ACCENT } from '../../shared/slideAccents';
+import { SANS } from './fonts';
 
 export interface ReadingCanvasProps {
   slide: Slide;
@@ -27,7 +28,7 @@ export function ReadingCanvas({ slide: s, fill = false }: ReadingCanvasProps): J
     containerType: 'size',
     background: 'radial-gradient(135% 135% at 50% 0%, #1c1925 0%, #08070b 72%)',
     color: '#fff',
-    fontFamily: "'Hanken Grotesk', system-ui, sans-serif",
+    fontFamily: SANS,
     display: 'flex',
     flexDirection: 'column'
   };

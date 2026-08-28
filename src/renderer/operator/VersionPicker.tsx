@@ -1,6 +1,8 @@
 import { useState, type CSSProperties, type JSX } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { BibleManifestEntry } from '../../shared/types';
+import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
+import { MONO } from '../shared/fonts';
 
 export interface VersionPickerProps {
   theme: Theme;
@@ -37,7 +39,7 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
     position: 'absolute',
     bottom: '46px',
     right: 0,
-    zIndex: 40,
+    zIndex: Z_POPOVER,
     width: '290px',
     background: T.panel3,
     borderRadius: '12px',
@@ -57,7 +59,7 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
     marginBottom: '2px'
   });
   const abbrStyle = (sel: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11px',
     width: '38px',
     flexShrink: 0,
@@ -76,7 +78,7 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
     textOverflow: 'ellipsis'
   });
   const markStyle = (sel: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '8.5px',
     letterSpacing: '0.06em',
     fontWeight: 600,
@@ -105,7 +107,7 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
       </button>
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'fixed', inset: 0, zIndex: Z_POPOVER_SCRIM }} onClick={() => setOpen(false)} />
           <div style={verPopStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 9px 8px' }}>
               <span style={{ fontSize: '10px', letterSpacing: '0.1em', fontWeight: 600, color: T.faint }}>TRANSLATIONS</span>

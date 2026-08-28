@@ -10,6 +10,7 @@ import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
 import type { IconProps } from '../shared/icons'
 import { MoonIcon, PreServiceIcon, ScreenBlackIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
+import { MONO } from '../shared/fonts'
 
 export interface HeaderProps {
   mode: Mode
@@ -83,7 +84,7 @@ export function Header({
     background: active ? T.accent : 'transparent'
   })
   const outputsChipStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11px',
     letterSpacing: '0.06em',
     color: outputs > 0 ? T.dim : T.faint,
@@ -106,7 +107,7 @@ export function Header({
   // Same verb and same mark as every Take down button (#92) — only the case differs,
   // because this is a chip inside the header's uppercase-mono status row.
   const takeDownChipStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '9.5px',
     letterSpacing: '0.08em',
     fontWeight: 700,
@@ -171,7 +172,7 @@ export function Header({
         <span style={liveDotStyle} />
         <span
           style={{
-            fontFamily: "'JetBrains Mono',monospace",
+            fontFamily: MONO,
             fontSize: '11px',
             letterSpacing: '0.08em'
           }}
@@ -193,7 +194,7 @@ export function Header({
       </button>
       <Clock
         style={{
-          fontFamily: "'JetBrains Mono',monospace",
+          fontFamily: MONO,
           fontSize: '15px',
           color: T.dim,
           fontVariantNumeric: 'tabular-nums'

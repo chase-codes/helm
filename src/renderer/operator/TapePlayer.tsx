@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEv
 import { activeOrdAt } from '../../shared/message/timing';
 import type { Theme } from '../../shared/theme';
 import type { Message, TimingMap } from '../../shared/types';
+import { MONO } from '../shared/fonts';
 
 export interface TapePlayerProps {
   theme: Theme;
@@ -132,7 +133,7 @@ export function TapePlayer({ theme: T, msg, audioSrc, timing, downloading, onAct
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{msg.title}</div>
-          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10.5px', color: T.faint, marginTop: '2px' }}>{tapeTime}</div>
+          <div style={{ fontFamily: MONO, fontSize: '10.5px', color: T.faint, marginTop: '2px' }}>{tapeTime}</div>
         </div>
       </div>
       <div ref={barRef} style={tapeBarStyle} onClick={seek}>

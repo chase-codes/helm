@@ -19,3 +19,9 @@ import '@fontsource/jetbrains-mono/800.css';
 import '@fontsource/newsreader/400.css';
 import '@fontsource/newsreader/500.css';
 import '@fontsource/newsreader/700.css';
+
+// The app's two typeface stacks, tokenized like the color tokens in theme.ts: the
+// typeface is one decision, not 60 string literals. Canvas faces (Newsreader) stay
+// literal at their two canvas sites.
+export const MONO = "'JetBrains Mono',monospace";
+export const SANS = "'Hanken Grotesk', system-ui, sans-serif";

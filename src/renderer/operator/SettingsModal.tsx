@@ -29,6 +29,7 @@ import type {
 } from '../../shared/types'
 import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 import type { ThemeFamily, ThemeMode } from '../../shared/theme'
+import { MONO } from '../shared/fonts'
 
 export interface SettingsModalProps {
   open: boolean
@@ -240,7 +241,7 @@ export function SettingsModal({
     borderBottom: `1px solid ${T.hairline}`
   }
   const abbrChipStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11px',
     fontWeight: 600,
     width: '42px',
@@ -249,7 +250,7 @@ export function SettingsModal({
   }
   const nameStyle: CSSProperties = { flex: 1, fontSize: '13.5px', fontWeight: 500, color: T.text }
   const bundledTagStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '9.5px',
     letterSpacing: '0.08em',
     fontWeight: 700,

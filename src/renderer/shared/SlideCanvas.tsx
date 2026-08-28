@@ -4,6 +4,7 @@ import { bandCandidates } from '../../shared/slides/fitText';
 import { CANVAS_GOLD } from '../../shared/slideAccents';
 import { LOGO_TITLE } from '../../shared/presentation/core';
 import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
+import { MONO, SANS } from './fonts';
 
 // Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
 // and usually longer. Both lost the px ceilings that made scripture render at 55% of
@@ -163,7 +164,7 @@ const clockStyle: CSSProperties = {
   top: '4cqmin',
   right: '5cqmin',
   zIndex: 5,
-  fontFamily: "'JetBrains Mono',monospace",
+  fontFamily: MONO,
   fontSize: 'clamp(8px,3.4cqmin,24px)',
   color: 'rgba(255,255,255,.5)',
   fontVariantNumeric: 'tabular-nums'
@@ -193,7 +194,7 @@ const labelStyle: CSSProperties = {
   top: '4cqmin',
   left: '5cqmin',
   zIndex: 5,
-  fontFamily: "'JetBrains Mono',monospace",
+  fontFamily: MONO,
   fontSize: 'clamp(7px,2.7cqmin,15px)',
   letterSpacing: '0.16em',
   textTransform: 'uppercase',
@@ -206,7 +207,7 @@ const audienceLabelStyle: CSSProperties = {
   bottom: '3.2cqmin',
   zIndex: 5,
   textAlign: 'center',
-  fontFamily: "'JetBrains Mono',monospace",
+  fontFamily: MONO,
   fontSize: 'clamp(7px,2.2cqmin,14px)',
   letterSpacing: '0.16em',
   textTransform: 'uppercase',
@@ -241,7 +242,7 @@ const blankLogoStyle: CSSProperties = {
 };
 const blankPlaceholderStyle: CSSProperties = {
   color: 'rgba(255,255,255,.22)',
-  fontFamily: "'JetBrains Mono',monospace",
+  fontFamily: MONO,
   fontSize: 'clamp(8px,2.6cqmin,15px)',
   letterSpacing: '0.22em',
   textTransform: 'uppercase'
@@ -296,7 +297,7 @@ export function SlideCanvas({
     containerType: 'size',
     background: bg,
     color: '#fff',
-    fontFamily: "'Hanken Grotesk', system-ui, sans-serif",
+    fontFamily: SANS,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
@@ -394,7 +395,7 @@ export function SlideCanvas({
 
   const showChrome = isStage;
   const nextTagStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: 'clamp(6px,2cqmin,12px)',
     letterSpacing: '0.18em',
     color: accent,
@@ -435,7 +436,7 @@ export function SlideCanvas({
     flexShrink: 0
   };
   const ltSecondaryStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: 'clamp(7px,2.6cqmin,11px)',
     letterSpacing: '0.1em',
     textTransform: 'uppercase',

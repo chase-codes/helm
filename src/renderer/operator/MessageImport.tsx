@@ -2,6 +2,8 @@ import { useContext, useRef, useState, type ChangeEvent, type CSSProperties, typ
 import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import type { MessageImportResult, MessageMeta } from '../../shared/types';
+import { Z_STACKED_MODAL } from './zLayers';
+import { MONO } from '../shared/fonts';
 
 export interface MessageImportProps {
   open: boolean;
@@ -110,7 +112,7 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
   const previewHintStyle: CSSProperties = { fontSize: '12px', color: T.dim, padding: '0 22px 10px' };
   const previewListStyle: CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 22px 16px', display: 'flex', flexDirection: 'column', gap: '8px' };
   const paraCardStyle: CSSProperties = { background: T.panel2, borderRadius: '10px', padding: '10px 13px', boxShadow: `inset 0 0 0 1px ${T.hairline}` };
-  const paraLabelStyle: CSSProperties = { fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', letterSpacing: '0.06em', color: T.accent, marginBottom: '5px' };
+  const paraLabelStyle: CSSProperties = { fontFamily: MONO, fontSize: '10px', letterSpacing: '0.06em', color: T.accent, marginBottom: '5px' };
   const paraTextStyle: CSSProperties = { fontSize: '13px', color: T.dim, lineHeight: 1.5 };
   const emptyStateStyle: CSSProperties = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.faint, fontSize: '13px' };
   const footerStyle: CSSProperties = {
@@ -147,7 +149,7 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
   const canSave = !!result && result.paragraphs.length > 0 && !saving;
 
   return (
-    <ModalShell onClose={onClose} zIndex={60} width="720px" maxWidth="96vw" maxHeight="88vh">
+    <ModalShell onClose={onClose} zIndex={Z_STACKED_MODAL} width="720px" maxWidth="96vw" maxHeight="88vh">
       <div style={headerRowStyle}>
         <div style={{ fontWeight: 700, fontSize: '18px' }}>Import a message</div>
         <div style={{ fontSize: '13px', color: T.dim, marginTop: '4px', lineHeight: 1.4 }}>

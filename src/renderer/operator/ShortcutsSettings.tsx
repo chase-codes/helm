@@ -7,6 +7,7 @@ import {
   type HotkeyScope
 } from '../../shared/hotkeys/actions'
 import { bindingConflict, eventToBinding, formatBinding } from '../../shared/hotkeys/match'
+import { MONO } from '../shared/fonts'
 
 export interface ShortcutsSettingsProps {
   overrides: HotkeyOverrides
@@ -75,7 +76,7 @@ export function ShortcutsSettings({ overrides, onChange }: ShortcutsSettingsProp
     borderBottom: `1px solid ${T.hairline}`
   }
   const chipStyle = (fixed: boolean, capturing: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11px',
     fontWeight: 600,
     padding: '5px 9px',

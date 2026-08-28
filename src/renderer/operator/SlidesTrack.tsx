@@ -27,6 +27,8 @@ import { UndoToast } from './UndoToast';
 import { ListEmpty } from './ListEmpty';
 import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
+import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
+import { MONO } from '../shared/fonts';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -442,7 +444,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     position: 'absolute',
     top: '30px',   // opens DOWNWARD from the header button (was bottom: 46px)
     right: 0,
-    zIndex: 40,
+    zIndex: Z_POPOVER,
     width: '180px',
     background: T.panel3,
     borderRadius: '12px',
@@ -468,7 +470,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   };
   const comingPanelStyle: CSSProperties = { width: `${rightPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const numStyle = (isCued: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
+    fontFamily: MONO,
     fontSize: '11px',
     width: '16px',
     flexShrink: 0,
@@ -491,7 +493,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap'
   };
   const transportTimeStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: T.dim, fontVariantNumeric: 'tabular-nums'
+    fontFamily: MONO, fontSize: '12px', color: T.dim, fontVariantNumeric: 'tabular-nums'
   };
 
   const deckFallbackCloseBtnStyle: CSSProperties = {
@@ -543,7 +545,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
             </button>
             {importOpen && (
               <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setImportOpen(false)} />
+                <div style={{ position: 'fixed', inset: 0, zIndex: Z_POPOVER_SCRIM }} onClick={() => setImportOpen(false)} />
                 <div style={importPopStyle}>
                   <button style={importRowStyle} onClick={importImages}>Images</button>
                   <button style={importRowStyle} onClick={importVideo}>Video</button>
@@ -643,7 +645,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
           <div style={{ padding: '14px 15px 10px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>{selected.title}</div>
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '10px', color: T.sermon }}>{slides.length} slides</div>
+              <div style={{ fontFamily: MONO, fontSize: '10px', color: T.sermon }}>{slides.length} slides</div>
             </div>
             <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45 }}>
               Tap any slide to put it on screen — jump anywhere, not just next.
