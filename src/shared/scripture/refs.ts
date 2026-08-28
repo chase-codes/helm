@@ -14,7 +14,10 @@ const rankOf = (name: string): number => RANK.get(name) ?? Number.MAX_SAFE_INTEG
 export function matchBook(token: string): string | null {
   const t = norm(token)
   if (!t) return null
-  for (const b of BOOKS) if (b.aliases.includes(t)) return b.name
+  // Exact alias wins before prefix fallback — the same pass as matchBookExact, expressed
+  // through it so the two can never drift (bookCompletion's digit clause relies on that).
+  const exact = matchBookExact(token)
+  if (exact !== null) return exact
   // Prefix fallback: best-ranked match, ties broken by canonical order (strict `<` keeps
   // the earlier, i.e. canonical, book when ranks are equal — including equal-unranked).
   let best: string | null = null
