@@ -18,11 +18,15 @@ export interface ScoredSong {
   dist: number;            // Σ best match distance of matched tokens (exact 0, prefix 1,
                            // fuzzy = edit distance) — lower wins; the only match-quality
                            // signal that survives into lyric mode (W5)
-  idfWeight: number;       // max ln((n+1)/(df+1)) over matched tokens, df = candidate-set
-                           // document frequency — the rarest matched token carries the
-                           // signal; equal-rarity candidates fall through to the
-                           // title/coverage tie-breaks. Filled only by rankSongs;
-                           // consulted only inside the partial band (W6)
+  idfWeight: number;       // max ln((n+1)/(df+1)) over EXACTLY matched tokens only
+                           // (bestDist===0), df = candidate-set document frequency over
+                           // all matchers — a candidate is promoted within the partial
+                           // band only when a token the operator typed EXACTLY is at
+                           // least a whole ln-unit rarer than anything the rival matched
+                           // exactly; rarity of fuzzy/prefix guesses about half-typed
+                           // words must not move the cursor under the operator's fingers.
+                           // Filled only by rankSongs; consulted only inside the partial
+                           // band (W6)
   rel: number;             // -bm25 relevance from FTS (0 when FTS didn't match) (#53)
   tf: number;              // total exact occurrences of query tokens (higher wins)
   titleStartsWith: boolean;// title begins with the whole query (wins)
@@ -178,10 +182,17 @@ function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, 
 function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
   // Partial band only (score 360): the candidates matched DIFFERENT token subsets,
-  // and a rare matched token outranks a common one wherever it matched (W6). Full
-  // bands matched every token, so their idfWeight is identical by construction —
-  // the guard just makes that scoping explicit.
-  if (a.score === 360 && b.idfWeight !== a.idfWeight) return b.idfWeight - a.idfWeight;
+  // and a rare EXACTLY-matched token outranks a common one wherever it matched (W6).
+  // Full bands matched every token, so their idfWeight is identical by construction —
+  // the guard just makes that scoping explicit. Compared in whole ln-units (rounded):
+  // sub-unit rarity differences (e.g. a common token matched exactly by one candidate
+  // vs a fuzzy/prefix guess by the other) are noise and fall through to the existing
+  // chain below.
+  if (a.score === 360) {
+    const ia = Math.round(a.idfWeight);
+    const ib = Math.round(b.idfWeight);
+    if (ib !== ia) return ib - ia;
+  }
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
   if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched (W1) — stopwords weigh less
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
@@ -209,7 +220,12 @@ export function rankSongs(query: string, songs: Song[], field: SearchField, rel?
   for (const r of scored) {
     let w = 0;
     for (let j = 0; j < qts.length; j++) {
-      if (r.s.bestDist[j] < 99) w = Math.max(w, Math.log((scored.length + 1) / (df[j] + 1)));
+      // Only an EXACT whole-word match contributes rarity (W6 amendment): a
+      // prefix/fuzzy match of the operator's half-typed last token routinely
+      // matches exactly one arbitrary candidate for a keystroke or two, giving
+      // it a transient df=1 and the max possible idf — vaulting it over the
+      // whole band. df itself still counts all matchers (line above).
+      if (r.s.bestDist[j] === 0) w = Math.max(w, Math.log((scored.length + 1) / (df[j] + 1)));
     }
     r.s.idfWeight = w;
   }
