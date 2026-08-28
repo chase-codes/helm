@@ -40,3 +40,18 @@ Per-fix: W1 fixed `praise recukless` 25→1, `holy reckelss` 17→1. W3 fixed `a
 - The monotonicity metric replays labeled queries verbatim (misspellings included), so it counts demotion by *any* further keystroke of the labeled query — slightly broader than W4's "correct added character" definition. Comments were reworded to match; Phase 3's W4 work should measure against what the code counts.
 - The measurement corpus is 356 songs (56 curated + 300 filler). Metrics are deterministic run-to-run (seeded PRNG); only latency varies.
 - The working SDD ledger (full per-task history) lives at `.superpowers/sdd/2026-08-27-song-search-improvements/progress.md` (git-ignored); resume Phases 3–4 by extending it. This document is the durable extract.
+
+---
+
+## Phase 3 addendum (2026-08-27, branch `song-search-stopword-fuzz`)
+
+Tasks 10–14. Measured end state (356-song corpus, 53 labeled queries): weighted p@1 93% / p@3 96% / recall@50 98% / MRR 0.94; unweighted 48/53; churn **143** (was 158); monotonicity **20** (was 25); `"give me your hand"` hit→miss regressions **0** (was 1); latency ~208–239 ms @3000 (ceiling 330). Full repo suite 1394/1394.
+
+Rulings (owner-approved where marked):
+
+1. **Task 12's literal solid rule was amended (OWNER).** The plan's `w.length >= t.length` breaks quality floors: an insertion typo (`recukless` 9 → `reckless` 8) maps token→shorter word, geometrically identical to `hand`→`and`; measured p@1 48→47, weighted 91.07 < 92, recall 95.83 < 97. Shipped rule: solid = `w.length >= t.length || (w.length >= 5 && d <= 1)`. All pins hold; metrics identical to baseline.
+2. **Task 13 (pairTol) REVERTED** per its own Step 5 gate: pairTol clamps digit-token admission — `10000` vs tokenized `000` needs d=2 but pairTol = matchTol(3) = 1, so the labeled `10000` query dropped from rank-3 hit to unmatched (recall 95.24 < 97). Stability had improved (churn 142, mono 20) but not at a quality floor's expense. The W4 matchTol-step noise remains (churn/mono ratchets still guard it); any numeric-token special-case is new design, not attempted.
+3. **Task 14's GMYH=0 gate required one extra owner-approved fix**: after Tasks 10–12 the last regression was no longer a band collapse but a tie-break loss at `give me your ha` — `titleCoverage` credited `your`→`you` (fuzz into a shorter title word). Fix: title tie-break credit requires the same solid rule (`bestSolidMatch`, single shared `isSolidMatch` predicate). GMYH 1→0, churn 144→143, mono 21→20.
+4. Task 10 folded the parked `' well' at index 6` comment fix; the plan's expectation that Task 11 alone would drop GMYH did not reproduce (documented in ledger; mechanism moved, count held at 1 until ruling 3).
+
+Ratchet after Phase 3: `unweightedP1Min=48, weightedP1MinPct=92, recall50MinPct=97, churnMax=143, monotonicityMax=20, giveMeYourHandRegressionsMax=0, latencyMs3000Max=330` (330 pinned in Task 10 from 217.63×1.5).

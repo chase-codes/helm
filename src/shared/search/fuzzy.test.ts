@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { norm, lev, fuzzyTok, matchTol, textSignals } from './fuzzy';
+import { norm, lev, fuzzyTok, matchTol, textSignals, bestSolidMatch } from './fuzzy';
 
 describe('norm', () => {
   test('lowercases, strips apostrophes and punctuation, collapses spaces', () => {
@@ -42,5 +42,34 @@ describe('textSignals dist', () => {
     expect(textSignals([['grace']], ['grase']).dist).toBe(1); // 1 edit
     // one exact (0) + one prefix (1) + one fuzzy (2) → 3
     expect(textSignals([['jesus', 'wonderful', 'grasey']], ['jesus', 'wonder', 'grace']).dist).toBe(0 + 1 + 2);
+  });
+});
+describe('textSignals bestDist', () => {
+  test('exposes per-token best distance, 99 for unmatched', () => {
+    const s = textSignals([['give', 'me', 'your', 'hand']], ['give', 'your', 'zz']);
+    expect(s.bestDist).toEqual([0, 0, 99]);
+  });
+});
+describe('textSignals strongSolid', () => {
+  test('a fuzz into a SHORTER word is not solid; equal-or-longer is', () => {
+    expect(textSignals([['and']], ['hand']).strongSolid).toBe(0);   // hand→and (4→3): noise signature
+    expect(textSignals([['sweet']], ['swet']).strongSolid).toBe(1); // swet→sweet (4→5): typo fix
+    expect(textSignals([['reckless']], ['reckelss']).strongSolid).toBe(1);
+    expect(textSignals([['the']], ['the']).strongSolid).toBe(1);    // exact match is always solid
+  });
+});
+describe('bestSolidMatch', () => {
+  test('fuzzing into a shorter word is not solid (99), even within tolerance', () => {
+    // your→you (4→3) is within tol but "you" is shorter than "your" and not >=5 chars
+    expect(bestSolidMatch('your', ['you', 'reign'])).toBe(99);
+  });
+  test('an anchored prefix onto a longer word is solid', () => {
+    expect(bestSolidMatch('grac', ['grace'])).toBe(1);
+  });
+  test('a single-edit fuzz onto a word >=5 chars is solid (typo, not noise)', () => {
+    expect(bestSolidMatch('recukless', ['reckless'])).toBe(1);
+  });
+  test('a fuzz into a shorter stopword-length word is not solid', () => {
+    expect(bestSolidMatch('hand', ['and'])).toBe(99);
   });
 });

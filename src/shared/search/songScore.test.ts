@@ -204,7 +204,7 @@ test('word-start type-ahead keeps its exact band values (W3)', () => {
   const wellspring = song('wellspring', 'Wellspring', '', [['V', ['water rises']]]);
   expect(scoreSong('well', wellspring, 'all').score).toBe(1000);           // startsWith
   const itIsWell = song('itiswell', 'It Is Well With My Soul', '', [['V', ['it is well']]]);
-  expect(scoreSong('well', itIsWell, 'all').score).toBe(994);              // ' well' at index 6 → 1000-6
+  expect(scoreSong('well', itIsWell, 'all').score).toBe(994);              // ' well' found at index 5 → word starts at 6 → 1000-6
 });
 
 // --- W5: lyric mode gains edit-distance discrimination via the dist signal ---
@@ -222,4 +222,51 @@ test('an exact match outranks an equally covered fuzzy match in lyric mode (W5)'
 // --- W9: phrase runs must not bridge from title into author ---
 test('a phrase run cannot bridge title into author (W9)', () => {
   expect(scoreSong('grace john', AMAZING, 'all').phrase).toBe(1);
+});
+
+// --- W2 hardening: 1-2 char tokens fuzz into any title and earn no title credit ---
+test('a 1-2 char query token earns no title relevance credit (W2)', () => {
+  // pre-fix "me"~"we" (lev 1, tol 1) inflated titleCoverage to 2 / titleCloseness to 1
+  const s = song('wesing', 'We Sing', '', [['V', ['we sing together']]]);
+  const r = scoreSong('me sing', s, 'all');
+  expect(r.titleCoverage).toBe(1);   // "sing" only
+  expect(r.titleCloseness).toBe(0);
+});
+
+// --- W2: the operator's unfinished trailing token must not collapse the band ---
+test('a short trailing mid-word token keeps the full-match band (W2)', () => {
+  // "ha" (2 chars) cannot match "hand" yet; the three complete tokens still carry
+  // the band ("give me your h" held 428 one keystroke earlier)
+  const s = song('takemyhand', 'Take My Hand', '', [['V', ['give me your hand tonight']]]);
+  expect(scoreSong('give me your ha', s, 'all').score).toBe(416); // 380 + 3*12
+  // only the TRAILING token is exempt — an unmatched short middle token is not
+  expect(scoreSong('give zx your hand', s, 'all').score).toBe(360);
+});
+
+// --- W2: stopword-fuzz alone cannot open the partial band ---
+test('a fuzz into a shorter stopword cannot open the partial band (W2)', () => {
+  // "hand" edit-matches "and" — present in essentially every worship lyric; that
+  // alone must not admit a song
+  const s = song('andsong', 'Faithful Anthem', '', [['V', ['faithful and true forever']]]);
+  expect(scoreSong('give me your hand', s, 'all').score).toBe(0);
+});
+
+// --- Task 14: the title tie-break must apply the same solid discipline as strongSolid ---
+test('title credit requires a SOLID match: "your"→"you" earns no title relevance (Task 14)', () => {
+  // "you" (3 chars) is shorter than "your" (4) and not >=5 chars — fuzzing into it
+  // is noise, not signal, per the same rule strongSolid already applies (W2). Before
+  // the fix, titleCoverage/titleCloseness used plain bestMatch and credited this fuzz,
+  // which flipped a tie-break away from a song whose real match was in the lyrics.
+  const s = song('gayl', 'Great Are You Lord', '', [['V', ['great are you lord']]]);
+  const r = scoreSong('your', s, 'all');
+  expect(r.titleCoverage).toBe(0);
+  expect(r.titleCloseness).toBe(0);
+});
+test('positive control: a genuine typo onto a >=5 char title word still earns title credit', () => {
+  // "recukless"~"reckless" (9 chars, 1 edit onto a 8-char word) stays solid via the
+  // second clause of the rule (w.length >= 5 && d <= 1) — the W1 pin must survive.
+  const reckless = song('reckless', 'Reckless Love', '', [['V', ['reckless love of god']]]);
+  const r = scoreSong('recukless', reckless, 'all');
+  expect(r.titleCoverage).toBe(1);
+  expect(r.titleCloseness).toBe(1);
 });
