@@ -191,50 +191,58 @@ export function setDisplayRole(fingerprint: string, role: OutputRole): void {
   broadcastStatus();
 }
 
-// Persist a view for a fingerprint and live-re-tag every matching window (no re-spawn).
-// The literal fingerprint 'test' targets dev test-output windows instead, so the driver
-// script (and a dev on a one-display machine) can exercise leader/mirror.
-export function setDisplayView(fingerprint: string, view: OutputViewMode): void {
+// Shared shape of every per-display setting flow: 'test' special-case targeting dev
+// test-output windows (no persistence, so the driver script and a dev on a one-display
+// machine can exercise leader/mirror), persist under a settings key, live-re-tag every
+// matching tracked window (no re-spawn), patch lastDisplays, broadcast.
+function updatePerDisplaySetting<T>(
+  fingerprint: string,
+  value: T,
+  cfg: {
+    settingsKey: string;
+    applyToWin: (win: BrowserWindow, value: T) => void;
+    applyToTracked: (t: Tracked, value: T) => void;
+    patchInfo: (d: DisplayInfo, value: T) => DisplayInfo;
+  },
+): void {
   if (fingerprint === 'test') {
-    for (const w of testOutputs) if (!w.isDestroyed()) presentation.setOutputView(w, view);
+    for (const w of testOutputs) if (!w.isDestroyed()) cfg.applyToWin(w, value);
     return;
   }
-  const views = savedViews();
-  views[fingerprint] = view;
-  settings?.set(VIEWS_KEY, views);
+  const saved = settings?.get<Record<string, T>>(cfg.settingsKey, {}) ?? {};
+  saved[fingerprint] = value;
+  settings?.set(cfg.settingsKey, saved);
   for (const t of byDisplayId.values()) {
     if (t.fingerprint === fingerprint && !t.win.isDestroyed()) {
-      t.view = view;
-      presentation.setOutputView(t.win, view);
+      cfg.applyToTracked(t, value);
+      cfg.applyToWin(t.win, value);
     }
   }
   lastDisplays = lastDisplays.map((d) =>
-    !d.isOperator && d.fingerprint === fingerprint ? { ...d, view } : d,
+    !d.isOperator && d.fingerprint === fingerprint ? cfg.patchInfo(d, value) : d,
   );
   broadcastStatus();
 }
 
-// Persist a leader split for a fingerprint and live-re-tag every matching window (no re-spawn).
-// Same 'test' special-case as setDisplayView: targets dev test-output windows, no persistence.
+// Persist a view for a fingerprint and live-re-tag every matching window (no re-spawn).
+export function setDisplayView(fingerprint: string, view: OutputViewMode): void {
+  updatePerDisplaySetting(fingerprint, view, {
+    settingsKey: VIEWS_KEY,
+    applyToWin: (w, v) => presentation.setOutputView(w, v),
+    applyToTracked: (t, v) => { t.view = v; },
+    patchInfo: (d, v) => ({ ...d, view: v }),
+  });
+}
+
+// Persist a leader split for a fingerprint and live-re-tag every matching window (no
+// re-spawn). Clamps first so the 'test' branch applies the clamped value too.
 export function setLeaderSplitByFingerprint(fingerprint: string, px: number): void {
-  if (fingerprint === 'test') {
-    for (const w of testOutputs) if (!w.isDestroyed()) presentation.setOutputLeaderSplit(w, clampLeaderSplit(px));
-    return;
-  }
-  const clamped = clampLeaderSplit(px);
-  const splits = savedSplits();
-  splits[fingerprint] = clamped;
-  settings?.set(SPLITS_KEY, splits);
-  for (const t of byDisplayId.values()) {
-    if (t.fingerprint === fingerprint && !t.win.isDestroyed()) {
-      t.leaderSplit = clamped;
-      presentation.setOutputLeaderSplit(t.win, clamped);
-    }
-  }
-  lastDisplays = lastDisplays.map((d) =>
-    !d.isOperator && d.fingerprint === fingerprint ? { ...d, leaderSplit: clamped } : d,
-  );
-  broadcastStatus();
+  updatePerDisplaySetting(fingerprint, clampLeaderSplit(px), {
+    settingsKey: SPLITS_KEY,
+    applyToWin: (w, v) => presentation.setOutputLeaderSplit(w, v),
+    applyToTracked: (t, v) => { t.leaderSplit = v; },
+    patchInfo: (d, v) => ({ ...d, leaderSplit: v }),
+  });
 }
 // The leader window reports its own drag; it doesn't know its fingerprint, but main can
 // resolve it from the sending WebContents. Test outputs (dev windows, no fingerprint)
