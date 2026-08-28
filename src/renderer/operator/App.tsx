@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { blurOnPointerClick } from './blurOnPointerClick';
+import { suppressSpaceActivation } from './suppressSpaceActivation';
 import { Header } from './Header';
 import { ModeErrorBoundary } from './ModeErrorBoundary';
 import { dispatchModeKey } from './keyDispatch';
@@ -132,6 +133,13 @@ function App(): JSX.Element {
   useEffect(() => {
     document.addEventListener('click', blurOnPointerClick);
     return () => document.removeEventListener('click', blurOnPointerClick);
+  }, []);
+
+  // Space is not a go-live key (#52), and must not become one again through the browser's
+  // native button activation on a focused control. See suppressSpaceActivation.
+  useEffect(() => {
+    document.addEventListener('keydown', suppressSpaceActivation, true);
+    return () => document.removeEventListener('keydown', suppressSpaceActivation, true);
   }, []);
 
   const rootStyle: CSSProperties = {

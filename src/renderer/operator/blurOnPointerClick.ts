@@ -5,7 +5,7 @@
 // and paints a focus ring that lingers on the last-clicked control (BUG-001).
 //
 // Blur pointer-activated buttons so no control retains focus between a click and later
-// keyboard navigation. Keyboard-activated clicks (Enter/Space produce a click event with
+// keyboard navigation. Keyboard-activated clicks (Enter produces a click event with
 // detail === 0) are left focused, so genuine keyboard focus indication is preserved.
 // Registered once on `document` in App; only acts on the nearest <button> ancestor of the
 // click target, so inputs/textareas and non-button clicks are untouched.

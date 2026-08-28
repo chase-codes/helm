@@ -140,7 +140,7 @@ function installHelmStubWith(
 describe('SongsMode', () => {
   // CRITICAL: the import wizard (Task 7) must be wired into the same isModalOpen/onEscape
   // contract as QuickAdd. Without it, keyDispatch's typing guard never trips inside the
-  // wizard (it has no <input>/<textarea>) so a focused button's Space/Enter falls through
+  // wizard (it has no <input>/<textarea>) so a focused button's Enter falls through
   // to onGoLive instead of being suppressed, and Escape does nothing.
   it('reports isModalOpen true while the import wizard is open, and Escape closes it', async () => {
     installHelmStub();
