@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, cleanup, fireEvent, type RenderResult } from '@testing-library/react'
+import { render, cleanup, fireEvent, waitFor, act, type RenderResult } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FeedbackModal } from './FeedbackModal'
 import { ThemeCtx } from './ThemeCtx'
@@ -91,5 +91,41 @@ describe('FeedbackModal', () => {
     fireEvent.change(getByRole('textbox'), { target: { value: 'a'.repeat(3600) } })
     getByText('3600 / 4000')
     expect((getByRole('textbox') as HTMLTextAreaElement).maxLength).toBe(4000)
+  })
+
+  it('shows the fallback when send() rejects instead of resolving', async () => {
+    send = vi.fn(async () => { throw new Error('network down') })
+    ;(window as unknown as { helm: unknown }).helm = {
+      feedback: {
+        context: vi.fn(async () => ctx),
+        send,
+        fallbackUrl: vi.fn(async () => 'https://github.com/chase-codes/helm/issues/new?template=feature_request.yml'),
+      },
+    }
+    const { getByText, getByRole, findByText } = mount()
+    fireEvent.change(getByRole('textbox'), { target: { value: 'Countdown timer' } })
+    fireEvent.click(getByText('Send'))
+    await findByText("Couldn't send right now.")
+    const link = getByText('Open on GitHub instead') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toContain('feature_request.yml')
+  })
+
+  it('cancelling while sending does not throw or warn when the send later settles', async () => {
+    let resolveSend!: (r: FeedbackSendResult) => void
+    send = vi.fn(() => new Promise<FeedbackSendResult>((resolve) => { resolveSend = resolve }))
+    ;(window as unknown as { helm: unknown }).helm = {
+      feedback: {
+        context: vi.fn(async () => ctx),
+        send,
+        fallbackUrl: vi.fn(async () => 'https://github.com/chase-codes/helm/issues/new?template=feature_request.yml'),
+      },
+    }
+    const { getByText, getByRole, unmount } = mount()
+    fireEvent.change(getByRole('textbox'), { target: { value: 'Countdown timer' } })
+    fireEvent.click(getByText('Send'))
+    await waitFor(() => expect(send).toHaveBeenCalled())
+    fireEvent.click(getByText('Cancel'))
+    unmount()
+    await act(async () => { resolveSend({ ok: true, number: 7, url: 'https://github.com/chase-codes/helm/issues/7' }) })
   })
 })

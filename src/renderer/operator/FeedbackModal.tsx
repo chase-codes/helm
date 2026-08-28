@@ -1,8 +1,8 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX } from 'react'
+import { useContext, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react'
 import { ModalShell } from './ModalShell'
 import { ThemeCtx } from './ThemeCtx'
 import { FEEDBACK_TEXT_MAX } from '../../shared/feedbackIssue'
-import type { FeedbackContext, FeedbackSendResult, FeedbackType } from '../../shared/types'
+import type { FeedbackContext, FeedbackPayload, FeedbackSendResult, FeedbackType } from '../../shared/types'
 
 type Phase = { k: 'edit' } | { k: 'sending' } | { k: 'sent'; url: string } | { k: 'failed'; fallback: string } | { k: 'unconfigured'; fallback: string }
 
@@ -11,6 +11,16 @@ const PLACEHOLDER: Record<FeedbackType, string> = {
   feature: 'What would you like Helm to do? When would you use it?',
 }
 const COUNTER_FROM = 3500
+// Last-resort link when fallbackUrl() itself is unreachable — a blank issue beats no link.
+const PLAIN_NEW_ISSUE_URL = 'https://github.com/chase-codes/helm/issues/new'
+
+async function safeFallbackUrl(payload: FeedbackPayload): Promise<string> {
+  try {
+    return await window.helm.feedback.fallbackUrl(payload)
+  } catch {
+    return PLAIN_NEW_ISSUE_URL
+  }
+}
 
 export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element {
   const T = useContext(ThemeCtx)
@@ -19,11 +29,17 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
   const [ctx, setCtx] = useState<FeedbackContext | null>(null)
   const [showCtx, setShowCtx] = useState(false)
   const [phase, setPhase] = useState<Phase>({ k: 'edit' })
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    let live = true
-    void window.helm.feedback.context().then((c) => { if (live) setCtx(c) })
-    return () => { live = false }
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    window.helm.feedback.context()
+      .then((c) => { if (mountedRef.current) setCtx(c) })
+      .catch(() => { /* swallowed — submit() fetches it again lazily on send */ })
   }, [])
 
   // Auto-close after a successful send; Done closes sooner.
@@ -39,14 +55,25 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
 
   const submit = async (): Promise<void> => {
     if (!canSend) return
-    const c = ctx ?? (await window.helm.feedback.context())
-    if (!ctx) setCtx(c)
-    const payload = { type, text, context: c }
     setPhase({ k: 'sending' })
-    const r: FeedbackSendResult = await window.helm.feedback.send(payload)
-    if (r.ok) { setPhase({ k: 'sent', url: r.url }); return }
-    const fallback = await window.helm.feedback.fallbackUrl(payload)
-    setPhase(r.reason === 'unconfigured' ? { k: 'unconfigured', fallback } : { k: 'failed', fallback })
+    let resolvedCtx: FeedbackContext | null = ctx
+    try {
+      const c = resolvedCtx ?? (await window.helm.feedback.context())
+      resolvedCtx = c
+      if (mountedRef.current && !ctx) setCtx(c)
+      const payload: FeedbackPayload = { type, text, context: c }
+      const r: FeedbackSendResult = await window.helm.feedback.send(payload)
+      if (!mountedRef.current) return
+      if (r.ok) { setPhase({ k: 'sent', url: r.url }); return }
+      const fallback = await safeFallbackUrl(payload)
+      if (!mountedRef.current) return
+      setPhase(r.reason === 'unconfigured' ? { k: 'unconfigured', fallback } : { k: 'failed', fallback })
+    } catch {
+      if (!mountedRef.current) return
+      const fallback = resolvedCtx ? await safeFallbackUrl({ type, text, context: resolvedCtx }) : PLAIN_NEW_ISSUE_URL
+      if (!mountedRef.current) return
+      setPhase({ k: 'failed', fallback })
+    }
   }
 
   // Fixed footprint: the card keeps one height across edit/sending/sent/failed.
