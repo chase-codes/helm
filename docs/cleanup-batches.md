@@ -127,4 +127,4 @@ These three overlap on railTint.ts / transport.ts / PreServiceMode.tsx and propo
 | B7 — Renderer: transport/tint style kit | merged | [#164](https://github.com/chase-codes/helm/pull/164) |
 | B8 — Renderer: mode-surface helpers | merged | [#165](https://github.com/chase-codes/helm/pull/165) |
 | B9 — Renderer: output canvases + logo slide | merged | [#166](https://github.com/chase-codes/helm/pull/166) |
-| B10 — Renderer: chrome constants (wide mechanical) | open | |
+| B10 — Renderer: chrome constants (wide mechanical) | merged | [#167](https://github.com/chase-codes/helm/pull/167) |
