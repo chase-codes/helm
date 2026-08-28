@@ -22,6 +22,19 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # Test-only on macOS so the suite isn't first exercised there at tag time
+  # (release-mac used to be the only macOS run, #105). No vendor/packaging.
+  test-mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   installer:
     runs-on: windows-latest
     steps:
