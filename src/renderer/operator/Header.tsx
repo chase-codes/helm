@@ -36,7 +36,6 @@ export function Header({
   const T = useContext(ThemeCtx)
   const { output, liveSnap } = usePresentationState()
   const { outputs } = useDisplayStatus()
-  const clock = useClock()
   const [viewsOpen, setViewsOpen] = useState(false)
   const outputsContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -197,16 +196,21 @@ export function Header({
       <button style={themeBtnStyle} onClick={onOpenSettings} title="Settings">
         <SettingsIcon size={17} />
       </button>
-      <div
+      <Clock
         style={{
           fontFamily: "'JetBrains Mono',monospace",
           fontSize: '15px',
           color: T.dim,
           fontVariantNumeric: 'tabular-nums'
         }}
-      >
-        {clock}
-      </div>
+      />
     </div>
   )
+}
+
+// Leaf holder for the 1Hz clock tick, so the always-mounted header itself
+// never re-renders on it.
+function Clock({ style }: { style: CSSProperties }): JSX.Element {
+  const clock = useClock()
+  return <div style={style}>{clock}</div>
 }
