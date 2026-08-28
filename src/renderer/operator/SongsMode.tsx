@@ -40,6 +40,9 @@ import { MONO } from '../shared/fonts';
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
   active: boolean;
+  /** Bumped by App's song-search hotkey (Mod+L, #52); each bump focuses the search box
+   * once. Same App-mediated shape as SermonMode's `lookupNonce`. */
+  searchNonce?: number;
 }
 
 // The hero doubles as the confidence monitor for rooms that mirror the operator screen
@@ -101,7 +104,7 @@ function toRow(song: Song, snippet: string, activeSongId: string | null, armedId
   };
 }
 
-export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Element {
+export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { output, liveKey } = usePresentationState();
   // Staleness guard for the double-click take that resolves a song first (#58).
@@ -642,6 +645,18 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   };
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Song-search hotkey (#52). App switches to Songs and bumps the nonce in one batch, so
+  // this page is already on screen (display:contents) when the effect runs and the input
+  // can take focus. One effect suffices — unlike SermonMode's lookup there is no track to
+  // force first. The ref makes it idempotent per press: a later rerender with the same
+  // nonce (or `active` flipping) must not steal focus back into the box.
+  const focusedSearchRef = useRef(0);
+  useEffect(() => {
+    if (!active || searchNonce === 0 || searchNonce === focusedSearchRef.current) return;
+    focusedSearchRef.current = searchNonce;
+    searchInputRef.current?.focus();
+  }, [searchNonce, active]);
 
   // Section-jump hotkeys (chorus/bridge/tag/verse-N). The jump always moves the
   // selection; the projector follows ONLY when this song is already live — then the
