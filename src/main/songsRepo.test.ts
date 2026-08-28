@@ -189,3 +189,13 @@ test('search returns the same Song object across searches until the song is writ
   expect(third).not.toBe(first); // a write invalidates: fresh object → fresh doc
   expect(third.sections[0].lines[0]).toBe('wonderful unique zebra rides');
 });
+
+// --- Apostrophe words: norm() joins them ("i'd" → "id") but a pre-norm FTS index split
+// them ("i", "d"), so the candidate gate missed and expandToken (< 3 chars) couldn't
+// rescue. The index now stores norm()'d text, so gate and scorer agree.
+test('search "i\'d" finds "I\'d Rather Have Jesus" when it is the only token', () => {
+  repo.add({ title: "I'd Rather Have Jesus", text: "Verse 1\nI'd rather have Jesus than silver or gold" });
+  expect(repo.search("i'd", 'all').map((x) => x.song.title)).toContain("I'd Rather Have Jesus");
+  expect(repo.search("I'd", 'title').map((x) => x.song.title)).toContain("I'd Rather Have Jesus");
+  expect(repo.search('id', 'all').map((x) => x.song.title)).toContain("I'd Rather Have Jesus");
+});

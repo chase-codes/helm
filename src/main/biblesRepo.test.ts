@@ -335,3 +335,15 @@ test('search: a query with no token of 3+ characters matches nothing', () => {
   repo.install(kjv)
   expect(repo.search('th', 'kjv')).toEqual({ hits: [], total: 0, versionId: 'kjv' })
 })
+
+// The FTS gate must tokenize the way norm() does: "Lord's" is one term "lords", not
+// "lord"/"s". A pre-norm index split it, so possessive queries only survived via typo
+// expansion ("lords" fuzzed to "lord"), polluting retrieval and ranking.
+test('indexes verses norm()-tokenized so possessives hit the FTS gate', () => {
+  repo.install({
+    id: 'kjv2', abbr: 'KJV', name: 'KJV', language: 'en',
+    books: [{ name: 'Psalms', chapters: [{ n: 118, verses: [{ n: 23, text: "This is the LORD'S doing; it is marvellous in our eyes." }] }] }]
+  })
+  const n = (db.prepare(`SELECT count(*) AS n FROM verse_fts WHERE verse_fts MATCH '"lords"'`).get() as { n: number }).n
+  expect(n).toBe(1)
+})

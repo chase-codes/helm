@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { SCHEMA } from './schema';
 import { createBiblesRepo } from './biblesRepo';
+import { ensureFtsNormVersion } from './searchIndex';
 
 export function openDb(path: string): Database.Database {
   const db = new Database(path);
@@ -9,6 +10,9 @@ export function openDb(path: string): Database.Database {
   const songCols = db.prepare('PRAGMA table_info(songs)').all() as { name: string }[];
   if (!songCols.some((c) => c.name === 'music_key'))
     db.exec(`ALTER TABLE songs ADD COLUMN music_key TEXT NOT NULL DEFAULT ''`);
+  // Order matters: a norm() version mismatch wipes verse_fts too, and the backfill
+  // below is what refills it.
+  ensureFtsNormVersion(db);
   createBiblesRepo(db).ensureSearchIndex();
   return db;
 }
