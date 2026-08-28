@@ -47,6 +47,9 @@ jobs:
         uses: ./.github/actions/vendor-deps
         timeout-minutes: 25
       - run: npm run build
+        env:
+          HELM_FEEDBACK_ENDPOINT: ${{ secrets.HELM_FEEDBACK_ENDPOINT }}
+          HELM_FEEDBACK_CLIENT: ${{ secrets.HELM_FEEDBACK_CLIENT }}
       # electron-builder's GitHub publisher uploads assets concurrently, and when
       # no draft exists yet the uploaders race to create one, splitting assets
       # across duplicate drafts (#104). Create the draft up front so the
@@ -87,6 +90,9 @@ jobs:
         uses: ./.github/actions/vendor-deps
         timeout-minutes: 25
       - run: npm run build
+        env:
+          HELM_FEEDBACK_ENDPOINT: ${{ secrets.HELM_FEEDBACK_ENDPOINT }}
+          HELM_FEEDBACK_CLIENT: ${{ secrets.HELM_FEEDBACK_CLIENT }}
       - name: Build DMG and publish to draft release
         run: npx electron-builder --mac --arm64 --publish always
         env:
