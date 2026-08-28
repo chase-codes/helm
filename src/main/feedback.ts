@@ -18,11 +18,12 @@ export function osLabel(platform: NodeJS.Platform, release: string): string {
  * reporter submits it on GitHub. Field ids match .github/ISSUE_TEMPLATE/*.yml. */
 export function feedbackUrl(p: FeedbackPayload): string {
   const text = p.text.length > URL_TEXT_MAX ? p.text.slice(0, URL_TEXT_MAX) + TRIM_MARK : p.text
-  const { body } = buildIssue({ ...p, text })
+  const { title, body } = buildIssue({ ...p, text })
   const params =
     p.type === 'bug'
-      ? new URLSearchParams({ template: 'bug_report.yml', version: p.context.version, os: p.context.os, 'what-happened': body })
-      : new URLSearchParams({ template: 'feature_request.yml', idea: body })
+      ? new URLSearchParams({ template: 'bug_report.yml', title, labels: 'feedback', version: p.context.version, os: p.context.os, 'what-happened': body })
+      // `problem` is the required field on feature_request.yml; `idea` is optional.
+      : new URLSearchParams({ template: 'feature_request.yml', title, labels: 'feedback', problem: body })
   return `${REPO_ISSUES}?${params}`
 }
 

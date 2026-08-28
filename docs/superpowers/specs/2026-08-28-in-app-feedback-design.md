@@ -70,8 +70,10 @@ via IPC `feedback:context`; never assembled in the renderer.
   reads **Continue on GitHub**). This keeps the PR shippable before Cloudflare exists.
 - `feedbackUrl(type, text, context)` extends `reportProblemUrl`: maps onto the
   template ids (`bug_report.yml`: `version`, `os`, `what-happened`;
-  `feature_request.yml`: `idea`). Truncates text at 1500 chars with
-  "… (trimmed — paste the rest below)" to stay under URL limits.
+  `feature_request.yml`: `problem`, the template's required field — `idea` is
+  optional there). Also sets `title` (from `buildIssue`) and `labels=feedback`.
+  Truncates text at 1500 chars with "… (trimmed — paste the rest below)" to stay
+  under URL limits.
 - `buildIssue(type, text, context)` → `{ title, body, labels }` — shared with the
   worker via `src/shared/feedbackIssue.ts` so the in-app fallback and the proxy render
   identical issues. Title = first line of text, ≤ 72 chars, prefixed "Feedback:".

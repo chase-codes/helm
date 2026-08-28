@@ -178,6 +178,12 @@ git commit -m "feat(feedback): shared issue builder"
 
 ### Task 2: Main-side URL fallback and proxy send
 
+> **Post-hoc correction (2026-08-28 final-review pass):** the code and test
+> snippets below prefill `feature_request.yml`'s optional `idea` field. That
+> template's required field is `problem` — `feedbackUrl` now prefills `problem`
+> (and also sets `title` + `labels=feedback`). See `src/main/feedback.ts` and
+> `src/main/feedback.test.ts` for the shipped behavior.
+
 **Files:**
 - Modify: `src/main/feedback.ts`
 - Modify: `src/main/feedback.test.ts`

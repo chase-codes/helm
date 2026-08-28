@@ -1,8 +1,31 @@
 import { describe, it, expect, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { osLabel, feedbackUrl, sendFeedback } from './feedback'
-import type { FeedbackContext } from '../shared/feedbackIssue'
+import { buildIssue, type FeedbackContext, type FeedbackType } from '../shared/feedbackIssue'
 
 const ctx: FeedbackContext = { version: '0.5.0', os: 'macOS (25.5.0)', arch: 'arm64', displays: 1, hasBibles: false, hasSongs: true }
+
+const TEMPLATE_DIR = fileURLToPath(new URL('../../.github/ISSUE_TEMPLATE/', import.meta.url))
+
+/** Tiny line-scan for `id: <x>` followed (before the next `id:`) by `required: true` —
+ * avoids a yaml dependency just to read two small, stable fixture files. */
+function requiredIds(templateFile: string): string[] {
+  const lines = readFileSync(TEMPLATE_DIR + templateFile, 'utf8').split('\n')
+  const idLines = lines.reduce<{ id: string; line: number }[]>((acc, line, i) => {
+    const m = /^\s*id:\s*(\S+)/.exec(line)
+    if (m) acc.push({ id: m[1], line: i })
+    return acc
+  }, [])
+  return idLines
+    .filter(({ line }, idx) => {
+      const end = idLines[idx + 1]?.line ?? lines.length
+      return lines.slice(line, end).some((l) => /^\s*required:\s*true/.exec(l))
+    })
+    .map(({ id }) => id)
+}
+
+const TEMPLATE_FOR: Record<FeedbackType, string> = { bug: 'bug_report.yml', feature: 'feature_request.yml' }
 
 describe('feedbackUrl', () => {
   it('prefills the bug template with version, os and what-happened', () => {
@@ -15,18 +38,33 @@ describe('feedbackUrl', () => {
     expect(url.searchParams.get('what-happened')).toContain('### Included automatically')
   })
 
-  it('prefills the feature template into idea', () => {
+  it('prefills the feature template into problem, the required field', () => {
     const url = new URL(feedbackUrl({ type: 'feature', text: 'Countdown timer', context: ctx }))
     expect(url.searchParams.get('template')).toBe('feature_request.yml')
-    expect(url.searchParams.get('idea')).toContain('Countdown timer')
+    expect(url.searchParams.get('problem')).toContain('Countdown timer')
+    expect(url.searchParams.get('idea')).toBeNull()
     expect(url.searchParams.get('version')).toBeNull()
   })
 
   it('truncates long text with a marker to stay under URL limits', () => {
     const url = new URL(feedbackUrl({ type: 'feature', text: 'a'.repeat(3000), context: ctx }))
-    const idea = url.searchParams.get('idea')!
-    expect(idea).toContain('… (trimmed — paste the rest below)')
-    expect(idea.indexOf('… (trimmed')).toBe(1500)
+    const problem = url.searchParams.get('problem')!
+    expect(problem).toContain('… (trimmed — paste the rest below)')
+    expect(problem.indexOf('… (trimmed')).toBe(1500)
+  })
+
+  it('sets the generated title and the feedback label', () => {
+    const payload = { type: 'bug' as const, text: 'Slides went black', context: ctx }
+    const url = new URL(feedbackUrl(payload))
+    expect(url.searchParams.get('title')).toBe(buildIssue(payload).title)
+    expect(url.searchParams.get('labels')).toBe('feedback')
+  })
+
+  it.each(['bug', 'feature'] as const)('fills every required field on the %s template', (type) => {
+    const url = new URL(feedbackUrl({ type, text: 'hello', context: ctx }))
+    for (const id of requiredIds(TEMPLATE_FOR[type])) {
+      expect(url.searchParams.get(id), `missing required field "${id}"`).not.toBeNull()
+    }
   })
 })
 
