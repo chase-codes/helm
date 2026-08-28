@@ -3,6 +3,7 @@ import type { Theme } from '../../shared/theme';
 import type { OutputMode, Slide, SlideColumn } from '../../shared/types';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
+import { logoSlide } from '../../shared/presentation/core';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
 
@@ -217,7 +218,7 @@ export function SermonCenter({
                 boxShadow: '0 10px 30px rgba(0,0,0,.28)'
               }}
             >
-              {heroMedia ?? <SlideCanvas slide={slide ?? { kind: 'logo', title: 'HELM' }} variant="audience" fill />}
+              {heroMedia ?? <SlideCanvas slide={slide ?? logoSlide()} variant="audience" fill />}
             </div>
           )}
         </div>

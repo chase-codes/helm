@@ -1,5 +1,6 @@
 import type { PreCard, Slide } from '../types';
 import { CANVAS_AMBER, CANVAS_GOLD } from '../slideAccents';
+import { logoSlide } from '../presentation/core';
 import { cleanListPoints } from './listPoints';
 
 export function preSlideFor(card: PreCard): Slide {
@@ -17,7 +18,7 @@ export function preSlideFor(card: PreCard): Slide {
       return { kind: 'image', src: card.src || '' };
     case 'logo':
     default:
-      return { kind: 'logo', title: 'HELM' };
+      return logoSlide();
   }
 }
 

@@ -7,6 +7,11 @@ import type {
   Slide
 } from '../types'
 
+/** The HELM logo card. The one production home of the brand string: a rebrand or a
+ * configurable church-name logo edits LOGO_TITLE and every logo surface follows. */
+export const LOGO_TITLE = 'HELM'
+export const logoSlide = (): Slide => ({ kind: 'logo', title: LOGO_TITLE })
+
 export function initialPresentation(): PresentationState {
   return { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null }
 }
@@ -104,7 +109,7 @@ export function outputPayload(
   st: PresentationState,
   variant: OutputVariant = 'audience',
   view: OutputViewMode = 'slides',
-  logoTitle = 'HELM'
+  logoTitle = LOGO_TITLE
 ): OutputPayload {
   const slide: Slide =
     st.output === 'black'

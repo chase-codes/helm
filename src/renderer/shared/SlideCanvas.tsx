@@ -1,6 +1,8 @@
 import { useRef, type CSSProperties, type JSX } from 'react';
 import type { Slide, OutputVariant } from '../../shared/types';
 import { bandCandidates } from '../../shared/slides/fitText';
+import { CANVAS_GOLD } from '../../shared/slideAccents';
+import { LOGO_TITLE } from '../../shared/presentation/core';
 import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
 
 // Auto-fit bands, in cqmin. Scripture sits slightly under lyrics: it is serif body text
@@ -13,7 +15,9 @@ import { fitSizeScaled, fitSizeValue, useFitText } from './useFitText';
 // render look "changed" and re-run the effect (tear down/recreate the ResizeObserver,
 // force a synchronous re-measure) even when nothing fit-relevant changed, e.g. once a
 // second from the stage variant's ticking clock prop.
-const LYRICS_BAND = bandCandidates(10.5, 3.5);
+// Exported: the leader hero fits the same nowrap lyric lines and must not drift onto a
+// stale copy of this band (see LeaderView).
+export const LYRICS_BAND = bandCandidates(10.5, 3.5);
 // Scripture's floor sits at 1.5, not 3: versions stack vertically, so two long verses
 // need roughly double the height the old side-by-side layout did, and fitFontSize
 // degrades to the smallest candidate when nothing fits — with a 3cqmin floor the walk
@@ -41,6 +45,214 @@ export const TITLE_BAND = bandCandidates(9.2, 2.2);
 // be able to keep shrinking).
 export const LIST_BAND = bandCandidates(6.4, 2.15);
 
+// Static style layer, hoisted to module scope: SlideCanvas re-renders once per second on
+// the stage variant (the ticking clock prop) and is instanced across every preview pane,
+// so every object here would otherwise be reallocated and re-diffed per render. Only
+// styles that read props or derived locals (accent, listMode, bg, fill) stay in the body.
+
+const contentStyle: CSSProperties = {
+  position: 'relative',
+  zIndex: 2,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '1.5cqmin',
+  width: '100%',
+  padding: '7cqmin',
+  boxSizing: 'border-box',
+  textAlign: 'center'
+};
+const lineStyle: CSSProperties = {
+  fontWeight: 700,
+  fontSize: `max(11px, ${fitSizeValue('7.4cqmin')})`,
+  lineHeight: 1.16,
+  letterSpacing: '-0.015em',
+  color: '#fff',
+  textShadow: '0 2px 22px rgba(0,0,0,.55)',
+  // No maxWidth here: with nowrap, a capped line box overflows to the right only, pushing
+  // long lines off-center where the fitter can't see it. contentStyle's padding is the margin.
+  whiteSpace: 'nowrap'
+};
+const scriptureWrap: CSSProperties = {
+  position: 'relative',
+  zIndex: 2,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '4cqmin',
+  width: '100%',
+  // Tighter side padding than the 6cqmin this launched with: stacked versions live or
+  // die by line length — every cqmin of margin costs wrapped lines, which costs font
+  // size. 3.5cqmin keeps a visible safe area (projectors overscan) without starving
+  // the text run; columnStyle's 94% cap provides the rest of the breathing room.
+  padding: '5cqmin 3.5cqmin',
+  boxSizing: 'border-box'
+};
+// Versions stack vertically (never side by side): two columns sharing the width were
+// too cramped to read from the congregation — each version gets the full slide width.
+const colsStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4cqmin',
+  width: '100%',
+  justifyContent: 'center',
+  alignItems: 'center'
+};
+const columnStyle: CSSProperties = {
+  width: '100%',
+  maxWidth: '94%',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '1.8cqmin',
+  textAlign: 'center'
+};
+const versionStyle: CSSProperties = {
+  fontFamily: "'JetBrains Mono', monospace",
+  // Unlike the ref, this scales with the fitted verse size (0.47x, its original
+  // proportion against the 4.7cqmin verse): it is part of each verse block, not
+  // slide chrome, so it shrinks with the text it labels. No ceiling (BUG-007).
+  fontSize: fitSizeScaled(7, '4.7cqmin', 0.47),
+  letterSpacing: '0.16em',
+  color: 'rgba(255,255,255,.4)'
+};
+const verseTextStyle: CSSProperties = {
+  fontFamily: "'Newsreader', Georgia, serif",
+  fontSize: `max(10px, ${fitSizeValue('4.7cqmin')})`,
+  lineHeight: 1.36,
+  color: '#f3efe6',
+  fontWeight: 400
+};
+const quoteTextStyle: CSSProperties = {
+  fontFamily: "'Newsreader', Georgia, serif",
+  fontStyle: 'italic',
+  fontWeight: 400,
+  fontSize: 'clamp(12px,5.4cqmin,52px)',
+  lineHeight: 1.34,
+  color: '#f2eee5',
+  maxWidth: '88%'
+};
+const pointsWrap: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  // The wrap carries the fitted size so the em-based gap and dot metrics below scale
+  // with the text they space — one knob for the fitter to turn.
+  fontSize: `max(9px, ${fitSizeValue('6.4cqmin')})`,
+  gap: '0.4em',
+  marginTop: '3.2cqmin',
+  alignItems: 'flex-start'
+};
+const pointStyle: CSSProperties = {
+  display: 'flex',
+  // flex-start, not center: a wrapped item must hang under its own first line with the
+  // dot pinned beside that line — centered, the dot floated between the lines.
+  alignItems: 'flex-start',
+  gap: '0.55em',
+  fontWeight: 600,
+  // The points are the fitted base — the congregation reads these, not the label (#49
+  // removed the px ceiling; this removes the 0.37× title ratio that kept them small).
+  fontSize: `max(9px, ${fitSizeValue('6.4cqmin')})`,
+  lineHeight: 1.22,
+  letterSpacing: '-0.01em',
+  color: '#f2efe8',
+  textAlign: 'left',
+  textShadow: '0 2px 22px rgba(0,0,0,.55)'
+};
+const clockStyle: CSSProperties = {
+  position: 'absolute',
+  top: '4cqmin',
+  right: '5cqmin',
+  zIndex: 5,
+  fontFamily: "'JetBrains Mono',monospace",
+  fontSize: 'clamp(8px,3.4cqmin,24px)',
+  color: 'rgba(255,255,255,.5)',
+  fontVariantNumeric: 'tabular-nums'
+};
+const nextStyle: CSSProperties = {
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 5,
+  padding: '2.6cqmin 5cqmin',
+  background: 'linear-gradient(0deg, rgba(0,0,0,.62), transparent)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '2.4cqmin'
+};
+const nextTextStyle: CSSProperties = {
+  fontSize: 'clamp(8px,3cqmin,20px)',
+  color: 'rgba(255,255,255,.72)',
+  fontWeight: 500,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis'
+};
+const labelStyle: CSSProperties = {
+  position: 'absolute',
+  top: '4cqmin',
+  left: '5cqmin',
+  zIndex: 5,
+  fontFamily: "'JetBrains Mono',monospace",
+  fontSize: 'clamp(7px,2.7cqmin,15px)',
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase',
+  color: 'rgba(255,255,255,.38)'
+};
+const audienceLabelStyle: CSSProperties = {
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  bottom: '3.2cqmin',
+  zIndex: 5,
+  textAlign: 'center',
+  fontFamily: "'JetBrains Mono',monospace",
+  fontSize: 'clamp(7px,2.2cqmin,14px)',
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase',
+  color: 'rgba(255,255,255,.34)'
+};
+const ltBarStyle: CSSProperties = {
+  position: 'absolute',
+  left: '5%',
+  right: '5%',
+  bottom: '9%',
+  zIndex: 6,
+  display: 'flex',
+  alignItems: 'stretch',
+  gap: '12px',
+  background: 'rgba(9,11,15,.74)',
+  backdropFilter: 'blur(10px)',
+  borderRadius: '6px',
+  padding: '10px 14px',
+  boxShadow: '0 8px 30px rgba(0,0,0,.4)'
+};
+const ltPrimaryStyle: CSSProperties = {
+  fontWeight: 700,
+  fontSize: 'clamp(11px,4.4cqmin,18px)',
+  color: '#fff',
+  lineHeight: 1.2
+};
+const blankLogoStyle: CSSProperties = {
+  fontWeight: 800,
+  fontSize: 'clamp(14px,7cqmin,60px)',
+  letterSpacing: '0.12em',
+  color: 'rgba(255,255,255,.92)'
+};
+const blankPlaceholderStyle: CSSProperties = {
+  color: 'rgba(255,255,255,.22)',
+  fontFamily: "'JetBrains Mono',monospace",
+  fontSize: 'clamp(8px,2.6cqmin,15px)',
+  letterSpacing: '0.22em',
+  textTransform: 'uppercase'
+};
+const backPlateLtStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background: 'repeating-linear-gradient(135deg,#14161b,#14161b 14px,#181b21 14px,#181b21 28px)'
+};
+const backPlateBaseStyle: CSSProperties = { position: 'absolute', inset: 0 };
+
 export interface SlideCanvasProps {
   slide: Slide;
   variant?: OutputVariant;
@@ -62,7 +274,7 @@ export function SlideCanvas({
   const isLT = variant === 'livestream';
   const isStage = variant === 'stage';
   const isMain = variant === 'main';
-  const accent = s.accent || '#f0b24a';
+  const accent = s.accent || CANVAS_GOLD;
 
   const rootRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
@@ -89,46 +301,7 @@ export function SlideCanvas({
     alignItems: 'center',
     justifyContent: 'center'
   };
-  const contentStyle: CSSProperties = {
-    position: 'relative',
-    zIndex: 2,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '1.5cqmin',
-    width: '100%',
-    padding: '7cqmin',
-    boxSizing: 'border-box',
-    textAlign: 'center'
-  };
-  const lineStyle: CSSProperties = {
-    fontWeight: 700,
-    fontSize: `max(11px, ${fitSizeValue('7.4cqmin')})`,
-    lineHeight: 1.16,
-    letterSpacing: '-0.015em',
-    color: '#fff',
-    textShadow: '0 2px 22px rgba(0,0,0,.55)',
-    // No maxWidth here: with nowrap, a capped line box overflows to the right only, pushing
-    // long lines off-center where the fitter can't see it. contentStyle's padding is the margin.
-    whiteSpace: 'nowrap'
-  };
 
-  const scriptureWrap: CSSProperties = {
-    position: 'relative',
-    zIndex: 2,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '4cqmin',
-    width: '100%',
-    // Tighter side padding than the 6cqmin this launched with: stacked versions live or
-    // die by line length — every cqmin of margin costs wrapped lines, which costs font
-    // size. 3.5cqmin keeps a visible safe area (projectors overscan) without starving
-    // the text run; columnStyle's 94% cap provides the rest of the breathing room.
-    padding: '5cqmin 3.5cqmin',
-    boxSizing: 'border-box'
-  };
   const refStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
     // Fixed, deliberately NOT tied to the fitted verse size: the fit re-runs per verse,
@@ -147,40 +320,6 @@ export function SlideCanvas({
     color: accent,
     fontWeight: 500
   };
-  // Versions stack vertically (never side by side): two columns sharing the width were
-  // too cramped to read from the congregation — each version gets the full slide width.
-  const colsStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4cqmin',
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center'
-  };
-  const columnStyle: CSSProperties = {
-    width: '100%',
-    maxWidth: '94%',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.8cqmin',
-    textAlign: 'center'
-  };
-  const versionStyle: CSSProperties = {
-    fontFamily: "'JetBrains Mono', monospace",
-    // Unlike the ref, this scales with the fitted verse size (0.47x, its original
-    // proportion against the 4.7cqmin verse): it is part of each verse block, not
-    // slide chrome, so it shrinks with the text it labels. No ceiling (BUG-007).
-    fontSize: fitSizeScaled(7, '4.7cqmin', 0.47),
-    letterSpacing: '0.16em',
-    color: 'rgba(255,255,255,.4)'
-  };
-  const verseTextStyle: CSSProperties = {
-    fontFamily: "'Newsreader', Georgia, serif",
-    fontSize: `max(10px, ${fitSizeValue('4.7cqmin')})`,
-    lineHeight: 1.36,
-    color: '#f3efe6',
-    fontWeight: 400
-  };
 
   const quoteMarkStyle: CSSProperties = {
     fontFamily: "'Newsreader', Georgia, serif",
@@ -189,15 +328,6 @@ export function SlideCanvas({
     color: accent,
     opacity: 0.55,
     marginBottom: '1cqmin'
-  };
-  const quoteTextStyle: CSSProperties = {
-    fontFamily: "'Newsreader', Georgia, serif",
-    fontStyle: 'italic',
-    fontWeight: 400,
-    fontSize: 'clamp(12px,5.4cqmin,52px)',
-    lineHeight: 1.34,
-    color: '#f2eee5',
-    maxWidth: '88%'
   };
   const quoteSourceStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono', monospace",
@@ -245,32 +375,6 @@ export function SlideCanvas({
     color: 'rgba(255,255,255,.58)',
     marginTop: '1.4cqmin'
   };
-  const pointsWrap: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    // The wrap carries the fitted size so the em-based gap and dot metrics below scale
-    // with the text they space — one knob for the fitter to turn.
-    fontSize: `max(9px, ${fitSizeValue('6.4cqmin')})`,
-    gap: '0.4em',
-    marginTop: '3.2cqmin',
-    alignItems: 'flex-start'
-  };
-  const pointStyle: CSSProperties = {
-    display: 'flex',
-    // flex-start, not center: a wrapped item must hang under its own first line with the
-    // dot pinned beside that line — centered, the dot floated between the lines.
-    alignItems: 'flex-start',
-    gap: '0.55em',
-    fontWeight: 600,
-    // The points are the fitted base — the congregation reads these, not the label (#49
-    // removed the px ceiling; this removes the 0.37× title ratio that kept them small).
-    fontSize: `max(9px, ${fitSizeValue('6.4cqmin')})`,
-    lineHeight: 1.22,
-    letterSpacing: '-0.01em',
-    color: '#f2efe8',
-    textAlign: 'left',
-    textShadow: '0 2px 22px rgba(0,0,0,.55)'
-  };
   const pointDotStyle: CSSProperties = {
     width: '0.24em',
     height: '0.24em',
@@ -286,44 +390,9 @@ export function SlideCanvas({
   };
 
   const isLogo = kind === 'logo';
-  const blankStyle: CSSProperties = isLogo
-    ? {
-        fontWeight: 800,
-        fontSize: 'clamp(14px,7cqmin,60px)',
-        letterSpacing: '0.12em',
-        color: 'rgba(255,255,255,.92)'
-      }
-    : {
-        color: 'rgba(255,255,255,.22)',
-        fontFamily: "'JetBrains Mono',monospace",
-        fontSize: 'clamp(8px,2.6cqmin,15px)',
-        letterSpacing: '0.22em',
-        textTransform: 'uppercase'
-      };
+  const blankStyle: CSSProperties = isLogo ? blankLogoStyle : blankPlaceholderStyle;
 
   const showChrome = isStage;
-  const clockStyle: CSSProperties = {
-    position: 'absolute',
-    top: '4cqmin',
-    right: '5cqmin',
-    zIndex: 5,
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: 'clamp(8px,3.4cqmin,24px)',
-    color: 'rgba(255,255,255,.5)',
-    fontVariantNumeric: 'tabular-nums'
-  };
-  const nextStyle: CSSProperties = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 5,
-    padding: '2.6cqmin 5cqmin',
-    background: 'linear-gradient(0deg, rgba(0,0,0,.62), transparent)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2.4cqmin'
-  };
   const nextTagStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono',monospace",
     fontSize: 'clamp(6px,2cqmin,12px)',
@@ -334,47 +403,15 @@ export function SlideCanvas({
     padding: '1px 6px',
     flexShrink: 0
   };
-  const nextTextStyle: CSSProperties = {
-    fontSize: 'clamp(8px,3cqmin,20px)',
-    color: 'rgba(255,255,255,.72)',
-    fontWeight: 500,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis'
-  };
 
   const showLabel =
     (isStage || isMain) && !!s.label && kind !== 'blank' && kind !== 'logo' && kind !== 'black';
-  const labelStyle: CSSProperties = {
-    position: 'absolute',
-    top: '4cqmin',
-    left: '5cqmin',
-    zIndex: 5,
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: 'clamp(7px,2.7cqmin,15px)',
-    letterSpacing: '0.16em',
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,.38)'
-  };
 
   const isAudience = variant === 'audience';
   const audienceLabelText = [s.sectionLabel, s.songKey ? `Key ${s.songKey}` : '']
     .filter(Boolean)
     .join(' · ');
   const showAudienceLabel = isAudience && kind === 'lyrics' && !!audienceLabelText;
-  const audienceLabelStyle: CSSProperties = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: '3.2cqmin',
-    zIndex: 5,
-    textAlign: 'center',
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: 'clamp(7px,2.2cqmin,14px)',
-    letterSpacing: '0.16em',
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,.34)'
-  };
 
   let ltPrimary = '';
   let ltSecondary = '';
@@ -391,32 +428,11 @@ export function SlideCanvas({
     ltPrimary = s.title || '';
     ltSecondary = s.subtitle || '';
   }
-  const ltBarStyle: CSSProperties = {
-    position: 'absolute',
-    left: '5%',
-    right: '5%',
-    bottom: '9%',
-    zIndex: 6,
-    display: 'flex',
-    alignItems: 'stretch',
-    gap: '12px',
-    background: 'rgba(9,11,15,.74)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '6px',
-    padding: '10px 14px',
-    boxShadow: '0 8px 30px rgba(0,0,0,.4)'
-  };
   const ltAccentStyle: CSSProperties = {
     width: '4px',
     borderRadius: '2px',
     background: accent,
     flexShrink: 0
-  };
-  const ltPrimaryStyle: CSSProperties = {
-    fontWeight: 700,
-    fontSize: 'clamp(11px,4.4cqmin,18px)',
-    color: '#fff',
-    lineHeight: 1.2
   };
   const ltSecondaryStyle: CSSProperties = {
     fontFamily: "'JetBrains Mono',monospace",
@@ -427,13 +443,7 @@ export function SlideCanvas({
     marginTop: '3px'
   };
 
-  const backPlateStyle: CSSProperties = isLT
-    ? {
-        position: 'absolute',
-        inset: 0,
-        background: 'repeating-linear-gradient(135deg,#14161b,#14161b 14px,#181b21 14px,#181b21 28px)'
-      }
-    : { position: 'absolute', inset: 0 };
+  const backPlateStyle: CSSProperties = isLT ? backPlateLtStyle : backPlateBaseStyle;
 
   const active = !isLT;
   const isLyrics = active && kind === 'lyrics';
@@ -444,7 +454,7 @@ export function SlideCanvas({
   const isImage = active && kind === 'image';
   const isVideo = active && kind === 'video';
   const isBlank = active && (kind === 'blank' || kind === 'black' || kind === 'logo');
-  const blankText = isLogo ? s.title || 'HELM' : kind === 'black' ? '' : '—';
+  const blankText = isLogo ? s.title || LOGO_TITLE : kind === 'black' ? '' : '—';
   const hasNext = isStage && !!next;
   const isLowerThird = isLT && kind !== 'blank' && kind !== 'black' && kind !== 'logo';
   const showBackPlate = isLT;

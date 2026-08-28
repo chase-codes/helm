@@ -61,11 +61,11 @@ export function useFitText(
       // fitFontSize() throws on an empty array, and that's the right contract for it — a
       // pure, directly-tested utility should fail loudly on a caller bug. But measure()
       // below runs synchronously inside a layout effect, directly in the render path of
-      // the live projector output, and this app has no error boundary anywhere
-      // (OutputApp.tsx mounts unprotected). Letting that throw propagate here would unmount
-      // the React root and blank the congregation's screen mid-service over what is, today,
-      // an unreachable case (SlideCanvas only ever passes `null` or a non-empty
-      // bandCandidates() result). Fail safe instead: behave like `candidates: null` — clear
+      // the live projector output. OutputErrorBoundary would catch a propagated throw,
+      // but tripping it degrades the live output to the fallback render mid-service over
+      // what is, today, an unreachable case (SlideCanvas only ever passes `null` or a
+      // non-empty bandCandidates() result). Failing soft locally is strictly better:
+      // behave like `candidates: null` — clear
       // the property so the style's own clamp() renders, same as the zero-size path below.
       // Logged so the bug doesn't vanish in development.
       console.error('useFitText: candidates must not be an empty array; treating as unfitted');

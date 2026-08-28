@@ -1,6 +1,7 @@
 import type { CSSProperties, JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import type { Slide } from '../../shared/types';
+import { MESSAGE_ACCENT } from '../../shared/slideAccents';
 
 export interface ReadingCanvasProps {
   slide: Slide;
@@ -8,10 +9,9 @@ export interface ReadingCanvasProps {
 }
 
 export function ReadingCanvas({ slide: s, fill = false }: ReadingCanvasProps): JSX.Element {
-  const accent = s.accent || '#a88bc4';
+  const accent = s.accent || MESSAGE_ACCENT;
   const paras = s.paras || [];
   const activeOrd = s.activeOrd ?? 0;
-  const scrollRef = useRef<HTMLDivElement | null>(null);
   const paraRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export function ReadingCanvas({ slide: s, fill = false }: ReadingCanvasProps): J
     fontFamily: "'Newsreader', Georgia, serif",
     fontSize: 'clamp(11px,4.6cqmin,36px)',
     lineHeight: 1.42,
-    transition: 'opacity .5s ease, color .5s ease, border-color .5s ease',
+    transition: 'color .5s ease, border-color .5s ease',
     borderLeft: '3px solid transparent',
     paddingLeft: '2.4cqmin'
   };
@@ -92,12 +92,12 @@ export function ReadingCanvas({ slide: s, fill = false }: ReadingCanvasProps): J
         <div style={sourceStyle}>{s.source || ''}</div>
       </div>
       {paras.length > 0 && (
-        <div style={scrollStyle} ref={scrollRef}>
+        <div style={scrollStyle}>
           {paras.map((p, i) => {
             const isActive = i === activeOrd;
             const paraTextStyle: CSSProperties = isActive
-              ? { ...paraTextBaseStyle, opacity: 1, color: '#f2eee5', borderLeftColor: accent }
-              : { ...paraTextBaseStyle, opacity: 1, color: 'rgba(255,255,255,.32)' };
+              ? { ...paraTextBaseStyle, color: '#f2eee5', borderLeftColor: accent }
+              : { ...paraTextBaseStyle, color: 'rgba(255,255,255,.32)' };
             return (
               <div
                 key={i}
