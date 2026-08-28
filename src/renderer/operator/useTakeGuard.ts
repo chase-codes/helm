@@ -20,6 +20,9 @@ import type { OutputMode } from '../../shared/types';
  * operator taking the screen DOWN while the fetch is in flight. Note that last one is a
  * TRANSITION (live → not live), not a level: taking from black is the ordinary case and
  * must still land.
+ *
+ * The transition rule would also cancel on live → logo, but no operator control reaches
+ * that state any more (#97 removed the logo toggle), so in practice only take-down cancels.
  */
 export function useTakeGuard(output: OutputMode): () => () => boolean {
   const seq = useRef(0);

@@ -38,11 +38,24 @@ describe('useTakeGuard', () => {
 
   // The take-down rule is a TRANSITION, not a level: the ordinary double-click starts from
   // a dark screen, and gating on `output === 'live'` would refuse every one of them.
-  it('leaves a take from a dark screen alone', () => {
+  // The transition here is black → live: the guard's effect DOES run, and it is the
+  // `was === 'live'` half of its condition that must hold the take open. (A black → black
+  // re-render never runs that effect at all and would pass against a wrong guard — #78.)
+  it('leaves a take from a dark screen alone when it lands', () => {
     const { result, rerender } = mount('black')
     const wanted = result.current()
-    rerender({ output: 'black' })
+    rerender({ output: 'live' })
     expect(wanted()).toBe(true)
+  })
+
+  it('lets a take from black land, then cancels the next one on take-down', () => {
+    const { result, rerender } = mount('black')
+    const first = result.current()
+    rerender({ output: 'live' })
+    expect(first()).toBe(true)
+    const second = result.current()
+    rerender({ output: 'black' })
+    expect(second()).toBe(false)
   })
 
   it('leaves a take alone when the screen only changes what it is showing', () => {

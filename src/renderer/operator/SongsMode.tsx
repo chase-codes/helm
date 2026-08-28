@@ -677,14 +677,19 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   // change, and its 0ms timer — which always beats the round trip — snaps the selection
   // back to the previous song, re-cueing it onto the leader while the new song is what's
   // actually live.
+  //
+  // But only when the take can change what is live (#77): main returns state by identity
+  // for an already-live key and skips the broadcast, so a latch set for that take would
+  // have nothing to clear it and the reconciler would skip its next pass.
   const takeSectionLive = (song: Song, idx: number): void => {
     const target = song.sections[idx];
     if (!target) return;
-    pendingSwitchRef.current = song.id;
+    const key = keyForSong(song.id, idx);
+    if (!(output === 'live' && liveKey === key)) pendingSwitchRef.current = song.id;
     setActiveSongId(song.id);
     setSection(idx);
     setArmedNextId(null);
-    window.helm.presentation.take(keyForSong(song.id, idx), slideFor(song, target));
+    window.helm.presentation.take(key, slideFor(song, target));
   };
 
   const activateSection = (i: number): void => {

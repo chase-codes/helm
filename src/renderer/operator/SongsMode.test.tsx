@@ -919,6 +919,22 @@ describe('double-click to go live (#58)', () => {
     expect(setOutput).not.toHaveBeenCalledWith('black');
   });
 
+  // #77: main skips the broadcast when the taken key is already live (state comes back by
+  // identity), so nothing ever arrives to clear a latch set for that take. A latched
+  // pendingSwitchRef makes the reconciler skip its next pass — here, an external switch to
+  // s3 would leave the center stuck on s2. The take must not latch when it cannot change
+  // what is live.
+  it('a no-op take of the live section does not leave the reconciler latched', async () => {
+    const { take, pushState } = installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    fireEvent.doubleClick(screen.getAllByText('Verse 1')[0]);
+    await waitFor(() => expect(take).toHaveBeenCalledWith('song:s2:0', expect.anything()));
+    // No broadcast for that take. The next live change is external; the center must follow.
+    act(() => pushState({ ...LIVE_ON_S2, liveKey: 'song:s3:0', cuedKey: 'song:s3:0' }));
+    await waitFor(() => expect(screen.getByText('Fanny Crosby')).toBeTruthy());
+  });
+
   it('takes a search result live at section 0 instead of arming it', async () => {
     const live: PresentationState = { output: 'live', liveKey: 'song:s1:0', liveSnap: null, cuedKey: null, cuedSnap: null };
     const { take } = installHelmStubWith([...SONGS, CHORUS_SONG], live);
