@@ -57,14 +57,10 @@ export function levWithin(a: string, b: string, tol: number): number {
   return prev[n] > tol ? BIG : prev[n];
 }
 // Single source of truth for fuzzy-match tolerance by token length: short tokens
-// (≤4) allow 1 edit, longer tokens allow 2. Used by fuzzyTok, songScore, and
-// messageScore so every scorer agrees on len-5 (→ 2) and every other length.
+// (≤4) allow 1 edit, longer tokens allow 2. Used by songScore and messageScore
+// via textSignals so every scorer agrees on len-5 (→ 2) and every other length.
 export function matchTol(tokLen: number): number {
   return tokLen <= 4 ? 1 : 2;
-}
-export function fuzzyTok(tok: string, words: string[]): boolean {
-  const tol = matchTol(tok.length);
-  return words.some((w) => Math.abs(w.length - tok.length) <= 2 && lev(tok, w) <= tol);
 }
 
 // A token matches a word exactly (0), as an anchored prefix (1 — type-ahead: "wonder"
