@@ -49,9 +49,12 @@ describe('FeedbackModal', () => {
   it('shows the attached context when expanded', async () => {
     const { getByText, findByText } = mount()
     fireEvent.click(getByText('Included with your report'))
-    await findByText(/macOS \(25\.5\.0\)/)
+    await findByText(/Version: 0\.5\.0/)
+    await findByText(/OS: macOS \(25\.5\.0\)/)
+    await findByText(/Arch: arm64/)
     await findByText(/Displays: 2/)
     await findByText(/Bibles installed: yes/)
+    await findByText(/Songs in library: no/)
   })
 
   it('sends the typed payload and shows the issue link', async () => {
@@ -84,6 +87,28 @@ describe('FeedbackModal', () => {
     fireEvent.click(getByText('Send'))
     const btn = await findByText('Continue on GitHub')
     expect(btn.closest('a')?.getAttribute('href')).toContain('feature_request.yml')
+  })
+
+  it('editing after unconfigured reverts to Send and drops the stale fallback link', async () => {
+    stub({ ok: false, reason: 'unconfigured' })
+    const { getByText, getByRole, findByText, queryByText } = mount()
+    fireEvent.change(getByRole('textbox'), { target: { value: 'Countdown timer' } })
+    fireEvent.click(getByText('Send'))
+    await findByText('Continue on GitHub')
+    fireEvent.change(getByRole('textbox'), { target: { value: 'Countdown timer, updated' } })
+    expect(queryByText('Continue on GitHub')).toBeNull()
+    getByText('Send')
+  })
+
+  it('editing after a failed send reverts to Send and drops the stale fallback link', async () => {
+    stub({ ok: false, reason: 'offline' })
+    const { getByText, getByRole, findByText, queryByText } = mount()
+    fireEvent.change(getByRole('textbox'), { target: { value: 'Countdown timer' } })
+    fireEvent.click(getByText('Send'))
+    await findByText("Couldn't send right now.")
+    fireEvent.click(getByText("Something's wrong"))
+    expect(queryByText("Couldn't send right now.")).toBeNull()
+    getByText('Send')
   })
 
   it('caps text at 4000 and shows a counter past 3500', () => {

@@ -53,6 +53,13 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
   // (usually already settled by the time anyone types) is awaited lazily inside submit().
   const canSend = text.trim().length > 0 && phase.k !== 'sending'
 
+  // The fallback URL (unconfigured/failed) bakes in the text at the moment it was
+  // computed. Any further edit must revert to `edit` so Send comes back and a fresh
+  // URL gets built on the next attempt, rather than shipping stale text to GitHub.
+  const resetIfStale = (): void => {
+    if (phase.k === 'unconfigured' || phase.k === 'failed') setPhase({ k: 'edit' })
+  }
+
   const submit = async (): Promise<void> => {
     if (!canSend) return
     setPhase({ k: 'sending' })
@@ -76,8 +83,10 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
     }
   }
 
-  // Fixed footprint: the card keeps one height across edit/sending/sent/failed.
-  const bodyStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '14px', minHeight: '360px' }
+  // Fixed footprint: the card keeps one height across edit/sending/sent/failed —
+  // ModalShell is given a fixed `height` below, so the body just fills it and
+  // scrolls internally (variant="card") if a state's content runs long.
+  const bodyStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '14px', height: '100%' }
   const h1: CSSProperties = { fontSize: '18px', fontWeight: 700, color: T.text }
   const sub: CSSProperties = { fontSize: '13px', color: T.dim, lineHeight: 1.5 }
   const pillsWrap: CSSProperties = { display: 'flex', gap: '4px', background: T.panel2, padding: '4px', borderRadius: '10px', alignSelf: 'flex-start' }
@@ -91,7 +100,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
     borderRadius: '9px', boxShadow: `inset 0 0 0 1px ${T.border}`, fontSize: '13.5px', lineHeight: 1.55, resize: 'vertical',
   }
   const faint: CSSProperties = { fontSize: '11.5px', color: T.faint }
-  const disclosure: CSSProperties = { ...faint, cursor: 'pointer', fontWeight: 600, letterSpacing: '0.04em' }
+  const disclosure: CSSProperties = { ...faint, cursor: 'pointer', fontWeight: 600, letterSpacing: '0.04em', background: 'none', padding: 0, textAlign: 'left' }
   const row: CSSProperties = { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginTop: 'auto' }
   const cancel: CSSProperties = { height: '40px', padding: '0 18px', borderRadius: '10px', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.border}`, fontSize: '14px', color: T.dim }
   const primary = (enabled: boolean): CSSProperties => ({
@@ -113,7 +122,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
   )
 
   return (
-    <ModalShell onClose={onClose} variant="card" width="520px" maxWidth="96vw" maxHeight="88vh">
+    <ModalShell onClose={onClose} variant="card" width="520px" maxWidth="96vw" height="560px" maxHeight="88vh">
       <div style={bodyStyle}>
         {phase.k === 'sent' ? (
           <>
@@ -127,8 +136,8 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
             <div style={h1}>What would make Helm better?</div>
             <div style={sub}>Tell us about a problem or something you&apos;d like. It goes straight to the team.</div>
             <div style={pillsWrap}>
-              <button style={pill(type === 'bug')} onClick={() => setType('bug')}>Something&apos;s wrong</button>
-              <button style={pill(type === 'feature')} onClick={() => setType('feature')}>Something I&apos;d like</button>
+              <button style={pill(type === 'bug')} onClick={() => { setType('bug'); resetIfStale() }}>Something&apos;s wrong</button>
+              <button style={pill(type === 'feature')} onClick={() => { setType('feature'); resetIfStale() }}>Something I&apos;d like</button>
             </div>
             <textarea
               style={area}
@@ -136,13 +145,13 @@ export function FeedbackModal({ onClose }: { onClose: () => void }): JSX.Element
               maxLength={FEEDBACK_TEXT_MAX}
               placeholder={PLACEHOLDER[type]}
               disabled={phase.k === 'sending'}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => { setText(e.target.value); resetIfStale() }}
             />
             {text.length >= COUNTER_FROM && <div style={{ ...faint, textAlign: 'right' }}>{text.length} / {FEEDBACK_TEXT_MAX}</div>}
             <div>
-              <div style={disclosure} onClick={() => setShowCtx((s) => !s)}>
+              <button type="button" style={disclosure} onClick={() => setShowCtx((s) => !s)}>
                 {showCtx ? '▾' : '▸'} <span>Included with your report</span>
-              </div>
+              </button>
               {showCtx && (
                 <>
                   <div style={{ ...faint, marginTop: '6px' }}>We attach a few details so we can reproduce what you saw. Nothing you&apos;ve typed into Helm is included.</div>
