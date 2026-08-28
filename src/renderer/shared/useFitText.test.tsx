@@ -51,11 +51,12 @@ describe('useFitText', () => {
     globalThis.ResizeObserver = saved;
   });
 
-  it('treats an empty candidates array as unfitted instead of throwing — no error boundary guards the live output', () => {
+  it('treats an empty candidates array as unfitted instead of throwing — a throw would degrade the live output mid-service', () => {
     // fitFontSize([], ...) throws, and that's correct for it as a pure, directly-tested
     // utility. But measure() runs synchronously in a layout effect, in the render path of
-    // the live projector output, and OutputApp.tsx has no error boundary — a propagated
-    // throw here would unmount the React root and blank the congregation's screen. This
+    // the live projector output. OutputErrorBoundary would catch a propagated throw, but
+    // tripping it swaps the congregation's screen to the fallback render mid-service —
+    // failing soft here (unfitted text at the style's own clamp) is strictly better. This
     // guards against that regressing if the empty-array special case is ever removed again.
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     let result: ReturnType<typeof render> | undefined;

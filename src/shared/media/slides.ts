@@ -1,4 +1,5 @@
 import type { MediaItem, Slide } from '../types';
+import { logoSlide } from '../presentation/core';
 
 export function keyForMedia(itemId: string, slideIdx: number): string {
   return `pres:${itemId}:${slideIdx}`;
@@ -18,7 +19,7 @@ export function buildVideoSlide(src: string): Slide {
 
 export function slidesOf(item: MediaItem): Slide[] {
   if (item.type === 'deck') {
-    if (item.slides.length === 0) return [{ kind: 'logo', title: 'HELM' }];
+    if (item.slides.length === 0) return [logoSlide()];
     return item.slides.map((relPath) => buildImageSlide(mediaSrc(relPath)));
   }
   if (item.type === 'image') {

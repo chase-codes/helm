@@ -2,14 +2,12 @@ import { useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEv
 import type { OutputPayload, Song } from '../../shared/types'
 import { parseSongKey } from '../../shared/presentation/core'
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../../shared/displays/roles'
-import { bandCandidates } from '../../shared/slides/fitText'
+import { LYRICS_BAND } from '../shared/SlideCanvas'
 import { useFitText, fitSizeValue } from '../shared/useFitText'
 import { usePresentationState } from '../shared/useHelm'
 import { DARK as T } from '../../shared/theme'
 import { SlidesView } from './SlidesView'
 
-// Hoisted for stable identity in useFitText's deps (same reasoning as SlideCanvas's bands).
-const LEADER_BAND = bandCandidates(10.5, 3.5)
 
 export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element {
   const st = usePresentationState()
@@ -103,7 +101,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
   // fallback it's supposed to be.
   const current = parsed && song && song.id === parsed.songId ? song : null
   const section = current && parsed ? current.sections[parsed.section] : undefined
-  useFitText(rootRef, heroRef, section ? LEADER_BAND : null, [shownKey, song?.id, split])
+  useFitText(rootRef, heroRef, section ? LYRICS_BAND : null, [shownKey, song?.id, split])
 
   // Not a song (or the song was deleted, or its fetch hasn't resolved yet for the shown key):
   // show exactly what the slides view would, but keep the `leader-view` testid contract

@@ -12,7 +12,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { usePresentationState, useVideoState } from '../shared/useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
-import { sameFlow } from '../../shared/presentation/core';
+import { logoSlide, sameFlow } from '../../shared/presentation/core';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
 import { PanelDivider } from './PanelDivider';
 import { type SermonTrack } from './SchedulePanel';
@@ -162,7 +162,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   const selected = items.find((i) => i.id === selId) ?? null;
   const slides: Slide[] = selected ? slidesOf(selected) : [];
   const curIdx = Math.max(0, Math.min(slideIdx, slides.length - 1));
-  const curSlide: Slide = slides[curIdx] ?? { kind: 'logo', title: 'HELM' };
+  const curSlide: Slide = slides[curIdx] ?? logoSlide();
 
   // Cue on every item/slide change (mirrors SermonMode's scripture cue effect and
   // MessageMode's quote cue effect) — recomputed from `items`/`selId`/`slideIdx` rather
