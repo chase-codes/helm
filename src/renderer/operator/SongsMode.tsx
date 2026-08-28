@@ -173,6 +173,31 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     void refreshLibrary(true);
   }, [refreshLibrary]);
 
+  // The one two-step search refresh (results, then the thin-title "Also in lyrics" hint)
+  // every refresh path shares — the drift this replaces was three hand-copies, one of
+  // which (import) forgot the hint half. `stillWanted` defaults to a mounted check; the
+  // debounced effect passes its own flag so superseded keystrokes stay cancelled.
+  const refreshSearch = useCallback(
+    (query: string, stillWanted: () => boolean = () => mountedRef.current): void => {
+      void window.helm.songs
+        .search(query, field)
+        .then((r) => {
+          if (!stillWanted()) return;
+          setResults(r);
+          if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
+            void window.helm.songs
+              .search(query, 'lyric')
+              .then((h) => {
+                if (stillWanted()) setLyricHint(h);
+              })
+              .catch(console.error);
+          }
+        })
+        .catch(console.error);
+    },
+    [field]
+  );
+
   // Runs after an import commits: refreshLibrary alone only updates `library`, but
   // displayedRows reads `results` instead whenever a query is typed, and `results` is
   // otherwise only repopulated by the [q, field] effect below on the next keystroke. Without
@@ -183,13 +208,8 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     void refreshLibrary(false);
     const query = q.trim();
     if (!query) return;
-    void window.helm.songs
-      .search(query, field)
-      .then((r) => {
-        if (mountedRef.current) setResults(r);
-      })
-      .catch(console.error);
-  }, [refreshLibrary, q, field]);
+    refreshSearch(query);
+  }, [refreshLibrary, q, refreshSearch]);
 
   // Re-query on every keystroke / field change. Empty query shows the library instead
   // (displayedRows only reads `results` when the query is non-empty, so no reset needed).
@@ -201,25 +221,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   useEffect(() => {
     if (!q.trim()) return;
     let live = true;
-    const timer = window.setTimeout(() => {
-      void window.helm.songs.search(q, field).then((r) => {
-        if (!live) return;
-        setResults(r);
-        if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
-          void window.helm.songs
-            .search(q, 'lyric')
-            .then((h) => {
-              if (live) setLyricHint(h);
-            })
-            .catch(console.error);
-        }
-      }).catch(console.error);
-    }, SEARCH_DEBOUNCE_MS);
+    const timer = window.setTimeout(() => refreshSearch(q, () => live), SEARCH_DEBOUNCE_MS);
     return () => {
       live = false;
       window.clearTimeout(timer);
     };
-  }, [q, field]);
+  }, [q, field, refreshSearch]);
 
   const activeSong = library.find((s) => s.id === activeSongId) ?? null;
   const clampedSection = activeSong ? Math.max(0, Math.min(section, activeSong.sections.length - 1)) : 0;
@@ -378,16 +385,7 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   const onSongSaved = (song: Song): void => {
     setLibrary((prev) => prev.map((s) => (s.id === song.id ? song : s)));
     const query = q.trim();
-    if (query) {
-      void window.helm.songs.search(query, field).then((r) => {
-        if (mountedRef.current) setResults(r);
-        if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
-          void window.helm.songs.search(query, 'lyric').then((h) => {
-            if (mountedRef.current) setLyricHint(h);
-          }).catch(console.error);
-        }
-      }).catch(console.error);
-    }
+    if (query) refreshSearch(query);
     if (song.id === activeSongId && song.sections.length) {
       // Read the live ref, not the closed-over clampedSection: the save this callback
       // resolves for may have been in flight while the operator moved the cue.

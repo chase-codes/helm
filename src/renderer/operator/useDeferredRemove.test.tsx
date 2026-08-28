@@ -2,7 +2,7 @@
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState, type JSX } from 'react';
-import { useDeferredRemove } from './useDeferredRemove';
+import { filterPending, useDeferredRemove, type DeferredRemove } from './useDeferredRemove';
 
 afterEach(cleanup);
 
@@ -236,5 +236,24 @@ describe('useDeferredRemove', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('filterPending', () => {
+  const undoStub = (pending: Array<{ id: string }>): DeferredRemove<{ id: string }> => ({
+    pending: null,
+    remove: () => {},
+    undo: () => {},
+    pendingNow: () => pending
+  })
+
+  it('drops rows still inside their undo window', () => {
+    const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+    expect(filterPending(undoStub([{ id: 'b' }]), rows)).toEqual([{ id: 'a' }, { id: 'c' }])
+  })
+
+  it('returns the rows array untouched when nothing is pending', () => {
+    const rows = [{ id: 'a' }, { id: 'b' }]
+    expect(filterPending(undoStub([]), rows)).toBe(rows)
   })
 })

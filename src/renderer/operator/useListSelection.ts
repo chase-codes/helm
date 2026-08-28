@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import type { ContextMenuItem } from './ContextMenu';
 
 export interface ListSelection {
   /** Selected row ids, in list order, pruned of ids no longer in the list. */
@@ -62,4 +63,24 @@ export function useListSelection(orderedIds: string[]): ListSelection {
 
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
   return { selectedIds, selectedId, select, selectTo, clear, isSelected };
+}
+
+/**
+ * The list-kit right-click grammar (#90/#8): a right-click inside a multi-selection
+ * offers `Delete N <noun>` on the whole batch; anywhere else selects the row under the
+ * pointer first, then offers a single `Delete`. `noun` is the plural row noun
+ * ('verses', 'quotes', 'items') — the count is always > 1 on the batch branch.
+ */
+export function deleteMenuItems(
+  sel: ListSelection,
+  id: string,
+  noun: string,
+  remove: (ids: string[]) => void
+): ContextMenuItem[] {
+  if (sel.isSelected(id) && sel.selectedIds.length > 1) {
+    const ids = sel.selectedIds;
+    return [{ label: `Delete ${ids.length} ${noun}`, danger: true, onSelect: () => remove(ids) }];
+  }
+  sel.select(id);
+  return [{ label: 'Delete', danger: true, onSelect: () => remove([id]) }];
 }

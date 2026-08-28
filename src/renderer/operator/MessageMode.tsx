@@ -23,8 +23,8 @@ import { SermonCenter } from './SermonCenter';
 import { TapePlayer } from './TapePlayer';
 import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
-import { useDeferredRemove } from './useDeferredRemove';
-import { useListSelection } from './useListSelection';
+import { filterPending, useDeferredRemove } from './useDeferredRemove';
+import { deleteMenuItems, useListSelection } from './useListSelection';
 import type { PanelWidthControl } from './usePanelWidth';
 
 /** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
@@ -126,12 +126,10 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     }
   });
 
-  // Filters out rows still inside their undo window, which the database has not dropped
-  // yet — a raw setSchedule here puts a just-deleted quote back on the rail. See
-  // `pendingNow`. `restore` deliberately bypasses it: that call wants the full list.
+  // Every list main hands back goes through here — see `filterPending`. `restore`
+  // deliberately bypasses it: that call wants the full list.
   function applyRows(rows: QuoteScheduleItem[]): void {
-    const pendingIds = new Set(undo.pendingNow().map((it) => it.id));
-    setSchedule(pendingIds.size ? rows.filter((it) => !pendingIds.has(it.id)) : rows);
+    setSchedule(filterPending(undo, rows));
   }
 
   // Mirrors SermonMode's removeReadings: the rows leave the rail on the gesture, the
@@ -524,17 +522,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     onDoubleClick: (e) => {
       if (!e.shiftKey) activateQuote(it.msgId, it.ord);
     },
-    onContextMenu: (e) => {
-      if (sel.isSelected(it.id) && sel.selectedIds.length > 1) {
-        const ids = sel.selectedIds;
-        contextMenu.open(e, [
-          { label: `Delete ${ids.length} quotes`, danger: true, onSelect: () => removeQuotes(ids) }
-        ]);
-      } else {
-        sel.select(it.id);
-        contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeQuotes([it.id]) }]);
-      }
-    }
+    onContextMenu: (e) => contextMenu.open(e, deleteMenuItems(sel, it.id, 'quotes', removeQuotes))
   }));
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
