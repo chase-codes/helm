@@ -945,6 +945,25 @@ describe('double-click to go live (#58)', () => {
     expect(screen.queryByText('NEXT')).toBeNull(); // took it, did not merely arm it
   });
 
+  // #76: the live song's own row re-takes the section that is already on screen. Section 0
+  // would be a different key, so the take would NOT be a no-op — the projector would jump
+  // back to the top mid-song.
+  it("double-clicking the live song's search row re-takes its live section, not section 0", async () => {
+    const live: PresentationState = {
+      ...LIVE_ON_S2,
+      liveKey: 'song:s2:2',
+      cuedKey: 'song:s2:2',
+      liveSnap: { kind: 'lyrics', label: 'With Chorus · Verse 2', lines: ['v2'] }
+    };
+    const { take } = installHelmStubWith([...SONGS, CHORUS_SONG], live);
+    renderMode({ current: null });
+    const row = (await screen.findAllByText('With Chorus')).find((el) => el.closest('button'));
+    if (!row) throw new Error('no search row for With Chorus');
+    fireEvent.doubleClick(row);
+    await waitFor(() => expect(take).toHaveBeenCalledWith('song:s2:2', expect.anything()));
+    expect(take).not.toHaveBeenCalledWith('song:s2:0', expect.anything());
+  });
+
   // The divergence window: `take` is sent and the selection moves in one commit, but
   // `liveParsed` keeps naming the OLD song until main's broadcast lands. The live-lock
   // reconciliation effect fires a 0ms timer, which always beats that round trip — so

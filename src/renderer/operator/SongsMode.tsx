@@ -358,23 +358,27 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
   // Double-click a search result (#58). `selectSong` ARMS when another song is live —
   // the operator's usual "queue this next" gesture. A double-click says take it now, so
-  // it bypasses arming entirely and commits section 0. Resolves out of `library` (the
-  // full Song list loaded at mount); the `songs.get` fallback covers a result whose song
-  // is somehow not in it, so a double-click is never silently dropped.
+  // it bypasses arming entirely and commits section 0 — unless the song is already live
+  // (#76), where section 0 would be a different key and the projector would jump back to
+  // the top mid-song; the live song's row re-takes its live section instead, which main
+  // treats as a no-op. Resolves out of `library` (the full Song list loaded at mount);
+  // the `songs.get` fallback covers a result whose song is somehow not in it, so a
+  // double-click is never silently dropped.
   const activateSong = (id: string): void => {
     // Claim the take BEFORE branching, cached path included: that is what cancels an
     // earlier double-click still waiting on its own `songs.get` (see useTakeGuard). The
     // guard subsumes the mountedRef check this used to make — unmount cancels too.
     const wanted = beginTake();
+    const idx = locked && liveParsed?.songId === id ? liveParsed.section : 0;
     const known = library.find((s) => s.id === id);
     if (known) {
-      takeSectionLive(known, 0);
+      takeSectionLive(known, idx);
       return;
     }
     void window.helm.songs
       .get(id)
       .then((s) => {
-        if (s && wanted()) takeSectionLive(s, 0);
+        if (s && wanted()) takeSectionLive(s, idx);
       })
       .catch(console.error);
   };

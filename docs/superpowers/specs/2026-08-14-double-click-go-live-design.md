@@ -54,7 +54,7 @@ Rows also get `userSelect: 'none'`. Double-clicking a `<button>` otherwise selec
 | `ParagraphRail` paragraph row | `take(keyForMessageQuote(msgId, ord), quoteSlide)` |
 | `SlidesTrack` media row / deck slide row | `take(keyForMedia(...), slide)` |
 | `PreServiceMode` card | new engine method `takeCard(i)` — `pushLive` at an explicit index |
-| `SongSearchRail` result | set active song, section 0, clear armed, then `take(keyForSong(id, 0), …)` |
+| `SongSearchRail` result | set active song, clear armed, then `take(keyForSong(id, i), …)` — `i` is 0, or the live section when the song is already live (#76: re-takes what is on screen instead of jumping to the top) |
 | `MessageSearchRail` tape / quote row | select, then `take` on that quote (a tape takes ord 0) |
 | `SchedulePanel` reading row | `jumpToReading`, resolve the chapter, `take` on the reading's `from` verse |
 
