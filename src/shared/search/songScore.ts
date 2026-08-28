@@ -1,5 +1,5 @@
 import type { Song, SongSection, SongSearchResult, SearchField } from '../types';
-import { norm, bestMatch, textSignals } from './fuzzy';
+import { norm, bestMatch, bestSolidMatch, textSignals } from './fuzzy';
 
 // Primary `score` (unchanged flat buckets) plus deterministic relevance sub-signals
 // used only to break score ties (BUG-002, extended for #53). The sub-signals never
@@ -117,7 +117,11 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     const titleWords = title.split(' ');
     for (const t of qts) {
       if (t.length < 3) continue; // mirror `strong`: a 1-2 char stopword fuzzes into any title (W2)
-      const d = bestMatch(t, titleWords);
+      // Title credit requires a SOLID match (mirrors strongSolid, Task 14): fuzzing
+      // a token into a shorter, stopword-length title word — e.g. "your"→"you" in
+      // "Great Are You Lord" — is noise, not signal, and must not win a tie-break
+      // over a song whose real match is a longer, cleaner run in the lyrics.
+      const d = bestSolidMatch(t, titleWords);
       if (d < 99) { titleCoverage++; titleCloseness += d; }
     }
   }

@@ -250,3 +250,23 @@ test('a fuzz into a shorter stopword cannot open the partial band (W2)', () => {
   const s = song('andsong', 'Faithful Anthem', '', [['V', ['faithful and true forever']]]);
   expect(scoreSong('give me your hand', s, 'all').score).toBe(0);
 });
+
+// --- Task 14: the title tie-break must apply the same solid discipline as strongSolid ---
+test('title credit requires a SOLID match: "your"→"you" earns no title relevance (Task 14)', () => {
+  // "you" (3 chars) is shorter than "your" (4) and not >=5 chars — fuzzing into it
+  // is noise, not signal, per the same rule strongSolid already applies (W2). Before
+  // the fix, titleCoverage/titleCloseness used plain bestMatch and credited this fuzz,
+  // which flipped a tie-break away from a song whose real match was in the lyrics.
+  const s = song('gayl', 'Great Are You Lord', '', [['V', ['great are you lord']]]);
+  const r = scoreSong('your', s, 'all');
+  expect(r.titleCoverage).toBe(0);
+  expect(r.titleCloseness).toBe(0);
+});
+test('positive control: a genuine typo onto a >=5 char title word still earns title credit', () => {
+  // "recukless"~"reckless" (9 chars, 1 edit onto a 8-char word) stays solid via the
+  // second clause of the rule (w.length >= 5 && d <= 1) — the W1 pin must survive.
+  const reckless = song('reckless', 'Reckless Love', '', [['V', ['reckless love of god']]]);
+  const r = scoreSong('recukless', reckless, 'all');
+  expect(r.titleCoverage).toBe(1);
+  expect(r.titleCloseness).toBe(1);
+});
