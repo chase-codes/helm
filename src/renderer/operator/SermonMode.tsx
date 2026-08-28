@@ -38,6 +38,7 @@ import type {
   BookExtent,
   ChapterData,
   ScriptureReading,
+  Slide,
   VerseHit,
   VerseSearchResult
 } from '../../shared/types';
@@ -49,8 +50,8 @@ import { ChapterRail } from './ChapterRail';
 import { MessageMode, type MessageKeyRef } from './MessageMode';
 import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack';
 import { useContextMenu } from './useContextMenu';
-import { useListSelection } from './useListSelection';
-import { useDeferredRemove } from './useDeferredRemove';
+import { deleteMenuItems, useListSelection } from './useListSelection';
+import { filterPending, useDeferredRemove } from './useDeferredRemove';
 import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
@@ -155,12 +156,10 @@ export function SermonMode({
     }
   });
 
-  // Every list main hands back goes through here. Rows in the undo window are still in the
-  // database, so a raw `setSchedule` would put a just-deleted reading back on the rail —
-  // see `pendingNow`. Not used by `restore`, which wants exactly the unfiltered list.
+  // Every list main hands back goes through here — see `filterPending`. Not used by
+  // `restore`, which wants exactly the unfiltered list.
   function applyRows(rows: ScriptureReading[]): void {
-    const pendingIds = new Set(undo.pendingNow().map((r) => r.id));
-    setSchedule(pendingIds.size ? rows.filter((r) => !pendingIds.has(r.id)) : rows);
+    setSchedule(filterPending(undo, rows));
   }
 
   // Shared by all tracks (Task 4 threads these into MessageMode/SlidesTrack too), so
@@ -444,6 +443,21 @@ export function SermonMode({
   const anyInstalled = manifest.some((m) => m.installed);
   const chapterMissing = (c: ChapterData): boolean => c.verseCount === 0 && anyInstalled;
 
+  // The one shape of the single-verse scripture slide, wherever it is shown or taken
+  // (mirrors SongsMode's slideFor): the verse's columns for the installed versions, or
+  // the INSTALL_HINT fallback when none resolve (no bible installed). Each caller keeps
+  // its own verb — `show` / `goLive` / `take`.
+  const verseSlide = useCallback(
+    (book: string, ch: number, v: number, c: ChapterData): Slide => {
+      const cols = verseCols(c.verses[v] ?? {}, versions, abbrOf);
+      return buildScriptureSlide(
+        formatRef({ book, ch, from: v, to: v }),
+        cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
+      );
+    },
+    [versions, abbrOf]
+  );
+
   // The cursor's route to the screen: `show` on every book/chapter/verse/version/
   // chapter-data change. Unlike the `cue` this replaced, it follows across chapters and
   // books — moving the cursor while live moves the projector, wherever you move it.
@@ -475,13 +489,8 @@ export function SermonMode({
     if (!active || track !== 'scripture') return;
     if (!liveChapter || chapterMissing(liveChapter)) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
-    const cols = verseCols(liveChapter.verses[scrV] ?? {}, versions, abbrOf);
-    const slide = buildScriptureSlide(
-      formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
-      cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
-    );
-    window.helm.presentation.show(key, slide);
-  }, [scrBook, scrCh, scrV, versions, liveChapter, anyInstalled, abbrOf, output, active, track]);
+    window.helm.presentation.show(key, verseSlide(scrBook, scrCh, scrV, liveChapter));
+  }, [scrBook, scrCh, scrV, versions, liveChapter, anyInstalled, abbrOf, verseSlide, output, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
   // `sameKind`, not key equality: while scripture is live the show effect above puts every
@@ -514,12 +523,12 @@ export function SermonMode({
   const goLive = (): void => {
     // Right after a cross-book/chapter jump, `chapter` still holds the previous
     // chapter's data for a render or two (see the `liveChapter` comment above) — so
-    // `liveCols` reads as [] and would build the install-hint slide even though a
-    // bible IS installed and the real verse text is just one tick away. Bail out here
-    // rather than going live with that false hint; the cue effect re-cues once
+    // the verse's columns resolve empty and would build the install-hint slide even
+    // though a bible IS installed and the real verse text is just one tick away. Bail
+    // out here rather than going live with that false hint; the cue effect re-cues once
     // getChapter resolves and the operator can press again. The no-bible-installed
     // case is unaffected: getChapter still resolves to a (verse-less) ChapterData,
-    // so liveChapter is non-null, this guard passes, liveCols is legitimately empty,
+    // so liveChapter is non-null, this guard passes, the columns are legitimately empty,
     // and the install-hint slide goes live, which is then the correct thing to show.
     // An absent chapter in an installed bible is not that case (#19): nothing to show.
     if (!liveChapter || chapterMissing(liveChapter)) return;
@@ -534,11 +543,7 @@ export function SermonMode({
     // keyboard twin — lands here and stops. Escape and the Take down button, which say
     // what they do, are the only ways down.
     if (cuedIsLive) return;
-    const slide = buildScriptureSlide(
-      formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV }),
-      liveCols.length ? liveCols : [{ version: '', text: INSTALL_HINT }]
-    );
-    window.helm.presentation.goLive(curKey, slide);
+    window.helm.presentation.goLive(curKey, verseSlide(scrBook, scrCh, scrV, liveChapter));
   };
 
   const takeDown = (): void => {
@@ -590,19 +595,7 @@ export function SermonMode({
   // the same convention `activateVerse` follows.
   const activateReading = (r: ScriptureReading): void => {
     jumpToReading(r);
-    // Claim the take BEFORE branching, cached path included: that is what cancels an
-    // earlier double-click still waiting on its own fetch (see useTakeGuard).
-    const wanted = beginTake();
-    if (chapter && chapter.book === r.book && chapter.chapter === r.ch) {
-      takeVerseLive(r.book, r.ch, r.from, chapter);
-      return;
-    }
-    window.helm.bibles
-      .getChapter(r.book, r.ch)
-      .then((c) => {
-        if (wanted()) takeVerseLive(r.book, r.ch, r.from, c);
-      })
-      .catch(console.error);
+    resolveAndTake(r.book, r.ch, r.from, chapter);
   };
 
   // Builds the live slide for a single verse (the reading's `from`, matching where the
@@ -611,12 +604,7 @@ export function SermonMode({
   const goLiveWithChapter = (p: ParsedRef, c: ChapterData): void => {
     if (chapterMissing(c)) return;
     const key = keyForScripture(p.book, p.ch, p.from);
-    const cols = verseCols(c.verses[p.from] ?? {}, versions, abbrOf);
-    const slide = buildScriptureSlide(
-      formatRef({ book: p.book, ch: p.ch, from: p.from, to: p.from }),
-      cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
-    );
-    window.helm.presentation.goLive(key, slide);
+    window.helm.presentation.goLive(key, verseSlide(p.book, p.ch, p.from, c));
   };
 
   // Double-click a verse card (#58). `take` is idempotent, so double-clicking the verse
@@ -625,12 +613,24 @@ export function SermonMode({
   // the hero, and the projector agree by the time this fires.
   const takeVerseLive = (book: string, ch: number, v: number, c: ChapterData): void => {
     if (chapterMissing(c)) return;
-    const cols = verseCols(c.verses[v] ?? {}, versions, abbrOf);
-    const slide = buildScriptureSlide(
-      formatRef({ book, ch, from: v, to: v }),
-      cols.length ? cols : [{ version: '', text: INSTALL_HINT }]
-    );
-    window.helm.presentation.take(keyForScripture(book, ch, v), slide);
+    window.helm.presentation.take(keyForScripture(book, ch, v), verseSlide(book, ch, v, c));
+  };
+
+  // The resolve-the-chapter-first take every double-click / Shift+Enter path shares (#58).
+  // Claims the take BEFORE branching, cached path included: that is what cancels an
+  // earlier double-click still waiting on its own fetch (see useTakeGuard).
+  const resolveAndTake = (book: string, ch: number, v: number, cached: ChapterData | null): void => {
+    const wanted = beginTake();
+    if (cached && cached.book === book && cached.chapter === ch) {
+      takeVerseLive(book, ch, v, cached);
+      return;
+    }
+    window.helm.bibles
+      .getChapter(book, ch)
+      .then((c) => {
+        if (wanted()) takeVerseLive(book, ch, v, c);
+      })
+      .catch(console.error);
   };
 
   // Enter on a search hit: the entry becomes that reference (so + Add / Go live /
@@ -672,17 +672,7 @@ export function SermonMode({
     const p = resultRef(i);
     if (!p) return;
     pickResult(i);
-    const wanted = beginTake();
-    if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
-      takeVerseLive(p.book, p.ch, p.from, chapter);
-      return;
-    }
-    window.helm.bibles
-      .getChapter(p.book, p.ch)
-      .then((c) => {
-        if (wanted()) takeVerseLive(p.book, p.ch, p.from, c);
-      })
-      .catch(console.error);
+    resolveAndTake(p.book, p.ch, p.from, chapter);
   };
 
   // The rail previews the builder's book+chapter when resolved, else the cued chapter.
@@ -746,17 +736,9 @@ export function SermonMode({
     // endpoints), so its `from` IS the range's start verse whichever end was clicked.
     const target = shift ? selectedRange?.from ?? v : v;
     jumpTo(book, ch, target);
-    const wanted = beginTake();
-    if (railChapter) {
-      takeVerseLive(book, ch, target, railChapter);
-      return;
-    }
-    window.helm.bibles
-      .getChapter(book, ch)
-      .then((c) => {
-        if (wanted()) takeVerseLive(book, ch, target, c);
-      })
-      .catch(console.error);
+    // `railChapter` non-null already implies it matches this book/chapter (see its
+    // derivation above), so the helper's cached check is the same condition.
+    resolveAndTake(book, ch, target, railChapter);
   };
 
   // `plannedSet`/`cuedV`/`isVerseLive` below are all computed against the CUED book/chapter
@@ -971,17 +953,7 @@ export function SermonMode({
       onDoubleClick: (e) => {
         if (!e.shiftKey) activateReading(r);
       },
-      onContextMenu: (e) => {
-        if (sel.isSelected(r.id) && sel.selectedIds.length > 1) {
-          const ids = sel.selectedIds;
-          contextMenu.open(e, [
-            { label: `Delete ${ids.length} verses`, danger: true, onSelect: () => removeReadings(ids) }
-          ]);
-        } else {
-          sel.select(r.id);
-          contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeReadings([r.id]) }]);
-        }
-      }
+      onContextMenu: (e) => contextMenu.open(e, deleteMenuItems(sel, r.id, 'verses', removeReadings))
     };
   });
 

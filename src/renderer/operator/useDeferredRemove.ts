@@ -114,3 +114,14 @@ export function useDeferredRemove<T>({
 
   return { pending: undo.pending, remove, undo: takeUndo, pendingNow };
 }
+
+/**
+ * The mandatory `pendingNow` filter (see its doc above) as a helper: drop rows still
+ * inside their undo window from a list handed back by main, so a refresh doesn't
+ * resurrect just-deleted rows. `restore` paths deliberately bypass this — an undo wants
+ * exactly the unfiltered list.
+ */
+export function filterPending<T extends { id: string }>(undo: DeferredRemove<T>, rows: T[]): T[] {
+  const pendingIds = new Set(undo.pendingNow().map((r) => r.id));
+  return pendingIds.size ? rows.filter((r) => !pendingIds.has(r.id)) : rows;
+}

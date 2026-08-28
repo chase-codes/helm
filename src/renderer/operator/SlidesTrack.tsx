@@ -21,8 +21,8 @@ import { SlideCanvas } from '../shared/SlideCanvas';
 import { VideoCanvas } from '../shared/VideoCanvas';
 import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
-import { useDeferredRemove } from './useDeferredRemove';
-import { useListSelection } from './useListSelection';
+import { filterPending, useDeferredRemove } from './useDeferredRemove';
+import { deleteMenuItems, useListSelection } from './useListSelection';
 import { UndoToast } from './UndoToast';
 import { ListEmpty } from './ListEmpty';
 import { pickNeighborId } from './pickNeighbor';
@@ -308,10 +308,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     if (res.canceled) return;
     const added = res.items.find((i) => !prevIds.has(i.id));
     // An import reply carries the whole library, which during an undo window still holds
-    // the items the operator just deleted — dropping them in raw resurrects those rows
-    // until the commit lands. See useDeferredRemove's `pendingNow`.
-    const pendingIds = new Set(undo.pendingNow().map((i) => i.id));
-    setItems(pendingIds.size ? res.items.filter((i) => !pendingIds.has(i.id)) : res.items);
+    // the items the operator just deleted — see `filterPending`.
+    setItems(filterPending(undo, res.items));
     if (added) {
       setSelId(added.id);
       setSlideIdx(0);
@@ -589,17 +587,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 sel.select(item.id);
                 takeSlideLive(item, 0);
               }}
-              onContextMenu={(e) => {
-                if (sel.isSelected(item.id) && sel.selectedIds.length > 1) {
-                  const ids = sel.selectedIds;
-                  contextMenu.open(e, [
-                    { label: `Delete ${ids.length} items`, danger: true, onSelect: () => removeItems(ids) }
-                  ]);
-                } else {
-                  sel.select(item.id);
-                  contextMenu.open(e, [{ label: 'Delete', danger: true, onSelect: () => removeItems([item.id]) }]);
-                }
-              }}
+              onContextMenu={(e) => contextMenu.open(e, deleteMenuItems(sel, item.id, 'items', removeItems))}
             >
               <div style={thumbBoxStyle}>
                 <SlideCanvas slide={slidesOf(item)[0]} fill />
