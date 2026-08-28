@@ -11,6 +11,7 @@ import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from '../shared/useHelm';
 import { useTakeGuard } from './useTakeGuard';
+import { useDebouncedSearch } from './useDebouncedSearch';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
 import { sameFlow } from '../../shared/presentation/core';
 import { norm } from '../../shared/search/fuzzy';
@@ -245,20 +246,16 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // Tape/quote search, scoped to `scope` when set. Skips the fetch (without touching
   // state) while `q` is empty — consumers below gate all three row lists on `hasSearch`
   // so a stale non-empty `searchRes` from a previous query is never rendered once the
-  // box is cleared, avoiding a synchronous setState-in-effect reset.
-  useEffect(() => {
-    if (!q.trim()) return;
-    let live = true;
+  // box is cleared, avoiding a synchronous setState-in-effect reset. Keystrokes are
+  // debounced (#15); a scope change re-searches at once.
+  useDebouncedSearch(q.trim() ? q : null, scope, (query, stillWanted) => {
     void window.helm.message
-      .search(q, scope)
+      .search(query, scope)
       .then((r) => {
-        if (live) setSearchRes({ scope, ...r });
+        if (stillWanted()) setSearchRes({ scope, ...r });
       })
       .catch(console.error);
-    return () => {
-      live = false;
-    };
-  }, [q, scope]);
+  });
 
   // `msg` is fetched async and keyed by `msgId`; right after switching tapes there's a
   // render or two where `msg` still holds the *previous* tape's paragraphs before the

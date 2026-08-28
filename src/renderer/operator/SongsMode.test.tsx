@@ -275,6 +275,19 @@ describe('SongsMode', () => {
     expect(search).toHaveBeenCalledTimes(1);
   });
 
+  it('switching the search field re-searches immediately, not behind the keystroke debounce (#15)', async () => {
+    const { search } = installHelmStub();
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+    fireEvent.change(screen.getByPlaceholderText('Title or a lyric line…'), { target: { value: 'ama' } });
+    await waitFor(() => expect(search).toHaveBeenCalledWith('ama', 'all'));
+    // A field switch is a click, not a keystroke burst: the re-search fires in the same
+    // commit, with no timer in between.
+    fireEvent.click(screen.getByText('Title'));
+    expect(search).toHaveBeenCalledWith('ama', 'title');
+  });
+
   it('title mode skips the lyric-hint search when title results are not thin', async () => {
     const rows: SongSearchResult[] = ['t1', 't2', 't3'].map((id, i) => ({
       song: { ...SONGS[0], id, title: `Grace ${i}` }, score: 1000, snippet: ''
