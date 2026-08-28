@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { norm, lev, levWithin, matchTol, textSignals, bestSolidMatch } from './fuzzy';
+import { norm, lev, levWithin, matchTol, matchDist, textSignals, bestSolidMatch } from './fuzzy';
 
 describe('norm', () => {
   test('lowercases, strips apostrophes and punctuation, collapses spaces', () => {
@@ -72,6 +72,52 @@ describe('bestSolidMatch', () => {
   });
   test('a fuzz into a shorter stopword-length word is not solid', () => {
     expect(bestSolidMatch('hand', ['and'])).toBe(99);
+  });
+});
+describe('matchDist stemming (#14)', () => {
+  test('an inflected token and its base pair at the prefix tier (1), both directions', () => {
+    for (const [a, b] of [
+      ['praising', 'praise'],
+      ['singing', 'sing'],
+      ['sorrows', 'sorrow'],
+      ['loved', 'love'],
+      ['running', 'run'],
+      ['mercies', 'mercy'],
+      ['blesses', 'bless']
+    ]) {
+      expect(matchDist(a, b), `${a}→${b}`).toBe(1);
+      expect(matchDist(b, a), `${b}→${a}`).toBe(1);
+    }
+  });
+  test('never reports 0 — a stem hit must not feed the exact-gated idf tie-break', () => {
+    expect(matchDist('praising', 'praise')).not.toBe(0);
+  });
+  test('stays a miss where stems do not pair', () => {
+    expect(matchDist('son', 'person')).toBe(99); // anchored at the word start
+    expect(matchDist('sing', 'singe')).toBe(1); // prefix, unchanged
+    expect(matchDist('thing', 'thin')).toBe(1); // one edit, unchanged
+    expect(matchDist('praising', 'prayer')).toBeGreaterThan(2); // beyond every tolerance
+    expect(matchDist('praising', 'prairie')).toBeGreaterThan(2);
+    expect(matchDist('evening', 'event')).toBeGreaterThan(2);
+    expect(matchDist('kings', 'king')).toBe(1); // one edit today; stemming agrees
+    expect(matchDist('this', 'thi')).toBe(1); // one edit, no folding under 5 chars
+  });
+  test('digit tokens never stem', () => {
+    expect(matchDist('10000', '1000')).toBe(1); // one edit, as before
+    expect(matchDist('1000s', '1000')).toBe(1);
+  });
+  test('opens the solid partial band and the title tie-break for an inflected query', () => {
+    expect(textSignals([['praise', 'him']], ['praising']).strongSolid).toBe(1);
+    expect(textSignals([['praising', 'my', 'saviour']], ['praise']).strongSolid).toBe(1);
+    expect(bestSolidMatch('praising', ['praise'])).toBe(1);
+  });
+  test('counts a token matched ONLY through the stem tier as rescued', () => {
+    expect(textSignals([['praise', 'my', 'saviour']], ['praising', 'my', 'saviour']).stemRescued).toBe(1);
+    expect(textSignals([['praising', 'my', 'saviour']], ['praising', 'my', 'saviour']).stemRescued).toBe(0);
+    // an exact hit elsewhere in the doc outranks the stem pairing: not rescued
+    expect(textSignals([['praise'], ['praising']], ['praising']).stemRescued).toBe(0);
+    // a prefix hit is not a rescue either
+    expect(textSignals([['singing']], ['sing']).stemRescued).toBe(0);
   });
 });
 describe('levWithin', () => {

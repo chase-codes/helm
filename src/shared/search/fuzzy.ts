@@ -71,14 +71,54 @@ export function matchTol(tokLen: number): number {
   return tokLen <= 4 ? 1 : 2;
 }
 
+// Light suffix fold for the stem tier of matchDist (#14). Deliberately NOT Porter: one
+// strip of -ies/-ing/-ed/-es/-s on a word of 5+ letters, leaving a stem of 3+, and
+// nothing else. Digit tokens and short words come back unchanged (a stem tier that
+// folded "sing"→"s" or "this"→"thi" would admit every stopword). A word with no
+// suffix IS its own stem, which is what lets "praise" meet "praising" below.
+export function stem(w: string): string {
+  const n = w.length;
+  if (n < 5 || /^[0-9]+$/.test(w)) return w;
+  if (w.endsWith('ies')) return n - 3 >= 3 ? w.slice(0, n - 3) + 'y' : w;
+  if (w.endsWith('ing')) return n - 3 >= 3 ? w.slice(0, n - 3) : w;
+  if (w.endsWith('ed')) return n - 2 >= 3 ? w.slice(0, n - 2) : w;
+  if (w.endsWith('es')) return n - 2 >= 3 ? w.slice(0, n - 2) : w;
+  if (w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, n - 1);
+  return w;
+}
+
+// Two words share a stem when the folds agree outright, or differ only by the letter
+// the inflection ate: the dropped -e (prais/praise, lov/love) or the doubled consonant
+// (runn/run, stopp/stop). Spelling the variants out here keeps `stem` a pure strip,
+// so "blessing"→"bless" is never collapsed to "bles".
+export function stemsPair(a: string, b: string): boolean {
+  if (a.length < 5 && b.length < 5) return false; // nothing to fold on either side
+  const sa = stem(a), sb = stem(b);
+  if (sa === a && sb === b) return false; // neither folded: plain edit distance's job
+  if (sa === sb) return true;
+  const [lo, hi] = sa.length < sb.length ? [sa, sb] : [sb, sa];
+  if (hi.length !== lo.length + 1 || !hi.startsWith(lo)) return false;
+  const last = hi[hi.length - 1];
+  return last === 'e' || last === hi[hi.length - 2];
+}
+
 // A token matches a word exactly (0), as an anchored prefix (1 — type-ahead: "wonder"
 // finds "wonderful"; digit tokens prefix at any length so a partial tape number or
 // "10" for "10000" keeps matching, word tokens need >=3 chars so short ones rely on
-// edit tolerance), or within fuzzy edit tolerance. Anchoring at the word start is
-// what keeps "son" from matching "person".
+// edit tolerance), as an inflection of the same stem (1 — "praising" finds "praise"
+// and vice versa, #14), or within fuzzy edit tolerance. Anchoring at the word start
+// is what keeps "son" from matching "person".
+//
+// The stem tier reports 1, the prefix tier's distance, on purpose: never 0, because
+// the partial band's idf tie-break is exact-gated (Phase 5 ruling) and a stem hit
+// must not start feeding it; and within every matchTol, so isSolidMatch opens the
+// 360 band for it the way it does for a prefix. Checked before the DP because it is
+// cheaper than a banded Levenshtein and is what the DP cannot find (lev 3 for
+// praise/praising).
 export function matchDist(t: string, w: string): number {
   if (w === t) return 0;
   if (w.length > t.length && w.startsWith(t) && (t.length >= 3 || /^[0-9]+$/.test(t))) return 1;
+  if (stemsPair(t, w)) return 1;
   // No caller admits a distance above 2 (matchTol's ceiling), so the DP may bail
   // early and report 3 for "too far" instead of computing the exact distance.
   return Math.abs(w.length - t.length) <= 2 ? levWithin(t, w, 2) : 99;
@@ -144,6 +184,11 @@ export interface TextSignals {
                        // e.g. an insertion typo like recukless→reckless). Fuzzing INTO
                        // a shorter word that's itself stopword-length (hand→and,
                        // your→you) cannot anchor the partial band on its own (W2).
+  stemRescued: number; // matched tokens whose ONLY admissible match is a stem pairing
+                       // (#14). They count as matched — that is the whole fix — but the
+                       // song scorer withholds the full band's per-token credit from
+                       // them, so a song holding the exact or prefix form still outranks
+                       // one that only holds a sibling inflection.
 }
 
 // Shared relevance pass for the song and message scorers. One fuzzy pass over the
@@ -156,6 +201,9 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
   for (const seg of segs) for (const w of seg) counts.set(w, (counts.get(w) ?? 0) + 1);
   const bestDist: number[] = qts.map(() => 99);
   const solid: boolean[] = qts.map(() => false);
+  // Per token: did any admissible match come from the exact/prefix/edit tiers? A token
+  // matched ONLY through the stem tier is "rescued" (#14) — see stemRescued.
+  const plain: boolean[] = qts.map(() => false);
   const wordMask = new Map<string, number>();
   for (const w of counts.keys()) {
     let mask = 0;
@@ -164,6 +212,7 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       if (d <= matchTol(qts[j].length)) {
         if (j < PHRASE_MAX_TOKENS) mask |= 1 << j;
         if (d < bestDist[j]) bestDist[j] = d;
+        if (d !== 1 || w.startsWith(qts[j]) || !stemsPair(qts[j], w)) plain[j] = true;
         // Solid: see isSolidMatch — equal-or-longer word (exact/prefix/typo-fix), OR
         // a single-edit fuzz onto a word long enough (>=5) not to be stopword-noise.
         if (isSolidMatch(qts[j], w, d)) solid[j] = true;
@@ -171,10 +220,11 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
     }
     if (mask) wordMask.set(w, mask);
   }
-  let matched = 0; let strong = 0; let strongSolid = 0; let covWeight = 0; let tf = 0; let dist = 0;
+  let matched = 0; let strong = 0; let strongSolid = 0; let covWeight = 0; let tf = 0; let dist = 0; let stemRescued = 0;
   for (let j = 0; j < qts.length; j++) {
     if (bestDist[j] < 99) {
       matched++; covWeight += qts[j].length; dist += bestDist[j];
+      if (!plain[j]) stemRescued++;
       if (qts[j].length >= 3) { strong++; if (solid[j]) strongSolid++; }
     }
     tf += counts.get(qts[j]) ?? 0;
@@ -195,5 +245,5 @@ export function textSignals(segs: string[][], qts: string[]): TextSignals {
       const swap = prev; prev = cur; cur = swap;
     }
   }
-  return { matched, strong, strongSolid, covWeight, tf, phrase, dist, bestDist };
+  return { matched, strong, strongSolid, covWeight, tf, phrase, dist, bestDist, stemRescued };
 }

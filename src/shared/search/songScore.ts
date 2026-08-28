@@ -151,7 +151,11 @@ function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, 
   const last = qts.length - 1;
   const trailingExempt = qts.length > 1 && qts[last].length < 3
     && sig.bestDist[last] === 99 && matched === qts.length - 1;
-  if ((matched === qts.length || trailingExempt) && matched > 0) score = Math.max(score, 380 + matched * 12);
+  // A token matched only through the stem tier (#14) opens the band but earns no
+  // per-token credit: "praising my saviour" must still put the song that SAYS
+  // "praising" (416) above the filler that says "praise ... saviour" (404), and the
+  // comparator behind the score would hand that to whichever has "saviour" in its title.
+  if ((matched === qts.length || trailingExempt) && matched > 0) score = Math.max(score, 380 + (matched - sig.stemRescued) * 12);
   // The partial band needs at least one significant matched token — 1-2 char stopwords
   // fuzz into nearly anything and must not qualify a song on their own.
   else if (strongSolid > 0 && field !== 'title') score = Math.max(score, 360);

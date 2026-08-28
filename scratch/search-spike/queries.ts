@@ -95,6 +95,8 @@ export const QUERIES: LabeledQuery[] = [
     note: 'lyric "I will sing of the goodness"' },
   { intent: 'inflected-form', q: 'trading sorrow', field: 'all', target: 'trading-my-sorrows',
     note: 'title/lyric plural "sorrows"' },
+  { intent: 'inflected-form', q: 'traded', field: 'all', target: 'trading-my-sorrows',
+    note: '#14 bare inflected token, no rescuing second word; lyric has only "trading" (lev 3, unreachable without the stem tier)' },
 
   // --- accented / multilingual ---
   { intent: 'accented-text', q: 'cuan grande', field: 'all', target: 'cuan-grande',

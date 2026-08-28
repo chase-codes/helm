@@ -243,6 +243,17 @@ test('a short trailing mid-word token keeps the full-match band (W2)', () => {
   expect(scoreSong('give zx your hand', s, 'all').score).toBe(360);
 });
 
+// --- #14: a stem-only match opens the band without the per-token credit ---
+test('an inflected query opens the full band on a base-form lyric, one step below the exact form (#14)', () => {
+  const exact = song('blessed', 'Blessed Assurance', '', [['C', ['praising my saviour all the day long']]]);
+  const base = song('filler', 'Glorious Saviour', '', [['C', ['we praise you my saviour']]]);
+  expect(scoreSong('praising my saviour', exact, 'all').score).toBe(416); // 380 + 3*12
+  expect(scoreSong('praising my saviour', base, 'all').score).toBe(404); // "praising" rescued: 380 + 2*12
+  // and the bare inflected token alone finds the base-form lyric at all
+  expect(scoreSong('praising', base, 'all').score).toBe(380);
+  expect(rankSongs('praising my saviour', [base, exact], 'all')[0].song.id).toBe('blessed');
+});
+
 // --- W2: stopword-fuzz alone cannot open the partial band ---
 test('a fuzz into a shorter stopword cannot open the partial band (W2)', () => {
   // "hand" edit-matches "and" — present in essentially every worship lyric; that

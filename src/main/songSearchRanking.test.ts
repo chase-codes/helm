@@ -113,6 +113,25 @@ beforeAll(() => {
   addBy('king-of-kings', 'King of Kings', 'Hillsong Worship', [
     'Verse 1', 'In the darkness we were waiting',
   ].join('\n'));
+
+  // #14: the seeded Blessed Assurance lyric. A bare inflected query has no FTS prefix
+  // hit and no nearest-tier expansion within edit tolerance, so the song never reached
+  // the scorer at all — the retrieval gate has to open, not just the band.
+  add('blessed-assurance', 'Blessed Assurance', [
+    'Chorus', 'This is my story this is my song', 'Praising my Saviour all the day long',
+  ].join('\n'));
+});
+
+test('#14: a bare inflected token reaches the song whose lyric has the other form', () => {
+  // "praising" has an exact hit here; the point is that a sibling inflection with NO
+  // prefix hit anywhere ("praises") now expands to it through the stem tier and the
+  // song is retrieved at all (it scored -1 before). Rank is not asserted for the
+  // sibling: "The sound of praise is rising" is one edit away and a fair competitor.
+  expect(rankOf('praising', 'all', 'blessed-assurance')).toBe(1);
+  expect(rankOf('praises', 'all', 'blessed-assurance')).toBeGreaterThan(0);
+  // Known limit, unchanged by #14: a token with a prefix hit of its own ("praise" →
+  // "praise is rising") is never vocabulary-expanded, so "praise" cannot reach a song
+  // whose only form is "praising". Retrieval-gate design, not a scorer gap.
 });
 
 test('stopword-heavy phrase outranks scattered stopword matches (lyric field)', () => {
