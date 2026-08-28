@@ -10,6 +10,7 @@ import {
 } from '../shared/types';
 import { applyCue, goLive, initialPresentation, outputPayload, setOutput, showLive, takeLive } from '../shared/presentation/core';
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../shared/displays/roles';
+import { broadcastAll } from './broadcast';
 
 let state: PresentationState = initialPresentation();
 const outputWindows = new Map<BrowserWindow, { variant: OutputVariant; view: OutputViewMode; leaderSplit: number }>();
@@ -17,8 +18,10 @@ const outputWindows = new Map<BrowserWindow, { variant: OutputVariant; view: Out
 function payloadFor(t: { variant: OutputVariant; view: OutputViewMode; leaderSplit: number }): OutputPayload {
   return { ...outputPayload(state, t.variant, t.view), leaderSplit: t.leaderSplit };
 }
+const sendPresState = broadcastAll(CH.presState);
 function broadcast(): void {
-  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.presState, state);
+  sendPresState(state);
+  // Output windows get a per-window payload (variant/view/split differ) — not broadcastAll.
   for (const [w, t] of outputWindows) if (!w.isDestroyed()) w.webContents.send(CH.outputSlide, payloadFor(t));
 }
 export const presentation = {

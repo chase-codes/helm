@@ -1,17 +1,5 @@
 import { app, ipcMain } from 'electron';
-import {
-  CH,
-  type MessageImportResult,
-  type NewSongInput,
-  type OutputMode,
-  type OutputRole,
-  type OutputViewMode,
-  type PreCard,
-  type ScriptureReading,
-  type SearchField,
-  type Slide,
-  type UpdateSongInput,
-} from '../shared/types';
+import { CH, type HelmApi } from '../shared/types';
 import type { SongsRepo } from './songsRepo';
 import type { BiblesRepo } from './biblesRepo';
 import type { ScheduleRepo } from './scheduleRepo';
@@ -39,129 +27,167 @@ import {
   toggleOutputsReleased,
 } from './displays';
 
-export function registerIpc(
-  repo: SongsRepo,
-  biblesRepo: BiblesRepo,
-  scheduleRepo: ScheduleRepo,
-  settingsRepo: SettingsRepo,
-  installer: BibleInstaller,
-  messagesRepo: MessagesRepo,
-  messagesScheduleRepo: MessagesScheduleRepo,
-  messageInstaller: MessageInstaller,
-  preserviceEngine: PreserviceEngine,
-  mediaRepo: MediaRepo,
-  mediaImport: MediaImport,
-  songImport: SongImport,
-  songSources: SongSources,
-  updater: Updater,
+type AnyFn = (...args: never[]) => unknown;
+
+// Registration helpers: each callback's argument and return types are derived from the
+// HelmApi method the channel serves (instantiate as `handleApi<HelmApi['songs']['search']>`),
+// so the main side of the renderer contract is compile-checked instead of hand-annotated —
+// preload and main can't drift silently as channels are added.
+function handleApi<F extends AnyFn>(
+  channel: string,
+  fn: (...args: Parameters<F>) => Awaited<ReturnType<F>> | Promise<Awaited<ReturnType<F>>>,
 ): void {
-  ipcMain.handle(CH.songsSearch, (_e, q: string, field: SearchField) => repo.search(q, field));
-  ipcMain.handle(CH.songsList, () => repo.list());
-  ipcMain.handle(CH.songsGet, (_e, id: string) => repo.get(id));
-  ipcMain.handle(CH.songsAdd, (_e, input: NewSongInput) => repo.add(input));
-  ipcMain.handle(CH.songsUpdate, (_e, id: string, input: UpdateSongInput) => repo.update(id, input));
-  ipcMain.handle(CH.songsRemove, (_e, id: string) => repo.remove(id));
-  ipcMain.handle(CH.presGet, () => presentation.get());
-  ipcMain.on(CH.presCue, (_e, key: string, slide: Slide) => presentation.cue(key, slide));
-  ipcMain.on(CH.presGoLive, (_e, key: string, slide: Slide) => presentation.goLive(key, slide));
-  ipcMain.on(CH.presShow, (_e, key: string, slide: Slide) => presentation.show(key, slide));
-  ipcMain.on(CH.presTake, (_e, key: string, slide: Slide) => presentation.take(key, slide));
-  ipcMain.on(CH.presSetOutput, (_e, mode: OutputMode) => presentation.setOutput(mode));
-  ipcMain.handle(CH.displaysGet, () => displayStatus());
-  ipcMain.on(CH.displaysOpenTest, () => openTestOutput());
-  ipcMain.on(CH.displaysSetRole, (_e, fp: string, role: OutputRole) => setDisplayRole(fp, role));
-  ipcMain.on(CH.displaysSetView, (_e, fp: string, view: OutputViewMode) => setDisplayView(fp, view));
-  ipcMain.on(CH.displaysSetLeaderSplit, (e, fp: string | null, px: number) =>
+  ipcMain.handle(channel, (_e, ...args) => fn(...(args as Parameters<F>)));
+}
+
+function onApi<F extends AnyFn>(channel: string, fn: (...args: Parameters<F>) => void): void {
+  ipcMain.on(channel, (_e, ...args) => fn(...(args as Parameters<F>)));
+}
+
+// Same as onApi, for the rare registration that also needs the sending WebContents
+// (the leader window reports its own split drag; main resolves the window from the sender).
+function onApiWithEvent<F extends AnyFn>(
+  channel: string,
+  fn: (e: Electron.IpcMainEvent, ...args: Parameters<F>) => void,
+): void {
+  ipcMain.on(channel, (e, ...args) => fn(e, ...(args as Parameters<F>)));
+}
+
+export interface IpcDeps {
+  repo: SongsRepo;
+  biblesRepo: BiblesRepo;
+  scheduleRepo: ScheduleRepo;
+  settingsRepo: SettingsRepo;
+  installer: BibleInstaller;
+  messagesRepo: MessagesRepo;
+  messagesScheduleRepo: MessagesScheduleRepo;
+  messageInstaller: MessageInstaller;
+  preserviceEngine: PreserviceEngine;
+  mediaRepo: MediaRepo;
+  mediaImport: MediaImport;
+  songImport: SongImport;
+  songSources: SongSources;
+  updater: Updater;
+}
+
+export function registerIpc(deps: IpcDeps): void {
+  const {
+    repo,
+    biblesRepo,
+    scheduleRepo,
+    settingsRepo,
+    installer,
+    messagesRepo,
+    messagesScheduleRepo,
+    messageInstaller,
+    preserviceEngine,
+    mediaRepo,
+    mediaImport,
+    songImport,
+    songSources,
+    updater,
+  } = deps;
+  handleApi<HelmApi['songs']['search']>(CH.songsSearch, (q, field) => repo.search(q, field));
+  handleApi<HelmApi['songs']['list']>(CH.songsList, () => repo.list());
+  handleApi<HelmApi['songs']['get']>(CH.songsGet, (id) => repo.get(id));
+  handleApi<HelmApi['songs']['add']>(CH.songsAdd, (input) => repo.add(input));
+  handleApi<HelmApi['songs']['update']>(CH.songsUpdate, (id, input) => repo.update(id, input));
+  handleApi<HelmApi['songs']['remove']>(CH.songsRemove, (id) => repo.remove(id));
+  handleApi<HelmApi['presentation']['get']>(CH.presGet, () => presentation.get());
+  onApi<HelmApi['presentation']['cue']>(CH.presCue, (key, slide) => presentation.cue(key, slide));
+  onApi<HelmApi['presentation']['goLive']>(CH.presGoLive, (key, slide) => presentation.goLive(key, slide));
+  onApi<HelmApi['presentation']['show']>(CH.presShow, (key, slide) => presentation.show(key, slide));
+  onApi<HelmApi['presentation']['take']>(CH.presTake, (key, slide) => presentation.take(key, slide));
+  onApi<HelmApi['presentation']['setOutput']>(CH.presSetOutput, (mode) => presentation.setOutput(mode));
+  handleApi<HelmApi['displays']['get']>(CH.displaysGet, () => displayStatus());
+  onApi<HelmApi['displays']['openTest']>(CH.displaysOpenTest, () => openTestOutput());
+  onApi<HelmApi['displays']['setRole']>(CH.displaysSetRole, (fp, role) => setDisplayRole(fp, role));
+  onApi<HelmApi['displays']['setView']>(CH.displaysSetView, (fp, view) => setDisplayView(fp, view));
+  onApiWithEvent<HelmApi['displays']['setLeaderSplit']>(CH.displaysSetLeaderSplit, (e, fp, px) =>
     fp === null ? setLeaderSplitFromSender(e.sender, px) : setLeaderSplitByFingerprint(fp, px));
-  ipcMain.on(CH.displaysToggleReleased, () => toggleOutputsReleased());
-  ipcMain.handle(CH.biblesManifest, () => installer.manifest());
-  ipcMain.on(CH.biblesInstall, (_e, id: string) => installer.install(id));
-  ipcMain.handle(CH.biblesUninstall, (_e, id: string) => installer.uninstall(id));
-  ipcMain.handle(CH.biblesGetChapter, (_e, book: string, chapter: number) =>
+  onApi<HelmApi['displays']['toggleReleased']>(CH.displaysToggleReleased, () => toggleOutputsReleased());
+  handleApi<HelmApi['bibles']['manifest']>(CH.biblesManifest, () => installer.manifest());
+  onApi<HelmApi['bibles']['install']>(CH.biblesInstall, (id) => installer.install(id));
+  handleApi<HelmApi['bibles']['uninstall']>(CH.biblesUninstall, (id) => installer.uninstall(id));
+  handleApi<HelmApi['bibles']['getChapter']>(CH.biblesGetChapter, (book, chapter) =>
     biblesRepo.getChapter(book, chapter),
   );
-  ipcMain.handle(CH.biblesBookExtent, (_e, book: string) => {
-    // Version-agnostic to the caller: chapter/verse counts are canonically stable across
-    // the KJV-family translations for clamping, so resolve to the first installed version
-    // (or return {0, []} when none is installed — the builder then can't advance past book).
-    const versionId = biblesRepo.installed()[0]?.id
-    return versionId ? biblesRepo.bookExtent(book, versionId) : { chapters: 0, verseCounts: [] }
-  });
-  ipcMain.handle(CH.biblesSearch, (_e, q: string, versionId: string) =>
+  handleApi<HelmApi['bibles']['bookExtent']>(CH.biblesBookExtent, (book) =>
+    biblesRepo.bookExtentAnyVersion(book),
+  );
+  handleApi<HelmApi['bibles']['search']>(CH.biblesSearch, (q, versionId) =>
     biblesRepo.search(q, versionId),
   );
-  ipcMain.handle(CH.scheduleList, () => scheduleRepo.list());
-  ipcMain.handle(CH.scheduleAdd, (_e, r: Omit<ScriptureReading, 'id'>) => scheduleRepo.add(r));
-  ipcMain.handle(CH.scheduleRemove, (_e, id: string) => scheduleRepo.remove(id));
-  ipcMain.handle(CH.scheduleRemoveMany, (_e, ids: string[]) => scheduleRepo.removeMany(ids));
-  ipcMain.handle(CH.settingsGet, (_e, key: string, fallback: unknown) =>
+  handleApi<HelmApi['schedule']['list']>(CH.scheduleList, () => scheduleRepo.list());
+  handleApi<HelmApi['schedule']['add']>(CH.scheduleAdd, (r) => scheduleRepo.add(r));
+  handleApi<HelmApi['schedule']['remove']>(CH.scheduleRemove, (id) => scheduleRepo.remove(id));
+  handleApi<HelmApi['schedule']['removeMany']>(CH.scheduleRemoveMany, (ids) => scheduleRepo.removeMany(ids));
+  handleApi<HelmApi['settings']['get']>(CH.settingsGet, (key, fallback) =>
     settingsRepo.get(key, fallback),
   );
-  ipcMain.on(CH.settingsSet, (_e, key: string, value: unknown) => settingsRepo.set(key, value));
+  onApi<HelmApi['settings']['set']>(CH.settingsSet, (key, value) => settingsRepo.set(key, value));
 
-  ipcMain.handle(CH.messageSearch, (_e, q: string, scope: string | null) =>
+  handleApi<HelmApi['message']['search']>(CH.messageSearch, (q, scope) =>
     messagesRepo.search(q, scope),
   );
-  ipcMain.handle(CH.messageList, () => messagesRepo.list());
-  ipcMain.handle(CH.messageGet, (_e, id: string) => messagesRepo.get(id));
-  ipcMain.on(CH.messageInstallCorpus, () => messageInstaller.installCorpus());
-  ipcMain.handle(CH.messageImportParse, (_e, _kind: 'txt' | 'pdf', data: string) =>
+  handleApi<HelmApi['message']['list']>(CH.messageList, () => messagesRepo.list());
+  handleApi<HelmApi['message']['get']>(CH.messageGet, (id) => messagesRepo.get(id));
+  onApi<HelmApi['message']['installCorpus']>(CH.messageInstallCorpus, () => messageInstaller.installCorpus());
+  handleApi<HelmApi['message']['importParse']>(CH.messageImportParse, (_kind, data) =>
     parseMessageText(data),
   );
-  ipcMain.handle(CH.messageImportSave, (_e, r: MessageImportResult) => messagesRepo.addImported(r));
-  ipcMain.on(CH.messageDownloadAudio, (_e, id: string) => messageInstaller.downloadAudio(id));
-  ipcMain.handle(CH.messageTiming, (_e, id: string) => messagesRepo.timings(id));
-  ipcMain.handle(CH.quoteScheduleList, () => messagesScheduleRepo.list());
-  ipcMain.handle(CH.quoteScheduleAdd, (_e, msgId: string, ord: number) =>
+  handleApi<HelmApi['message']['importSave']>(CH.messageImportSave, (r) => messagesRepo.addImported(r));
+  onApi<HelmApi['message']['downloadAudio']>(CH.messageDownloadAudio, (id) => messageInstaller.downloadAudio(id));
+  handleApi<HelmApi['message']['timing']>(CH.messageTiming, (id) => messagesRepo.timings(id));
+  handleApi<HelmApi['quoteSchedule']['list']>(CH.quoteScheduleList, () => messagesScheduleRepo.list());
+  handleApi<HelmApi['quoteSchedule']['add']>(CH.quoteScheduleAdd, (msgId, ord) =>
     messagesScheduleRepo.add(msgId, ord),
   );
-  ipcMain.handle(CH.quoteScheduleRemove, (_e, id: string) => messagesScheduleRepo.remove(id));
-  ipcMain.handle(CH.quoteScheduleRemoveMany, (_e, ids: string[]) =>
+  handleApi<HelmApi['quoteSchedule']['remove']>(CH.quoteScheduleRemove, (id) => messagesScheduleRepo.remove(id));
+  handleApi<HelmApi['quoteSchedule']['removeMany']>(CH.quoteScheduleRemoveMany, (ids) =>
     messagesScheduleRepo.removeMany(ids),
   );
 
-  ipcMain.handle(CH.preserviceGetState, () => preserviceEngine.getState());
-  ipcMain.on(CH.preserviceEngage, () => preserviceEngine.engage());
-  ipcMain.on(CH.preserviceDisengage, () => preserviceEngine.disengage());
-  ipcMain.on(CH.preserviceShow, (_e, idx: number) => preserviceEngine.showCard(idx));
-  ipcMain.on(CH.preserviceTake, (_e, idx: number) => preserviceEngine.takeCard(idx));
-  ipcMain.on(CH.preserviceStep, (_e, dir: 1 | -1) => preserviceEngine.step(dir));
-  ipcMain.on(CH.preserviceShowNow, () => preserviceEngine.showNow());
-  ipcMain.on(CH.preserviceToggleLoop, () => preserviceEngine.toggleLoop());
-  ipcMain.on(CH.preserviceSetDwell, (_e, d: number) => preserviceEngine.setDwell(d));
-  ipcMain.on(CH.preserviceToggleEnabled, (_e, id: string) => preserviceEngine.toggleEnabled(id));
-  ipcMain.on(CH.preserviceSaveCard, (_e, c: Omit<PreCard, 'id'> & { id?: string }) =>
-    preserviceEngine.saveCard(c),
-  );
-  ipcMain.on(CH.preserviceRemoveCard, (_e, id: string) => preserviceEngine.removeCard(id));
-  ipcMain.on(CH.preserviceRestoreCard, (_e, card: PreCard, index: number) =>
+  handleApi<HelmApi['preservice']['getState']>(CH.preserviceGetState, () => preserviceEngine.getState());
+  onApi<HelmApi['preservice']['engage']>(CH.preserviceEngage, () => preserviceEngine.engage());
+  onApi<HelmApi['preservice']['disengage']>(CH.preserviceDisengage, () => preserviceEngine.disengage());
+  onApi<HelmApi['preservice']['showCard']>(CH.preserviceShow, (idx) => preserviceEngine.showCard(idx));
+  onApi<HelmApi['preservice']['takeCard']>(CH.preserviceTake, (idx) => preserviceEngine.takeCard(idx));
+  onApi<HelmApi['preservice']['step']>(CH.preserviceStep, (dir) => preserviceEngine.step(dir));
+  onApi<HelmApi['preservice']['showNow']>(CH.preserviceShowNow, () => preserviceEngine.showNow());
+  onApi<HelmApi['preservice']['toggleLoop']>(CH.preserviceToggleLoop, () => preserviceEngine.toggleLoop());
+  onApi<HelmApi['preservice']['setDwell']>(CH.preserviceSetDwell, (d) => preserviceEngine.setDwell(d));
+  onApi<HelmApi['preservice']['toggleEnabled']>(CH.preserviceToggleEnabled, (id) => preserviceEngine.toggleEnabled(id));
+  onApi<HelmApi['preservice']['saveCard']>(CH.preserviceSaveCard, (c) => preserviceEngine.saveCard(c));
+  onApi<HelmApi['preservice']['removeCard']>(CH.preserviceRemoveCard, (id) => preserviceEngine.removeCard(id));
+  onApi<HelmApi['preservice']['restoreCard']>(CH.preserviceRestoreCard, (card, index) =>
     preserviceEngine.restoreCard(card, index),
   );
 
-  ipcMain.handle(CH.mediaList, () => mediaRepo.list());
-  ipcMain.handle(CH.mediaImportImages, () => mediaImport.importImages());
-  ipcMain.handle(CH.mediaImportVideo, () => mediaImport.importVideo());
-  ipcMain.handle(CH.mediaImportDeck, () => mediaImport.importDeck());
-  ipcMain.handle(CH.mediaRemove, (_e, id: string) => mediaImport.removeMedia(id));
+  handleApi<HelmApi['media']['list']>(CH.mediaList, () => mediaRepo.list());
+  handleApi<HelmApi['media']['importImages']>(CH.mediaImportImages, () => mediaImport.importImages());
+  handleApi<HelmApi['media']['importVideo']>(CH.mediaImportVideo, () => mediaImport.importVideo());
+  handleApi<HelmApi['media']['importDeck']>(CH.mediaImportDeck, () => mediaImport.importDeck());
+  handleApi<HelmApi['media']['remove']>(CH.mediaRemove, (id) => mediaImport.removeMedia(id));
 
-  ipcMain.handle(CH.songImportSources, () => songImport.sources());
-  ipcMain.handle(CH.songImportScan, (_e, sourceId: string) => songImport.scan(sourceId));
-  ipcMain.handle(CH.songImportCommit, (_e, token: string) => songImport.commit(token));
+  handleApi<HelmApi['songImport']['sources']>(CH.songImportSources, () => songImport.sources());
+  handleApi<HelmApi['songImport']['scan']>(CH.songImportScan, (sourceId) => songImport.scan(sourceId));
+  handleApi<HelmApi['songImport']['commit']>(CH.songImportCommit, (token) => songImport.commit(token));
 
-  ipcMain.handle(CH.songSourcesSearch, (_e, q: string) => songSources.search(q));
-  ipcMain.handle(CH.songSourcesFromUrl, (_e, url: string) => songSources.fromUrl(url));
+  handleApi<HelmApi['songSources']['search']>(CH.songSourcesSearch, (q) => songSources.search(q));
+  handleApi<HelmApi['songSources']['fromUrl']>(CH.songSourcesFromUrl, (url) => songSources.fromUrl(url));
 
-  ipcMain.handle(CH.videoGetState, () => video.get());
-  ipcMain.on(CH.videoLoad, (_e, key: string, src: string) => video.load(key, src));
-  ipcMain.on(CH.videoPlay, () => video.play());
-  ipcMain.on(CH.videoPause, () => video.pause());
-  ipcMain.on(CH.videoSeek, (_e, ms: number) => video.seek(ms));
-  ipcMain.on(CH.videoSetVolume, (_e, v: number) => video.setVolume(v));
-  ipcMain.on(CH.videoSetMuted, (_e, m: boolean) => video.setMuted(m));
-  ipcMain.on(CH.videoReportDuration, (_e, ms: number) => video.reportDuration(ms));
+  handleApi<HelmApi['video']['get']>(CH.videoGetState, () => video.get());
+  onApi<HelmApi['video']['load']>(CH.videoLoad, (key, src) => video.load(key, src));
+  onApi<HelmApi['video']['play']>(CH.videoPlay, () => video.play());
+  onApi<HelmApi['video']['pause']>(CH.videoPause, () => video.pause());
+  onApi<HelmApi['video']['seek']>(CH.videoSeek, (ms) => video.seek(ms));
+  onApi<HelmApi['video']['setVolume']>(CH.videoSetVolume, (v) => video.setVolume(v));
+  onApi<HelmApi['video']['setMuted']>(CH.videoSetMuted, (m) => video.setMuted(m));
+  onApi<HelmApi['video']['reportDuration']>(CH.videoReportDuration, (ms) => video.reportDuration(ms));
 
-  ipcMain.handle(CH.updatesGetStatus, () => updater.status());
-  ipcMain.handle(CH.updatesCheck, () => updater.check());
-  ipcMain.handle(CH.updatesInstall, () => updater.install());
-  ipcMain.handle(CH.appGetVersion, () => app.getVersion());
+  handleApi<HelmApi['updates']['getStatus']>(CH.updatesGetStatus, () => updater.status());
+  handleApi<HelmApi['updates']['check']>(CH.updatesCheck, () => updater.check());
+  handleApi<HelmApi['updates']['install']>(CH.updatesInstall, () => updater.install());
+  handleApi<HelmApi['app']['version']>(CH.appGetVersion, () => app.getVersion());
 }
