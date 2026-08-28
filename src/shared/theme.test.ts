@@ -36,7 +36,8 @@ describe('themeFor', () => {
   it('classic light is charcoal\'s daytime twin, not parchment', () => {
     const t = themeFor('classic', 'light')
     expect(t.appBg).toBe('#e7e5e0')
-    expect(t.accent).toBe('#a76a17')
+    // Darkened from #a76a17 so it clears 4.5:1 on panel/appBg/selBg (#117).
+    expect(t.accent).toBe('#905b14')
     expect(t.scripture).toBe('#2f5cab')
   })
 
@@ -112,6 +113,21 @@ describe('contrast floors (#47)', () => {
       for (const mode of MODES) {
         const t = themeFor(family, mode)
         expect(contrast(t.dim, t.panel), `${family}/${mode} dim on panel`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+
+  it('accent text clears 4.5:1 on every surface it is written on, in every family and mode', () => {
+    // The cued-is-live hero label (SermonCenter/SongsMode) paints `accent` on panel;
+    // Header's output label paints it on appBg; SongSearchRail/SectionRail paint it on
+    // selBg; buttons paint accentInk on accent. Classic light shipped at 3.88:1 (#117).
+    for (const family of FAMILY_KEYS) {
+      for (const mode of MODES) {
+        const t = themeFor(family, mode)
+        expect(contrast(t.accent, t.panel), `${family}/${mode} accent on panel`).toBeGreaterThanOrEqual(4.5)
+        expect(contrast(t.accent, t.appBg), `${family}/${mode} accent on appBg`).toBeGreaterThanOrEqual(4.5)
+        expect(contrast(t.accent, t.selBg), `${family}/${mode} accent on selBg`).toBeGreaterThanOrEqual(4.5)
+        expect(contrast(t.accentInk, t.accent), `${family}/${mode} accentInk on accent`).toBeGreaterThanOrEqual(4.5)
       }
     }
   })
