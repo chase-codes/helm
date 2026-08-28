@@ -1603,6 +1603,23 @@ describe('SermonMode — double-clicking a message search row (#58)', () => {
   // `hasSearch` and the QUOTE SCHEDULE rows return. MessageSearchRail has no Esc handler and
   // no clear-the-query affordance of its own (its ✕ chip clears the tape SCOPE, not the
   // query), so this is the gesture, and it is unchanged by any of the above.
+  it('rapid keystrokes coalesce into a single message search for the final query (#15)', async () => {
+    const search = vi.fn(() => SEARCH_HITS)
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    const box = await screen.findByPlaceholderText('Search tapes & quotes…')
+    // synchronous burst — no timer can fire between these, so a trailing debounce
+    // must collapse them into exactly one IPC call for the final value
+    fireEvent.change(box, { target: { value: 'f' } })
+    fireEvent.change(box, { target: { value: 'fa' } })
+    fireEvent.change(box, { target: { value: 'fai' } })
+    await waitFor(() => expect(search).toHaveBeenCalledWith('fai', null))
+    expect(search).toHaveBeenCalledTimes(1)
+  })
+
   it('emptying the search box returns the rail to the QUOTE SCHEDULE view', async () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE, search: SEARCH_HITS })
     render(<Harness />)
@@ -2344,6 +2361,19 @@ describe('SermonMode — verse text search from the entry', () => {
     expect(search).toHaveBeenLastCalledWith('zacch', 'kjv')
     expect(screen.getByText('Luke 19:2')).toBeTruthy()
     expect(screen.getByText('PASSAGES')).toBeTruthy() // curated "Zacchaeus" passage
+  })
+
+  it('rapid keystrokes coalesce into a single search for the final query (#15)', async () => {
+    const { resolveChapter, search } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    // synchronous burst — no timer can fire between these, so a trailing debounce
+    // must collapse them into exactly one IPC call for the final value
+    typeInEntry('zacch')
+    await waitFor(() => expect(search).toHaveBeenCalledWith('zacch', 'kjv'))
+    expect(search).toHaveBeenCalledTimes(1)
   })
 
   it('ArrowDown moves the highlight without moving the cursor; Enter picks and sets the entry', async () => {

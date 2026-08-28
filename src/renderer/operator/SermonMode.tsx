@@ -54,6 +54,7 @@ import { deleteMenuItems, useListSelection } from './useListSelection';
 import { filterPending, useDeferredRemove } from './useDeferredRemove';
 import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
+import { useDebouncedSearch } from './useDebouncedSearch';
 import { PanelDivider } from './PanelDivider';
 
 export interface SermonModeProps {
@@ -368,22 +369,19 @@ export function SermonMode({
   const [hiState, setHiState] = useState<{ q: string | null; i: number }>({ q: null, i: 0 });
   const primaryVersion = versions[0] ?? null;
 
-  useEffect(() => {
-    if (query === null || !primaryVersion) return;
-    let live = true;
+  // Keystrokes are debounced (#15); a translation change re-searches at once.
+  useDebouncedSearch(primaryVersion ? query : null, primaryVersion, (q, stillWanted) => {
+    const versionId = primaryVersion as string;
     void window.helm.bibles
-      .search(query, primaryVersion)
+      .search(q, versionId)
       .then((res) => {
-        if (live) setVerseRes({ q: query, res });
+        if (stillWanted()) setVerseRes({ q, res });
       })
       .catch((err: unknown) => {
         console.error(err);
-        if (live) setVerseRes({ q: query, res: { hits: [], total: 0, versionId: primaryVersion } });
+        if (stillWanted()) setVerseRes({ q, res: { hits: [], total: 0, versionId } });
       });
-    return () => {
-      live = false;
-    };
-  }, [query, primaryVersion]);
+  });
 
   // `settled` = the reply on screen answers THIS query in THIS translation. Until it does,
   // the rail is still waiting: the empty state must not render (see ScriptureSearchResults),
