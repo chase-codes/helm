@@ -13,7 +13,7 @@ import {
   type SongImportProgress,
   type UpdateStatus
 } from '../shared/types'
-import { reportProblemUrl } from './feedback'
+import { osLabel, reportProblemUrl } from './feedback'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { createBiblesRepo } from './biblesRepo'
@@ -130,7 +130,9 @@ function buildMenu(): void {
         {
           label: 'Report a Problem…',
           click: () =>
-            shell.openExternal(reportProblemUrl(app.getVersion(), `Windows (${os.release()})`))
+            shell.openExternal(
+              reportProblemUrl(app.getVersion(), osLabel(process.platform, os.release()))
+            )
         }
       ]
     }
