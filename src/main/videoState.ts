@@ -1,19 +1,18 @@
-import { BrowserWindow } from 'electron';
 import { CH, type VideoStateWire } from '../shared/types';
 import {
   initialVideo, loadVideo, playVideo, pauseVideo, seekVideo,
   setVolume, setMuted, setDuration, toWire, type VideoStateInternal
 } from '../shared/video/state';
+import { broadcastAll } from './broadcast';
 
 let state: VideoStateInternal = initialVideo();
 
-// Broadcast the wire snapshot to every window (operator + outputs) — the same
-// all-windows fan-out preserviceState / biblesProgress use. No timer: we only
+// Broadcast the wire snapshot to every window (operator + outputs). No timer: we only
 // broadcast on operator actions; each VideoCanvas fetches video.get() on mount,
 // which covers a late-joining output window without touching registerOutput.
+const sendVideoState = broadcastAll(CH.videoState);
 function broadcast(): void {
-  const wire = toWire(state, Date.now());
-  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.videoState, wire);
+  sendVideoState(toWire(state, Date.now()));
 }
 
 export const video = {

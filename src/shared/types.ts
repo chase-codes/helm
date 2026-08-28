@@ -232,6 +232,23 @@ export const CH = {
   appGetVersion: 'app:getVersion',
 } as const;
 
+/** Payload carried by each main → renderer push channel. Pairing the channel constant
+ * with its payload type gives main's broadcast helper and preload's `sub` one
+ * compile-checked contract instead of a hand-written type at every site. */
+export interface PushPayloads {
+  [CH.presState]: PresentationState;
+  [CH.outputSlide]: OutputPayload;
+  [CH.displaysStatus]: DisplayStatus;
+  [CH.biblesProgress]: BibleInstallProgress;
+  [CH.messageInstallProgress]: MessageInstallProgress;
+  [CH.messageAudioProgress]: AudioDownloadProgress;
+  [CH.preserviceState]: PreState;
+  [CH.mediaImportProgress]: MediaImportProgress;
+  [CH.videoState]: VideoStateWire;
+  [CH.songImportProgress]: SongImportProgress;
+  [CH.updatesStatus]: UpdateStatus;
+}
+
 export interface InstalledVersion { id: string; abbr: string; name: string; language: string }
 export interface ChapterData {
   book: string; chapter: number; verseCount: number;

@@ -4,15 +4,8 @@ import os from 'node:os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
-import {
-  CH,
-  type AudioDownloadProgress,
-  type BibleInstallProgress,
-  type MediaImportProgress,
-  type MessageInstallProgress,
-  type SongImportProgress,
-  type UpdateStatus
-} from '../shared/types'
+import { CH } from '../shared/types'
+import { broadcastAll } from './broadcast'
 import { osLabel, reportProblemUrl } from './feedback'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
@@ -162,23 +155,12 @@ app.whenReady().then(() => {
   const biblesRepo = createBiblesRepo(db)
   const scheduleRepo = createScheduleRepo(db)
   const settingsRepo = createSettingsRepo(db)
-  // Same broadcast-to-all-windows pattern as displaysStatus in displays.ts.
-  const broadcastBibleProgress = (p: BibleInstallProgress): void => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.biblesProgress, p)
-  }
-  const installer = createBibleInstaller(biblesRepo, broadcastBibleProgress)
+  const installer = createBibleInstaller(biblesRepo, broadcastAll(CH.biblesProgress))
 
   const messagesRepo = createMessagesRepo(db)
   const messagesScheduleRepo = createMessagesScheduleRepo(db)
-  const broadcastMessageInstallProgress = (p: MessageInstallProgress): void => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.messageInstallProgress, p)
-  }
-  const broadcastAudioProgress = (p: AudioDownloadProgress): void => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.messageAudioProgress, p)
-  }
+  const broadcastMessageInstallProgress = broadcastAll(CH.messageInstallProgress)
+  const broadcastAudioProgress = broadcastAll(CH.messageAudioProgress)
   const messageInstaller = createMessageInstaller(
     messagesRepo,
     (p) => ('msgId' in p ? broadcastAudioProgress(p) : broadcastMessageInstallProgress(p)),
@@ -193,43 +175,28 @@ app.whenReady().then(() => {
     isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k },
     setOutput: (m) => presentation.setOutput(m)
   })
-  preserviceEngine.onChange((s) => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.preserviceState, s)
-  })
+  preserviceEngine.onChange(broadcastAll(CH.preserviceState))
 
   const mediaRepo = createMediaRepo(db)
-  const broadcastMediaProgress = (p: MediaImportProgress): void => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.mediaImportProgress, p)
-  }
   const mediaImport = createMediaImport(mediaRepo, libRoot, {
     findSoffice: () => findSoffice(undefined, process.resourcesPath),
-    onProgress: broadcastMediaProgress,
+    onProgress: broadcastAll(CH.mediaImportProgress),
     getParentWindow: () => operatorWindow
   })
 
-  const broadcastSongImportProgress = (p: SongImportProgress): void => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.songImportProgress, p)
-  }
   const songImport = createSongImport(
     repo,
     [createEasyWorshipSource({ getParentWindow: () => operatorWindow })],
     {
-      onProgress: broadcastSongImportProgress
+      onProgress: broadcastAll(CH.songImportProgress)
     }
   )
   const songSources = createSongSources()
 
-  const broadcastUpdateStatus = (s: UpdateStatus): void => {
-    for (const w of BrowserWindow.getAllWindows())
-      if (!w.isDestroyed()) w.webContents.send(CH.updatesStatus, s)
-  }
   // electron-updater throws on unpacked builds — dev gets the no-op null driver.
   const updater = createUpdater(app.isPackaged ? autoUpdater : null, {
     outputCount: () => presentation.outputCount(),
-    broadcast: broadcastUpdateStatus,
+    broadcast: broadcastAll(CH.updatesStatus),
     // Unsigned mac builds can't apply updates (no latest-mac.yml is even
     // published) — manual checks report 'unsupported' instead of a 404.
     supported: process.platform !== 'darwin'

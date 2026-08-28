@@ -15,6 +15,7 @@ import {
   type ActiveOutputRole,
 } from '../shared/displays/roles';
 import type { SettingsRepo } from './settingsRepo';
+import { broadcastAll } from './broadcast';
 import { presentation } from './stateStore';
 
 const ROLES_KEY = 'displays:roles';
@@ -83,9 +84,9 @@ function savedSplits(): Record<string, number> {
   return settings?.get<Record<string, number>>(SPLITS_KEY, {}) ?? {};
 }
 
+const sendStatus = broadcastAll(CH.displaysStatus);
 function broadcastStatus(): void {
-  const status = displayStatus();
-  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(CH.displaysStatus, status);
+  sendStatus(displayStatus());
 }
 
 function sync(): void {
