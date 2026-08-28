@@ -3,7 +3,7 @@
 // design: no bridge/pre-chorus guessing — a wrong label costs more than a missing one,
 // and the QuickAdd editor review catches the rest.
 
-const LABEL_LINE = /^(chorus|verse|bridge|refrain|intro|outro|tag|pre-?chorus)\b/i;
+import { SECTION_LABEL_RE } from './sectionLabel';
 
 const stanzaKey = (stanza: string): string =>
   stanza.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -12,7 +12,7 @@ export function detectChorus(text: string): string {
   const stanzas = (text || '').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
   if (stanzas.length < 2) return text;
   // Already-labeled text (e.g. a Genius import) is left untouched.
-  if (stanzas.some((s) => LABEL_LINE.test(s.split('\n')[0]))) return text;
+  if (stanzas.some((s) => SECTION_LABEL_RE.test(s.split('\n')[0]))) return text;
   const counts = new Map<string, number>();
   for (const s of stanzas) {
     const k = stanzaKey(s);
