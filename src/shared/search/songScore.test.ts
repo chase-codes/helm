@@ -313,8 +313,9 @@ test('partial band: the candidate matching the RARE token beats the common-token
   expect(r[0].song.id).toBe('target');
 });
 
-test('idfWeight never reorders the full-match band (all tokens matched => identical idf)', () => {
-  // Both match both tokens; ordering must stay what the existing signals decide.
+test('idfWeight never reorders bands other than the partial band', () => {
+  // The comparator consults idf only at score 360 (the partial band); both candidates
+  // here land in the exact-title band, so ordering must stay what the existing signals decide.
   const a = song('a', 'Amazing Grace', 'John Newton', [
     ['Verse 1', ['Amazing grace how sweet the sound']],
   ]);

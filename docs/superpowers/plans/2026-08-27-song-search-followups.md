@@ -10,6 +10,8 @@
 
 **Spec:** GitHub issues #121/#122/#123; `docs/superpowers/specs/2026-08-27-song-search-accuracy-findings.md` §W6/§W8/§W10; `docs/superpowers/specs/2026-08-27-song-search-phase1-2-execution-notes.md` (all rulings binding, incl. Phase 3–4 addenda); `docs/superpowers/specs/2026-08-27-song-search-breakdown.md`.
 
+*Execution note: Task 3's idfWeight formula was amended twice during execution (Σ→MAX; then exact-gated + quantized) — implement from the Phase 5 addendum's rulings in the execution-notes spec, not this plan's verbatim code blocks.*
+
 ## Investigation results this plan is built on (measured 2026-08-27, main @ 320b371)
 
 - **#121 reproduces**: `asbury worship` (all) → ABSENT. The harness's "scorer scored it 0" ABSENT label is a stale diagnosis: Reckless Love scores **360** (covWeight 6, dist 0) but 240 candidates score > 0 and every `worship`-matcher carries covWeight 7 (`worship` = 7 chars > `asbury` = 6), so the target never makes the top-50 cap.

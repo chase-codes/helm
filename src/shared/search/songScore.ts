@@ -183,8 +183,10 @@ function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
   // Partial band only (score 360): the candidates matched DIFFERENT token subsets,
   // and a rare EXACTLY-matched token outranks a common one wherever it matched (W6).
-  // Full bands matched every token, so their idfWeight is identical by construction —
-  // the guard just makes that scoping explicit. Compared in whole ln-units (rounded):
+  // The guard is load-bearing: since only exact matches feed idfWeight, full-band
+  // candidates can differ in idfWeight too (exact vs prefix/fuzzy matches of the same
+  // tokens) — the score check is what keeps rarity from reordering any band but the
+  // partial one. Compared in whole ln-units (rounded):
   // sub-unit rarity differences (e.g. a common token matched exactly by one candidate
   // vs a fuzzy/prefix guess by the other) are noise and fall through to the existing
   // chain below.
