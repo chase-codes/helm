@@ -12,6 +12,10 @@ export interface BiblesRepo {
   getChapter(book: string, chapter: number): ChapterData
   isInstalled(id: string): boolean
   bookExtent(book: string, versionId: string): BookExtent
+  /** Version-agnostic to the caller: chapter/verse counts are canonically stable across
+   * the KJV-family translations for clamping, so resolve to the first installed version
+   * (or return {0, []} when none is installed — the builder then can't advance past book). */
+  bookExtentAnyVersion(book: string): BookExtent
   /** Backfill verse_fts for any version installed before the index existed. Called once at
    * startup from openDb — not lazily on first search, where a half-second stall would land
    * on the first keystroke mid-service. Idempotent. */
@@ -92,9 +96,15 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
     return [tok, ...near]
   }
 
+  const installed = (): InstalledVersion[] =>
+    db.prepare('SELECT id, abbr, name, language FROM bible_versions').all() as InstalledVersion[]
+  const bookExtent = (book: string, versionId: string): BookExtent => {
+    const rows = selectExtent.all(versionId, book) as { chapter: number; mv: number }[]
+    return { chapters: rows.length, verseCounts: rows.map((r) => r.mv) }
+  }
+
   return {
-    installed: () =>
-      db.prepare('SELECT id, abbr, name, language FROM bible_versions').all() as InstalledVersion[],
+    installed,
     isInstalled: (id) => !!db.prepare('SELECT 1 FROM bible_versions WHERE id = ?').get(id),
     install(bible) {
       db.transaction(() => {
@@ -128,9 +138,10 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
       }
       return { book, chapter, verseCount, verses }
     },
-    bookExtent(book, versionId) {
-      const rows = selectExtent.all(versionId, book) as { chapter: number; mv: number }[]
-      return { chapters: rows.length, verseCounts: rows.map((r) => r.mv) }
+    bookExtent,
+    bookExtentAnyVersion(book) {
+      const versionId = installed()[0]?.id
+      return versionId ? bookExtent(book, versionId) : { chapters: 0, verseCounts: [] }
     },
     ensureSearchIndex() {
       const versions = db.prepare('SELECT id FROM bible_versions').all() as { id: string }[]

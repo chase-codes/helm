@@ -181,6 +181,15 @@ test('bookExtent returns {0, []} for an unknown book', () => {
   expect(repo.bookExtent('Nahum', 'kjvx')).toEqual({ chapters: 0, verseCounts: [] })
 })
 
+test('bookExtentAnyVersion resolves the first installed version', () => {
+  repo.install(multi)
+  expect(repo.bookExtentAnyVersion('James')).toEqual({ chapters: 2, verseCounts: [3, 2] })
+})
+
+test('bookExtentAnyVersion returns {0, []} when no version is installed', () => {
+  expect(repo.bookExtentAnyVersion('James')).toEqual({ chapters: 0, verseCounts: [] })
+})
+
 const ftsCount = (versionId: string): number =>
   (db.prepare('SELECT count(*) AS n FROM verse_fts WHERE version_id = ?').get(versionId) as { n: number }).n
 
