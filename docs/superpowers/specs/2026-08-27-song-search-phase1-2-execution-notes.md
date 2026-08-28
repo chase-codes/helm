@@ -55,3 +55,16 @@ Rulings (owner-approved where marked):
 4. Task 10 folded the parked `' well' at index 6` comment fix; the plan's expectation that Task 11 alone would drop GMYH did not reproduce (documented in ledger; mechanism moved, count held at 1 until ruling 3).
 
 Ratchet after Phase 3: `unweightedP1Min=48, weightedP1MinPct=92, recall50MinPct=97, churnMax=143, monotonicityMax=20, giveMeYourHandRegressionsMax=0, latencyMs3000Max=330` (330 pinned in Task 10 from 217.63×1.5).
+
+## Phase 4 addendum (2026-08-27, branch `song-search-perf`, stacked on Phase 3)
+
+Tasks 15–19. Measured end state: quality/stability unchanged-or-better vs Phase 3 (unweighted p@1 **49**/53 — `faithfullness` now hits via vocab expansion; weighted 95%; recall@50 98%; churn **137**; monotonicity 20; GMYH 0). Latency (avg ms/search, labeled set): **20.0 / 66.3 / 78.4** at 200/1000/3000 songs vs the 41.2/139.9/218.9 post-Phase-2 baseline (~2.1–2.8x per search), before counting the 120 ms debounce (only 2–4 of ~13 keystrokes reach the main process) and the Title-mode hint gate (~12x off the common Title-mode case). Full repo suite 1405/1405.
+
+Rulings:
+
+1. **Task 19's expansion compares normalized vocab terms (OWNER).** The brief's literal code compared raw fts5 vocab terms against `norm()`-ed query tokens; unicode61 leaves `ß` unfolded, so `großer` measured 3 edits from `gros` (not 1) and "Großer Gott" fell out of its own expansion tier (measured monotonicity break). Shipped: `getVocab()` caches `{raw, norm}` pairs — distance on `norm`, FTS re-query on `raw`. The brief's named contingency (full-scan restore) was inapplicable (expansion non-empty, just wrong).
+2. **The fallback retirement is broader than the ≥30 gate**: the old sparse-hits (<30) full-scan is gone too — candidates are always FTS+expansion except all-digit-no-hit tokens. Plan-authorized; measured better; noted because a stored-typo song whose query token FTS-hits elsewhere is a newly unreachable edge class.
+3. Latency ratchet was corrected 260→270 mid-phase (formula uses the slowest observed run), then tightened 270→200 (Task 18) →**120** (Task 19, slowest 79.49×1.5→120).
+4. Final-review minors parked: serial hint fetch (one-round-trip-later hint, plan-designed), songCache direct-SQL test-authoring hazard (documented in code), libraryOrder UTF-16-vs-BINARY (unreachable for realistic titles).
+
+Ratchet after Phase 4: `unweightedP1Min=49, weightedP1MinPct=94, recall50MinPct=97, churnMax=137, monotonicityMax=20, giveMeYourHandRegressionsMax=0, latencyMs3000Max=120`.
