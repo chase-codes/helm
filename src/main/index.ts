@@ -6,7 +6,7 @@ import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import { CH } from '../shared/types'
 import { broadcastAll } from './broadcast'
-import { osLabel, reportProblemUrl } from './feedback'
+import { osLabel, feedbackUrl } from './feedback'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { createBiblesRepo } from './biblesRepo'
@@ -124,7 +124,11 @@ function buildMenu(): void {
           label: 'Report a Problem…',
           click: () =>
             shell.openExternal(
-              reportProblemUrl(app.getVersion(), osLabel(process.platform, os.release()))
+              feedbackUrl({
+                type: 'bug',
+                text: '',
+                context: { version: app.getVersion(), os: osLabel(process.platform, os.release()), arch: process.arch, displays: 0, hasBibles: false, hasSongs: false }
+              })
             )
         }
       ]
