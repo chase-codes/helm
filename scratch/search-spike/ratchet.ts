@@ -13,5 +13,5 @@ export const RATCHET = {
   monotonicityMax: 20,              // target held rank 1, then a further keystroke of the labeled query demoted it
   giveMeYourHandRegressionsMax: 0,  // hit→miss regressions replaying the reported bug
   // Perf ceiling (eval.test.ts latency loop)
-  latencyMs3000Max: 330,            // avg ms/search at 3000 songs (pinned from the slowest observed run)
+  latencyMs3000Max: 260,            // avg ms/search at 3000 songs (P1: precomputed docs, ~4-6x faster; pinned w/ 1.5x headroom)
 };

@@ -159,3 +159,15 @@ test('FTS-path candidate order matches list() order, so full ties rank identical
   const viaScan = r.search('duplicqte', 'all').map((x) => x.song.id);
   expect(viaScan.indexOf(b.id)).toBeLessThan(viaScan.indexOf(a.id));
 });
+
+// --- P1: the repo memoizes Song objects so the scorer's doc cache can key on identity ---
+test('search returns the same Song object across searches until the song is written (P1)', () => {
+  const s = repo.add({ title: 'Cache Song', text: 'Verse 1\nwonderful unique zebra' });
+  const first = repo.search('zebra', 'lyric')[0].song;
+  const second = repo.search('zebra', 'lyric')[0].song;
+  expect(second).toBe(first); // identity, not equality — this is what makes doc caching safe
+  repo.update(s.id, { title: 'Cache Song', sections: [{ label: 'Verse 1', lines: ['wonderful unique zebra rides'] }] });
+  const third = repo.search('zebra', 'lyric')[0].song;
+  expect(third).not.toBe(first); // a write invalidates: fresh object → fresh doc
+  expect(third.sections[0].lines[0]).toBe('wonderful unique zebra rides');
+});

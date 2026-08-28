@@ -59,12 +59,40 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
     insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
     insertFts.run(song.id, song.title, song.author, lyricsOf(song));
+    // No songCache.delete here: the id is freshly minted (randomUUID above), so the
+    // cache can hold no stale entry for it.
     return song;
   };
-  const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSong);
+  // Memoized Song objects by id: JSON.parse of sections_json was measured at up to
+  // ~36 ms per keystroke at 10k songs, and object identity is what keys the scorer's
+  // per-song doc cache. Writes DELETE from the cache (never insert) so a rolled-back
+  // transaction can never leave a ghost — the next read lazily re-caches from the row.
+  const songCache = new Map<string, Song>();
+  const toSongCached = (r: Row): Song => {
+    const hit = songCache.get(r.id);
+    if (hit) return hit;
+    const s = toSong(r);
+    songCache.set(r.id, s);
+    return s;
+  };
+  // Both candidate paths must agree with list()'s ORDER BY created_at, title so a
+  // full relevance tie ranks identically on either path (W7, guarded by the repo test).
+  const libraryOrder = (a: Song, b: Song): number =>
+    a.createdAt - b.createdAt || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
+  // P8: prepare once, not per keystroke (the probe was re-prepared per TOKEN).
+  const probeStmt = db.prepare('SELECT 1 FROM song_fts WHERE song_fts MATCH ? LIMIT 1');
+  // P7: the FTS query already JOINs songs — select the full row so the second
+  // `rowid IN (...)` query (and the bound-variable dance) disappears.
+  const searchStmt = Object.fromEntries(
+    (Object.keys(BM25) as SearchField[]).map((f) => [
+      f,
+      db.prepare(`SELECT s.rowid AS rowid, s.id AS id, s.title AS title, s.author AS author, s.sections_json AS sections_json, s.source AS source, s.created_at AS created_at, s.music_key AS music_key, -${BM25[f]} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}`),
+    ])
+  ) as Record<SearchField, ReturnType<typeof db.prepare>>;
+  const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSongCached);
   const get = (id: string): Song | null => {
     const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined;
-    return r ? toSong(r) : null;
+    return r ? toSongCached(r) : null;
   };
   return {
     list,
@@ -112,6 +140,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
         updateSong.run(title, author, JSON.stringify(sections), key, id);
         updateFts.run(title, author, lyricsOfSections(sections), id);
       })();
+      songCache.delete(id);
       return song;
     },
     remove(id) {
@@ -119,31 +148,24 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
         deleteFts.run(id);
         deleteSong.run(id);
       })();
+      songCache.delete(id);
       return list();
     },
     search(q, field) {
       const tokens = norm(q).split(' ').filter(Boolean);
       if (!tokens.length) return rankSongs('', list(), field);
-      const tokenHasHit = (t: string): boolean =>
-        (db.prepare('SELECT 1 FROM song_fts WHERE song_fts MATCH ? LIMIT 1').get(ftsTerm(t, true)) as unknown) !== undefined;
+      const tokenHasHit = (t: string): boolean => (probeStmt.get(ftsTerm(t, true)) as unknown) !== undefined;
       const match = orPrefixMatch(tokens);
-      // bm25 gives TF-IDF relevance the JS scorer can't (#53): stopwords are IDF-damped
-      // and repeated terms count. Column weights per field; negated so higher = better.
-      // Songs FTS didn't match simply carry no prior. `field` arrives over IPC, so it is
-      // whitelisted before touching SQL text. The LIMIT keeps a common-token query's hit
-      // list under the bound-variable cap of the IN() below — best-ranked hits survive.
-      const bm25 = Object.hasOwn(BM25, field) ? BM25[field] : BM25.all;
-      const hits = db.prepare(`SELECT s.rowid AS rowid, s.id AS id, -${bm25} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}`)
-        .all(match) as { rowid: number; id: string; rel: number }[];
+      // bm25 gives TF-IDF relevance the JS scorer can't (#53); `field` arrives over
+      // IPC, so it is whitelisted before selecting a prepared statement.
+      const stmt = Object.hasOwn(searchStmt, field) ? searchStmt[field as SearchField] : searchStmt.all;
+      const hits = stmt.all(match) as (Row & { rel: number })[];
       const rel = new Map(hits.map((h) => [h.id, h.rel]));
       let candidates: Song[];
-      // Typo detection is per TOKEN, not per hit count (#13): "holy reckelss" clears 30
-      // hits on "holy" alone, and the song that matches only the misspelled token is then
-      // never a candidate for the fuzzy scorer to rescue. Any token with no FTS hit of its
-      // own → scan the library (FTS rows keep their bm25 prior via `rel`).
+      // Typo detection is per TOKEN, not per hit count (#13): any token with no FTS
+      // hit of its own → scan the library (FTS rows keep their bm25 prior via `rel`).
       if (hits.length >= 30 && tokens.every((t) => tokenHasHit(t))) {
-        const qs = hits.map(() => '?').join(',');
-        candidates = (db.prepare(`SELECT rowid, * FROM songs WHERE rowid IN (${qs}) ORDER BY created_at, title`).all(...hits.map((h) => h.rowid)) as Row[]).map(toSong);
+        candidates = hits.map(toSongCached).sort(libraryOrder);
       } else candidates = list(); // sparse hits or an unmatched token → typo likely; scorer handles fuzz
       return rankSongs(q, candidates, field, rel, 50);
     },
