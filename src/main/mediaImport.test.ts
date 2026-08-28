@@ -220,6 +220,30 @@ describe('createMediaImport / importDeck', () => {
     expect(await mediaImport.importImages()).toEqual({ items: [], canceled: true });
   });
 
+  it('importImages copies each picked file into images/ and adds items in picked order', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    const srcDir = mkdtempSync(join(tmpdir(), 'helm-media-src-'));
+    const a = join(srcDir, 'a.png');
+    const b = join(srcDir, 'b.jpg');
+    writeFileSync(a, 'aaa');
+    writeFileSync(b, 'bbb');
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [a, b] } as never);
+    const mediaImport = createMediaImport(repo, libRoot, {});
+    const result = await mediaImport.importImages();
+    expect(result.canceled).toBeUndefined();
+    expect(result.items).toHaveLength(2);
+    // Fake repo unshifts, so picked order is reversed in the list — assert per-title.
+    const byTitle = new Map(result.items.map((i) => [i.title, i]));
+    for (const [title, ext] of [['a.png', '.png'], ['b.jpg', '.jpg']] as const) {
+      const item = byTitle.get(title)!;
+      expect(item.type).toBe('image');
+      expect(item.filePath!.startsWith('images/')).toBe(true);
+      expect(item.filePath!.endsWith(ext)).toBe(true);
+      expect(existsSync(join(libRoot, item.filePath!))).toBe(true);
+    }
+  });
+
   it('emits converting then per-page rasterizing progress for a pptx import', async () => {
     const repo = makeFakeRepo();
     const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));

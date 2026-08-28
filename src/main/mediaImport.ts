@@ -1,5 +1,6 @@
 import { dialog } from 'electron';
-import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync } from 'fs';
+import { copyFile } from 'fs/promises';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -92,20 +93,26 @@ export function findSoffice(
   return probeForBinary(KNOWN_SOFFICE_PATHS, 'soffice', 'soffice.exe', exists);
 }
 
-function copyPickedFiles(
+/**
+ * Copies asynchronously (awaited per file, in order): the main process is the
+ * presentation control plane, and a multi-GB video copied synchronously would
+ * stall every queued IPC (Go live, blank, video transport) for the duration.
+ * File order, repo.add order and the returned items match the old sync version.
+ */
+async function copyPickedFiles(
   repo: MediaRepo,
   libRoot: string,
   subfolder: string,
   type: MediaItem['type'],
   filePaths: string[]
-): MediaItem[] {
+): Promise<MediaItem[]> {
   const destDir = join(libRoot, subfolder);
   mkdirSync(destDir, { recursive: true });
   const added: MediaItem[] = [];
   for (const filePath of filePaths) {
     const ext = extname(filePath);
     const relPath = `${subfolder}/${randomUUID()}${ext}`;
-    copyFileSync(filePath, join(libRoot, relPath));
+    await copyFile(filePath, join(libRoot, relPath));
     added.push(repo.add({ type, title: basename(filePath), filePath: relPath, slides: [] }));
   }
   return added;
@@ -161,14 +168,14 @@ export function createMediaImport(
     async importImages() {
       const { paths, canceled } = await pickFiles(IMAGE_EXTENSIONS, 'Images');
       if (canceled) return { items: repo.list(), canceled: true };
-      copyPickedFiles(repo, libRoot, 'images', 'image', paths);
+      await copyPickedFiles(repo, libRoot, 'images', 'image', paths);
       return { items: repo.list() };
     },
 
     async importVideo() {
       const { paths, canceled } = await pickFiles(VIDEO_EXTENSIONS, 'Video');
       if (canceled) return { items: repo.list(), canceled: true };
-      copyPickedFiles(repo, libRoot, 'video', 'video', paths);
+      await copyPickedFiles(repo, libRoot, 'video', 'video', paths);
       return { items: repo.list() };
     },
 
