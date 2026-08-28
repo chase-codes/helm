@@ -140,7 +140,7 @@ function installHelmStubWith(
 describe('SongsMode', () => {
   // CRITICAL: the import wizard (Task 7) must be wired into the same isModalOpen/onEscape
   // contract as QuickAdd. Without it, keyDispatch's typing guard never trips inside the
-  // wizard (it has no <input>/<textarea>) so a focused button's Space/Enter falls through
+  // wizard (it has no <input>/<textarea>) so a focused button's Enter falls through
   // to onGoLive instead of being suppressed, and Escape does nothing.
   it('reports isModalOpen true while the import wizard is open, and Escape closes it', async () => {
     installHelmStub();
@@ -422,6 +422,42 @@ describe('SongsMode hotkey jumps', () => {
     expect(input.value).toBe('');
     act(() => keyHandlerRef.current?.onAction?.({ id: 'focus.search' }));
     expect(document.activeElement).toBe(input);
+  });
+});
+
+describe('SongsMode — the song-search hotkey (App bumps searchNonce, #52)', () => {
+  // App wires Mod+L to setMode('songs') + a searchNonce bump in one batch, so by the time
+  // the effect runs the page is on screen; a bump focuses the search box once per press.
+  const renderWith = (searchNonce: number, keyHandlerRef: ModeKeyHandlerRef): ReturnType<typeof render> =>
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SongsMode keyHandlerRef={keyHandlerRef} active searchNonce={searchNonce} />
+      </ThemeCtx.Provider>
+    );
+
+  it('focuses the search input when searchNonce bumps, and not on a rerender with the same nonce', async () => {
+    installHelmStubWith([], NOTHING_LIVE);
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const { rerender } = renderWith(0, keyHandlerRef);
+    await waitFor(() => expect(keyHandlerRef.current?.onAction).toBeTruthy());
+    const input = screen.getByPlaceholderText(/Title or a lyric line/) as HTMLInputElement;
+    expect(document.activeElement).not.toBe(input);
+
+    rerender(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SongsMode keyHandlerRef={keyHandlerRef} active searchNonce={1} />
+      </ThemeCtx.Provider>
+    );
+    expect(document.activeElement).toBe(input);
+
+    input.blur();
+    expect(document.activeElement).not.toBe(input);
+    rerender(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SongsMode keyHandlerRef={keyHandlerRef} active searchNonce={1} />
+      </ThemeCtx.Provider>
+    );
+    expect(document.activeElement).not.toBe(input);
   });
 });
 

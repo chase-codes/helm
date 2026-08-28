@@ -1,7 +1,13 @@
 export type HotkeyScope = 'global' | 'songs' | 'scripture'
 
 /** Actions App handles itself (mode switching / lookup) rather than delegating to a mode. */
-export type AppActionId = 'page.pre' | 'page.songs' | 'page.sermon' | 'scripture.lookup' | 'displays.release'
+export type AppActionId =
+  | 'page.pre'
+  | 'page.songs'
+  | 'page.sermon'
+  | 'scripture.lookup'
+  | 'song.search'
+  | 'displays.release'
 
 export interface HotkeyAction {
   id: string
@@ -26,11 +32,17 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'page.pre', label: 'Go to Pre-service', scope: 'global', defaults: ['Mod+1'] },
   { id: 'page.songs', label: 'Go to Songs', scope: 'global', defaults: ['Mod+2'] },
   { id: 'page.sermon', label: 'Go to Sermon', scope: 'global', defaults: ['Mod+3'] },
-  { id: 'scripture.lookup', label: 'Scripture lookup', scope: 'global', defaults: ['Mod+L'] },
+  // Mod+L reaches the song search from any page (#52): songs are the page the operator
+  // jumps to mid-service. Scripture lookup keeps a chord on Mod+K — Mod+Shift+L is not
+  // expressible, since eventToBinding drops Shift for printable keys.
+  { id: 'song.search', label: 'Song search', scope: 'global', defaults: ['Mod+L'] },
+  { id: 'scripture.lookup', label: 'Scripture lookup', scope: 'global', defaults: ['Mod+K'] },
   { id: 'displays.release', label: 'Release / take screens', scope: 'global', defaults: ['Mod+B'] },
   { id: 'focus.search', label: 'Focus search / entry', scope: 'global', defaults: ['/', '\\'] },
   { id: 'field.clear', label: 'Clear field', scope: 'global', defaults: ['Mod+Backspace', 'Mod+Delete'] },
-  { id: 'go.live', label: 'Go live / take down', scope: 'global', defaults: ['Enter', 'Space'] },
+  // Enter only (#52): Space went live too, and a stray thumb on the space bar mid-service
+  // is exactly the accidental take the pilot church asked to be rid of.
+  { id: 'go.live', label: 'Go live / take down', scope: 'global', defaults: ['Enter'] },
   { id: 'nav.next', label: 'Next', scope: 'global', defaults: ['ArrowRight', 'ArrowDown'] },
   { id: 'nav.prev', label: 'Previous', scope: 'global', defaults: ['ArrowLeft', 'ArrowUp'] },
   { id: 'item.delete', label: 'Delete selected', scope: 'global', defaults: ['Delete', 'Backspace'] },
@@ -56,7 +68,12 @@ export function sanitizeOverrides(value: unknown): HotkeyOverrides {
   for (const [id, bindings] of Object.entries(value as Record<string, unknown>)) {
     if (!NON_FIXED_ACTION_IDS.has(id)) continue
     if (!Array.isArray(bindings) || !bindings.every((b) => typeof b === 'string')) continue
-    out[id] = bindings
+    // One-time migration (#52): builds before Space left go.live persisted it in any
+    // customized override. Strip it rather than honour it — nobody bound Space on purpose,
+    // it was the shipped default. An override left empty falls back to the default.
+    const kept = id === 'go.live' ? bindings.filter((b) => b !== 'Space') : bindings
+    if (id === 'go.live' && kept.length === 0) continue
+    out[id] = kept
   }
   return out
 }

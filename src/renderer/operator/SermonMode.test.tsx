@@ -1115,7 +1115,7 @@ describe('SermonMode — arrows during the stale-chapter tick', () => {
 })
 
 describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', () => {
-  // App wires Mod+L to bump lookupNonce; SermonMode's two-effect split (part 1 defers
+  // App wires Mod+K to bump lookupNonce; SermonMode's two-effect split (part 1 defers
   // setTrack('scripture') into a timeout, part 2 focuses the entry once `track` actually
   // reads 'scripture') is exactly the code path the lint fix restructured — this pins the
   // requirement it exists to serve, not just that it typechecks.
@@ -1130,7 +1130,7 @@ describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', (
     clickTab('Message')
     await waitFor(() => expect(panelHidden('scripture')).toBe(true))
 
-    // Simulate App's Mod+L: bump lookupNonce. Part 1's setTrack is deferred a real tick,
+    // Simulate App's Mod+K: bump lookupNonce. Part 1's setTrack is deferred a real tick,
     // so wait (rather than assert synchronously) for the scripture panel to come back,
     // then check focus landed on the entry.
     rerender(<Harness lookupNonce={1} />)

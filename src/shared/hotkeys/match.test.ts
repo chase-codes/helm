@@ -47,9 +47,14 @@ describe('resolveHotkey', () => {
     ...over
   })
 
-  it('resolves defaults: Mod+2 → page.songs, Mod+L → scripture.lookup', () => {
+  it('resolves defaults: Mod+2 → page.songs, Mod+L → song.search, Mod+K → scripture.lookup', () => {
     expect(resolveHotkey(ev('2', { ctrl: true }), opts())).toEqual({ id: 'page.songs' })
-    expect(resolveHotkey(ev('l', { ctrl: true }), opts())).toEqual({ id: 'scripture.lookup' })
+    expect(resolveHotkey(ev('l', { ctrl: true }), opts())).toEqual({ id: 'song.search' })
+    expect(resolveHotkey(ev('k', { ctrl: true }), opts())).toEqual({ id: 'scripture.lookup' })
+  })
+  it('Space resolves to nothing — it is no longer a go-live key (#52)', () => {
+    expect(resolveHotkey(ev(' '), opts())).toBeNull()
+    expect(resolveHotkey(ev('Enter'), opts())).toEqual({ id: 'go.live' })
   })
   it('songs scope: C → song.chorus, Home → song.chorus, B → song.bridge', () => {
     expect(resolveHotkey(ev('c'), opts({ scope: 'songs' }))).toEqual({ id: 'song.chorus' })

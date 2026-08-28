@@ -54,6 +54,7 @@ export function dispatchModeKey(e: KeyboardEvent, ctx: KeyDispatchCtx): void {
     case 'page.songs':
     case 'page.sermon':
     case 'scripture.lookup':
+    case 'song.search':
       // Behind Settings or a mode modal a silent page switch would strand the modal.
       if (ctx.settingsOpen || handler?.isModalOpen()) return;
       e.preventDefault();
@@ -69,7 +70,7 @@ export function dispatchModeKey(e: KeyboardEvent, ctx: KeyDispatchCtx): void {
       return;
     case 'go.live':
       e.preventDefault();
-      // Guard Enter/Space→goLive behind an open modal (quick-add or settings).
+      // Guard Enter→goLive behind an open modal (quick-add or settings).
       if (ctx.settingsOpen || handler?.isModalOpen()) return;
       handler?.onGoLive();
       return;

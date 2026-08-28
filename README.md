@@ -116,7 +116,7 @@ per-display renders of that same state; they hold no local state of their own.
    window attaches to it automatically.
 2. Launch Helm (`npm run dev`, or the packaged app).
 3. Songs tab → type a few words of the lyric → **Enter** to cue → **Go live** (or press
-   Enter/Space again) to put it on screen.
+   Enter again) to put it on screen.
 4. Sermon tab → type a reference — `john 3:16` — and press **Enter** to put it on screen
    immediately. Settings → Bibles has KJV installed out of the box; install more
    translations there (needs a network connection) to compare versions side by side.

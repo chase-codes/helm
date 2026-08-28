@@ -76,6 +76,14 @@ describe('dispatchModeKey', () => {
     expect(onEscape).not.toHaveBeenCalled()
   })
 
+  it('Space does nothing: no goLive, and no preventDefault (#52)', () => {
+    const onGoLive = vi.fn()
+    const e = ev(' ')
+    dispatchModeKey(e, { ...baseCtx(), handler: makeHandler({ onGoLive }) })
+    expect(onGoLive).not.toHaveBeenCalled()
+    expect(e.preventDefault).not.toHaveBeenCalled()
+  })
+
   it('Enter goLive is suppressed while a modal is open', () => {
     const onGoLive = vi.fn()
     dispatchModeKey(ev('Enter'), { ...baseCtx(), handler: makeHandler({ onGoLive, isModalOpen: () => true }) })
@@ -102,10 +110,27 @@ describe('dispatchModeKey — hotkey actions', () => {
     expect(ctx.onAppAction).toHaveBeenCalledWith('page.songs')
   })
 
-  it('Mod+L fires scripture.lookup even while typing', () => {
+  it('Mod+K fires scripture.lookup even while typing', () => {
     const ctx = baseCtx()
-    dispatchModeKey(ev('l', { ctrl: true, tag: 'input' }), { ...ctx, handler: makeHandler() })
+    dispatchModeKey(ev('k', { ctrl: true, tag: 'input' }), { ...ctx, handler: makeHandler() })
     expect(ctx.onAppAction).toHaveBeenCalledWith('scripture.lookup')
+  })
+
+  it('Mod+L fires song.search even while typing (#52)', () => {
+    const ctx = baseCtx()
+    const e = ev('l', { ctrl: true, tag: 'input' })
+    dispatchModeKey(e, { ...ctx, handler: makeHandler() })
+    expect(ctx.onAppAction).toHaveBeenCalledWith('song.search')
+    expect(e.preventDefault).toHaveBeenCalled()
+  })
+
+  it('song.search is a page action: suppressed behind Settings or a mode modal', () => {
+    const settings = baseCtx({ settingsOpen: true })
+    dispatchModeKey(ev('l', { ctrl: true }), { ...settings, handler: makeHandler() })
+    expect(settings.onAppAction).not.toHaveBeenCalled()
+    const modal = baseCtx()
+    dispatchModeKey(ev('l', { ctrl: true }), { ...modal, handler: makeHandler({ isModalOpen: () => true }) })
+    expect(modal.onAppAction).not.toHaveBeenCalled()
   })
 
   it('app actions are suppressed while settings is open', () => {

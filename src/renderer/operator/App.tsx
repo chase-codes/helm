@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { blurOnPointerClick } from './blurOnPointerClick';
+import { suppressSpaceActivation } from './suppressSpaceActivation';
 import { Header } from './Header';
 import { ModeErrorBoundary } from './ModeErrorBoundary';
 import { dispatchModeKey } from './keyDispatch';
@@ -28,13 +29,13 @@ export interface ModeKeyHandler {
   onEscape: () => boolean;
   /** Arrow navigation: +1 (Right/Down) or -1 (Left/Up) steps the current cue. */
   onArrow: (dir: 1 | -1) => void;
-  /** Enter/Space: go live on the current cue. */
+  /** Enter: go live on the current cue. (Space no longer does — #52.) */
   onGoLive: () => void;
   /**
    * True while this mode has its own modal open (e.g. SongsMode's QuickAdd). Queried
    * fresh at dispatch time (the handler is re-registered every render — from a LAYOUT
    * effect, so it never lags the commit that is on screen — and this therefore always
-   * reflects current state) so App can suppress Enter/Space→onGoLive without needing a
+   * reflects current state) so App can suppress Enter→onGoLive without needing a
    * separate piece of App-level state per mode's modal.
    */
   isModalOpen: () => boolean;
@@ -92,6 +93,9 @@ function App(): JSX.Element {
   // Bumped by the scripture-lookup hotkey; SermonMode reacts by forcing its scripture
   // track and focusing the ref entry (same App-mediated pattern as biblesRevision).
   const [lookupNonce, setLookupNonce] = useState(0);
+  // Its Songs twin (#52): the song-search hotkey switches to Songs and SongsMode focuses
+  // its search box on the bump.
+  const [searchNonce, setSearchNonce] = useState(0);
 
   // useCallback([]) so it's a stable dep for the keydown effect below — it only touches
   // stable setters, so it never needs to change.
@@ -100,9 +104,12 @@ function App(): JSX.Element {
     else if (id === 'page.songs') setMode('songs');
     else if (id === 'page.sermon') setMode('sermon');
     else if (id === 'displays.release') window.helm.displays.toggleReleased();
-    else {
+    else if (id === 'scripture.lookup') {
       setMode('sermon');
       setLookupNonce((n) => n + 1);
+    } else if (id === 'song.search') {
+      setMode('songs');
+      setSearchNonce((n) => n + 1);
     }
   }, []);
 
@@ -126,6 +133,13 @@ function App(): JSX.Element {
   useEffect(() => {
     document.addEventListener('click', blurOnPointerClick);
     return () => document.removeEventListener('click', blurOnPointerClick);
+  }, []);
+
+  // Space is not a go-live key (#52), and must not become one again through the browser's
+  // native button activation on a focused control. See suppressSpaceActivation.
+  useEffect(() => {
+    document.addEventListener('keydown', suppressSpaceActivation, true);
+    return () => document.removeEventListener('keydown', suppressSpaceActivation, true);
   }, []);
 
   const rootStyle: CSSProperties = {
@@ -161,7 +175,7 @@ function App(): JSX.Element {
               only registers its keyboard delegate while it's the one on screen. */}
           <div style={{ display: mode === 'songs' ? 'contents' : 'none' }}>
             <ModeErrorBoundary label="Songs">
-              <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} />
+              <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} searchNonce={searchNonce} />
             </ModeErrorBoundary>
           </div>
           <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>

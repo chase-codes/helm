@@ -39,8 +39,9 @@ export interface SchedulePanelProps {
   /** Book-name completion preview for the entry field. Non-null exactly when space (or Tab)
    * would commit a book while the entry has focus — see `bookCompletion` in refBuilder.
    * Rendered as a dim overlay, never as part of `value`, and only while the input is
-   * focused: away from focus, space goes to onGoLive instead, so a stale ghost must not
-   * imply it would still be accepted (see Finding 1). */
+   * focused: away from focus, space does nothing to the entry (it is not a go-live key
+   * either, #52), so a stale ghost must not imply it would still be accepted (see
+   * Finding 1). */
   ghost?: RefGhost | null;
   canAdd: boolean;
   addLabel: string;
@@ -82,8 +83,8 @@ export function SchedulePanel({
   search
 }: SchedulePanelProps): JSX.Element {
   // The ghost is derived from builder state alone and knows nothing about focus, but "space
-  // commits the book" is only true while this input has focus — when it doesn't, space goes
-  // to onGoLive instead (see Finding 1). Track focus locally and gate the overlay on it.
+  // commits the book" is only true while this input has focus — when it doesn't, space
+  // reaches no handler at all (see Finding 1). Track focus locally and gate the overlay on it.
   const [focused, setFocused] = useState(false);
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const schedInputStyle: CSSProperties = {
