@@ -55,6 +55,31 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
   const updateAudioPath = db.prepare('UPDATE messages SET audio_path = ? WHERE id = ?');
   const countMessages = db.prepare('SELECT COUNT(*) AS n FROM messages');
 
+  // Search statements are prepared once here, not per keystroke (P8, as songsRepo
+  // does): better-sqlite3 does not cache prepared statements, and search re-runs
+  // on every keystroke. Only the IN(...) candidate fetch, whose placeholder count
+  // varies, is prepared per call.
+  const allParagraphsSql = (scoped: boolean): string => `
+    SELECT p.message_id AS msgId, p.ord AS ord, p.label AS label, p.text AS text,
+           m.tape_no AS tapeNo, m.title AS title
+    FROM paragraphs p JOIN messages m ON m.id = p.message_id
+    ${scoped ? 'WHERE p.message_id = ?' : ''}
+  `;
+  const allParagraphsScoped = db.prepare(allParagraphsSql(true));
+  const allParagraphsUnscoped = db.prepare(allParagraphsSql(false));
+  // bm25 gives TF-IDF relevance the JS scorer can't (#53): negated so higher =
+  // better. Paragraphs FTS didn't match simply carry no prior.
+  // LIMIT keeps a common-token query's hit list under the bound-variable cap of the
+  // IN() below — best-ranked paragraphs survive.
+  const ftsSql = (scoped: boolean): string => `
+    SELECT p.rowid AS rowid, p.message_id AS msgId, p.ord AS ord, -bm25(paragraph_fts) AS rel
+    FROM paragraph_fts JOIN paragraphs p ON p.rowid = paragraph_fts.rowid
+    WHERE paragraph_fts MATCH ?${scoped ? ' AND p.message_id = ?' : ''}
+    ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}
+  `;
+  const ftsScoped = db.prepare(ftsSql(true));
+  const ftsUnscoped = db.prepare(ftsSql(false));
+
   const listMeta = (): MessageMeta[] => (selectAllMessages.all() as MessageRow[]).map(toMeta);
 
   const installIndex = (entries: SermonIndexEntry[]): void => {
@@ -95,15 +120,8 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
   const timings = (id: string): TimingMap =>
     (selectTimings.all(id) as TimingRow[]).map((t) => ({ ord: t.ord, tStart: t.t_start, tEnd: t.t_end }));
 
-  const allParagraphCandidates = (scope: string | null): QuoteRow[] => {
-    const sql = `
-      SELECT p.message_id AS msgId, p.ord AS ord, p.label AS label, p.text AS text,
-             m.tape_no AS tapeNo, m.title AS title
-      FROM paragraphs p JOIN messages m ON m.id = p.message_id
-      ${scope ? 'WHERE p.message_id = ?' : ''}
-    `;
-    return (scope ? db.prepare(sql).all(scope) : db.prepare(sql).all()) as QuoteRow[];
-  };
+  const allParagraphCandidates = (scope: string | null): QuoteRow[] =>
+    (scope ? allParagraphsScoped.all(scope) : allParagraphsUnscoped.all()) as QuoteRow[];
 
   const search = (q: string, scope: string | null): { tapes: TapeRow[]; quotes: QuoteRow[] } => {
     const tapeRows: TapeRow[] = (selectAllMessages.all() as MessageRow[]).map((r) => ({
@@ -115,18 +133,8 @@ export function createMessagesRepo(db: Database.Database): MessagesRepo {
     if (!tokens.length) return { tapes, quotes: [] };
 
     const match = orPrefixMatch(tokens);
-    // bm25 gives TF-IDF relevance the JS scorer can't (#53): negated so higher =
-    // better. Paragraphs FTS didn't match simply carry no prior.
-    // LIMIT keeps a common-token query's hit list under the bound-variable cap of the
-    // IN() below — best-ranked paragraphs survive.
-    const ftsSql = `
-      SELECT p.rowid AS rowid, p.message_id AS msgId, p.ord AS ord, -bm25(paragraph_fts) AS rel
-      FROM paragraph_fts JOIN paragraphs p ON p.rowid = paragraph_fts.rowid
-      WHERE paragraph_fts MATCH ?${scope ? ' AND p.message_id = ?' : ''}
-      ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}
-    `;
     const hits = (
-      scope ? db.prepare(ftsSql).all(match, scope) : db.prepare(ftsSql).all(match)
+      scope ? ftsScoped.all(match, scope) : ftsUnscoped.all(match)
     ) as { rowid: number; msgId: string; ord: number; rel: number }[];
     const rel = new Map(hits.map((h) => [`${h.msgId}:${h.ord}`, h.rel]));
 
