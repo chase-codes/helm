@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import { CH, type HelmApi } from '../shared/types';
+import { CH, type HelmApi, type PushPayloads } from '../shared/types';
 
-const sub = <T>(channel: string) => (cb: (v: T) => void) => {
-  const h = (_e: IpcRendererEvent, v: T): void => cb(v);
+// Keying by the push channel ties each subscription's payload type to its channel
+// constant (see PushPayloads) instead of a hand-written type per site.
+const sub = <C extends keyof PushPayloads>(channel: C) => (cb: (v: PushPayloads[C]) => void) => {
+  const h = (_e: IpcRendererEvent, v: PushPayloads[C]): void => cb(v);
   ipcRenderer.on(channel, h);
   return () => ipcRenderer.removeListener(channel, h);
 };

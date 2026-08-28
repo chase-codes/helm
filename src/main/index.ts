@@ -202,7 +202,7 @@ app.whenReady().then(() => {
     supported: process.platform !== 'darwin'
   })
 
-  registerIpc(
+  registerIpc({
     repo,
     biblesRepo,
     scheduleRepo,
@@ -217,7 +217,7 @@ app.whenReady().then(() => {
     songImport,
     songSources,
     updater
-  )
+  })
 
   buildMenu()
   createWindow()
