@@ -56,7 +56,7 @@ export const QUERIES: LabeledQuery[] = [
   { intent: 'audible-partial', q: 'grave', field: 'all', target: 'graves-into-gardens' },
   { intent: 'audible-partial', q: 'cornerst', field: 'all', target: 'cornerstone' },
   { intent: 'audible-partial', q: '10000', field: 'all', target: '10000-reasons',
-    note: 'digits + comma in title "10,000 Reasons"' },
+    note: 'W8 (#122 fixed): norm() joins the digit-group comma; whole-word "10000" wins the title band' },
   { intent: 'audible-partial', q: 'o come to the alt', field: 'all', target: 'o-come-to-the-altar' },
   { intent: 'audible-partial', q: 'no longer', field: 'all', target: 'no-longer-slaves' },
 
