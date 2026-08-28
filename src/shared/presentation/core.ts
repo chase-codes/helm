@@ -105,6 +105,28 @@ export function setOutput(st: PresentationState, mode: OutputMode): Presentation
   if (mode === 'live' && st.liveKey === null) return { ...st, output: 'black' }
   return { ...st, output: mode }
 }
+/** Content was deleted: forget it if it is what is (or was last) on screen (#40).
+ *
+ * `key` is either a full slide key or an ITEM prefix — `song:<id>`, `pres:<id>` — and
+ * matches segment-wise, so deleting a song drops whichever of its sections is live while
+ * `song:ab` can never reach `song:abc`. Per-item rather than per-key because that is the
+ * grain deletion happens at: a song, a media item, a card are what the rail removes, and
+ * a caller that had to enumerate every section key would inevitably miss one.
+ *
+ * A live screen showing the deleted content goes black — the audience can't keep reading
+ * something that no longer exists, and 'live' + null key is the incoherent state
+ * `setOutput` refuses (BUG-021). A black or logo screen keeps its mode: blacking a logo
+ * would claim an action the operator didn't take, and the point of nulling the pair
+ * behind it is that no later restore to 'live' can resurrect the deleted slide.
+ *
+ * Only the live pair is touched. The cue is the renderer's selection, which every rail
+ * re-points at a neighbour as part of the same delete. Returns `st` BY IDENTITY when
+ * nothing matches so `stateStore` can skip the broadcast (see `takeLive`). */
+export function invalidate(st: PresentationState, key: string): PresentationState {
+  const k = st.liveKey
+  if (k === null || !(k === key || k.startsWith(key + ':'))) return st
+  return { ...st, output: st.output === 'live' ? 'black' : st.output, liveKey: null, liveSnap: null }
+}
 export function outputPayload(
   st: PresentationState,
   variant: OutputVariant = 'audience',

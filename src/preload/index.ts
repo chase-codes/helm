@@ -24,6 +24,7 @@ const api: HelmApi = {
     show: (key, slide) => ipcRenderer.send(CH.presShow, key, slide),
     take: (key, slide) => ipcRenderer.send(CH.presTake, key, slide),
     setOutput: (mode) => ipcRenderer.send(CH.presSetOutput, mode),
+    invalidate: (key) => ipcRenderer.send(CH.presInvalidate, key),
     onState: sub(CH.presState),
   },
   output: { onSlide: sub(CH.outputSlide) },

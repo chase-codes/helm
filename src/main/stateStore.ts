@@ -8,7 +8,7 @@ import {
   type PresentationState,
   type Slide,
 } from '../shared/types';
-import { applyCue, goLive, initialPresentation, outputPayload, setOutput, showLive, takeLive } from '../shared/presentation/core';
+import { applyCue, goLive, initialPresentation, invalidate, outputPayload, setOutput, showLive, takeLive } from '../shared/presentation/core';
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../shared/displays/roles';
 import { broadcastAll } from './broadcast';
 
@@ -33,6 +33,8 @@ export const presentation = {
   // key): re-sending an identical outputSlide would disturb a playing video for nothing.
   take: (key: string, slide: Slide) => { const next = takeLive(state, key, slide); if (next === state) return; state = next; broadcast(); },
   setOutput: (mode: OutputMode) => { state = setOutput(state, mode); broadcast(); },
+  // Deleted content (#40). Same identity-skip as `take`: most deletes touch nothing live.
+  invalidate: (key: string) => { const next = invalidate(state, key); if (next === state) return; state = next; broadcast(); },
   registerOutput(w: BrowserWindow, variant: OutputVariant, view: OutputViewMode = 'slides', leaderSplit: number = DEFAULT_LEADER_SPLIT) {
     outputWindows.set(w, { variant, view, leaderSplit });
     w.on('closed', () => outputWindows.delete(w));

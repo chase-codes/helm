@@ -173,7 +173,7 @@ app.whenReady().then(() => {
     goLive: (k, s) => presentation.goLive(k, s),
     show: (k, s) => presentation.show(k, s),
     isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k },
-    setOutput: (m) => presentation.setOutput(m)
+    invalidate: (k) => presentation.invalidate(k)
   })
   preserviceEngine.onChange(broadcastAll(CH.preserviceState))
 

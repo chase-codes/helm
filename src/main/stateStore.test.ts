@@ -95,3 +95,34 @@ describe('stateStore.take', () => {
     expect(presentation.get().output).toBe('live');
   });
 });
+
+describe('stateStore.invalidate (#40)', () => {
+  let win: InstanceType<typeof BrowserWindow>;
+
+  beforeEach(() => {
+    win = new BrowserWindow();
+    presentation.registerOutput(win, 'audience');
+    presentation.setOutput('black');
+    (win.webContents.send as ReturnType<typeof vi.fn>).mockClear();
+  });
+
+  it('blacks the outputs and forgets the live pair when the deleted item is on screen', () => {
+    presentation.take('pres:a:1', slideA);
+    const send = win.webContents.send as ReturnType<typeof vi.fn>;
+    send.mockClear();
+
+    presentation.invalidate('pres:a');
+    expect(send.mock.calls.map((c) => c[0])).toContain(CH.outputSlide);
+    expect(presentation.get()).toMatchObject({ output: 'black', liveKey: null, liveSnap: null });
+  });
+
+  it('does not broadcast when the deleted item is not the live one', () => {
+    presentation.take('pres:a:0', slideA);
+    const send = win.webContents.send as ReturnType<typeof vi.fn>;
+    send.mockClear();
+
+    presentation.invalidate('pres:b');
+    expect(send).not.toHaveBeenCalled();
+    expect(presentation.get().liveKey).toBe('pres:a:0');
+  });
+});
