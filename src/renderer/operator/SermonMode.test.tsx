@@ -380,7 +380,7 @@ describe('SermonMode — direct preview to live', () => {
   // negative test above (goLive not called when the target is already live) can't tell
   // "the guard suppressed it" from "the Shift+Enter path is dead."
   it('Shift+Enter on a different verse than the one live reaches the projector', async () => {
-    const { goLive, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const { goLive, take, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
     render(<Harness />)
     resolveChapter()
     // The rail renders a single card until the chapter resolves (railVerseCount falls back
@@ -395,8 +395,44 @@ describe('SermonMode — direct preview to live', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('Add verse — John 3:16, or search a word')).toBeTruthy())
 
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
-    await waitFor(() => expect(goLive).toHaveBeenCalled())
-    expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(take.mock.calls[0][0]).toBe('scr:Genesis:1:3')
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  // #20: `output`/`liveKey` here are main's state MIRRORED over a broadcast, so they lag
+  // main by a round trip. The show effect fires on every cursor move, so main can already
+  // have the cursor's verse live while the renderer still reads the old state — and a guard
+  // that compares mirrored state before calling the TOGGLING `goLive` verb blacks the
+  // screen on exactly that stale read. Both Go live paths must therefore reach main through
+  // `take`, which is idempotent on the key already live, and never through `goLive`.
+  // Modelled here with a mirror that says nothing is live at all: whatever main really
+  // holds, the toggling verb must not be what the renderer sends.
+  it('Shift+Enter reaches main through the non-toggling take, never goLive (#20)', async () => {
+    const { goLive, take, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+
+    fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  it('the Go live button reaches main through the non-toggling take, never goLive (#20)', async () => {
+    const { goLive, take, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+    const scripture = within(trackPanel('scripture'))
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(scripture.getByText('Genesis 1:3')).toBeTruthy())
+
+    fireEvent.click(scripture.getByRole('button', { name: /Go live/ }))
+    expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything())
+    expect(goLive).not.toHaveBeenCalled()
   })
 
   it('Enter files a schedule row and never reaches the projector', async () => {
@@ -460,6 +496,29 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     // catch that regression.
     fireEvent.doubleClick(verseCard(4), { shiftKey: true })
     await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:1', expect.anything()))
+  })
+
+  // #22: a second shift-tap pivots around the anchor the first one established (the cursor,
+  // verse 1) rather than growing the range from its stored start. Pins that SermonMode
+  // threads `railSelect`'s anchor back in — the pure rule is tested in selection.test.ts.
+  it('a second shift-click pivots the range around the original anchor', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [])
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 5')).toBeTruthy())
+
+    // Cursor 1 -> shift-tap 3 builds 1-3.
+    fireEvent.click(verseCard(3), { shiftKey: true })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 1:1-3'))
+    // Cursor 1 is the range's start here, so growing and pivoting agree — move the cursor
+    // to 3 first with a plain tap, then shift-tap 2 (backward, 2-3) and 5 (forward). A
+    // grow would read 2-5; the pivot around 3 reads 3-5.
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(entryValue()).toBe(''))
+    fireEvent.click(verseCard(2), { shiftKey: true })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 1:2-3'))
+    fireEvent.click(verseCard(5), { shiftKey: true })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 1:3-5'))
   })
 
   // A shift-click deliberately leaves the cursor where it is, so activateVerse has to move
@@ -807,7 +866,7 @@ describe('SermonMode — the Go live button does what its label says', () => {
     const SONG_LIVE: PresentationState = {
       output: 'live', liveKey: 'song:s1:0', liveSnap: null, cuedKey: null, cuedSnap: null
     }
-    const { goLive, setOutput, resolveChapter } = installHelmStub(SONG_LIVE)
+    const { goLive, take, setOutput, resolveChapter } = installHelmStub(SONG_LIVE)
     render(<Harness />)
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
@@ -819,8 +878,9 @@ describe('SermonMode — the Go live button does what its label says', () => {
     await waitFor(() => expect(scripture.getByText('Genesis 1:3')).toBeTruthy())
 
     fireEvent.click(scripture.getByRole('button', { name: /Go live/ }))
-    expect(goLive).toHaveBeenCalled()
-    expect(goLive.mock.calls[0][0]).toBe('scr:Genesis:1:3')
+    expect(take).toHaveBeenCalled()
+    expect(take.mock.calls[0][0]).toBe('scr:Genesis:1:3')
+    expect(goLive).not.toHaveBeenCalled()
     expect(setOutput).not.toHaveBeenCalled()
   })
 })
@@ -962,18 +1022,19 @@ describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', 
   })
 
   it('a pasted out-of-range chapter clamps to the book, and never puts INSTALL_HINT on screen (#19b)', async () => {
-    const { goLive, resolveChapter } = installHelmStub()
+    const { goLive, take, resolveChapter } = installHelmStub()
     render(<Harness />)
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
 
     fireEvent.change(entry(), { target: { value: 'Genesis 99:1' } })
     await waitFor(() => expect(entryValue()).toBe('Genesis 50:1'))
-    expect(goLive.mock.calls.every((c) => JSON.stringify(c[1]).indexOf(INSTALL_HINT) === -1)).toBe(true)
+    const sent = [...goLive.mock.calls, ...take.mock.calls]
+    expect(sent.every((c) => JSON.stringify(c[1]).indexOf(INSTALL_HINT) === -1)).toBe(true)
   })
 
   it('an absent chapter in an installed bible shows nothing rather than the install hint (#19)', async () => {
-    const { show, goLive, getChapter, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], {}, {
+    const { show, goLive, take, getChapter, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], {}, {
       book: 'Genesis',
       ch: 2,
       data: { book: 'Genesis', chapter: 2, verseCount: 0, verses: {} }
@@ -988,12 +1049,12 @@ describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', 
     resolveSecondChapter()
     await waitFor(() => expect(getChapter).toHaveBeenCalledWith('Genesis', 2))
     await act(async () => {})
-    const slides = [...show.mock.calls, ...goLive.mock.calls].map((c) => JSON.stringify(c[1]))
+    const slides = [...show.mock.calls, ...goLive.mock.calls, ...take.mock.calls].map((c) => JSON.stringify(c[1]))
     expect(slides.some((sl) => sl.indexOf(INSTALL_HINT) !== -1)).toBe(false)
   })
 
   it('with no bible installed the install hint still goes live (the hint\'s one honest case)', async () => {
-    const { goLive, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], { installed: false }, {
+    const { take, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], { installed: false }, {
       book: 'Genesis',
       ch: 2,
       data: { book: 'Genesis', chapter: 2, verseCount: 0, verses: {} }
@@ -1006,8 +1067,8 @@ describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', 
     await waitFor(() => expect(entryValue()).toBe('Genesis 2:1'))
     fireEvent.keyDown(entry(), { key: 'Enter', shiftKey: true })
     resolveSecondChapter()
-    await waitFor(() => expect(goLive).toHaveBeenCalled())
-    expect(JSON.stringify(goLive.mock.calls[0][1])).toContain(INSTALL_HINT)
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(JSON.stringify(take.mock.calls[0][1])).toContain(INSTALL_HINT)
   })
 
   it('with no bible installed an arrow press does not collapse the cursor to verse 1 (#19a)', async () => {
