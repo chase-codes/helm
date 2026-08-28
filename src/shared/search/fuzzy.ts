@@ -11,6 +11,9 @@ export function norm(s: string): string {
     .toLowerCase()
     .replace(/[ßøđłæœþ]/g, (c) => FOLD[c])
     .replace(/['’`]/g, '')
+    // Digit-group separators join rather than split: the operator types "10000"
+    // for "10,000 Reasons", and "10 000" would never match it whole-word (W8).
+    .replace(/(?<=\d),(?=\d)/g, '')
     .replace(/[^a-z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
