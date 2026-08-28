@@ -1914,6 +1914,23 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     await screen.findByText(/2 verses/)
   })
 
+  // #81: right-click inside a multi-selection offers a batch item acting on the whole
+  // selection — the scripture-track twin of the quote test below.
+  it('right-click on a multi-row selection deletes the batch with one undo toast', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, THREE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => rowButton('Genesis 1:1'))
+
+    fireEvent.click(rowButton('Genesis 1:1'))
+    fireEvent.click(rowButton('Genesis 1:2'), { shiftKey: true })
+    fireEvent.contextMenu(rowButton('Genesis 1:2'))
+    fireEvent.click(await screen.findByText('Delete 2 verses'))
+
+    await waitFor(() => expect(scheduleRowTitles()).toEqual(['Genesis 1:3']))
+    expect(await screen.findByText(/2 verses/)).toBeTruthy()
+  })
+
   it('defers the real removeMany until the undo window closes, then sends one call', async () => {
     const { resolveChapter, removeMany } = installHelmStub(NOTHING_LIVE, THREE)
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
