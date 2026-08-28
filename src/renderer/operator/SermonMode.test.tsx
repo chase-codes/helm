@@ -7,6 +7,7 @@ import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { INSTALL_HINT } from '../../shared/scripture/labels'
 import { themeFor } from '../../shared/theme'
+import { settleAndClear } from '../../test/mocks'
 import type {
   ChapterData,
   BookExtent,
@@ -900,10 +901,12 @@ describe('SermonMode — cursor moves made under the logo', () => {
     // the renderer's `show` is a no-op in main while output isn't live, and neither the
     // screen-reaching verbs fire.
     fireEvent.click(verseCard(3))
-    await waitFor(() => expect(screen.getByText('Genesis 1:3')).toBeTruthy())
+    // Settle on the show call itself (the renderer still calls it; main no-ops it), not
+    // on the hero text — otherwise the pending effect lands after mockClear and the
+    // last-call assertion below passes for the wrong reason.
+    await settleAndClear(show, 'scr:Genesis:1:3', expect.anything())
     expect(goLive).not.toHaveBeenCalled()
     expect(setOutput).not.toHaveBeenCalled()
-    show.mockClear()
 
     // Logo off. Main restores the OLD liveSnap (Genesis 1:1), so unless the show effect
     // re-fires, the projector reads Genesis 1:1 while the hero reads Genesis 1:3.
@@ -1764,10 +1767,15 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     resolveChapter()
     // The message track is mounted (hidden) from the start; wait for its tape to load.
     await waitFor(() => expect(document.querySelector('audio')).toBeTruthy())
-    cue.mockClear()
+    // Nothing cues at mount here (scripture drives, no media), so there is no mount
+    // call to settle on — flush the pending loads and prove that, rather than clearing
+    // a mock that must already be empty.
+    await act(async () => {})
+    expect(cue).not.toHaveBeenCalled()
 
     // A timeupdate computes ord 0 (≠ TapePlayer's initial -1) and fires onActiveOrd.
     fireEvent.timeUpdate(document.querySelector('audio') as HTMLElement)
+    await act(async () => {})
     expect(cue).not.toHaveBeenCalled()
   })
 
