@@ -4,7 +4,7 @@ import { parseSongKey } from '../../shared/presentation/core'
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../../shared/displays/roles'
 import { bandCandidates } from '../../shared/slides/fitText'
 import { useFitText, fitSizeValue } from '../shared/useFitText'
-import { usePresentationState } from '../operator/useHelm'
+import { usePresentationState } from '../shared/useHelm'
 import { DARK as T } from '../../shared/theme'
 import { SlidesView } from './SlidesView'
 

@@ -1,6 +1,6 @@
 import { useContext, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import { useDisplayStatus } from './useHelm'
+import { useDisplayStatus } from '../shared/useHelm'
 import { bindingsFor, formatBinding } from '../../shared/hotkeys/match'
 import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 

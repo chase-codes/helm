@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { ThemeMode } from './App';
 import { ThemeCtx } from './ThemeCtx';
-import { usePresentationState } from './useHelm';
+import { usePresentationState } from '../shared/useHelm';
 import { useTakeGuard } from './useTakeGuard';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
 import { sameFlow } from '../../shared/presentation/core';

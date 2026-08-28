@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, type CSSProperties, type JSX, type RefObject } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import { useDisplayStatus } from './useHelm'
+import { useDisplayStatus } from '../shared/useHelm'
 import { DEFAULT_LEADER_SPLIT, LEADER_SPLIT_MAX, LEADER_SPLIT_MIN, OUTPUT_VIEWS } from '../../shared/displays/roles'
 import type { OutputViewMode } from '../../shared/types'
 

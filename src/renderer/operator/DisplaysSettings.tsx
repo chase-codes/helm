@@ -1,6 +1,6 @@
 import { useContext, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import { useDisplayStatus } from './useHelm'
+import { useDisplayStatus } from '../shared/useHelm'
 import { OUTPUT_ROLES, OUTPUT_VIEWS } from '../../shared/displays/roles'
 import type { OutputRole, OutputViewMode } from '../../shared/types'
 

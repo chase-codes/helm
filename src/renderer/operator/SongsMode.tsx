@@ -12,7 +12,7 @@ import {
 } from 'react';
 import type { ModeKeyHandlerRef } from './App';
 import { ThemeCtx } from './ThemeCtx';
-import { usePresentationState } from './useHelm';
+import { usePresentationState } from '../shared/useHelm';
 import { bandCandidates } from '../../shared/slides/fitText';
 import { useFitText, fitSizeValue } from '../shared/useFitText';
 import { keyForSong, parseSongKey, sameFlow } from '../../shared/presentation/core';

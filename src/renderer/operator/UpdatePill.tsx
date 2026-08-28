@@ -1,6 +1,6 @@
-import { useContext, useEffect, useState, type CSSProperties, type JSX } from 'react'
+import { useContext, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import type { DisplayStatus, UpdateStatus } from '../../shared/types'
+import { useDisplayStatus, useUpdateStatus } from '../shared/useHelm'
 
 /**
  * Quiet "restart when you like" affordance. Deliberately invisible unless an
@@ -10,34 +10,8 @@ import type { DisplayStatus, UpdateStatus } from '../../shared/types'
  */
 export function UpdatePill(): JSX.Element | null {
   const T = useContext(ThemeCtx)
-  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle', version: null })
-  const [displays, setDisplays] = useState<DisplayStatus>({ outputs: 0, displays: [], released: false })
-
-  useEffect(() => {
-    // A pushed onStatus event is always at least as fresh as the in-flight
-    // initial fetch, so once one arrives, ignore the fetch's stale result.
-    let gotPush = false
-    const off = window.helm.updates.onStatus((s) => {
-      gotPush = true
-      setStatus(s)
-    })
-    void window.helm.updates.getStatus().then((s) => {
-      if (!gotPush) setStatus(s)
-    })
-    return off
-  }, [])
-
-  useEffect(() => {
-    let gotPush = false
-    const off = window.helm.displays.onStatus((d) => {
-      gotPush = true
-      setDisplays(d)
-    })
-    void window.helm.displays.get().then((d) => {
-      if (!gotPush) setDisplays(d)
-    })
-    return off
-  }, [])
+  const status = useUpdateStatus()
+  const displays = useDisplayStatus()
 
   if (status.state !== 'ready' || displays.outputs > 0 || displays.released) return null
 
