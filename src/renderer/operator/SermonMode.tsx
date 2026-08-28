@@ -99,6 +99,10 @@ export function SermonMode({
   const [scrV, setScrV] = useState(1);
   const [versions, setVersions] = useState<string[]>(['kjv']);
   const [builder, setBuilder] = useState<RefBuilderState>(initialBuilder());
+  // The verse a shift-tap range pivots around (#22), owned here and handed back to
+  // `railSelect` on every rail tap — see `RailSelection.anchor`. Never cleared elsewhere:
+  // railSelect ignores it once the builder no longer holds the range it belongs to.
+  const [railAnchor, setRailAnchor] = useState<Cursor | null>(null);
   // Per-book chapter/verse-count cache for the builder's digit clamping. Kept as state
   // (not a ref) so reading it during render — for `curExtent` below — doesn't trip
   // react-hooks' no-ref-reads-during-render check; the effect below only writes an entry
@@ -532,18 +536,23 @@ export function SermonMode({
     // and the install-hint slide goes live, which is then the correct thing to show.
     // An absent chapter in an installed bible is not that case (#19): nothing to show.
     if (!liveChapter || chapterMissing(liveChapter)) return;
-    // Do exactly what the button says, rather than re-deriving the decision inside the
-    // main-process `goLive` verb (which blacks when fired on the key already live). The
-    // cursor now commits to the screen as it moves, so by the time the operator reaches
-    // for the button the verse is usually ALREADY live — under the old toggle, the
-    // trained "tap the verse, then press Go live" two-step took the screen down.
+    // Do exactly what the button says. The cursor now commits to the screen as it moves,
+    // so by the time the operator reaches for the button the verse is usually ALREADY
+    // live — under the old toggle, the trained "tap the verse, then press Go live"
+    // two-step took the screen down.
     //
     // So this path never blacks (#85): the verb is "put this on screen", and when it is
     // already there the work is done. The button ghosts in that state and Enter — its
     // keyboard twin — lands here and stops. Escape and the Take down button, which say
     // what they do, are the only ways down.
+    //
+    // `cuedIsLive` is a convenience, not the safety: it reads `output`/`liveKey` MIRRORED
+    // from main over a broadcast, so it lags the show effect's send by a round trip and can
+    // read false while main already has this key live (#20). The verb below is therefore
+    // `take` — idempotent on the key already live — never the toggling `goLive`, which
+    // would black the screen on exactly that stale read.
     if (cuedIsLive) return;
-    window.helm.presentation.goLive(curKey, verseSlide(scrBook, scrCh, scrV, liveChapter));
+    window.helm.presentation.take(curKey, verseSlide(scrBook, scrCh, scrV, liveChapter));
   };
 
   const takeDown = (): void => {
@@ -601,10 +610,13 @@ export function SermonMode({
   // Builds the live slide for a single verse (the reading's `from`, matching where the
   // cue effect lands scrV) — not the whole reading range, so the on-screen ref/label
   // ("Genesis 1:1") matches what the hero and the cue effect would independently produce.
-  const goLiveWithChapter = (p: ParsedRef, c: ChapterData): void => {
+  // `take`, not `goLive`: Shift+Enter names a reference, so blanking is never what was
+  // asked for, and main decides "already live" itself rather than this side comparing
+  // mirrored state that can be a round trip stale (#20).
+  const takeWithChapter = (p: ParsedRef, c: ChapterData): void => {
     if (chapterMissing(c)) return;
     const key = keyForScripture(p.book, p.ch, p.from);
-    window.helm.presentation.goLive(key, verseSlide(p.book, p.ch, p.from, c));
+    window.helm.presentation.take(key, verseSlide(p.book, p.ch, p.from, c));
   };
 
   // Double-click a verse card (#58). `take` is idempotent, so double-clicking the verse
@@ -717,7 +729,7 @@ export function SermonMode({
   // Double-click a verse card (#58). A shift-double-click builds the range (both clicks run
   // railSelect, which is idempotent on a repeated shift-tap of either endpoint) and takes
   // its START verse — the same single-verse slide Shift+Enter produces via
-  // goLiveWithChapter, so the on-screen ref matches the hero.
+  // takeWithChapter, so the on-screen ref matches the hero.
   //
   // Move the cursor FIRST, unconditionally, exactly as `goLiveFromBuilder` does and for the
   // same reason. A plain click has already moved it (railSelect's non-shift branch), but a
@@ -817,28 +829,24 @@ export function SermonMode({
     const p = addRef;
     setBuilder(initialBuilder());
     setTrack('scripture');
-    // Move the cursor first, unconditionally: the already-live guard below returns early,
-    // and if it did so before this the hero would keep showing a different reference than
-    // the projector. Safe to do ahead of the guard — the show effect this triggers is a
-    // same-key no-op when the guard is about to fire.
+    // Move the cursor first, unconditionally, so the hero never shows a different reference
+    // than the projector. The show effect this triggers is a same-key no-op in main when
+    // the verse is already up, as is the take below (`takeLive` returns the state by
+    // identity and skips the broadcast). No renderer-side "already live" guard: the
+    // mirrored `output`/`liveKey` can lag main by a round trip (#20), and main is the only
+    // side that can decide this without racing itself.
     jumpTo(p.book, p.ch, p.from);
     requestRailScroll(p.from, 'start');
-    // `goLive` blacks the output when fired on the key already live (see
-    // shared/presentation/core.ts) — correct for the Go live / Take down button, wrong here.
-    // Shift+Enter names a reference, so blanking is never what was asked for; if it's
-    // already up, we're done.
-    const key = keyForScripture(p.book, p.ch, p.from);
-    if (output === 'live' && liveKey === key) return;
     // Reuse the cached chapter when it already matches, else fetch fresh so the live slide
     // never shows stale text from the previous book.
     if (chapter && chapter.book === p.book && chapter.chapter === p.ch) {
-      goLiveWithChapter(p, chapter);
+      takeWithChapter(p, chapter);
     } else {
       window.helm.bibles
         .getChapter(p.book, p.ch)
         .then((c) => {
           setChapter(c);
-          goLiveWithChapter(p, c);
+          takeWithChapter(p, c);
         })
         .catch(console.error);
     }
@@ -925,12 +933,14 @@ export function SermonMode({
   // A click on a verse card. Plain tap moves the cursor — which reaches the projector via
   // the show effect above when output is live, and is a quiet preview when it isn't.
   // Shift-tap leaves the cursor and writes a range into the builder instead, anchored at the
-  // start verse already typed into the entry when it names this previewed book/chapter (the
-  // one `selectedRange` highlights on the rail), else at the cursor. The decision itself
-  // lives in `railSelect` so it can be tested without mounting this component.
+  // anchor of the range already built (a second shift-tap pivots, #22), else the start verse
+  // already typed into the entry when it names this previewed book/chapter (the one
+  // `selectedRange` highlights on the rail), else the cursor. The decision itself lives in
+  // `railSelect` so it can be tested without mounting this component.
   const onRailSelectVerse = (v: number, shift: boolean): void => {
-    const next = railSelect(builder, cursor, { book: previewBook, ch: previewCh }, v, shift);
+    const next = railSelect(builder, cursor, { book: previewBook, ch: previewCh }, v, shift, railAnchor);
     setBuilder(next.builder);
+    setRailAnchor(next.anchor);
     jumpTo(next.cursor.book, next.cursor.ch, next.cursor.v);
   };
 

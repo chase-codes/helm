@@ -144,6 +144,77 @@ test('shift-tapping inside a range still re-aims it from the start verse', () =>
   expect(r.builder.endVerse).toBe(5)
 })
 
+// Consecutive shift-taps PIVOT around the original anchor (#22): conventional shift-click,
+// and the same semantics `useListSelection.selectTo` gives the schedule. The ordered
+// `startVerse`/`endVerse` pair cannot carry that on its own — after a backward tap the
+// stored start IS the tapped verse — so the anchor is threaded through `RailSelection`.
+test('a second shift-tap pivots around the original anchor instead of growing', () => {
+  const first = railSelect(empty, cursor, here, 2, true, null) // cursor 5, tap 2 -> 2-5
+  expect(first.builder.startVerse).toBe(2)
+  expect(first.builder.endVerse).toBe(5)
+  expect(first.anchor).toEqual({ book: 'Genesis', ch: 1, v: 5 })
+  const second = railSelect(first.builder, cursor, here, 9, true, first.anchor)
+  expect(second.builder.startVerse).toBe(5)
+  expect(second.builder.endVerse).toBe(9)
+  expect(second.anchor).toEqual({ book: 'Genesis', ch: 1, v: 5 })
+})
+
+test('a third shift-tap still pivots around the same anchor', () => {
+  const first = railSelect(empty, cursor, here, 2, true, null)
+  const second = railSelect(first.builder, cursor, here, 9, true, first.anchor)
+  const third = railSelect(second.builder, cursor, here, 3, true, second.anchor)
+  expect(third.builder.startVerse).toBe(3)
+  expect(third.builder.endVerse).toBe(5)
+  expect(third.anchor).toEqual({ book: 'Genesis', ch: 1, v: 5 })
+})
+
+// A typed start verse is the anchor on the first shift-tap (see above) and STAYS the anchor
+// on the next: cursor 1, typed 5, shift-tap 9 -> 5-9, shift-tap 3 -> 3-5, not 3-9.
+test('a typed anchor survives a second shift-tap', () => {
+  const atOne: Cursor = { book: 'Genesis', ch: 1, v: 1 }
+  const first = railSelect(built({ startVerse: 5 }), atOne, here, 9, true, null)
+  expect(first.anchor).toEqual({ book: 'Genesis', ch: 1, v: 5 })
+  const second = railSelect(first.builder, atOne, here, 3, true, first.anchor)
+  expect(second.builder.startVerse).toBe(3)
+  expect(second.builder.endVerse).toBe(5)
+})
+
+test('a plain tap drops the anchor', () => {
+  const first = railSelect(empty, cursor, here, 2, true, null)
+  const r = railSelect(first.builder, cursor, here, 7, false, first.anchor)
+  expect(r.anchor).toBeNull()
+})
+
+// The anchor only counts while the builder still holds the range it belongs to. Typing a
+// new reference over the range (or clearing the entry) leaves a stale anchor behind, and
+// the next shift-tap must fall back to the usual rules rather than pivot on a ghost.
+test('an anchor that no longer matches the builder is ignored', () => {
+  const stale: Cursor = { book: 'Genesis', ch: 1, v: 7 }
+  const r = railSelect(empty, cursor, here, 9, true, stale)
+  expect(r.builder.startVerse).toBe(5)
+  expect(r.builder.endVerse).toBe(9)
+  expect(r.anchor).toEqual({ book: 'Genesis', ch: 1, v: 5 })
+})
+
+test('an anchor for another chapter than the rail previews is ignored', () => {
+  const elsewhere: Cursor = { book: 'Romans', ch: 8, v: 28 }
+  const range = built({ startVerse: 2, endVerse: 5, stage: 'endVerse' })
+  const r = railSelect(range, cursor, here, 9, true, elsewhere)
+  expect(r.builder.startVerse).toBe(2)
+  expect(r.builder.endVerse).toBe(9)
+})
+
+// Both clicks of a shift-double-click run railSelect with the anchor threaded through, so
+// the second click must rebuild the first one's range (#58) — in both directions.
+test('a repeated shift-tap with the anchor threaded through is idempotent', () => {
+  const back = railSelect(empty, cursor, here, 2, true, null)
+  const back2 = railSelect(back.builder, cursor, here, 2, true, back.anchor)
+  expect(back2.builder).toEqual(back.builder)
+  const fwd = railSelect(empty, cursor, here, 9, true, null)
+  const fwd2 = railSelect(fwd.builder, cursor, here, 9, true, fwd.anchor)
+  expect(fwd2.builder).toEqual(fwd.builder)
+})
+
 test('addTarget falls back to the cursor when the builder is empty', () => {
   expect(addTarget(initialBuilder(), cursor)).toEqual({ book: 'Genesis', ch: 1, from: 5, to: 5 })
 })
