@@ -74,6 +74,12 @@ export const BOOKS = [
   T('Revelation', 'revelations', 'rev', 're', 'apocalypse')
 ] as const
 
+const BOOK_INDEX = new Map(BOOKS.map((b, i) => [b.name, i]))
+/** Canonical book order (position in BOOKS) — the final deterministic tie-break in the
+ * verse and passage rankers. Unknown names sort last. */
+export const canonicalBookIndex = (name: string): number =>
+  BOOK_INDEX.get(name) ?? Number.MAX_SAFE_INTEGER
+
 /** Tie-break order for AMBIGUOUS typed prefixes — earlier wins. Everything unlisted keeps
  * canonical order relative to itself, and sorts after everything listed. Only ever consulted
  * when a prefix matches more than one book, so it cannot touch exact aliases.
