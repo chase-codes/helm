@@ -14,13 +14,11 @@ const IDLE_PRES: PresentationState = { output: 'black', liveKey: null, liveSnap:
 const NO_DISPLAYS: DisplayStatus = { outputs: 0, displays: [], released: false }
 
 let presCb: (s: PresentationState) => void = () => {}
-let displaysCb: (d: DisplayStatus) => void = () => {}
 let resolvePresGet: (s: PresentationState) => void = () => {}
 let resolveDisplaysGet: (d: DisplayStatus) => void = () => {}
 
 function installHelmStub(): void {
   presCb = () => {}
-  displaysCb = () => {}
   ;(window as unknown as { helm: unknown }).helm = {
     presentation: {
       get: vi.fn(
@@ -41,10 +39,7 @@ function installHelmStub(): void {
             resolveDisplaysGet = res
           })
       ),
-      onStatus: vi.fn((cb: (d: DisplayStatus) => void) => {
-        displaysCb = cb
-        return () => {}
-      })
+      onStatus: vi.fn(() => () => {})
     }
   }
 }

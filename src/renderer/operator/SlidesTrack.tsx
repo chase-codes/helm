@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
-import { usePresentationState, useVideoState } from './useHelm';
+import { usePresentationState, useVideoState } from '../shared/useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
 import { sameFlow } from '../../shared/presentation/core';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';

@@ -1,6 +1,6 @@
 import { useContext, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import { useDisplayStatus, useUpdateStatus } from './useHelm'
+import { useDisplayStatus, useUpdateStatus } from '../shared/useHelm'
 
 /**
  * Quiet "restart when you like" affordance. Deliberately invisible unless an

@@ -2,7 +2,7 @@ import { useContext, useRef, useState, type CSSProperties, type JSX } from 'reac
 import type { Mode, ThemeMode } from './App'
 import type { HotkeyOverrides } from '../../shared/hotkeys/actions'
 import { ThemeCtx } from './ThemeCtx'
-import { usePresentationState, useDisplayStatus, useClock } from './useHelm'
+import { usePresentationState, useDisplayStatus, useClock } from '../shared/useHelm'
 import { OutputViewPopover } from './OutputViewPopover'
 import { ReleaseToggle } from './ReleaseToggle'
 import { UpdatePill } from './UpdatePill'

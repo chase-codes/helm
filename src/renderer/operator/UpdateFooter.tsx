@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import { useDisplayStatus, useUpdateStatus } from './useHelm'
+import { useDisplayStatus, useUpdateStatus } from '../shared/useHelm'
 
 const SITE_URL = 'https://chase-codes.github.io/helm/'
 

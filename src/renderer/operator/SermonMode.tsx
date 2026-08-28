@@ -12,7 +12,7 @@ import {
 import type { ModeKeyHandlerRef, ThemeMode } from './App';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { ThemeCtx } from './ThemeCtx';
-import { usePresentationState } from './useHelm';
+import { usePresentationState } from '../shared/useHelm';
 import { formatRef, parseRef, type ParsedRef } from '../../shared/scripture/refs';
 import {
   initialBuilder,

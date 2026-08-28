@@ -1,6 +1,6 @@
 import { useContext, useLayoutEffect, useState, type CSSProperties, type JSX } from 'react';
 import { ThemeCtx } from './ThemeCtx';
-import { usePreState, usePresentationState } from './useHelm';
+import { usePreState, usePresentationState } from '../shared/useHelm';
 import { preSlideFor } from '../../shared/preservice/cards';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { ScreenBlackIcon } from '../shared/icons';
