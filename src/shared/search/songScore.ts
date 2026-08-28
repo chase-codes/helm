@@ -8,7 +8,7 @@ import { norm, bestMatch, bestSolidMatch, textSignals } from './fuzzy';
 export interface ScoredSong {
   score: number;
   snippet: string;
-  titleCoverage: number;   // # query tokens fuzzy-matching a title word (higher wins)
+  titleCoverage: number;   // # query tokens (≥3 chars) with solid title match (higher wins)
   titleCloseness: number;  // total edit distance of those title matches (lower wins)
   phrase: number;          // longest run of consecutive query tokens found consecutively
                            // in the text (fuzzy per-word; line breaks transparent,
