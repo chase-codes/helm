@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SongSection } from '../../shared/types';
+import { railBadgeStyle, railFont, railLabelStyle } from './railTint';
 
 export interface SectionRailProps {
   theme: Theme;
@@ -105,7 +106,7 @@ export function SectionRail({
   onEditCancel,
   onCollapse
 }: SectionRailProps): JSX.Element {
-  const secFont = Math.round(Math.max(13, Math.min(18, width / 24)) * 10) / 10;
+  const secFont = railFont(width);
 
   const sectionPanelStyle: CSSProperties = {
     width: `${width}px`,
@@ -129,24 +130,8 @@ export function SectionRail({
         : `inset 0 0 0 1px ${T.hairline}`,
     userSelect: 'none'
   });
-  const secLabelStyle = (isCued: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: '10.5px',
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    fontWeight: 500,
-    color: isCued ? T.accent : T.faint
-  });
-  const secBadgeStyle = (isLive: boolean): CSSProperties => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: '9px',
-    letterSpacing: '0.08em',
-    fontWeight: 600,
-    color: isLive ? T.live : T.dim
-  });
+  const secLabelStyle = (isCued: boolean): CSSProperties => railLabelStyle(T, T.accent, isCued);
+  const secBadgeStyle = (isLive: boolean): CSSProperties => railBadgeStyle(T, isLive);
   const secLineStyle = (isCued: boolean): CSSProperties => ({
     fontSize: `${secFont}px`,
     lineHeight: 1.45,

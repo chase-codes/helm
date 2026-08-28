@@ -33,7 +33,7 @@ import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
 import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
-import { primaryBtnStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
 
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
@@ -788,24 +788,8 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
 
   // ---------------- styles ----------------
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
-  const projBarStyle: CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    height: '30px',
-    padding: '0 13px',
-    borderRadius: '9px',
-    background: `${outColor}1c`,
-    boxShadow: `inset 0 0 0 1px ${outColor}55`,
-    color: outColor
-  };
-  const projDotStyle: CSSProperties = {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: outColor,
-    animation: output === 'live' ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
-  };
+  const projBarStyle: CSSProperties = statusChipStyle(outColor);
+  const projDotStyle: CSSProperties = statusDotStyle(outColor, output === 'live');
   const bigVerseWrapStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,

@@ -1,6 +1,7 @@
 import { useContext, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
 import { useDisplayStatus, useUpdateStatus } from '../shared/useHelm'
+import { tintChip } from './railTint'
 
 /**
  * Quiet "restart when you like" affordance. Deliberately invisible unless an
@@ -19,9 +20,7 @@ export function UpdatePill(): JSX.Element | null {
     height: '28px',
     padding: '0 11px',
     borderRadius: '8px',
-    background: T.accent + '1c',
-    boxShadow: `inset 0 0 0 1px ${T.accent}55`,
-    color: T.accent,
+    ...tintChip(T.accent),
     fontSize: '11.5px',
     fontWeight: 600,
     whiteSpace: 'nowrap'

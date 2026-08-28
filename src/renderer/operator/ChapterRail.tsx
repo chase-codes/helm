@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties, type JSX } from 'react'
 import type { Theme } from '../../shared/theme'
-import { railTint } from './railTint'
+import { railBadgeStyle, railFont, railLabelStyle, railRowStyle, railTextStyle } from './railTint'
 
 export interface ChapterRailProps {
   theme: Theme
@@ -59,9 +59,7 @@ export function ChapterRail({
   scrollRequest,
   onScrollConsumed
 }: ChapterRailProps): JSX.Element {
-  // Same width-derived font as SectionRail's secFont: the pastor reads this
-  // column over the pulpit mirror, so widening the rail must enlarge the text.
-  const verseFont = Math.round(Math.max(13, Math.min(18, width / 24)) * 10) / 10
+  const verseFont = railFont(width)
   const panelStyle: CSSProperties = {
     width: `${width}px`,
     flexShrink: 0,
@@ -101,66 +99,13 @@ export function ChapterRail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollRequest?.nonce, verseCount])
 
-  const rowStyle = (
-    isLive: boolean,
-    isCued: boolean,
-    planned: boolean,
-    selected: boolean
-  ): CSSProperties => ({
-    display: 'block',
-    width: '100%',
-    textAlign: 'left',
-    padding: '11px 13px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    userSelect: 'none',
-    background: selected
-      ? railTint(T.scripture, 'selected', dark)
-      : isLive
-        ? railTint(T.scripture, 'live', dark)
-        : isCued
-          ? railTint(T.scripture, 'cued', dark)
-          : planned
-            ? railTint(T.scripture, 'planned', dark)
-            : T.panel2,
-    boxShadow: selected
-      ? `inset 0 0 0 2px ${T.scripture}`
-      : isLive
-        ? `inset 0 0 0 2px ${T.scripture}`
-        : isCued
-          ? `inset 0 0 0 1.5px ${T.scripture}66`
-          : planned
-            ? `inset 0 0 0 1px ${T.scripture}44`
-            : `inset 0 0 0 1px ${T.hairline}`
-  })
-  const labelStyle = (isCued: boolean, planned: boolean): CSSProperties => ({
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: '10.5px',
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    fontWeight: 500,
-    color: isCued || planned ? T.scripture : T.faint
-  })
-  const badgeStyle = (isLive: boolean): CSSProperties => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: '9px',
-    letterSpacing: '0.08em',
-    fontWeight: 600,
-    color: isLive ? T.live : T.dim
-  })
-  const textStyle = (isCued: boolean, planned: boolean): CSSProperties => ({
-    fontSize: `${verseFont}px`,
-    lineHeight: 1.42,
-    fontWeight: 500,
-    color: isCued ? T.text : planned ? T.lineDim : T.dim,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden'
-  })
+  const rowStyle = (isLive: boolean, isCued: boolean, planned: boolean, selected: boolean): CSSProperties =>
+    railRowStyle(T, T.scripture, dark, { live: isLive, cued: isCued, planned, selected })
+  const labelStyle = (isCued: boolean, planned: boolean): CSSProperties =>
+    railLabelStyle(T, T.scripture, isCued || planned)
+  const badgeStyle = (isLive: boolean): CSSProperties => railBadgeStyle(T, isLive)
+  const textStyle = (isCued: boolean, planned: boolean): CSSProperties =>
+    railTextStyle(T, { cued: isCued, planned, fontPx: verseFont })
 
   const verses = Array.from({ length: verseCount }, (_, i) => i + 1)
 
