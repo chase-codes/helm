@@ -120,7 +120,7 @@ These three overlap on railTint.ts / transport.ts / PreServiceMode.tsx and propo
 |---|---|---|
 | B1 — Main-process seams | merged | [#161](https://github.com/chase-codes/helm/pull/161) |
 | B2 — Main-process perf & repos | merged | [#160](https://github.com/chase-codes/helm/pull/160) |
-| B3 — Chromium sandbox (medium risk) | open | |
+| B3 — Chromium sandbox (medium risk) | merged | [#168](https://github.com/chase-codes/helm/pull/168) |
 | B4 — Shared: message import + search dead code | merged | [#158](https://github.com/chase-codes/helm/pull/158) |
 | B5 — Shared: songs + scripture helpers | merged | [#159](https://github.com/chase-codes/helm/pull/159) |
 | B6 — Renderer: useHelm core | merged | [#163](https://github.com/chase-codes/helm/pull/163) |
