@@ -60,6 +60,12 @@ const SECTION_W_MIN = 260;
 const SECTION_W_MAX = 620;
 const SECONDARY_TITLE_MAX = 3;
 const SECONDARY_LIMIT = 3;
+// Trailing debounce for the keystroke search (same shape as the operator-window
+// 'moved' resync debounce in src/main/index.ts): at normal typing speed only the
+// last 2-4 keystrokes of a query reach the main process, which otherwise blocks
+// presTake/presGoLive behind every intermediate search. The import-completed
+// re-search stays un-debounced — it is one deliberate call, not a keystroke.
+const SEARCH_DEBOUNCE_MS = 120;
 // How long "Remove — sure?" stays armed before lapsing back. Same value Settings uses for
 // uninstalling a bible, because it is the same gesture — see onSongContextMenu.
 const REMOVE_CONFIRM_MS = 4000;
@@ -191,23 +197,27 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
   // results land and only when they are thin (< SECONDARY_TITLE_MAX) — the common fat
   // case previously paid a full lyric-scored search per keystroke (~12x the title cost)
   // and threw the result away (secondaryLyricRows returns [] when titles are not thin).
+  // Debounced: see SEARCH_DEBOUNCE_MS.
   useEffect(() => {
     if (!q.trim()) return;
     let live = true;
-    void window.helm.songs.search(q, field).then((r) => {
-      if (!live) return;
-      setResults(r);
-      if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
-        void window.helm.songs
-          .search(q, 'lyric')
-          .then((h) => {
-            if (live) setLyricHint(h);
-          })
-          .catch(console.error);
-      }
-    }).catch(console.error);
+    const timer = window.setTimeout(() => {
+      void window.helm.songs.search(q, field).then((r) => {
+        if (!live) return;
+        setResults(r);
+        if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
+          void window.helm.songs
+            .search(q, 'lyric')
+            .then((h) => {
+              if (live) setLyricHint(h);
+            })
+            .catch(console.error);
+        }
+      }).catch(console.error);
+    }, SEARCH_DEBOUNCE_MS);
     return () => {
       live = false;
+      window.clearTimeout(timer);
     };
   }, [q, field]);
 
