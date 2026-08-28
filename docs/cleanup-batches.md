@@ -123,7 +123,7 @@ These three overlap on railTint.ts / transport.ts / PreServiceMode.tsx and propo
 | B3 — Chromium sandbox (medium risk) | open | |
 | B4 — Shared: message import + search dead code | merged | [#158](https://github.com/chase-codes/helm/pull/158) |
 | B5 — Shared: songs + scripture helpers | merged | [#159](https://github.com/chase-codes/helm/pull/159) |
-| B6 — Renderer: useHelm core | open | |
+| B6 — Renderer: useHelm core | merged | [#163](https://github.com/chase-codes/helm/pull/163) |
 | B7 — Renderer: transport/tint style kit | open | |
 | B8 — Renderer: mode-surface helpers | open | |
 | B9 — Renderer: output canvases + logo slide | open | |
