@@ -18,6 +18,11 @@ export interface ScoredSong {
   dist: number;            // Σ best match distance of matched tokens (exact 0, prefix 1,
                            // fuzzy = edit distance) — lower wins; the only match-quality
                            // signal that survives into lyric mode (W5)
+  idfWeight: number;       // max ln((n+1)/(df+1)) over matched tokens, df = candidate-set
+                           // document frequency — the rarest matched token carries the
+                           // signal; equal-rarity candidates fall through to the
+                           // title/coverage tie-breaks. Filled only by rankSongs;
+                           // consulted only inside the partial band (W6)
   rel: number;             // -bm25 relevance from FTS (0 when FTS didn't match) (#53)
   tf: number;              // total exact occurrences of query tokens (higher wins)
   titleStartsWith: boolean;// title begins with the whole query (wins)
@@ -89,15 +94,20 @@ function bestSnippet(qts: string[], song: Song, doc: SongDoc): string {
 
 export function scoreSong(query: string, song: Song, field: SearchField, rel = 0): ScoredSong {
   const q = norm(query);
-  return scoreSignals(q, q ? q.split(' ') : [], song, field, rel, true);
+  const { bestDist: _internal, ...s } = scoreSignals(q, q ? q.split(' ') : [], song, field, rel, true);
+  return s;
 }
+
+// rankSongs needs per-token match info to compute candidate-set df; the public
+// ScoredSong stays free of it.
+interface ScoredInternal extends ScoredSong { bestDist: number[] }
 
 // `withSnippet=false` skips the snippet scan: it never affects ranking, so rankSongs
 // only pays for it on the rows it actually returns.
-function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredSong {
+function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredInternal {
   const doc = docFor(song);
   const title = doc.title;
-  const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, dist: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
+  const empty: ScoredInternal = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, dist: 0, idfWeight: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title, bestDist: [] };
   if (!q) return empty;
 
   // Token segments: phrase adjacency is transparent across line breaks (people
@@ -160,13 +170,18 @@ function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, 
     }
   }
   const titleStartsWith = field !== 'lyric' && title.startsWith(q);
-  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, dist, rel, tf, titleStartsWith, titleLen: title.length, title };
+  return { score, snippet, titleCoverage, titleCloseness, phrase, coverage: matched, covWeight, dist, idfWeight: 0, rel, tf, titleStartsWith, titleLen: title.length, title, bestDist: sig.bestDist };
 }
 
 // Order by primary score, then by relevance sub-signals, then lexicographically by
 // title. Insertion order can no longer decide a winner between two distinct titles.
 function compareRelevance(a: ScoredSong, b: ScoredSong): number {
   if (b.score !== a.score) return b.score - a.score;
+  // Partial band only (score 360): the candidates matched DIFFERENT token subsets,
+  // and a rare matched token outranks a common one wherever it matched (W6). Full
+  // bands matched every token, so their idfWeight is identical by construction —
+  // the guard just makes that scoping explicit.
+  if (a.score === 360 && b.idfWeight !== a.idfWeight) return b.idfWeight - a.idfWeight;
   if (b.titleCoverage !== a.titleCoverage) return b.titleCoverage - a.titleCoverage;
   if (b.covWeight !== a.covWeight) return b.covWeight - a.covWeight; // more of the query matched (W1) — stopwords weigh less
   if (a.titleCloseness !== b.titleCloseness) return a.titleCloseness - b.titleCloseness;
@@ -184,9 +199,21 @@ export function rankSongs(query: string, songs: Song[], field: SearchField, rel?
   const q = norm(query);
   if (!q) return songs.slice(0, limit).map((song) => ({ song, score: 1, snippet: '' }));
   const qts = q.split(' ');
-  return songs
+  const scored = songs
     .map((song) => ({ song, s: scoreSignals(q, qts, song, field, rel?.get(song.id) ?? 0, false) }))
-    .filter((r) => r.s.score > 0)
+    .filter((r) => r.s.score > 0);
+  // Candidate-set document frequency per token: how many surviving candidates
+  // matched it. Rarity is what separates "asbury" (a couple of songs) from
+  // "worship" (hundreds) when partial matches compete for the band (W6).
+  const df = qts.map((_, j) => scored.reduce((acc, r) => acc + (r.s.bestDist[j] < 99 ? 1 : 0), 0));
+  for (const r of scored) {
+    let w = 0;
+    for (let j = 0; j < qts.length; j++) {
+      if (r.s.bestDist[j] < 99) w = Math.max(w, Math.log((scored.length + 1) / (df[j] + 1)));
+    }
+    r.s.idfWeight = w;
+  }
+  return scored
     .sort((a, b) => compareRelevance(a.s, b.s))
     .slice(0, limit)
     .map(({ song, s }) => ({ song, score: s.score, snippet: field !== 'title' ? bestSnippet(qts, song, docFor(song)) : '' }));
