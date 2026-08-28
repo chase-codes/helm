@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties, type JSX } from 'react'
 import { ThemeCtx } from './ThemeCtx'
-import type { UpdateStatus } from '../../shared/types'
+import { useDisplayStatus, useUpdateStatus } from './useHelm'
 
 const SITE_URL = 'https://chase-codes.github.io/helm/'
 
@@ -13,35 +13,9 @@ const SITE_URL = 'https://chase-codes.github.io/helm/'
  */
 export function UpdateFooter(): JSX.Element {
   const T = useContext(ThemeCtx)
-  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle', version: null })
-  const [outputs, setOutputs] = useState(0)
+  const status = useUpdateStatus()
+  const { outputs } = useDisplayStatus()
   const [version, setVersion] = useState('')
-
-  useEffect(() => {
-    // A pushed onStatus event is always at least as fresh as the in-flight
-    // initial fetch, so once one arrives, ignore the fetch's stale result.
-    let gotPush = false
-    const off = window.helm.updates.onStatus((s) => {
-      gotPush = true
-      setStatus(s)
-    })
-    void window.helm.updates.getStatus().then((s) => {
-      if (!gotPush) setStatus(s)
-    })
-    return off
-  }, [])
-
-  useEffect(() => {
-    let gotPush = false
-    const off = window.helm.displays.onStatus((d) => {
-      gotPush = true
-      setOutputs(d.outputs)
-    })
-    void window.helm.displays.get().then((d) => {
-      if (!gotPush) setOutputs(d.outputs)
-    })
-    return off
-  }, [])
 
   useEffect(() => {
     let live = true

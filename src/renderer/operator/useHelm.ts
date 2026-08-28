@@ -1,48 +1,67 @@
 import { useEffect, useState } from 'react';
-import type { DisplayStatus, PresentationState, PreState, VideoStateWire } from '../../shared/types';
+import type { DisplayStatus, PresentationState, PreState, UpdateStatus, VideoStateWire } from '../../shared/types';
 
-export function usePresentationState(): PresentationState {
-  const [st, setSt] = useState<PresentationState>({ output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null });
+/**
+ * Fetch-then-subscribe bridge to a main-process state channel. A pushed event
+ * is always at least as fresh as the in-flight initial fetch, so once one
+ * arrives (or the host unmounts), the fetch's stale result is ignored.
+ */
+function useMainState<T>(initial: T, get: () => Promise<T>, subscribe: (cb: (v: T) => void) => () => void): T {
+  const [st, setSt] = useState<T>(initial);
   useEffect(() => {
-    let live = true;
-    void window.helm.presentation.get().then((s) => { if (live) setSt(s); });
-    const off = window.helm.presentation.onState(setSt);
-    return () => { live = false; off(); };
-  }, []);
+    let gotPush = false;
+    const off = subscribe((v) => { gotPush = true; setSt(v); });
+    void get().then((v) => { if (!gotPush) setSt(v); });
+    return () => { gotPush = true; off(); };
+  }, [get, subscribe]);
   return st;
 }
+
+export function usePresentationState(): PresentationState {
+  return useMainState<PresentationState>(
+    { output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null },
+    window.helm.presentation.get,
+    window.helm.presentation.onState
+  );
+}
 export function usePreState(): PreState {
-  const [s, setS] = useState<PreState>({ engaged: false, loopOn: true, idx: 0, dwellS: 12, cards: [] });
-  useEffect(() => {
-    let live = true;
-    void window.helm.preservice.getState().then((st) => { if (live) setS(st); });
-    const off = window.helm.preservice.onState(setS);
-    return () => { live = false; off(); };
-  }, []);
-  return s;
+  return useMainState<PreState>(
+    { engaged: false, loopOn: true, idx: 0, dwellS: 12, cards: [] },
+    window.helm.preservice.getState,
+    window.helm.preservice.onState
+  );
 }
 export function useDisplayStatus(): DisplayStatus {
-  const [d, setD] = useState<DisplayStatus>({ outputs: 0, displays: [], released: false });
-  useEffect(() => {
-    void window.helm.displays.get().then(setD);
-    return window.helm.displays.onStatus(setD);
-  }, []);
-  return d;
+  return useMainState<DisplayStatus>(
+    { outputs: 0, displays: [], released: false },
+    window.helm.displays.get,
+    window.helm.displays.onStatus
+  );
 }
-export function useClock(): string {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+export function useUpdateStatus(): UpdateStatus {
+  return useMainState<UpdateStatus>(
+    { state: 'idle', version: null },
+    window.helm.updates.getStatus,
+    window.helm.updates.onStatus
+  );
+}
+const fmtClock = (): string => {
+  const now = new Date();
   const p = (n: number): string => (n < 10 ? '0' : '') + n;
   const h = now.getHours() % 12 || 12;
   return `${h}:${p(now.getMinutes())} ${now.getHours() < 12 ? 'AM' : 'PM'}`;
+};
+// Stores the formatted no-seconds string, so 59 of every 60 ticks bail out
+// with an identical value instead of re-rendering the host.
+export function useClock(): string {
+  const [label, setLabel] = useState(fmtClock);
+  useEffect(() => { const t = setInterval(() => setLabel(fmtClock()), 1000); return () => clearInterval(t); }, []);
+  return label;
 }
 export function useVideoState(): VideoStateWire {
-  const [s, setS] = useState<VideoStateWire>({ key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false });
-  useEffect(() => {
-    let live = true;
-    void window.helm.video.get().then((v) => { if (live) setS(v); });
-    const off = window.helm.video.onState(setS);
-    return () => { live = false; off(); };
-  }, []);
-  return s;
+  return useMainState<VideoStateWire>(
+    { key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false },
+    window.helm.video.get,
+    window.helm.video.onState
+  );
 }
