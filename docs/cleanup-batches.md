@@ -125,6 +125,6 @@ These three overlap on railTint.ts / transport.ts / PreServiceMode.tsx and propo
 | B5 — Shared: songs + scripture helpers | merged | [#159](https://github.com/chase-codes/helm/pull/159) |
 | B6 — Renderer: useHelm core | merged | [#163](https://github.com/chase-codes/helm/pull/163) |
 | B7 — Renderer: transport/tint style kit | merged | [#164](https://github.com/chase-codes/helm/pull/164) |
-| B8 — Renderer: mode-surface helpers | open | |
+| B8 — Renderer: mode-surface helpers | merged | [#165](https://github.com/chase-codes/helm/pull/165) |
 | B9 — Renderer: output canvases + logo slide | open | |
 | B10 — Renderer: chrome constants (wide mechanical) | open | |
