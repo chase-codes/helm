@@ -1,12 +1,15 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- plain JS script */
 // Regenerates the raster brand assets from the vector sources in assets/.
 //
-//   node scripts/generate-brand-assets.mjs
+//   node scripts/generate-brand-assets.mjs            # 64–1024, ico, icns, banner
+//   node scripts/generate-brand-assets.mjs --small    # also icon-16/32
 //
 // Sources of truth:
 //   assets/helm-mark.svg          — the gold helm wheel (96 viewBox)
-//   assets/app-icon/icon-{16,32,48}.png — hand-tuned small sizes (simplified
-//                                   four-spoke wheel ≤32px); never regenerated
+//   assets/app-icon/icon-48.png   — hand-tuned; never regenerated
+//   assets/app-icon/icon-{16,32}.png — drawn by scripts/small-wheel.mjs (thick
+//                                   rim + 8 handle nubs, no spokes; #64) only
+//                                   when --small is passed, never by accident
 //
 // Outputs:
 //   assets/app-icon/icon-{64,128,256,512,1024}.png and icon.png (1024 master)
@@ -14,6 +17,7 @@
 //   build/icon.png (1024), build/icon.ico, build/icon.icns (macOS only)
 //   resources/icon.png (256)      — runtime window icon
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas'
+import { TILE, roundRect, drawSmallWheel } from './small-wheel.mjs'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -25,7 +29,7 @@ const appIconDir = path.join(root, 'assets', 'app-icon')
 
 // Icon tile recipe (fitted to the brand deliverable PNGs): full-bleed rounded
 // square, 23% corner radius, vertical navy gradient, mark at 64% of the tile.
-const TILE = { radius: 0.23, markScale: 0.64, gradTop: '#26324B', gradBottom: '#0D1422' }
+// TILE itself lives in small-wheel.mjs so the 16/32 routine shares it.
 
 const markSvg = fs.readFileSync(path.join(root, 'assets', 'helm-mark.svg'))
 
@@ -36,16 +40,6 @@ async function markAt(size) {
   img.width = size
   img.height = size
   return img
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.arcTo(x + w, y, x + w, y + h, r)
-  ctx.arcTo(x + w, y + h, x, y + h, r)
-  ctx.arcTo(x, y + h, x, y, r)
-  ctx.arcTo(x, y, x + w, y, r)
-  ctx.closePath()
 }
 
 async function renderTile(size) {
@@ -209,6 +203,14 @@ async function generateBanner() {
   fs.writeFileSync(path.join(root, 'assets', 'github-banner.png'), c.toBuffer('image/png'))
 }
 
+if (process.argv.includes('--small')) {
+  for (const size of [16, 32]) {
+    fs.writeFileSync(
+      path.join(appIconDir, `icon-${size}.png`),
+      drawSmallWheel(size).toBuffer('image/png')
+    )
+  }
+}
 const pngs = await generateIconPngs()
 fs.writeFileSync(path.join(root, 'build', 'icon.png'), pngs[1024])
 fs.writeFileSync(path.join(root, 'resources', 'icon.png'), pngs[256])
