@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { rankSongs, scoreSong } from './songScore';
+import { rankSongs, scoreSong, buildSongDoc } from './songScore';
 import type { Song } from '../types';
 
 const song = (id: string, title: string, author: string, secs: [string, string[]][]): Song => ({
@@ -269,4 +269,26 @@ test('positive control: a genuine typo onto a >=5 char title word still earns ti
   const r = scoreSong('recukless', reckless, 'all');
   expect(r.titleCoverage).toBe(1);
   expect(r.titleCloseness).toBe(1);
+});
+
+// --- W3 (title field): the word-start band applies in 'title' mode too, not just
+// transitively through shared code — after the P1 refactor the title path reads the
+// doc directly, so this must be pinned on its own.
+test('title field: a word-interior substring earns no band (W3)', () => {
+  const heart = song('heart', 'Heart of Worship', '', [['V', ['when the music fades']]]);
+  expect(scoreSong('art', heart, 'title').score).toBe(0);
+});
+test('title field: a word-start substring keeps its exact band value (W3)', () => {
+  const itIsWell = song('itiswell', 'It Is Well With My Soul', '', [['V', ['it is well']]]);
+  expect(scoreSong('well', itIsWell, 'title').score).toBe(994); // ' well' at index 5 → word start 6 → 1000-6
+});
+
+// --- P1: precomputed per-song normalized docs ---
+test('buildSongDoc precomputes normalized words for title, author, sections and lines', () => {
+  const d = buildSongDoc(AMAZING);
+  expect(d.title).toBe('amazing grace');
+  expect(d.titleWords).toEqual(['amazing', 'grace']);
+  expect(d.authorWords).toEqual(['john', 'newton']);
+  expect(d.sectionWords[0]).toEqual(['amazing', 'grace', 'how', 'sweet', 'the', 'sound', 'that', 'saved', 'a', 'wretch', 'like', 'me']);
+  expect(d.lineWords[0][1]).toEqual(['that', 'saved', 'a', 'wretch', 'like', 'me']);
 });

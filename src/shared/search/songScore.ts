@@ -1,4 +1,4 @@
-import type { Song, SongSection, SongSearchResult, SearchField } from '../types';
+import type { Song, SongSearchResult, SearchField } from '../types';
 import { norm, bestMatch, bestSolidMatch, textSignals } from './fuzzy';
 
 // Primary `score` (unchanged flat buckets) plus deterministic relevance sub-signals
@@ -25,11 +25,46 @@ export interface ScoredSong {
   title: string;           // lexicographic final tiebreak → fully insertion-order-independent
 }
 
+// Precomputed normalized token views of a song. Built once per Song OBJECT and
+// cached by identity (WeakMap) — the repo hands out memoized Song objects and
+// replaces them on write, so invalidation is object replacement, never bookkeeping
+// here. Reproduces scoreSignals' segmentation exactly: title and author are
+// separate segments (W9); one segment per section; per-line words feed the snippet.
+export interface SongDoc {
+  title: string;            // norm(song.title)
+  titleWords: string[];     // title.split(' ') minus empties
+  authorWords: string[];    // norm(song.author).split(' ') minus empties
+  sectionWords: string[][]; // per section, all words
+  lineWords: string[][][];  // per section, per line
+}
+
+export function buildSongDoc(song: Song): SongDoc {
+  const title = norm(song.title);
+  const lineWords = song.sections.map((sc) => sc.lines.map((ln) => norm(ln).split(' ').filter(Boolean)));
+  return {
+    title,
+    titleWords: title.split(' ').filter(Boolean),
+    authorWords: norm(song.author).split(' ').filter(Boolean),
+    sectionWords: lineWords.map((ls) => ls.flat()),
+    lineWords,
+  };
+}
+
+const DOCS = new WeakMap<Song, SongDoc>();
+function docFor(song: Song): SongDoc {
+  let d = DOCS.get(song);
+  if (!d) {
+    d = buildSongDoc(song);
+    DOCS.set(song, d);
+  }
+  return d;
+}
+
 // Snippet: the line (or two-line window) with the most distinct query-token matches,
 // whole-word with fuzzy tolerance — never an unanchored substring, and independent of
 // the score (#53). A two-line window wins only when it genuinely beats every single line,
 // so cross-line phrases surface as "line one / line two".
-function bestSnippet(qts: string[], sections: SongSection[]): string {
+function bestSnippet(qts: string[], song: Song, doc: SongDoc): string {
   const density = (words: string[]): number => {
     let n = 0;
     for (const t of qts) if (bestMatch(t, words) < 99) n++;
@@ -37,8 +72,9 @@ function bestSnippet(qts: string[], sections: SongSection[]): string {
   };
   let single = { d: 0, text: '' };
   let pair = { d: 0, text: '' };
-  for (const sc of sections) {
-    const words = sc.lines.map((ln) => norm(ln).split(' ').filter(Boolean));
+  for (let si = 0; si < song.sections.length; si++) {
+    const sc = song.sections[si];
+    const words = doc.lineWords[si];
     for (let i = 0; i < sc.lines.length; i++) {
       const d1 = density(words[i]);
       if (d1 > single.d) single = { d: d1, text: sc.lines[i] };
@@ -52,17 +88,17 @@ function bestSnippet(qts: string[], sections: SongSection[]): string {
 }
 
 export function scoreSong(query: string, song: Song, field: SearchField, rel = 0): ScoredSong {
-  return scoreSignals(query, song, field, rel, true);
+  const q = norm(query);
+  return scoreSignals(q, q ? q.split(' ') : [], song, field, rel, true);
 }
 
 // `withSnippet=false` skips the snippet scan: it never affects ranking, so rankSongs
 // only pays for it on the rows it actually returns.
-function scoreSignals(query: string, song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredSong {
-  const q = norm(query);
-  const title = norm(song.title);
+function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, rel: number, withSnippet: boolean): ScoredSong {
+  const doc = docFor(song);
+  const title = doc.title;
   const empty: ScoredSong = { score: 1, snippet: '', titleCoverage: 0, titleCloseness: 0, phrase: 0, coverage: 0, covWeight: 0, dist: 0, rel: 0, tf: 0, titleStartsWith: false, titleLen: title.length, title };
   if (!q) return empty;
-  const qts = q.split(' ');
 
   // Token segments: phrase adjacency is transparent across line breaks (people
   // remember lyrics as continuous text) but blocked at section boundaries; the
@@ -73,12 +109,10 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
     if (field !== 'lyric') {
       // Title and author are separate segments (W9): "grace john" must not earn a
       // phrase run bridging "Amazing Grace" into "John Newton".
-      const tw = title.split(' ').filter(Boolean);
-      if (tw.length) segs.push(tw);
-      const aw = norm(song.author).split(' ').filter(Boolean);
-      if (aw.length) segs.push(aw);
+      if (doc.titleWords.length) segs.push(doc.titleWords);
+      if (doc.authorWords.length) segs.push(doc.authorWords);
     }
-    for (const sc of song.sections) { const ws = norm(sc.lines.join(' ')).split(' ').filter(Boolean); if (ws.length) segs.push(ws); }
+    for (const ws of doc.sectionWords) if (ws.length) segs.push(ws);
   }
 
   const sig = textSignals(segs, qts);
@@ -107,14 +141,14 @@ function scoreSignals(query: string, song: Song, field: SearchField, rel: number
   // The partial band needs at least one significant matched token — 1-2 char stopwords
   // fuzz into nearly anything and must not qualify a song on their own.
   else if (strongSolid > 0 && field !== 'title') score = Math.max(score, 360);
-  const snippet = withSnippet && score > 0 && field !== 'title' ? bestSnippet(qts, song.sections) : '';
+  const snippet = withSnippet && score > 0 && field !== 'title' ? bestSnippet(qts, song, doc) : '';
 
   // Tie-break signals. Title-based signals only apply when the title is in scope; a
   // lyric-only search has no title relevance, so they stay neutral and the lyric
   // signals (phrase/coverage/rel/tf) decide.
   let titleCoverage = 0; let titleCloseness = 0;
   if (field !== 'lyric') {
-    const titleWords = title.split(' ');
+    const titleWords = doc.titleWords;
     for (const t of qts) {
       if (t.length < 3) continue; // mirror `strong`: a 1-2 char stopword fuzzes into any title (W2)
       // Title credit requires a SOLID match (mirrors strongSolid, Task 14): fuzzing
@@ -151,9 +185,9 @@ export function rankSongs(query: string, songs: Song[], field: SearchField, rel?
   if (!q) return songs.slice(0, limit).map((song) => ({ song, score: 1, snippet: '' }));
   const qts = q.split(' ');
   return songs
-    .map((song) => ({ song, s: scoreSignals(query, song, field, rel?.get(song.id) ?? 0, false) }))
+    .map((song) => ({ song, s: scoreSignals(q, qts, song, field, rel?.get(song.id) ?? 0, false) }))
     .filter((r) => r.s.score > 0)
     .sort((a, b) => compareRelevance(a.s, b.s))
     .slice(0, limit)
-    .map(({ song, s }) => ({ song, score: s.score, snippet: field !== 'title' ? bestSnippet(qts, song.sections) : '' }));
+    .map(({ song, s }) => ({ song, score: s.score, snippet: field !== 'title' ? bestSnippet(qts, song, docFor(song)) : '' }));
 }

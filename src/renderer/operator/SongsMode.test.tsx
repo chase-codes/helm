@@ -259,6 +259,47 @@ describe('SongsMode', () => {
     fireEvent.click(screen.getByText('Close'));
     await waitFor(() => expect(screen.getByText('Newly Imported Song')).toBeTruthy());
   });
+
+  it('rapid keystrokes coalesce into a single search for the final query', async () => {
+    const { search } = installHelmStub();
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+    const input = screen.getByPlaceholderText('Title or a lyric line…');
+    // synchronous burst — no timer can fire between these, so a trailing debounce
+    // must collapse them into exactly one IPC call for the final value
+    fireEvent.change(input, { target: { value: 'a' } });
+    fireEvent.change(input, { target: { value: 'am' } });
+    fireEvent.change(input, { target: { value: 'ama' } });
+    await waitFor(() => expect(search).toHaveBeenCalledWith('ama', 'all'));
+    expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it('title mode skips the lyric-hint search when title results are not thin', async () => {
+    const rows: SongSearchResult[] = ['t1', 't2', 't3'].map((id, i) => ({
+      song: { ...SONGS[0], id, title: `Grace ${i}` }, score: 1000, snippet: ''
+    }));
+    const { search } = installHelmStub((_q, field) => Promise.resolve(field === 'lyric' ? [] : rows));
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+    fireEvent.click(screen.getByText('Title'));
+    const input = screen.getByPlaceholderText('Search titles…');
+    fireEvent.change(input, { target: { value: 'grace' } });
+    await waitFor(() => expect(screen.getByText('Grace 0')).toBeTruthy());
+    expect(search.mock.calls.filter((c) => c[1] === 'lyric')).toHaveLength(0);
+  });
+
+  it('title mode still fetches the lyric hint when title results are thin', async () => {
+    const HINT: SongSearchResult = { song: { ...SONGS[0], id: 'h1', title: 'Hidden Gem' }, score: 400, snippet: 'a lyric line' };
+    installHelmStub((_q, field) => Promise.resolve(field === 'lyric' ? [HINT] : []));
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    renderMode(keyHandlerRef);
+    await screen.findByText(/John Newton ·/);
+    fireEvent.click(screen.getByText('Title'));
+    fireEvent.change(screen.getByPlaceholderText('Search titles…'), { target: { value: 'gem' } });
+    await waitFor(() => expect(screen.getByText('Hidden Gem')).toBeTruthy());
+  });
 });
 
 describe('SongsMode hotkey jumps', () => {

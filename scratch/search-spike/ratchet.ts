@@ -5,13 +5,13 @@
 // not a CI benchmark.
 export const RATCHET = {
   // Quality floors (eval.test.ts)
-  unweightedP1Min: 48,              // count of rank-1 hits over QUERIES
-  weightedP1MinPct: 92,             // intent-weighted p@1, percent (exact 92.86%, floored)
-  recall50MinPct: 97,               // intent-weighted recall@50, percent
+  unweightedP1Min: 49,               // count of rank-1 hits over QUERIES (P10: vocab expansion; was 48)
+  weightedP1MinPct: 94,              // intent-weighted p@1, percent (exact 94.64%, floored; was 92)
+  recall50MinPct: 97,                // intent-weighted recall@50, percent (exact 97.62%, floored — unchanged)
   // Stability ceilings (stability.test.ts)
-  churnMax: 143,                    // top-1 changes across all replayed keystrokes
-  monotonicityMax: 20,              // target held rank 1, then a further keystroke of the labeled query demoted it
-  giveMeYourHandRegressionsMax: 0,  // hit→miss regressions replaying the reported bug
+  churnMax: 137,                     // top-1 changes across all replayed keystrokes (P10: vocab expansion; was 143)
+  monotonicityMax: 20,               // target held rank 1, then a further keystroke of the labeled query demoted it (unchanged)
+  giveMeYourHandRegressionsMax: 0,   // hit→miss regressions replaying the reported bug
   // Perf ceiling (eval.test.ts latency loop)
-  latencyMs3000Max: 330,            // avg ms/search at 3000 songs (pinned from the slowest observed run)
+  latencyMs3000Max: 120,             // avg ms/search at 3000 songs (P10: vocab-expansion fallback replaces the full-library scan; pinned from slowest observed run 79.49ms x 1.5, rounded up to nearest 10)
 };

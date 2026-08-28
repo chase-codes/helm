@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS songs (
 CREATE VIRTUAL TABLE IF NOT EXISTS song_fts USING fts5(
   ${SONG_FTS_COLUMNS.join(', ')}, tokenize='unicode61 remove_diacritics 2'
 );
+CREATE VIRTUAL TABLE IF NOT EXISTS song_vocab USING fts5vocab(song_fts, 'row');
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS bible_versions (
   id TEXT PRIMARY KEY, abbr TEXT NOT NULL, name TEXT NOT NULL,
