@@ -381,12 +381,12 @@ export function SongsMode({ keyHandlerRef, active }: SongsModeProps): JSX.Elemen
     if (query) {
       void window.helm.songs.search(query, field).then((r) => {
         if (mountedRef.current) setResults(r);
+        if (field === 'title' && r.length < SECONDARY_TITLE_MAX) {
+          void window.helm.songs.search(query, 'lyric').then((h) => {
+            if (mountedRef.current) setLyricHint(h);
+          }).catch(console.error);
+        }
       }).catch(console.error);
-      if (field === 'title') {
-        void window.helm.songs.search(query, 'lyric').then((r) => {
-          if (mountedRef.current) setLyricHint(r);
-        }).catch(console.error);
-      }
     }
     if (song.id === activeSongId && song.sections.length) {
       // Read the live ref, not the closed-over clampedSection: the save this callback

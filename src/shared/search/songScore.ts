@@ -148,7 +148,7 @@ function scoreSignals(q: string, qts: string[], song: Song, field: SearchField, 
   // signals (phrase/coverage/rel/tf) decide.
   let titleCoverage = 0; let titleCloseness = 0;
   if (field !== 'lyric') {
-    const titleWords = title.split(' ');
+    const titleWords = doc.titleWords;
     for (const t of qts) {
       if (t.length < 3) continue; // mirror `strong`: a 1-2 char stopword fuzzes into any title (W2)
       // Title credit requires a SOLID match (mirrors strongSolid, Task 14): fuzzing

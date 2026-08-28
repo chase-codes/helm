@@ -111,6 +111,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   const getVocab = (): { raw: string; norm: string }[] =>
     (vocab ??= (selectVocab.all() as { term: string }[])
       .map((r) => ({ raw: r.term, norm: norm(r.term) }))
+      // Pure-symbol terms normalize to '' and can never be within tolerance of a ≥3-char token — drop them to keep the scan tight.
       .filter((v) => v.norm));
   // Nearest-tier expansion for a token with NO FTS prefix hit of its own: only the
   // vocabulary terms at the smallest edit distance found join the OR group (ties
