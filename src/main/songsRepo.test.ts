@@ -24,12 +24,30 @@ test('search finds by typo’d lyric via re-rank fallback', () => {
   const r = repo.search('only beleive', 'all');
   expect(r[0].song.title).toBe('Only Believe');
 });
-test('a typo in the distinguishing token is rescued even when a common token clears the 30-hit gate (#13)', () => {
+test('a typo in the distinguishing token is rescued even when a common token clears 30 hits (#13, via vocab expansion)', () => {
   // 30 decoys all match "holy"; the target matches only "reckless", and only fuzzily.
+  // The old mechanism full-scanned; the new one expands "reckelss" against song_vocab
+  // to the nearest tier ("reckless") and re-runs the FTS gate. Same observable rescue.
   for (let i = 0; i < 30; i++) repo.add({ title: `Holy Hymn ${i}`, text: `Verse 1\nHoly, holy is the Lord number ${i}` });
   repo.add({ title: 'Reckless Love', text: 'Chorus\nOh the overwhelming never-ending reckless love of God' });
   const r = repo.search('holy reckelss', 'all').map((x) => x.song.title);
   expect(r).toContain('Reckless Love');
+});
+test('an all-digit token with no FTS hit still finds its song via the full scan ("10000")', () => {
+  // "10,000" indexes as "10"/"000": nothing prefixes "10000" and vocab expansion
+  // would fuzz it away (measured regression) — digits keep the full-scan path where
+  // matchDist's digit-prefix rule rescues them.
+  repo.add({ title: '10,000 Reasons (Bless the Lord)', text: 'Chorus\nBless the Lord O my soul' });
+  for (let i = 0; i < 30; i++) repo.add({ title: `Hymn ${i}`, text: `Verse 1\nsing praise number ${i}` });
+  const r = repo.search('10000', 'all').map((x) => x.song.title);
+  expect(r[0]).toBe('10,000 Reasons (Bless the Lord)');
+});
+test('vocabulary expansion sees terms from songs added after the first search', () => {
+  repo.add({ title: 'Cornerstone', text: 'Chorus\nChrist alone cornerstone' });
+  repo.search('cornerstoen', 'all'); // warms the vocab cache
+  repo.add({ title: 'Wellspring', text: 'Verse 1\nwellspring of wonder' });
+  const r = repo.search('wellspirng', 'all').map((x) => x.song.title); // needs post-add vocab
+  expect(r).toContain('Wellspring');
 });
 test('accented songs are found by accented and unaccented queries (#12)', () => {
   repo.add({ title: 'Renuévame', text: 'Coro\nRenuévame Señor Jesús, no quiero ser igual' });

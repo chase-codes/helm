@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import type { NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput } from '../shared/types';
 import { SONG_FTS_COLUMNS } from './schema';
-import { norm } from '../shared/search/fuzzy';
+import { norm, matchDist, matchTol } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
 import { lyricsOf, lyricsOfSections } from '../shared/songs/lyrics';
@@ -59,6 +59,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
     insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
     insertFts.run(song.id, song.title, song.author, lyricsOf(song));
+    invalidateVocab();
     // No songCache.delete here: the id is freshly minted (randomUUID above), so the
     // cache can hold no stale entry for it.
     return song;
@@ -95,6 +96,40 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       db.prepare(`SELECT s.rowid AS rowid, s.id AS id, s.title AS title, s.author AS author, s.sections_json AS sections_json, s.source AS source, s.created_at AS created_at, s.music_key AS music_key, -${BM25[f]} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}`),
     ])
   ) as Record<SearchField, ReturnType<typeof db.prepare>>;
+  // Vocabulary of every indexed song term, loaded on first use and dropped whenever
+  // song_fts changes — the verse pattern (biblesRepo.expandToken / verse_vocab).
+  const selectVocab = db.prepare('SELECT term FROM song_vocab');
+  // { raw, norm } pairs: fts5's tokenizer strips combining-mark diacritics but leaves
+  // letters like ß intact (verified directly against song_vocab), while every query
+  // token is norm()'d before it ever reaches expandToken. Comparing un-normalized
+  // "großer" against normalized "gros" put them 3 edits apart instead of 1 and let an
+  // irrelevant same-distance decoy ("grow") win the nearest tier (measured monotonicity
+  // regression on "grosser gott") — `norm` is what distance compares against, `raw` is
+  // what re-queries FTS (the index still only recognizes its own un-normalized token).
+  let vocab: { raw: string; norm: string }[] | null = null;
+  const invalidateVocab = (): void => { vocab = null; };
+  const getVocab = (): { raw: string; norm: string }[] =>
+    (vocab ??= (selectVocab.all() as { term: string }[])
+      .map((r) => ({ raw: r.term, norm: norm(r.term) }))
+      .filter((v) => v.norm));
+  // Nearest-tier expansion for a token with NO FTS prefix hit of its own: only the
+  // vocabulary terms at the smallest edit distance found join the OR group (ties
+  // included) — everything within tolerance would pollute retrieval AND ranking.
+  // Returns [] when the token is too short or nothing is in reach; the scorer then
+  // simply never matches that token, same as a fruitless full scan today.
+  const expandToken = (tok: string): string[] => {
+    if (tok.length < 3) return [];
+    const tol = matchTol(tok.length);
+    let best = Infinity;
+    let near: string[] = [];
+    for (const t of getVocab()) {
+      const d = matchDist(tok, t.norm);
+      if (d > tol) continue;
+      if (d < best) { best = d; near = [t.raw]; }
+      else if (d === best) near.push(t.raw);
+    }
+    return near;
+  };
   const list = (): Song[] => (db.prepare('SELECT rowid, * FROM songs ORDER BY created_at, title').all() as Row[]).map(toSongCached);
   const get = (id: string): Song | null => {
     const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined;
@@ -147,6 +182,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
         updateFts.run(title, author, lyricsOfSections(sections), id);
       })();
       songCache.delete(id);
+      invalidateVocab();
       return song;
     },
     remove(id) {
@@ -155,24 +191,36 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
         deleteSong.run(id);
       })();
       songCache.delete(id);
+      invalidateVocab();
       return list();
     },
     search(q, field) {
       const tokens = norm(q).split(' ').filter(Boolean);
       if (!tokens.length) return rankSongs('', list(), field);
       const tokenHasHit = (t: string): boolean => (probeStmt.get(ftsTerm(t, true)) as unknown) !== undefined;
-      const match = orPrefixMatch(tokens);
-      // bm25 gives TF-IDF relevance the JS scorer can't (#53); `field` arrives over
-      // IPC, so it is whitelisted before selecting a prepared statement.
       const stmt = Object.hasOwn(searchStmt, field) ? searchStmt[field as SearchField] : searchStmt.all;
-      const hits = stmt.all(match) as (Row & { rel: number })[];
+      let match = orPrefixMatch(tokens);
+      let hits = stmt.all(match) as (Row & { rel: number })[];
+      const noHit = tokens.filter((t) => !tokenHasHit(t));
+      // All-digit tokens can't be vocabulary-expanded: "10,000" indexes as "10"/"000",
+      // no term prefixes "10000" — only matchDist's digit-prefix rule over the full
+      // library rescues it (the measured "10000" regression). The one surviving
+      // full-scan class.
+      if (noHit.some((t) => /^[0-9]+$/.test(t))) {
+        return rankSongs(q, list(), field, new Map(hits.map((h) => [h.id, h.rel])), 50);
+      }
+      // Typo handling is per TOKEN (#13), now by vocabulary expansion instead of a
+      // full-library scan: each no-hit token ORs in its nearest indexed terms and the
+      // candidate gate re-runs — the fuzzy pass costs O(vocab), not O(library words).
+      if (noHit.length) {
+        const extra = [...new Set(noHit.flatMap((t) => expandToken(t)))];
+        if (extra.length) {
+          match = [match, ...extra.map((t) => ftsTerm(t, false))].join(' OR ');
+          hits = stmt.all(match) as (Row & { rel: number })[];
+        }
+      }
       const rel = new Map(hits.map((h) => [h.id, h.rel]));
-      let candidates: Song[];
-      // Typo detection is per TOKEN, not per hit count (#13): any token with no FTS
-      // hit of its own → scan the library (FTS rows keep their bm25 prior via `rel`).
-      if (hits.length >= 30 && tokens.every((t) => tokenHasHit(t))) {
-        candidates = hits.map(toSongCached).sort(libraryOrder);
-      } else candidates = list(); // sparse hits or an unmatched token → typo likely; scorer handles fuzz
+      const candidates = hits.map(toSongCached).sort(libraryOrder);
       return rankSongs(q, candidates, field, rel, 50);
     },
   };
