@@ -9,7 +9,7 @@ import { ReleaseToggle } from './ReleaseToggle'
 import { UpdatePill } from './UpdatePill'
 import { HelmMark } from '../shared/HelmMark'
 import type { IconProps } from '../shared/icons'
-import { MoonIcon, PreServiceIcon, ScreenBlackIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
+import { FeedbackIcon, MoonIcon, PreServiceIcon, ScreenBlackIcon, SermonIcon, SettingsIcon, SongsIcon, SunIcon } from '../shared/icons'
 import { MONO } from '../shared/fonts'
 
 export interface HeaderProps {
@@ -18,6 +18,7 @@ export interface HeaderProps {
   themeMode: ThemeMode
   toggleTheme: () => void
   onOpenSettings: () => void
+  onOpenFeedback: () => void
   hotkeyOverrides: HotkeyOverrides
 }
 
@@ -33,6 +34,7 @@ export function Header({
   themeMode,
   toggleTheme,
   onOpenSettings,
+  onOpenFeedback,
   hotkeyOverrides
 }: HeaderProps): JSX.Element {
   const T = useContext(ThemeCtx)
@@ -191,6 +193,9 @@ export function Header({
       </button>
       <button style={themeBtnStyle} onClick={onOpenSettings} title="Settings">
         <SettingsIcon size={17} />
+      </button>
+      <button style={themeBtnStyle} onClick={onOpenFeedback} title="Send feedback">
+        <FeedbackIcon size={17} />
       </button>
       <Clock
         style={{

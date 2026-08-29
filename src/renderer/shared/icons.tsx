@@ -174,3 +174,12 @@ export function MoonIcon(p: IconProps): JSX.Element {
     </Icon>
   )
 }
+
+export function FeedbackIcon(p: IconProps): JSX.Element {
+  return (
+    <Icon {...p}>
+      <path d="M3.5 5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8.5L5 16.5v-3h.5a2 2 0 0 1-2-2v-6z" />
+      <path d="M7 8h6M7 10.5h4" />
+    </Icon>
+  )
+}

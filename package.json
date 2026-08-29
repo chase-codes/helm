@@ -13,6 +13,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
+    "test:worker": "npm --prefix feedback-worker test",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",

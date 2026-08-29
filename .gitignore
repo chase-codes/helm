@@ -13,3 +13,6 @@ scratch/
 
 # Vendored LibreOffice tree (150+ MB) — staged by scripts/vendor-libreoffice.mjs
 resources/libreoffice/
+
+feedback-worker/node_modules
+feedback-worker/.wrangler

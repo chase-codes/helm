@@ -1,0 +1,12 @@
+name = "helm-feedback"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+GITHUB_REPO = "chase-codes/helm"
+
+[[kv_namespaces]]
+binding = "RATE"
+id = "REPLACE_WITH_OUTPUT_OF_wrangler_kv_namespace_create"
+
+# Secrets (wrangler secret put): GITHUB_TOKEN, CLIENT_KEY

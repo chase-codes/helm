@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX, type MutableRefObject } from 'react';
 import { blurOnPointerClick } from './blurOnPointerClick';
 import { suppressSpaceActivation } from './suppressSpaceActivation';
+import { FeedbackModal } from './FeedbackModal';
 import { Header } from './Header';
 import { ModeErrorBoundary } from './ModeErrorBoundary';
 import { dispatchModeKey } from './keyDispatch';
@@ -64,6 +65,11 @@ function App(): JSX.Element {
   // SongsMode/SermonMode the way QuickAdd's modal state lives in SongsMode.
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // App-level like Settings — the Help menu and the header button open the same
+  // dialog, and neither owns a mode.
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  useEffect(() => window.helm.feedback.onOpen(() => setFeedbackOpen(true)), []);
+
   // Bumped by SettingsModal after a successful bible uninstall (which, unlike install,
   // has no IPC progress broadcast for SermonMode to piggyback on) so App can mediate the
   // refresh between the two sibling components instead of them reaching into each other.
@@ -116,8 +122,8 @@ function App(): JSX.Element {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void =>
       dispatchModeKey(e, {
-        settingsOpen,
-        closeSettings: () => setSettingsOpen(false),
+        settingsOpen: settingsOpen || feedbackOpen,
+        closeSettings: () => { setSettingsOpen(false); setFeedbackOpen(false); },
         handler: keyHandlerRef.current,
         scope: mode === 'songs' ? 'songs' : mode === 'sermon' ? 'scripture' : null,
         overrides: hotkeyOverrides,
@@ -125,7 +131,7 @@ function App(): JSX.Element {
       });
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [settingsOpen, mode, hotkeyOverrides, onAppAction]);
+  }, [settingsOpen, feedbackOpen, mode, hotkeyOverrides, onAppAction]);
 
   // Release DOM focus from mouse-clicked buttons so the last-clicked control doesn't keep
   // a lingering :focus-visible ring once keyboard navigation begins (BUG-001). See
@@ -157,7 +163,7 @@ function App(): JSX.Element {
   return (
     <ThemeCtx.Provider value={theme}>
       <div style={rootStyle}>
-        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} hotkeyOverrides={hotkeyOverrides} />
+        <Header mode={mode} setMode={setMode} themeMode={themeMode} toggleTheme={toggleTheme} onOpenSettings={() => setSettingsOpen(true)} onOpenFeedback={() => setFeedbackOpen(true)} hotkeyOverrides={hotkeyOverrides} />
         <div style={mainStyle}>
           {/* Unlike Songs/Sermon, Pre-service is mounted only while it's the active page
               — the brief gives it no keep-alive, since its whole state lives in main and
@@ -204,6 +210,7 @@ function App(): JSX.Element {
             setThemeMode={setThemeMode}
           />
         )}
+        {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
       </div>
     </ThemeCtx.Provider>
   );

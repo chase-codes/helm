@@ -1,12 +1,10 @@
 import { app, shell, BrowserWindow, Menu, protocol, session, desktopCapturer } from 'electron'
 import { join } from 'path'
-import os from 'node:os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import { CH } from '../shared/types'
 import { broadcastAll } from './broadcast'
-import { osLabel, reportProblemUrl } from './feedback'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
 import { createBiblesRepo } from './biblesRepo'
@@ -121,11 +119,8 @@ function buildMenu(): void {
       label: 'Help',
       submenu: [
         {
-          label: 'Report a Problem…',
-          click: () =>
-            shell.openExternal(
-              reportProblemUrl(app.getVersion(), osLabel(process.platform, os.release()))
-            )
+          label: 'Send Feedback…',
+          click: () => broadcastAll(CH.feedbackOpen)(null)
         }
       ]
     }
