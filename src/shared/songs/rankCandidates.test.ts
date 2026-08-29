@@ -43,6 +43,43 @@ describe('rankCandidates', () => {
     expect(out[0]).toBe(match);
   });
 
+  it('prefers an exact title match over an artist-name match', () => {
+    // LRCLIB's "q=Jireh" is 20 rows of the artist Jireh Lim; the worship song is the
+    // one whose *title* is Jireh.
+    const lim = row({ trackName: 'Diwata', artistName: 'Jireh Lim', plainLyrics: 'Ikaw ang diwata\nng buhay ko\n\nIkaw ang diwata\nng buhay ko' });
+    const song = row({ trackName: 'Jireh', artistName: 'Elevation Worship', plainLyrics: 'I will be content\nin every circumstance\n\nJireh You are enough\nJireh You are enough' });
+    const out = rankCandidates([lim, song], 'jireh');
+    expect(out[0]).toBe(song);
+  });
+
+  it('prefers a worship artist when titles match equally', () => {
+    const pop = row({ trackName: 'Gratitude', artistName: 'Beastie Boys', plainLyrics: 'Good times gone\nand you missed them\n\nWhat is it about gratitude\nthat you find so hard' });
+    const worship = row({ trackName: 'Gratitude', artistName: 'Brandon Lake', plainLyrics: 'All my words fall short\nI got nothing new\n\nSo I throw up my hands\nand praise You again' });
+    const out = rankCandidates([pop, worship], 'gratitude');
+    expect(out[0]).toBe(worship);
+  });
+
+  it('prefers lyrics that read as worship when artist gives no signal', () => {
+    const pop = row({ trackName: 'Promises', artistName: 'Naked Eyes', plainLyrics: 'Promises promises\nyou knew you would never keep\n\nPromises promises\nwhy do I believe' });
+    const worship = row({ trackName: 'Promises', artistName: 'Maverick City Music', plainLyrics: 'God of Abraham\nYou are the God of covenant\n\nI put my faith in Jesus\nmy anchor to the ground' });
+    const out = rankCandidates([pop, worship], 'promises');
+    expect(out[0]).toBe(worship);
+  });
+
+  it('prefers the plain song over a medley that contains its title', () => {
+    const medley = row({ trackName: 'The Worship Medley: Reckless Love / O Come To The Altar / Great Are You Lord', artistName: 'Tauren Wells', plainLyrics: 'Before I spoke a word\nYou were singing over me\n\nO come to the altar\nthe Father\'s arms are open wide' });
+    const plain = row({ trackName: 'Reckless Love', artistName: 'Cory Asbury', plainLyrics: 'Before I spoke a word\nYou were singing over me\n\nOh the overwhelming\nnever-ending reckless love of God' });
+    const out = rankCandidates([medley, plain], 'reckless love');
+    expect(out[0]).toBe(plain);
+  });
+
+  it('demotes rows whose title says instrumental even when the flag is unset', () => {
+    const instr = row({ trackName: 'Promises (Instrumental)', artistName: 'The Worship Initiative Instrumentals' });
+    const sung = row({ trackName: 'Promises', artistName: 'The Worship Initiative', plainLyrics: STANZAS + '\nextra line' });
+    const out = rankCandidates([instr, sung], 'promises');
+    expect(out[0]).toBe(sung);
+  });
+
   it('returns an empty array for no usable rows', () => {
     expect(rankCandidates([], 'anything')).toEqual([]);
   });
