@@ -36,13 +36,29 @@ const toCandidate = (row: LrclibRow): SongWebCandidate => ({
   text: detectChorus(importTidy(row.plainLyrics ?? '')),
 });
 
+async function fetchRows(url: string, fetchFn: typeof fetch): Promise<LrclibRow[]> {
+  const res = await fetchFn(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`lrclib: HTTP ${res.status}`);
+  return toRows(await res.json());
+}
+
+// LRCLIB caps a search at 20 rows and is genre-blind, so a one-word title like "Jireh"
+// returns 20 rows of an unrelated artist and the worship song never enters the pool.
+// Fan out: the plain query, a worship-hinted query, and a title-only query. Rows are
+// merged and ranked together; a single failed leg is tolerated as long as one succeeds.
+const fanOut = (query: string): string[] => [
+  `${LRCLIB_SEARCH_URL}?q=${encodeURIComponent(query)}`,
+  `${LRCLIB_SEARCH_URL}?q=${encodeURIComponent(`${query} worship`)}`,
+  `${LRCLIB_SEARCH_URL}?track_name=${encodeURIComponent(query)}`,
+];
+
 export async function searchLrclib(
   query: string,
   fetchFn: typeof fetch = fetch
 ): Promise<SongWebCandidate[]> {
-  const url = `${LRCLIB_SEARCH_URL}?q=${encodeURIComponent(query)}`;
-  const res = await fetchFn(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`lrclib: HTTP ${res.status}`);
-  const rows = toRows(await res.json());
+  const legs = await Promise.allSettled(fanOut(query).map((u) => fetchRows(u, fetchFn)));
+  const ok = legs.filter((l): l is PromiseFulfilledResult<LrclibRow[]> => l.status === 'fulfilled');
+  if (ok.length === 0) throw (legs[0] as PromiseRejectedResult).reason;
+  const rows = ok.flatMap((l) => l.value);
   return rankCandidates(rows, query).slice(0, MAX_RESULTS).map(toCandidate);
 }

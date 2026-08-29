@@ -12,13 +12,38 @@ const fakeFetch = (body: unknown, ok = true, status = 200): typeof fetch =>
   vi.fn().mockResolvedValue({ ok, status, json: () => Promise.resolve(body) }) as unknown as typeof fetch;
 
 describe('searchLrclib', () => {
-  it('queries the LRCLIB search endpoint with the encoded query', async () => {
+  it('fans out to plain, worship-hinted and title-only queries', async () => {
     const f = fakeFetch([]);
     await searchLrclib('goodness of god', f);
-    expect(f).toHaveBeenCalledWith(
+    const urls = (f as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(urls).toEqual([
       'https://lrclib.net/api/search?q=goodness%20of%20god',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    );
+      'https://lrclib.net/api/search?q=goodness%20of%20god%20worship',
+      'https://lrclib.net/api/search?track_name=goodness%20of%20god',
+    ]);
+    for (const c of (f as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(c[1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    }
+  });
+
+  it('merges rows from every fan-out query into one ranked list', async () => {
+    // "q=Gratitude" returns only a band named Gratitude; the worship song arrives via
+    // the hinted query. Both must be in the pool, worship first.
+    const f = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([apiRow({ trackName: 'This Is Part', artistName: 'Gratitude', plainLyrics: 'Other words\nhere\n\nOther words\nhere' })]) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([apiRow({ trackName: 'Gratitude', artistName: 'Brandon Lake' })]) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) }) as unknown as typeof fetch;
+    const out = await searchLrclib('gratitude', f);
+    expect(out.map((c) => c.author)).toEqual(['Brandon Lake', 'Gratitude']);
+  });
+
+  it('survives one fan-out query failing when another succeeds', async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, json: () => Promise.resolve([]) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([apiRow()]) })
+      .mockRejectedValueOnce(new Error('timeout')) as unknown as typeof fetch;
+    const out = await searchLrclib('goodness of god', f);
+    expect(out).toHaveLength(1);
   });
 
   it('maps rows to display-ready candidates (tidied + chorus-labeled)', async () => {
