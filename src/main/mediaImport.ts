@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 import { basename, dirname, extname, join } from 'path';
 import { pathToFileURL } from 'url';
 import type { MediaRepo, MediaItem } from './mediaRepo';
+import { sanitizePptx } from './pptxSanitize';
 import type { MediaImportProgress, MediaImportResult } from '../shared/types';
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -200,8 +201,22 @@ export function createMediaImport(
         pdfPath = srcPath;
       } else {
         emit({ phase: 'converting' });
-        // soffice is non-null here: the !isPdf branch above returned when it was null.
-        pdfPath = await convertToPdf(soffice as string, srcPath, deckDir);
+        // LibreOffice applies a text OUTLINE's <a:alpha> to the whole glyph, dimming
+        // pure-white text to near-black; sanitizePptx strips it from a temporary copy
+        // (and decides itself which formats need it). null = convert the original.
+        const sanitized = await sanitizePptx(srcPath);
+        try {
+          // soffice is non-null here: the !isPdf branch above returned when it was null.
+          pdfPath = await convertToPdf(soffice as string, sanitized ?? srcPath, deckDir);
+        } catch (err) {
+          // Keep the copy — it holds the exact bytes soffice choked on — and name
+          // both paths so the error stays diagnosable against files that exist.
+          if (sanitized !== null && err instanceof Error) {
+            err.message += `\n  source deck: ${srcPath}\n  sanitized copy retained for diagnosis at: ${sanitized}`;
+          }
+          throw err;
+        }
+        if (sanitized !== null) removeDirQuietly(dirname(sanitized));
       }
 
       const pngFiles = await rasterize(pdfPath, deckDir, (page, pageCount) =>
@@ -219,6 +234,21 @@ export function createMediaImport(
       return repo.remove(id);
     }
   };
+}
+
+/**
+ * Best-effort recursive dir removal that never throws: a lingering soffice.bin
+ * lock (or AV scanner hold, common on Windows) can make rmSync itself fail with
+ * EBUSY/EPERM even with force:true, which only swallows ENOENT. Cleanup must
+ * never mask a real result or fail an otherwise-successful operation — retry
+ * briefly, then warn-only. Injectable `rm` mirrors the file's other seams.
+ */
+export function removeDirQuietly(dir: string, rm: typeof rmSync = rmSync): void {
+  try {
+    rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch (err) {
+    console.error(`mediaImport: failed to clean up ${dir}: ${String(err)}`);
+  }
 }
 
 function runExternal(cmd: string, args: string[]): Promise<void> {
@@ -296,16 +326,7 @@ async function convertToPdfProd(soffice: string, src: string, outDir: string): P
   try {
     await runExternal(soffice, args);
   } finally {
-    // Cleanup must never mask the conversion result: a lingering soffice.bin lock
-    // (or AV scanner hold, common on Windows) can make this rmSync itself throw
-    // (EBUSY/EPERM) even with force:true, which only swallows ENOENT. Retry briefly,
-    // then warn-only on failure rather than letting a leftover tmpdir replace a real
-    // soffice error or fail an otherwise-successful conversion.
-    try {
-      rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-    } catch (err) {
-      console.error(`mediaImport: failed to clean up soffice profile dir ${profileDir}: ${String(err)}`);
-    }
+    removeDirQuietly(profileDir);
   }
   const pdfPath = join(outDir, `${basename(src, extname(src))}.pdf`);
   assertConverted(pdfPath, `${soffice} ${args.join(' ')}`);
