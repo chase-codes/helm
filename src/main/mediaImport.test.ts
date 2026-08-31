@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, basename, dirname } from 'path';
 import { strToU8, strFromU8, unzipSync, zipSync } from 'fflate';
 import { dialog } from 'electron';
-import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport, assertConverted } from './mediaImport';
+import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport, assertConverted, removeDirQuietly } from './mediaImport';
 import type { MediaRepo, MediaItem } from './mediaRepo';
 import type { MediaImportProgress } from '../shared/types';
 
@@ -120,6 +120,10 @@ describe('assertConverted', () => {
 });
 
 describe('createMediaImport / importDeck', () => {
+  // Several tests spy console.error (the sanitizer logs a skip for picked paths
+  // that don't exist on disk); restore so spies never leak across tests.
+  afterEach(() => vi.restoreAllMocks());
+
   it('returns no-libreoffice when a NON-pdf is picked and findSoffice is null', async () => {
     const repo = makeFakeRepo();
     const convertToPdf = vi.fn();
@@ -163,6 +167,8 @@ describe('createMediaImport / importDeck', () => {
   });
 
   it('converts a .pptx via convertToPdf then rasterize, storing slides in page order', async () => {
+    // The picked path doesn't exist on disk, so the sanitizer logs a skip; silence it.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const repo = makeFakeRepo();
     const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
     vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/decks/MyDeck.pptx'] } as never);
@@ -227,8 +233,40 @@ describe('createMediaImport / importDeck', () => {
 
     expect(convertedSrc).not.toBe(srcPath);
     expect(convertedMasterXml).not.toContain('<a:alpha');
-    expect(existsSync(convertedSrc)).toBe(false); // sanitized copy is temporary
+    // Copy keeps the deck's basename but lives in its own temp dir (never in the
+    // library), and the whole dir is gone after a successful conversion.
+    expect(basename(convertedSrc)).toBe('Deck.pptx');
+    expect(existsSync(dirname(convertedSrc))).toBe(false);
     expect(result.items[0].title).toBe('Deck.pptx'); // title stays the original name
+  });
+
+  it('keeps the sanitized copy and names both paths when conversion fails', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    const srcDir = mkdtempSync(join(tmpdir(), 'helm-media-src-'));
+    const master = `<p:txStyles><p:bodyStyle><a:lvl1pPr><a:defRPr><a:ln><a:solidFill><a:schemeClr val="bg1"><a:alpha val="10000"/></a:schemeClr></a:solidFill></a:ln></a:defRPr></a:lvl1pPr></p:bodyStyle></p:txStyles>`;
+    const srcPath = join(srcDir, 'Deck.pptx');
+    writeFileSync(srcPath, zipSync({ 'ppt/slideMasters/slideMaster1.xml': strToU8(master) }));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [srcPath] } as never);
+
+    let convertedSrc = '';
+    const convertToPdf = vi.fn(async (_soffice: string, src: string) => {
+      convertedSrc = src;
+      throw new Error('soffice exited with code 1: boom');
+    });
+    const mediaImport = createMediaImport(repo, libRoot, { findSoffice: () => '/usr/bin/soffice', convertToPdf, rasterize: vi.fn() });
+
+    const err: Error = await mediaImport.importDeck().then(
+      () => { throw new Error('expected importDeck to reject'); },
+      (e: Error) => e
+    );
+
+    expect(err.message).toContain('soffice exited with code 1: boom');
+    // Diagnosability: the error names the real deck, and the exact bytes soffice
+    // choked on are retained rather than deleted on unwind.
+    expect(err.message).toContain(srcPath);
+    expect(err.message).toContain(convertedSrc);
+    expect(existsSync(convertedSrc)).toBe(true);
   });
 
   it('hands soffice the original pptx when there is nothing to sanitize', async () => {
@@ -289,6 +327,7 @@ describe('createMediaImport / importDeck', () => {
   });
 
   it('emits converting then per-page rasterizing progress for a pptx import', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {}); // nonexistent pptx path: silence sanitizer skip log
     const repo = makeFakeRepo();
     const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
     vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: ['/d/Deck.pptx'] } as never);
@@ -365,5 +404,23 @@ describe('createMediaImport / removeMedia', () => {
     const repo = makeFakeRepo();
     const mediaImport = createMediaImport(repo, '/lib', { deleteFiles: () => { throw new Error('should not delete'); } });
     expect(() => mediaImport.removeMedia('nope')).not.toThrow();
+  });
+});
+
+describe('removeDirQuietly', () => {
+  it('swallows rm failures (EBUSY/EPERM from lingering handles) and logs instead of throwing', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const rm = vi.fn(() => { throw new Error('EBUSY: resource busy'); });
+    expect(() => removeDirQuietly('/some/dir', rm as never)).not.toThrow();
+    expect(errSpy).toHaveBeenCalledOnce();
+    expect(String(errSpy.mock.calls[0][0])).toContain('/some/dir');
+    vi.restoreAllMocks();
+  });
+
+  it('removes the directory with the real rm by default', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'helm-rm-quiet-'));
+    writeFileSync(join(dir, 'f'), 'x');
+    removeDirQuietly(dir);
+    expect(existsSync(dir)).toBe(false);
   });
 });
