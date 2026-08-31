@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { strToU8, strFromU8, unzipSync, zipSync } from 'fflate';
 import { dialog } from 'electron';
 import { findSoffice, bundledSofficeCandidates, parsePngOutput, createMediaImport, assertConverted } from './mediaImport';
 import type { MediaRepo, MediaItem } from './mediaRepo';
@@ -199,6 +200,49 @@ describe('createMediaImport / importDeck', () => {
     expect(pdfArg).toBe('/decks/Report.pdf');
     expect(result.items[0].type).toBe('deck');
     expect(result.items[0].slides).toHaveLength(1);
+  });
+
+  it('hands soffice a sanitized copy when the pptx carries a text-outline alpha, and cleans it up', async () => {
+    // Regression for the LibreOffice bug where an <a:alpha> on a text outline dims
+    // the whole glyph: importDeck must sanitize the deck before conversion.
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    const srcDir = mkdtempSync(join(tmpdir(), 'helm-media-src-'));
+    const master = `<p:txStyles><p:bodyStyle><a:lvl1pPr><a:defRPr><a:ln><a:solidFill><a:schemeClr val="bg1"><a:alpha val="10000"/></a:schemeClr></a:solidFill></a:ln></a:defRPr></a:lvl1pPr></p:bodyStyle></p:txStyles>`;
+    const srcPath = join(srcDir, 'Deck.pptx');
+    writeFileSync(srcPath, zipSync({ 'ppt/slideMasters/slideMaster1.xml': strToU8(master) }));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [srcPath] } as never);
+
+    let convertedSrc = '';
+    let convertedMasterXml = '';
+    const convertToPdf = vi.fn(async (_soffice: string, src: string) => {
+      convertedSrc = src;
+      convertedMasterXml = strFromU8(unzipSync(readFileSync(src))['ppt/slideMasters/slideMaster1.xml']);
+      return '/tmp/Deck.pdf';
+    });
+    const rasterize = vi.fn().mockResolvedValue(['slide-0001.png']);
+    const mediaImport = createMediaImport(repo, libRoot, { findSoffice: () => '/usr/bin/soffice', convertToPdf, rasterize });
+
+    const result = await mediaImport.importDeck();
+
+    expect(convertedSrc).not.toBe(srcPath);
+    expect(convertedMasterXml).not.toContain('<a:alpha');
+    expect(existsSync(convertedSrc)).toBe(false); // sanitized copy is temporary
+    expect(result.items[0].title).toBe('Deck.pptx'); // title stays the original name
+  });
+
+  it('hands soffice the original pptx when there is nothing to sanitize', async () => {
+    const repo = makeFakeRepo();
+    const libRoot = mkdtempSync(join(tmpdir(), 'helm-media-test-'));
+    const srcDir = mkdtempSync(join(tmpdir(), 'helm-media-src-'));
+    const srcPath = join(srcDir, 'Clean.pptx');
+    writeFileSync(srcPath, zipSync({ 'ppt/slides/slide1.xml': strToU8('<p:sld/>') }));
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [srcPath] } as never);
+    const convertToPdf = vi.fn().mockResolvedValue('/tmp/Clean.pdf');
+    const rasterize = vi.fn().mockResolvedValue(['slide-0001.png']);
+    const mediaImport = createMediaImport(repo, libRoot, { findSoffice: () => '/usr/bin/soffice', convertToPdf, rasterize });
+    await mediaImport.importDeck();
+    expect(convertToPdf).toHaveBeenCalledWith('/usr/bin/soffice', srcPath, expect.any(String));
   });
 
   it('offers pptx, ppt, odp and pdf to the picker', async () => {

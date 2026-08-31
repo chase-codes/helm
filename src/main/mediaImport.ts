@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 import { basename, dirname, extname, join } from 'path';
 import { pathToFileURL } from 'url';
 import type { MediaRepo, MediaItem } from './mediaRepo';
+import { sanitizePptx } from './pptxSanitize';
 import type { MediaImportProgress, MediaImportResult } from '../shared/types';
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -200,8 +201,15 @@ export function createMediaImport(
         pdfPath = srcPath;
       } else {
         emit({ phase: 'converting' });
-        // soffice is non-null here: the !isPdf branch above returned when it was null.
-        pdfPath = await convertToPdf(soffice as string, srcPath, deckDir);
+        // LibreOffice applies a text OUTLINE's <a:alpha> to the whole glyph, dimming
+        // pure-white text to near-black; strip it from a temporary copy first (pptx only).
+        const convertSrc = extname(srcPath).toLowerCase() === '.pptx' ? sanitizePptx(srcPath, deckDir) : srcPath;
+        try {
+          // soffice is non-null here: the !isPdf branch above returned when it was null.
+          pdfPath = await convertToPdf(soffice as string, convertSrc, deckDir);
+        } finally {
+          if (convertSrc !== srcPath) rmSync(convertSrc, { force: true });
+        }
       }
 
       const pngFiles = await rasterize(pdfPath, deckDir, (page, pageCount) =>

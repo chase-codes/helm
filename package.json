@@ -33,6 +33,7 @@
     "@napi-rs/canvas": "0.1.100",
     "better-sqlite3": "^12.11.1",
     "electron-updater": "^6.8.9",
+    "fflate": "^0.8.3",
     "pdfjs-dist": "^5.7.284"
   },
   "devDependencies": {
