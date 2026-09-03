@@ -1,9 +1,28 @@
 import { expect, test } from 'vitest'
-import { keyForScripture, verseCols, buildScriptureSlide, pickVersion } from './slides'
+import { keyForScripture, parseScriptureKey, verseCols, buildScriptureSlide, pickVersion } from './slides'
 
 test('keyForScripture format', () => {
   expect(keyForScripture('John', 3, 16)).toBe('scr:John:3:16')
   expect(keyForScripture('Genesis', 1, 1)).toBe('scr:Genesis:1:1')
+})
+
+test('parseScriptureKey round-trips keyForScripture', () => {
+  expect(parseScriptureKey(keyForScripture('John', 3, 16))).toEqual({ book: 'John', ch: 3, v: 16 })
+})
+
+test('parseScriptureKey handles book names with spaces and digits', () => {
+  expect(parseScriptureKey('scr:1 John:4:8')).toEqual({ book: '1 John', ch: 4, v: 8 })
+  expect(parseScriptureKey('scr:Song of Solomon:2:1')).toEqual({ book: 'Song of Solomon', ch: 2, v: 1 })
+})
+
+test('parseScriptureKey rejects non-scripture and malformed keys', () => {
+  expect(parseScriptureKey(null)).toBeNull()
+  expect(parseScriptureKey('song:s1:0')).toBeNull()
+  expect(parseScriptureKey('scr:John:3')).toBeNull() // missing verse
+  expect(parseScriptureKey('scr:kjv:John:3')).toBeNull() // chapter segment not a number
+  expect(parseScriptureKey('scr::3:16')).toBeNull() // empty book
+  expect(parseScriptureKey('scr:John:0:16')).toBeNull() // chapters are 1-based
+  expect(parseScriptureKey('scr:John:3:0')).toBeNull() // verses are 1-based
 })
 
 test('buildScriptureSlide shape', () => {
