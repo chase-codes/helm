@@ -100,13 +100,15 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     manifest.find((m) => m.abbr === primaryAbbr)?.id ?? manifest.find((m) => m.installed)?.id
   const verseText = (v: number): string => (primaryId ? (scrChapter?.verses[v]?.[primaryId] ?? '') : '')
 
-  // Keep the live verse card in view as the operator advances — the whole point of the
-  // rail is read-ahead, so center it and let the following verses show below it.
-  const verseRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  // Keep the live card in view as the operator advances — the whole point of the rail is
+  // read-ahead, so center it and let what follows show below it. One ref serves both
+  // branches: each rail marks only its ACTIVE card, and the effect re-fires when the
+  // shown key moves or when the branch's data lands (chapter/song fetch resolving after
+  // the key already points at it).
+  const activeCardRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    if (!scr || !scrChapter) return
-    verseRefs.current[scr.v]?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
-  }, [scr?.book, scr?.ch, scr?.v, scrChapter])
+    activeCardRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }, [shownKey, scrChapter, song])
 
   // Split: payload value is authoritative between drags; local state carries the live drag.
   // Adjusting `split` when `payload.leaderSplit` changes is React's sanctioned "adjust state
@@ -333,9 +335,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
           return (
             <div
               key={v}
-              ref={(el) => {
-                verseRefs.current[v] = el
-              }}
+              ref={active ? activeCardRef : undefined}
               style={sectionCardStyle(active)}
               data-testid={`leader-verse-${v}`}
               data-live={String(active)}
@@ -392,7 +392,13 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
       {current.sections.map((s, i) => {
         const active = parsed.section === i
         return (
-          <div key={i} style={sectionCardStyle(active)} data-testid={`leader-section-${i}`} data-live={String(active)}>
+          <div
+            key={i}
+            ref={active ? activeCardRef : undefined}
+            style={sectionCardStyle(active)}
+            data-testid={`leader-section-${i}`}
+            data-live={String(active)}
+          >
             <div style={sectionLabelStyle(active)}>{s.label}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {s.lines.map((ln, j) => (

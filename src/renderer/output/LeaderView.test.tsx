@@ -259,6 +259,22 @@ describe('LeaderView', () => {
     expect(rail.textContent).not.toContain('W two')
   })
 
+  it('auto-scrolls the live song section card into view', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    const st: PresentationState = {
+      output: 'live',
+      liveKey: 'song:s1:2',
+      liveSnap: { kind: 'lyrics', accent: '#e0a341', label: 'Amazing Grace · Chorus', lines: SONG.sections[2].lines },
+      cuedKey: 'song:s1:2',
+      cuedSnap: { kind: 'lyrics', accent: '#e0a341', label: 'Amazing Grace · Chorus', lines: SONG.sections[2].lines }
+    }
+    installHelmStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    await waitFor(() => expect(spy).toHaveBeenCalled())
+  })
+
   it('auto-scrolls the live verse card into view (#188)', async () => {
     const spy = vi.fn()
     Element.prototype.scrollIntoView = spy
