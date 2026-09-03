@@ -5,6 +5,20 @@ export function keyForScripture(book: string, ch: number, v: number): string {
   return `scr:${book}:${ch}:${v}`
 }
 
+/** Inverse of keyForScripture. The chapter and verse are the LAST two segments so a book
+ * name containing ':' can't break it (book names with spaces/digits — '1 John' — are the
+ * common case and pass through untouched). */
+export function parseScriptureKey(key: string | null): { book: string; ch: number; v: number } | null {
+  if (!key || !key.startsWith('scr:')) return null
+  const parts = key.split(':')
+  if (parts.length < 4) return null
+  const ch = Number(parts[parts.length - 2])
+  const v = Number(parts[parts.length - 1])
+  const book = parts.slice(1, -2).join(':')
+  if (book === '' || !Number.isInteger(ch) || ch < 1 || !Number.isInteger(v) || v < 1) return null
+  return { book, ch, v }
+}
+
 export function verseCols(
   textByVersion: Record<string, string>,
   selected: string[],

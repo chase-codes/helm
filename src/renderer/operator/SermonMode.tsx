@@ -491,7 +491,15 @@ export function SermonMode({
     if (!active || track !== 'scripture') return;
     if (!liveChapter || chapterMissing(liveChapter)) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
-    window.helm.presentation.show(key, verseSlide(scrBook, scrCh, scrV, liveChapter));
+    const slide = verseSlide(scrBook, scrCh, scrV, liveChapter);
+    // Cue as well as show (#188): `showLive` no-ops while output is down and records no
+    // cue in its refusal paths, but the leader display renders the CUE when output is
+    // down — without this, taking the projector to black/logo freezes the leader on the
+    // last live verse no matter where the cursor goes. `applyCue` always records the
+    // cued pair, and the leader's live-first rule keeps a scripture cue from moving the
+    // leader while another kind is live.
+    window.helm.presentation.cue(key, slide);
+    window.helm.presentation.show(key, slide);
   }, [scrBook, scrCh, scrV, versions, liveChapter, anyInstalled, abbrOf, verseSlide, output, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);

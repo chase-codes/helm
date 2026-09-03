@@ -34,6 +34,46 @@ const payload = (state: PresentationState): OutputPayload => ({
   leaderSplit: 320
 })
 
+const scriptureSnap = (v: number): PresentationState['liveSnap'] => ({
+  kind: 'scripture',
+  accent: '#f0b24a',
+  ref: `John 3:${v}`,
+  label: `John 3:${v}`,
+  columns: [{ version: 'KJV', text: `Verse ${['one', 'two', 'three'][v - 1]} text` }]
+})
+const scriptureState = (output: PresentationState['output'], v: number): PresentationState => ({
+  output,
+  liveKey: `scr:John:3:${v}`,
+  liveSnap: scriptureSnap(v),
+  cuedKey: `scr:John:3:${v}`,
+  cuedSnap: scriptureSnap(v)
+})
+function installScriptureStub(state: PresentationState): void {
+  ;(window as unknown as { helm: unknown }).helm = {
+    presentation: { get: () => Promise.resolve(state), onState: () => () => {} },
+    songs: { get: () => Promise.resolve(null) },
+    bibles: {
+      manifest: () => Promise.resolve([{ id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }]),
+      getChapter: (book: string, ch: number) =>
+        Promise.resolve(
+          book === 'John' && ch === 3
+            ? {
+                book,
+                chapter: ch,
+                verseCount: 3,
+                verses: {
+                  1: { kjv: 'Verse one text' },
+                  2: { kjv: 'Verse two text' },
+                  3: { kjv: 'Verse three text' }
+                }
+              }
+            : { book, chapter: ch, verseCount: 0, verses: {} }
+        )
+    },
+    displays: { setLeaderSplit: vi.fn() }
+  }
+}
+
 describe('LeaderView', () => {
   it('renders hero lines, title, and the section rail with the live section highlighted', async () => {
     const st: PresentationState = {
@@ -96,28 +136,60 @@ describe('LeaderView', () => {
     expect(r.queryByText('LIVE')).toBeNull()
   })
 
-  it('falls back to the slides render for non-song content', async () => {
+  it('falls back to the slides render for content that is neither song nor scripture', async () => {
     const st: PresentationState = {
       output: 'live',
-      liveKey: 'scr:kjv:John:3',
-      liveSnap: {
-        kind: 'scripture',
-        accent: '#7fb069',
-        ref: 'John 3:16',
-        columns: [{ version: 'KJV', text: 'For God so loved the world' }]
-      },
-      cuedKey: 'scr:kjv:John:3',
-      cuedSnap: {
-        kind: 'scripture',
-        accent: '#7fb069',
-        ref: 'John 3:16',
-        columns: [{ version: 'KJV', text: 'For God so loved the world' }]
-      }
+      liveKey: 'msg:q1:0',
+      liveSnap: { kind: 'quote', accent: '#6f9cf0', text: 'A quoted line', source: 'Someone' },
+      cuedKey: 'msg:q1:0',
+      cuedSnap: { kind: 'quote', accent: '#6f9cf0', text: 'A quoted line', source: 'Someone' }
     }
     installHelmStub(st)
     const r = render(<LeaderView payload={payload(st)} />)
-    await waitFor(() => expect(r.getByText('For God so loved the world')).toBeTruthy())
+    await waitFor(() => expect(r.getByText('A quoted line')).toBeTruthy())
     expect(r.queryByTestId('leader-rail')).toBeNull()
+  })
+
+  it('renders the scripture hero and chapter rail with the live verse highlighted (#188)', async () => {
+    const st = scriptureState('live', 2)
+    installScriptureStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    // Hero shows the projected slide (ref + verse text); rail shows the whole chapter so
+    // the leader can read ahead — including verses that are not live yet.
+    expect(r.getAllByText('John 3:2').length).toBeGreaterThan(0)
+    expect(r.getAllByText('Verse two text').length).toBeGreaterThan(0)
+    expect(r.getByTestId('leader-verse-2').dataset.live).toBe('true')
+    expect(r.getByTestId('leader-verse-1').dataset.live).toBe('false')
+    expect(r.getByTestId('leader-rail').textContent).toContain('Verse three text')
+    expect(r.getByText('LIVE')).toBeTruthy()
+  })
+
+  it('follows the cued verse while output is down so the operator can walk the leader through (#188)', async () => {
+    const st: PresentationState = {
+      output: 'black',
+      liveKey: 'scr:John:3:1',
+      liveSnap: scriptureSnap(1),
+      cuedKey: 'scr:John:3:3',
+      cuedSnap: scriptureSnap(3)
+    }
+    installScriptureStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    expect(r.getByTestId('leader-verse-3').dataset.live).toBe('true')
+    expect(r.getByTestId('leader-verse-1').dataset.live).toBe('false')
+    expect(r.getByText('CUED')).toBeTruthy()
+    expect(r.getByText('BLACK')).toBeTruthy()
+  })
+
+  it('auto-scrolls the live verse card into view (#188)', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    const st = scriptureState('live', 2)
+    installScriptureStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    await waitFor(() => expect(spy).toHaveBeenCalled())
   })
 
   it('falls back to the slides render when the song has been deleted', async () => {

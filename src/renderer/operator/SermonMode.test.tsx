@@ -455,6 +455,31 @@ describe('SermonMode — direct preview to live', () => {
   })
 })
 
+describe('SermonMode — cursor cues so the leader can follow while output is down (#188)', () => {
+  // Main's `showLive` no-ops unless output is live and deliberately records no cue in its
+  // refusal paths — so with the projector on black/logo, `show` alone leaves `cuedKey`
+  // stale and the leader display (which renders the cue when output is down) stuck on
+  // whatever was last live. The cursor must ALSO cue: `applyCue` always records the
+  // cued pair, which is exactly what the leader reads.
+  it('moving the cursor while output is black cues the verse', async () => {
+    const { cue, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+
+    cue.mockClear()
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('scr:Genesis:1:3', expect.objectContaining({ kind: 'scripture', ref: 'Genesis 1:3' })))
+  })
+
+  it('cues the mount-time cursor too, so the leader has a cue before any move', async () => {
+    const { cue, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('scr:Genesis:1:1', expect.objectContaining({ kind: 'scripture' })))
+  })
+})
+
 describe('SermonMode — double-click a verse goes live (#58)', () => {
   it('takes the verse on double-click', async () => {
     const { resolveChapter, take } = installHelmStub(NOTHING_LIVE, [])
@@ -1745,9 +1770,11 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     render(<Harness />)
     resolveChapter()
     await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
-    // Let the media/message loads land — then nothing may have been cued or loaded.
+    // Let the media/message loads land — then no HIDDEN track may have cued or loaded.
+    // (Scripture itself now cues its cursor (#188), so filter to non-scripture keys
+    // rather than asserting an empty mock.)
     await act(async () => {})
-    expect(cue).not.toHaveBeenCalled()
+    expect(cue.mock.calls.filter(([k]) => !String(k).startsWith('scr:'))).toEqual([])
     expect(window.helm.video.load).not.toHaveBeenCalled()
 
     // Revealing the slides track is what cues its selection and arms the video preview.
@@ -1784,16 +1811,17 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     resolveChapter()
     // The message track is mounted (hidden) from the start; wait for its tape to load.
     await waitFor(() => expect(document.querySelector('audio')).toBeTruthy())
-    // Nothing cues at mount here (scripture drives, no media), so there is no mount
-    // call to settle on — flush the pending loads and prove that, rather than clearing
-    // a mock that must already be empty.
+    // Only scripture's own cursor cue may land at mount (#188) — the hidden message
+    // track must not cue at all, so assert on non-scripture keys rather than an
+    // empty mock.
+    const nonScrCues = (): unknown[][] => cue.mock.calls.filter(([k]) => !String(k).startsWith('scr:'))
     await act(async () => {})
-    expect(cue).not.toHaveBeenCalled()
+    expect(nonScrCues()).toEqual([])
 
     // A timeupdate computes ord 0 (≠ TapePlayer's initial -1) and fires onActiveOrd.
     fireEvent.timeUpdate(document.querySelector('audio') as HTMLElement)
     await act(async () => {})
-    expect(cue).not.toHaveBeenCalled()
+    expect(nonScrCues()).toEqual([])
   })
 
   it('the same playing tape keeps a LIVE reading view scrolling', async () => {

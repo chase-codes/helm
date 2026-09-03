@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
-import type { OutputPayload, Song } from '../../shared/types'
+import type { BibleManifestEntry, ChapterData, OutputPayload, Song } from '../../shared/types'
 import { parseSongKey } from '../../shared/presentation/core'
+import { parseScriptureKey } from '../../shared/scripture/slides'
+import { SlideCanvas } from '../shared/SlideCanvas'
 import { DEFAULT_LEADER_SPLIT, clampLeaderSplit } from '../../shared/displays/roles'
 import { LYRICS_BAND } from '../shared/SlideCanvas'
 import { useFitText, fitSizeValue } from '../shared/useFitText'
@@ -16,7 +18,11 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
   // congregation is singing it, and no amount of operator browsing/arming may move this
   // display. When output is down, follow the cue instead (prep view between songs).
   const shownKey = st.output === 'live' && st.liveKey ? st.liveKey : (st.cuedKey ?? st.liveKey)
+  // The snap paired with shownKey — same live-first selection. For scripture it is the
+  // exact projected slide (ref + version columns), which the hero re-renders verbatim.
+  const shownSnap = st.output === 'live' && st.liveKey ? st.liveSnap : (st.cuedKey ? st.cuedSnap : st.liveSnap)
   const parsed = parseSongKey(shownKey)
+  const scr = parsed ? null : parseScriptureKey(shownKey)
   const [song, setSong] = useState<Song | null>(null)
   useEffect(() => {
     // Nothing to fetch for non-song content — the render below already falls back to
@@ -41,6 +47,66 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsed?.songId])
+
+  // Scripture context (#188): the chapter's verses fill the rail so the leader can read
+  // ahead of the projected verse. Same degrade contract as the song fetch above — a
+  // failed or unresolved fetch leaves the SlidesView fallback showing the bare slide.
+  const [chapter, setChapter] = useState<ChapterData | null>(null)
+  useEffect(() => {
+    if (!scr) return
+    let live = true
+    void window.helm.bibles
+      .getChapter(scr.book, scr.ch)
+      .then((c) => {
+        if (live) setChapter(c)
+      })
+      .catch((err: unknown) => {
+        console.error('[helm] leader chapter fetch failed:', err)
+      })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scr?.book, scr?.ch])
+  const [manifest, setManifest] = useState<BibleManifestEntry[]>([])
+  useEffect(() => {
+    if (!scr || manifest.length) return
+    let live = true
+    void window.helm.bibles
+      .manifest()
+      .then((m) => {
+        if (live) setManifest(m)
+      })
+      .catch((err: unknown) => {
+        console.error('[helm] leader manifest fetch failed:', err)
+      })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scr !== null])
+
+  // Stale-chapter identity gate, same reason as the song gate below: on a cross-chapter
+  // move `scr` points at the new chapter while `chapter` still holds the old rows.
+  const scrChapter = scr && chapter && chapter.book === scr.book && chapter.chapter === scr.ch ? chapter : null
+  // Rail text version: the projected slide's primary column (an abbr) mapped back to its
+  // version id, else the first installed version.
+  const scrSnap = scr && shownSnap?.kind === 'scripture' ? shownSnap : null
+  const primaryAbbr = scrSnap?.columns?.[0]?.version
+  const primaryId =
+    manifest.find((m) => m.abbr === primaryAbbr)?.id ?? manifest.find((m) => m.installed)?.id
+  const verseText = (v: number): string => {
+    const byVersion = scrChapter?.verses[v] ?? {}
+    return (primaryId && byVersion[primaryId]) || Object.values(byVersion)[0] || ''
+  }
+
+  // Keep the live verse card in view as the operator advances — the whole point of the
+  // rail is read-ahead, so center it and let the following verses show below it.
+  const verseRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  useEffect(() => {
+    if (!scr || !scrChapter) return
+    verseRefs.current[scr.v]?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }, [scr?.book, scr?.ch, scr?.v, scrChapter])
 
   // Split: payload value is authoritative between drags; local state carries the live drag.
   // Adjusting `split` when `payload.leaderSplit` changes is React's sanctioned "adjust state
@@ -104,15 +170,10 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
   const section = current && parsed ? current.sections[parsed.section] : undefined
   useFitText(rootRef, heroRef, section ? LYRICS_BAND : null, [shownKey, song?.id, split])
 
-  // Not a song (or the song was deleted, or its fetch hasn't resolved yet for the shown key):
-  // show exactly what the slides view would, but keep the `leader-view` testid contract
-  // OutputApp's view-branching test relies on.
-  if (!parsed || !current || !section)
-    return (
-      <div data-testid="leader-view" style={{ position: 'fixed', inset: 0 }}>
-        <SlidesView payload={payload} />
-      </div>
-    )
+  // Scripture renders its own branch only once everything it needs has landed: the
+  // projected snap, the (identity-matched) chapter, and at least one verse row. Anything
+  // short of that degrades to the SlidesView fallback below, same as a mid-fetch song.
+  const scrReady = scr && scrSnap && scrChapter && scrChapter.verseCount > 0
 
   const isLive = st.output === 'live' && st.liveKey === shownKey
   const outChip = st.output === 'logo' ? 'LOGO' : st.output === 'black' ? 'BLACK' : null
@@ -224,6 +285,57 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     fontWeight: 500,
     color: active ? T.text : '#b4b1aa'
   })
+
+  // Scripture (#188): hero re-renders the projected slide verbatim (the leader sees what
+  // the audience sees), the rail adds what the audience doesn't get — the whole chapter,
+  // live verse highlighted and kept in view, so the person at the pulpit can read ahead.
+  if (scrReady && scr && scrSnap && scrChapter)
+    return (
+      <div style={rootStyle} data-testid="leader-view">
+        <div style={heroWrapStyle}>
+          <div style={titleRowStyle}>
+            <span>{scrSnap.ref}</span>
+            <span style={chipStyle(isLive ? T.live : T.accent)}>{isLive ? 'LIVE' : 'CUED'}</span>
+            {outChip && <span style={chipStyle(T.accent)}>{outChip}</span>}
+          </div>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
+            <SlideCanvas slide={scrSnap} variant={payload.variant} fill />
+          </div>
+        </div>
+        <div style={dividerStyle} data-testid="leader-divider" title="Drag to resize" onMouseDown={startDrag}>
+          <div style={gripStyle} />
+        </div>
+        <div style={railStyle} data-testid="leader-rail">
+          {Array.from({ length: scrChapter.verseCount }, (_, i) => i + 1).map((v) => {
+            const active = scr.v === v
+            return (
+              <div
+                key={v}
+                ref={(el) => {
+                  verseRefs.current[v] = el
+                }}
+                style={sectionCardStyle(active)}
+                data-testid={`leader-verse-${v}`}
+                data-live={String(active)}
+              >
+                <div style={sectionLabelStyle(active)}>{v}</div>
+                <div style={sectionLineStyle(active)}>{verseText(v)}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+
+  // Not a song or scripture (or the content was deleted, or a fetch hasn't resolved yet
+  // for the shown key): show exactly what the slides view would, but keep the
+  // `leader-view` testid contract OutputApp's view-branching test relies on.
+  if (!parsed || !current || !section)
+    return (
+      <div data-testid="leader-view" style={{ position: 'fixed', inset: 0 }}>
+        <SlidesView payload={payload} />
+      </div>
+    )
 
   return (
     <div style={rootStyle} data-testid="leader-view">
