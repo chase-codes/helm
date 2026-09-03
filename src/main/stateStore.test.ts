@@ -96,6 +96,37 @@ describe('stateStore.take', () => {
   });
 });
 
+// The show effect fires on every cursor move AND on activation/output flips with the
+// cursor at rest — and `showLive` returns its input BY IDENTITY on every refusal (output
+// not live, cross-kind). Without the same skip `take` has, each refused show still
+// re-broadcasts byte-identical state to every output window (#188 review).
+describe('stateStore.show', () => {
+  let win: InstanceType<typeof BrowserWindow>;
+
+  beforeEach(() => {
+    win = new BrowserWindow();
+    presentation.registerOutput(win, 'audience');
+    presentation.setOutput('black');
+    (win.webContents.send as ReturnType<typeof vi.fn>).mockClear();
+  });
+
+  it('does not broadcast when showLive refuses (output down)', () => {
+    const send = win.webContents.send as ReturnType<typeof vi.fn>;
+    send.mockClear();
+    presentation.show('scr:Genesis:1:2', slideA);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('broadcasts when live and the cursor moves within the kind', () => {
+    presentation.take('scr:Genesis:1:1', slideA);
+    const send = win.webContents.send as ReturnType<typeof vi.fn>;
+    send.mockClear();
+    presentation.show('scr:Genesis:1:2', slideB);
+    expect(send.mock.calls.map((c) => c[0])).toContain(CH.outputSlide);
+    expect(presentation.get().liveKey).toBe('scr:Genesis:1:2');
+  });
+});
+
 describe('stateStore.invalidate (#40)', () => {
   let win: InstanceType<typeof BrowserWindow>;
 

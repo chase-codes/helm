@@ -28,7 +28,10 @@ export const presentation = {
   get: () => state,
   cue: (key: string, slide: Slide) => { state = applyCue(state, key, slide); broadcast(); },
   goLive: (key: string, slide: Slide) => { state = goLive(state, key, slide); broadcast(); },
-  show: (key: string, slide: Slide) => { state = showLive(state, key, slide); broadcast(); },
+  // Same identity-skip as `take`: showLive returns its input on every refusal (output
+  // down, cross-kind), and the show effect fires on activation/output flips too — a
+  // refused show must not re-push identical payloads at the output windows.
+  show: (key: string, slide: Slide) => { const next = showLive(state, key, slide); if (next === state) return; state = next; broadcast(); },
   // No broadcast when takeLive hands back the state it was given (already live on this
   // key): re-sending an identical outputSlide would disturb a playing video for nothing.
   take: (key: string, slide: Slide) => { const next = takeLive(state, key, slide); if (next === state) return; state = next; broadcast(); },

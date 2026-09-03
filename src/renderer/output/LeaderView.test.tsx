@@ -182,6 +182,83 @@ describe('LeaderView', () => {
     expect(r.getByText('BLACK')).toBeTruthy()
   })
 
+  it('keeps the cued verse up while the chapter is still fetching — never a black flash (#188 review)', async () => {
+    const st = scriptureState('black', 2)
+    installScriptureStub(st)
+    // Chapter fetch never resolves (a cross-chapter IPC round trip, or a failed fetch):
+    // the leader must render the cued snap's verse text, not fall through to the black
+    // payload slide. Model the real payload: with output black, outputPayload sends
+    // {kind:'black'}, NOT the snap — so the SlidesView fallback here is a black screen.
+    ;(window as unknown as { helm: { bibles: { getChapter: () => Promise<never> } } }).helm.bibles.getChapter = () =>
+      new Promise<never>(() => {})
+    const r = render(<LeaderView payload={{ ...payload(st), slide: { kind: 'black' } }} />)
+    await waitFor(() => expect(r.getAllByText('Verse two text').length).toBeGreaterThan(0))
+    expect(r.queryByTestId('leader-rail')).toBeNull()
+  })
+
+  it('renders the bare slide when the shown verse is outside the chapter (#188 review)', async () => {
+    const st: PresentationState = {
+      output: 'live',
+      liveKey: 'scr:John:3:9',
+      liveSnap: { kind: 'scripture', accent: '#f0b24a', ref: 'John 3:9', label: 'John 3:9', columns: [] },
+      cuedKey: 'scr:John:3:9',
+      cuedSnap: { kind: 'scripture', accent: '#f0b24a', ref: 'John 3:9', label: 'John 3:9', columns: [] }
+    }
+    installScriptureStub(st)
+    const r = render(<LeaderView payload={payload(st)} />)
+    // Chapter has 3 verses; verse 9 can't be highlighted, so a rail with every card dark
+    // would be a lie — degrade to the bare slide like a mid-fetch song. Flush until the
+    // chapter fetch has landed (waiting on the ref text alone would resolve on the
+    // pre-fetch fallback pass and race the getChapter promise).
+    await act(async () => {})
+    await act(async () => {})
+    expect(r.getAllByText('John 3:9').length).toBeGreaterThan(0)
+    expect(r.queryByTestId('leader-rail')).toBeNull()
+  })
+
+  it('hero renders the audience scripture slide even on a livestream-variant display (#188 review)', async () => {
+    const st = scriptureState('live', 2)
+    installScriptureStub(st)
+    const r = render(<LeaderView payload={{ ...payload(st), variant: 'livestream' }} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    // The livestream variant renders a chroma-key lower third with no verse body — the
+    // leader hero must show the full verse regardless of the display's role. The verse
+    // text appears in the rail too, so require BOTH (hero + rail card).
+    expect(r.getAllByText('Verse two text').length).toBeGreaterThan(1)
+  })
+
+  it('rail sticks to the projected translation and never silently swaps versions (#188 review)', async () => {
+    const st = scriptureState('live', 1)
+    installScriptureStub(st)
+    ;(window as unknown as { helm: { bibles: { manifest: () => unknown; getChapter: () => unknown } } }).helm.bibles = {
+      manifest: () =>
+        Promise.resolve([
+          { id: 'web', abbr: 'WEB', name: 'World English', installed: true },
+          { id: 'kjv', abbr: 'KJV', name: 'King James', installed: true }
+        ]),
+      getChapter: () =>
+        Promise.resolve({
+          book: 'John',
+          chapter: 3,
+          verseCount: 3,
+          verses: {
+            1: { kjv: 'K one', web: 'W one' },
+            2: { web: 'W two' }, // absent from the projected (KJV) translation
+            3: { kjv: 'K three', web: 'W three' }
+          }
+        })
+    }
+    const r = render(<LeaderView payload={payload(st)} />)
+    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+    const rail = r.getByTestId('leader-rail')
+    // Snap's primary column is KJV — the rail follows it, not manifest order.
+    expect(rail.textContent).toContain('K one')
+    expect(rail.textContent).toContain('K three')
+    // A verse the projected translation omits stays blank rather than silently showing
+    // another translation's text.
+    expect(rail.textContent).not.toContain('W two')
+  })
+
   it('auto-scrolls the live verse card into view (#188)', async () => {
     const spy = vi.fn()
     Element.prototype.scrollIntoView = spy

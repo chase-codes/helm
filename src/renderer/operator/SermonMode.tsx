@@ -113,6 +113,8 @@ export function SermonMode({
   // Arrow/Prev/Next presses made while the chapter is unresolved (#21); see stepVerse and
   // the chapter fetch effect. `from` is the cursor when the first press queued.
   const pendingStep = useRef<{ from: number; delta: number } | null>(null);
+  // Last cursor key the show effect handled — the "was this a move?" baseline (#188).
+  const lastShownCursor = useRef<string | null>(null);
 
   // One-shot scroll commands for ChapterRail — see its scrollRequest prop doc. `railScroll`
   // itself is never cleared after use (nonces only ever go up, so re-passing the same
@@ -492,15 +494,25 @@ export function SermonMode({
     if (!liveChapter || chapterMissing(liveChapter)) return;
     const key = keyForScripture(scrBook, scrCh, scrV);
     const slide = verseSlide(scrBook, scrCh, scrV, liveChapter);
-    // Cue as well as show (#188): `showLive` no-ops while output is down and records no
-    // cue in its refusal paths, but the leader display renders the CUE when output is
-    // down — without this, taking the projector to black/logo freezes the leader on the
-    // last live verse no matter where the cursor goes. `applyCue` always records the
-    // cued pair, and the leader's live-first rule keeps a scripture cue from moving the
-    // leader while another kind is live.
-    window.helm.presentation.cue(key, slide);
+    // Cue on a cursor MOVE, as well as show (#188): `showLive` no-ops while output is
+    // down and records no cue in its refusal paths, but the leader display renders the
+    // CUE when output is down — without this, taking the projector to black/logo freezes
+    // the leader on the last live verse no matter where the cursor goes.
+    //
+    // Only a MOVE may cue, and only while the verse isn't already live. This effect also
+    // fires on activation and on `output` flips with the cursor at rest — recording the
+    // resting cursor then would steal the leader display from whatever the operator had
+    // armed on another surface (a two-second peek at this tab must not strand the
+    // leader on Genesis 1:1), the same jump showLive's refusal paths refuse to record.
+    // And while the verse is live, `showLive` already records the cued pair, so cueing
+    // again would only double every broadcast. The ref advances unconditionally so the
+    // first firing after activation is the baseline, never a move.
+    const moved = lastShownCursor.current !== null && lastShownCursor.current !== key;
+    lastShownCursor.current = key;
+    if (moved && !(output === 'live' && sameKind(liveKey, key)))
+      window.helm.presentation.cue(key, slide);
     window.helm.presentation.show(key, slide);
-  }, [scrBook, scrCh, scrV, versions, liveChapter, anyInstalled, abbrOf, verseSlide, output, active, track]);
+  }, [scrBook, scrCh, scrV, versions, liveChapter, anyInstalled, abbrOf, verseSlide, output, liveKey, active, track]);
 
   const curKey = keyForScripture(scrBook, scrCh, scrV);
   // `sameKind`, not key equality: while scripture is live the show effect above puts every
