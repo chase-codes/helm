@@ -1,0 +1,94 @@
+name: Windows video probe
+# Drives the real operator UI (import a video → Play → Go live → Play) under Playwright and
+# records what the <video> elements, the helm-media:// handler and main's video state do.
+# Exists because imported video sits on its first frame on Windows and nobody has a
+# Windows machine to look at; see scripts/probe-video-playback.mjs.
+on:
+  workflow_dispatch:
+  # TEMPORARY: push trigger for the fix/windows-video-playback investigation only.
+  # Remove it (keep workflow_dispatch) before or when that branch merges.
+  push:
+    branches: [fix/windows-video-playback]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: probe (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14 is the control: the same flow is known to pass there.
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # No vendor-deps step: the probe runs the unpackaged build, which reads the
+      # checked-in resources/bibles/kjv.json and never touches LibreOffice for video.
+      - run: npx electron-vite build
+
+      - name: Download test videos
+        run: |
+          mkdir -p "$RUNNER_TEMP/probe-videos"
+          fetch() {
+            local out="$RUNNER_TEMP/probe-videos/$1"
+            curl --fail --silent --show-error --location --retry 3 --retry-delay 5 --max-time 300 -o "$out" "$2"
+            # A CDN error page saved as .mp4 would make the probe fail for the wrong reason.
+            node -e '
+              const fs = require("fs");
+              const f = process.argv[1];
+              const size = fs.statSync(f).size;
+              const head = Buffer.alloc(12);
+              fs.readSync(fs.openSync(f, "r"), head, 0, 12, 0);
+              const brand = head.toString("latin1", 4, 8);
+              if (brand !== "ftyp" || size < 100000) {
+                console.error(`::error::${f} is not a real mp4 (size=${size}, bytes 4-8=${JSON.stringify(brand)})`);
+                process.exit(1);
+              }
+              console.log(`ok ${f} ${size} bytes`);
+            ' "$out"
+          }
+          # ~1 MB, 5s, H.264 + AAC, faststart.
+          fetch flower.mp4 https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4
+          # ~30 MB, 10s, 1080p H.264, no audio: forces real range requests.
+          fetch bbb-1080-30mb.mp4 https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_30MB.mp4
+
+      # The hosted Windows runner has an interactive desktop session, so Electron needs no
+      # xvfb-style wrapper or extra flags. It has no GPU, though: video decodes in software
+      # here, so a hardware-decode-only failure on a real machine would not reproduce.
+      - name: Probe playback
+        env:
+          PROBE_OUT: ${{ runner.temp }}/probe-out
+        run: |
+          mkdir -p "$PROBE_OUT"
+          node scripts/probe-video-playback.mjs \
+            "$RUNNER_TEMP/probe-videos/flower.mp4" \
+            "$RUNNER_TEMP/probe-videos/bbb-1080-30mb.mp4" 2>&1 | tee "$PROBE_OUT/probe.log"
+
+      - name: Summarise verdicts
+        if: always()
+        run: |
+          {
+            echo "### Video probe — ${{ matrix.os }}"
+            echo '```'
+            cat "$RUNNER_TEMP/probe-out/verdicts.txt" 2>/dev/null || echo "no verdicts written — see the probe log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: video-probe-${{ matrix.os }}
+          path: ${{ runner.temp }}/probe-out
+          if-no-files-found: warn
+          retention-days: 14
