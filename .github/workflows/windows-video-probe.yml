@@ -3,6 +3,9 @@ name: Windows video probe
 # records what the <video> elements, the helm-media:// handler and main's video state do.
 # Exists because imported video sits on its first frame on Windows and nobody has a
 # Windows machine to look at; see scripts/probe-video-playback.mjs.
+# Two legs per OS: the unpackaged build (node_modules Electron + out/), then the same
+# flow against an electron-builder --dir package (asar, app.isPackaged, resourcesPath),
+# which is as close to the NSIS install as a runner gets.
 on:
   workflow_dispatch:
   # TEMPORARY: push trigger for the fix/windows-video-playback investigation only.
@@ -19,10 +22,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-14 is the control: the same flow is known to pass there.
-        os: [windows-latest, macos-14]
+        include:
+          - os: windows-latest
+            builder: --win
+            exe: dist/win-unpacked/Helm.exe
+          # macos-14 is the control: the same flow is known to pass there.
+          - os: macos-14
+            builder: --mac --arm64
+            exe: dist/mac-arm64/Helm.app/Contents/MacOS/Helm
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     defaults:
       run:
         shell: bash
@@ -33,8 +42,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # No vendor-deps step: the probe runs the unpackaged build, which reads the
-      # checked-in resources/bibles/kjv.json and never touches LibreOffice for video.
+      # No vendor-deps step: video never touches LibreOffice, and resources/bibles/kjv.json
+      # is checked in — enough for the unpackaged build and for the package below.
       - run: npx electron-vite build
 
       - name: Download test videos
@@ -75,14 +84,47 @@ jobs:
             "$RUNNER_TEMP/probe-videos/flower.mp4" \
             "$RUNNER_TEMP/probe-videos/bbb-1080-30mb.mp4" 2>&1 | tee "$PROBE_OUT/probe.log"
 
+      # Packaged leg. always(): a FAIL above must not hide this result, or the reverse.
+      # Same packaging as release.yml minus the installer: npm ci's postinstall
+      # (electron-builder install-app-deps) already built better-sqlite3 and
+      # @napi-rs/canvas for Electron, and npmRebuild: false ships them as-is. --dir stops
+      # at the unpacked app the NSIS installer would wrap. electron-builder only warns
+      # about a missing extraResources source, but an empty resources/libreoffice costs
+      # nothing and takes the question away; the app then shows its no-LibreOffice
+      # fallback, which video import never reaches.
+      - name: Package (unpacked)
+        id: package
+        if: always()
+        run: |
+          mkdir -p resources/libreoffice
+          npx electron-builder ${{ matrix.builder }} --dir --publish never
+          ls -la "$(dirname "${{ matrix.exe }}")"
+
+      # The probe passes --host-resolver-rules to a packaged app so its auto-updater
+      # (on whenever app.isPackaged) can't reach GitHub; see probe-video-playback.mjs.
+      - name: Probe playback (packaged)
+        if: always() && steps.package.outcome == 'success'
+        env:
+          PROBE_OUT: ${{ runner.temp }}/probe-out-packaged
+          PROBE_APP_EXE: ${{ matrix.exe }}
+        run: |
+          mkdir -p "$PROBE_OUT"
+          node scripts/probe-video-playback.mjs \
+            "$RUNNER_TEMP/probe-videos/flower.mp4" \
+            "$RUNNER_TEMP/probe-videos/bbb-1080-30mb.mp4" 2>&1 | tee "$PROBE_OUT/probe.log"
+
       - name: Summarise verdicts
         if: always()
         run: |
           {
             echo "### Video probe — ${{ matrix.os }}"
-            echo '```'
-            cat "$RUNNER_TEMP/probe-out/verdicts.txt" 2>/dev/null || echo "no verdicts written — see the probe log"
-            echo '```'
+            for leg in probe-out probe-out-packaged; do
+              echo "**$leg**"
+              echo '```'
+              grep -m1 -E '^platform:' "$RUNNER_TEMP/$leg/probe.log" 2>/dev/null || true
+              cat "$RUNNER_TEMP/$leg/verdicts.txt" 2>/dev/null || echo "no verdicts written — see the probe log"
+              echo '```'
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
@@ -90,5 +132,13 @@ jobs:
         with:
           name: video-probe-${{ matrix.os }}
           path: ${{ runner.temp }}/probe-out
+          if-no-files-found: warn
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: video-probe-packaged-${{ matrix.os }}
+          path: ${{ runner.temp }}/probe-out-packaged
           if-no-files-found: warn
           retention-days: 14

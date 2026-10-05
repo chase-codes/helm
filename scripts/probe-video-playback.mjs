@@ -10,7 +10,9 @@
 //
 // Env:
 //   PROBE_OUT      output dir for report.json + screenshots (default: a temp dir)
-//   PROBE_APP_EXE  probe a packaged app binary instead of node_modules' Electron + out/
+//   PROBE_APP_EXE  probe a packaged app binary instead of node_modules' Electron + out/,
+//                  e.g. dist/win-unpacked/Helm.exe or dist/mac-arm64/Helm.app/Contents/MacOS/Helm
+//                  from `npx electron-builder --dir --publish never`
 //   PROBE_TIMEOUT  per-file budget in ms (default 150000)
 //
 // Exit code: 0 when every file PASSes, 1 on any FAIL, 2 on a usage error.
@@ -24,7 +26,7 @@ import { fileURLToPath } from 'node:url'
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
 const OUT_DIR = process.env.PROBE_OUT || fs.mkdtempSync(path.join(os.tmpdir(), 'helm-video-probe-'))
-const APP_EXE = process.env.PROBE_APP_EXE || ''
+const APP_EXE = process.env.PROBE_APP_EXE ? path.resolve(process.env.PROBE_APP_EXE) : ''
 const FILE_TIMEOUT = Number(process.env.PROBE_TIMEOUT) || 150_000
 const SAMPLE_MS = 250
 const SAMPLE_COUNT = 17 // ~4s
@@ -35,7 +37,7 @@ if (!files.length) {
   console.error('usage: node scripts/probe-video-playback.mjs <video> [<video> ...]')
   process.exit(2)
 }
-for (const f of files) {
+for (const f of APP_EXE ? [APP_EXE, ...files] : files) {
   if (!fs.existsSync(f)) {
     console.error(`no such file: ${f}`)
     process.exit(2)
@@ -55,6 +57,13 @@ function withTimeout(promise, ms, what) {
 }
 function clip(text, n) {
   return text.length > n ? `${text.slice(0, n)}… (+${text.length - n} chars)` : text
+}
+function attemptSync(fn) {
+  try {
+    return fn()
+  } catch {
+    return null
+  }
 }
 async function attempt(fn) {
   try {
@@ -358,9 +367,18 @@ async function probeFile(file, index) {
   let app
   const body = async () => {
     const flags = [`--user-data-dir=${userDataDir}`, '--enable-logging=stderr']
+    // A packaged app starts electron-updater at launch with autoDownload on (main/index.ts),
+    // and there is no switch to turn it off. Nothing the probe exercises needs the network
+    // (helm-media:// is served from disk), so take DNS away: an update check can then only
+    // fail, silently, and can never download or stage an installer on the runner.
+    const packagedFlags = [...flags, '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost']
+    // Playwright prepends --inspect=0 --remote-debugging-port=0 either way; a packaged
+    // binary only honours --inspect while the EnableNodeCliInspectArguments fuse is on
+    // (Electron's default — electron-builder.yml sets no electronFuses). With it off the
+    // launch dies here waiting for "Debugger listening".
     app = await electron.launch(
       APP_EXE
-        ? { executablePath: APP_EXE, args: flags, timeout: 60_000 }
+        ? { executablePath: APP_EXE, args: packagedFlags, timeout: 60_000 }
         : {
             executablePath: require('electron'),
             args: [APP_DIR, ...flags],
@@ -424,6 +442,9 @@ async function probeFile(file, index) {
           gpuInfo = String(e)
         }
         return {
+          execPath: process.execPath,
+          appPath: a.getAppPath(),
+          resourcesPath: process.resourcesPath,
           platform: process.platform,
           arch: process.arch,
           osRelease: process.getSystemVersion(),
@@ -438,6 +459,16 @@ async function probeFile(file, index) {
         }
       })
     )
+    // Refuse to drive an app that isn't the one asked for, or that ignored
+    // --user-data-dir: the import below would land in the real profile's library.
+    if (r.env.probeError) throw new Error(`could not read app env: ${r.env.probeError}`)
+    // Present = electron-updater has a feed to poll (NSIS installs; --dir builds may not).
+    r.env.updateConfig = fs.existsSync(path.join(r.env.resourcesPath, 'app-update.yml'))
+    if (r.env.isPackaged !== !!APP_EXE)
+      throw new Error(`expected packaged=${!!APP_EXE}, app reports packaged=${r.env.isPackaged}`)
+    const real = (p) => attemptSync(() => fs.realpathSync(p)) || path.resolve(p)
+    if (real(r.env.userData) !== real(userDataDir))
+      throw new Error(`app ignored --user-data-dir: userData=${r.env.userData}`)
     r.codecs = await attempt(() => op.evaluate(codecSupportInPage))
 
     await app.evaluate(({ dialog }, p) => {
@@ -530,6 +561,7 @@ async function probeFile(file, index) {
     await attempt(() => op.screenshot({ path: path.join(OUT_DIR, shot2) }))
     await attempt(() => out.screenshot({ path: path.join(OUT_DIR, shot3) }))
     r.screenshots.push(shot2, shot3)
+    r.updater = await attempt(() => op.evaluate(() => window.helm.updates.getStatus()))
     r.probes = {
       operator: await attempt(() => op.evaluate(() => window.__probe)),
       output: await attempt(() => out.evaluate(() => window.__probe))
@@ -736,7 +768,13 @@ function printReport(r) {
       `platform:  process.platform=${e.platform} arch=${e.arch} os=${e.osRelease}  ` +
         `electron=${e.electron} chromium=${e.chrome} node=${e.node}  packaged=${e.isPackaged} app=${e.appVersion}`
     )
+    console.log(`binary:    ${e.execPath}`)
+    console.log(`app path:  ${e.appPath}`)
     console.log(`userData:  ${e.userData}`)
+    console.log(
+      `updater:   app-update.yml ${e.updateConfig ? 'present' : 'absent'}; ` +
+        `status at end = ${JSON.stringify(r.updater ?? '(not reached)')}`
+    )
     console.log(`gpu features: ${JSON.stringify(e.gpuFeatureStatus)}`)
     const g = e.gpuInfo && e.gpuInfo.gpuDevice ? e.gpuInfo.gpuDevice : e.gpuInfo
     console.log(`gpu devices:  ${JSON.stringify(g)}`)
@@ -874,7 +912,9 @@ function verdictLines(r) {
 console.log(
   `helm video playback probe — ${files.length} file(s), host ${process.platform}/${process.arch}`
 )
-console.log(`app: ${APP_EXE || `${APP_DIR} (unpackaged, node_modules Electron)`}`)
+console.log(
+  `app: ${APP_EXE ? `${APP_EXE} (packaged)` : `${APP_DIR} (unpackaged, node_modules Electron)`}`
+)
 console.log(`output dir: ${OUT_DIR}`)
 const results = []
 for (const [i, file] of files.entries()) {
