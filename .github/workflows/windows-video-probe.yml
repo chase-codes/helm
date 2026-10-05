@@ -8,7 +8,7 @@ on:
   # TEMPORARY: push trigger for the fix/windows-video-playback investigation only.
   # Remove it (keep workflow_dispatch) before or when that branch merges.
   push:
-    branches: [fix/windows-video-playback]
+    branches: [probe/windows-video-baseline]
 
 permissions:
   contents: read
