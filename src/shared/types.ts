@@ -142,10 +142,30 @@ export interface PresentationState {
   output: OutputMode; liveKey: string | null; liveSnap: Slide | null;
   cuedKey: string | null; cuedSnap: Slide | null;
 }
+// What a <video> element tells main about itself. 'error' (the element's MediaError) and
+// 'play-rejected' (a non-Abort play() rejection) are FATAL: main pauses and carries the
+// failure on VideoStateWire.error. The rest are diagnostics for the media log only, except
+// 'playing', which also clears a previous error (the element really did start).
+export type VideoReportKind = 'error' | 'play-rejected' | 'stalled' | 'waiting' | 'playing' | 'ended';
+export interface VideoErrorReport {
+  src: string;
+  kind: VideoReportKind;
+  name?: string;      // DOMException name of a play() rejection
+  code?: number;      // MediaError.code (1 aborted, 2 network, 3 decode, 4 src not supported)
+  message?: string;
+  readyState: number; networkState: number; currentTime: number;
+}
+export interface VideoError {
+  kind: 'error' | 'play-rejected';
+  name?: string; code?: number; message?: string;
+}
 export interface VideoStateWire {
   key: string | null; src: string | null;
   playing: boolean; positionMs: number; durationMs: number;
   volume: number; muted: boolean;
+  // The loaded video failed in some window. Main always sends it (null when healthy);
+  // optional only so hand-built idle states need not spell it.
+  error?: VideoError | null;
 }
 export type OutputVariant = 'audience' | 'main' | 'stage' | 'leader' | 'livestream';
 export type OutputRole = 'audience' | 'stage' | 'livestream' | 'off';  // declared here; roles.ts imports it
@@ -225,6 +245,7 @@ export const CH = {
   videoLoad: 'video:load', videoPlay: 'video:play', videoPause: 'video:pause',
   videoSeek: 'video:seek', videoSetVolume: 'video:setVolume',
   videoSetMuted: 'video:setMuted', videoReportDuration: 'video:reportDuration',
+  videoReportError: 'video:reportError', videoRevealLog: 'video:revealLog',
   songImportSources: 'songImport:sources', songImportScan: 'songImport:scan',
   songImportCommit: 'songImport:commit', songImportProgress: 'songImport:progress',
   songSourcesSearch: 'songSources:search', songSourcesFromUrl: 'songSources:fromUrl',
@@ -407,6 +428,8 @@ export interface HelmApi {
     seek(ms: number): void;
     setVolume(v: number): void; setMuted(m: boolean): void;
     reportDuration(ms: number): void;
+    reportError(r: VideoErrorReport): void;
+    revealLog(): void; // show media.log in the OS file manager, so it can be sent to us
   };
   songImport: {
     sources(): Promise<ImportSourceInfo[]>;

@@ -29,6 +29,7 @@ import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
+import { videoErrorText } from '../../shared/video/errorText';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -512,6 +513,13 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   // (e.g. a plain image, which has no right panel at all).
   const hasRightPanel = selected != null && (selected.type === 'deck' || selected.type === 'video');
 
+  // A failed element reported to main (VideoCanvas → video.reportError): only for the clip
+  // this panel is showing — main's state is shared, and may still hold another video.
+  const videoError =
+    selected && selected.type === 'video' && vstate.error && vstate.key === keyForMedia(selected.id, 0)
+      ? videoErrorText(vstate.error)
+      : null;
+
   const heroMedia =
     selected && selected.type === 'video' ? (
       <VideoCanvas
@@ -710,6 +718,21 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 style={{ flex: 1, minWidth: 0 }}
               />
             </div>
+            {/* Last in the column, so appearing never moves the transport above it (rule 5).
+                Operator-only: the audience canvas never renders an error. */}
+            {videoError && (
+              <div role="alert" style={{ borderRadius: '9px', padding: '10px 12px', background: `${T.live}1a`, boxShadow: `inset 0 0 0 1px ${T.live}66` }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: T.live }}>{videoError.title}</div>
+                <div style={{ fontSize: '11.5px', color: T.dim, marginTop: '4px', lineHeight: 1.45 }}>{videoError.reason}</div>
+                <button
+                  style={{ ...transportBtnStyle, height: '28px', padding: '0 10px', fontSize: '12px', marginTop: '9px' }}
+                  title="Opens the folder holding media.log — send us that file so we can see what went wrong"
+                  onClick={() => window.helm.video.revealLog()}
+                >
+                  Show log file
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

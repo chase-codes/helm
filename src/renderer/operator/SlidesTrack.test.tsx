@@ -51,7 +51,8 @@ function baseHelm(pres?: PresentationState): StubHelm {
       get: () => Promise.resolve({ key: null, src: null, playing: false, positionMs: 0, durationMs: 0, volume: 1, muted: false }),
       onState: () => () => {},
       load: vi.fn(), play: vi.fn(), pause: vi.fn(),
-      seek: vi.fn(), setVolume: vi.fn(), setMuted: vi.fn(), reportDuration: vi.fn()
+      seek: vi.fn(), setVolume: vi.fn(), setMuted: vi.fn(), reportDuration: vi.fn(),
+      reportError: vi.fn(), revealLog: vi.fn()
     }
   }
 }
@@ -233,6 +234,36 @@ describe('SlidesTrack', () => {
     await waitFor(() =>
       expect(window.helm.video.load).toHaveBeenCalledWith('pres:vid1:0', 'helm-media://video/promo.mp4')
     )
+  })
+
+  it('a failed video says so in the transport panel, with the reason and the log', async () => {
+    installHelmStub()
+    const failed = {
+      key: 'pres:vid1:0', src: 'helm-media://video/promo.mp4', playing: false, positionMs: 0, durationMs: 0,
+      volume: 1, muted: false, error: { kind: 'error', code: 4, message: 'DEMUXER_ERROR_COULD_NOT_OPEN' }
+    }
+    ;(window.helm.video as unknown as { get: () => Promise<unknown> }).get = () => Promise.resolve(failed)
+    renderTrack()
+    // The shared state already holds the failed clip, but nothing is said until it is the
+    // one this panel shows.
+    await screen.findByText('▤ Sermon.pptx')
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click((await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain("Can't play this video")
+    expect(alert.textContent).toMatch(/H\.264 MP4/)
+    // The transport stays put and usable above the message.
+    expect(screen.getByText('▶ Play')).toBeTruthy()
+    fireEvent.click(screen.getByText('Show log file'))
+    expect(window.helm.video.revealLog).toHaveBeenCalled()
+  })
+
+  it('a healthy video shows no error message', async () => {
+    installHelmStub()
+    renderTrack()
+    fireEvent.click((await screen.findByText('▶ Promo.mp4')).closest('button') as HTMLButtonElement)
+    await screen.findByText('▶ Play')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('going live on a video lands it paused (no surprise audio on go-live)', async () => {

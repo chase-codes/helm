@@ -107,7 +107,9 @@ const api: HelmApi = {
     seek: (ms) => ipcRenderer.send(CH.videoSeek, ms),
     setVolume: (v) => ipcRenderer.send(CH.videoSetVolume, v),
     setMuted: (m) => ipcRenderer.send(CH.videoSetMuted, m),
-    reportDuration: (ms) => ipcRenderer.send(CH.videoReportDuration, ms)
+    reportDuration: (ms) => ipcRenderer.send(CH.videoReportDuration, ms),
+    reportError: (r) => ipcRenderer.send(CH.videoReportError, r),
+    revealLog: () => ipcRenderer.send(CH.videoRevealLog)
   },
   songImport: {
     sources: () => ipcRenderer.invoke(CH.songImportSources),

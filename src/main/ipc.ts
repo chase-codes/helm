@@ -19,6 +19,7 @@ import type { Updater } from './updater';
 import { parseMessageText } from '../shared/message/parseImport';
 import { presentation } from './stateStore';
 import { video } from './videoState';
+import { revealMediaLog } from './mediaLog';
 import {
   displayStatus,
   openTestOutput,
@@ -190,6 +191,9 @@ export function registerIpc(deps: IpcDeps): void {
   onApi<HelmApi['video']['setVolume']>(CH.videoSetVolume, (v) => video.setVolume(v));
   onApi<HelmApi['video']['setMuted']>(CH.videoSetMuted, (m) => video.setMuted(m));
   onApi<HelmApi['video']['reportDuration']>(CH.videoReportDuration, (ms) => video.reportDuration(ms));
+  // The sender id goes in the log: the operator hero and each output hold their own element.
+  onApiWithEvent<HelmApi['video']['reportError']>(CH.videoReportError, (e, r) => video.report(r, e.sender.id));
+  onApi<HelmApi['video']['revealLog']>(CH.videoRevealLog, () => revealMediaLog());
 
   handleApi<HelmApi['updates']['getStatus']>(CH.updatesGetStatus, () => updater.status());
   handleApi<HelmApi['updates']['check']>(CH.updatesCheck, () => updater.check());

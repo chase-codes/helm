@@ -1,4 +1,4 @@
-import type { VideoStateWire } from '../types';
+import type { VideoError, VideoErrorReport, VideoStateWire } from '../types';
 
 export interface VideoStateInternal {
   key: string | null;
@@ -9,10 +9,11 @@ export interface VideoStateInternal {
   durationMs: number; // 0 until the operator's element reports it
   volume: number;     // 0..1
   muted: boolean;
+  error: VideoError | null; // set by a fatal element report; see reportVideo
 }
 
 export function initialVideo(): VideoStateInternal {
-  return { key: null, src: null, playing: false, anchorMs: 0, anchorAt: 0, durationMs: 0, volume: 1, muted: false };
+  return { key: null, src: null, playing: false, anchorMs: 0, anchorAt: 0, durationMs: 0, volume: 1, muted: false, error: null };
 }
 
 function clampMs(ms: number, durationMs: number): number {
@@ -60,10 +61,35 @@ export function setDuration(st: VideoStateInternal, durationMs: number): VideoSt
   return { ...st, durationMs: d, anchorMs: clampMs(st.anchorMs, d) };
 }
 
+export function isFatalReport(r: VideoErrorReport): boolean {
+  return r.kind === 'error' || (r.kind === 'play-rejected' && r.name !== 'AbortError');
+}
+
+// An element's report about itself. Only reports for the LOADED src count (a stale
+// element still showing the previous clip must not fail the new one). A fatal report
+// pauses and records the error so every window agrees; 'playing' proves the element
+// really started, which is the only thing that clears it (a play *command* does not —
+// a retry of a broken file would otherwise blink the message off and on). Everything
+// else returns the same reference, so the caller can skip the broadcast.
+export function reportVideo(st: VideoStateInternal, r: VideoErrorReport, now: number): VideoStateInternal {
+  if (!st.src || r.src !== st.src) return st;
+  if (isFatalReport(r)) {
+    const error: VideoError = { kind: r.kind as VideoError['kind'] };
+    if (r.name !== undefined) error.name = r.name;
+    if (r.code !== undefined) error.code = r.code;
+    if (r.message !== undefined) error.message = r.message;
+    const e = st.error; // the same failure from a second window/retry: nothing new to say
+    if (!st.playing && e && e.kind === error.kind && e.name === error.name && e.code === error.code && e.message === error.message) return st;
+    return { ...pauseVideo(st, now), error };
+  }
+  if (r.kind === 'playing' && st.error) return { ...st, error: null };
+  return st;
+}
+
 export function toWire(st: VideoStateInternal, now: number): VideoStateWire {
   return {
     key: st.key, src: st.src, playing: st.playing,
     positionMs: effectiveMs(st, now), durationMs: st.durationMs,
-    volume: st.volume, muted: st.muted
+    volume: st.volume, muted: st.muted, error: st.error
   };
 }

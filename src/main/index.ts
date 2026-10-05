@@ -33,6 +33,7 @@ import {
   operatorDisplayId
 } from './displays'
 import { registerMediaProtocol, libraryRoot } from './library'
+import { mediaLog } from './mediaLog'
 import { presentation } from './stateStore'
 
 protocol.registerSchemesAsPrivileged([
@@ -144,7 +145,10 @@ app.whenReady().then(() => {
 
   const db = openDb(join(app.getPath('userData'), 'helm.db'))
   const libRoot = libraryRoot()
-  registerMediaProtocol(libRoot)
+  registerMediaProtocol(libRoot, {
+    log: (event, data) =>
+      mediaLog(`media.${event}`, data, event === 'stream-error' || event === 'close-error' ? 'error' : 'info')
+  })
   const repo = createSongsRepo(db)
   seedIfEmpty(repo)
   const biblesRepo = createBiblesRepo(db)

@@ -217,7 +217,9 @@ function installHelmStub(
       seek: vi.fn(),
       setVolume: vi.fn(),
       setMuted: vi.fn(),
-      reportDuration: vi.fn()
+      reportDuration: vi.fn(),
+      reportError: vi.fn(),
+      revealLog: vi.fn()
     }
   }
   return {
