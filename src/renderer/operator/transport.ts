@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { Theme } from '../../shared/theme';
 import { tintChip } from './railTint';
+import type { ScreenTone } from '../../shared/presentation/screenOwner';
 
 /** Both transport verbs are this wide in every state (#85). Fixed rather than
  * content-sized: "Go live", "Take down" and "⇄ Switch" all have to occupy the same
@@ -85,6 +86,17 @@ export function statusDotStyle(color: string, pulsing: boolean): CSSProperties {
     background: color,
     animation: pulsing ? 'lecPulse 1.6s ease-in-out infinite' : 'none'
   };
+}
+
+/** Theme colour for a `screenStatus` tone. Red only for this page's own content (grammar
+ * rule 1); another page's content is faint, because the Header chip already says the
+ * screen is live in red and a second red chip would claim content this page cannot take
+ * down from its own rail. */
+export function screenToneColor(T: Theme, tone: ScreenTone): string {
+  if (tone === 'live') return T.live;
+  if (tone === 'logo') return T.accent;
+  if (tone === 'black') return T.dim;
+  return T.faint;
 }
 
 /** Sits between Take down and Go live: adjacent opposite verbs, so the gap has to be
