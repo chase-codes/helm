@@ -268,7 +268,7 @@ export function SermonCenter({
           style={takeDownStyle}
           onClick={onTakeDown}
           disabled={!canTakeDown}
-          title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
+          title={canTakeDown ? 'Black the audience screen' : 'Nothing on screen'}
         >
           <ScreenBlackIcon size={14} /> Take down
         </button>

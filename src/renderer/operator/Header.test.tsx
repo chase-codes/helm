@@ -50,4 +50,16 @@ describe('Header status chip', () => {
     expect(await screen.findByText('NOTHING ON SCREEN')).toBeTruthy()
     expect(screen.queryByText('SCREEN BLACK')).toBeNull()
   })
+
+  it('titles the live chip with the Take down tooltip every page uses', async () => {
+    setPresentation({
+      output: 'live',
+      liveKey: 'song:s1:0',
+      liveSnap: { kind: 'lyrics', label: 'Amazing Grace', lines: ['x'] },
+      cuedKey: null,
+      cuedSnap: null
+    })
+    renderHeader()
+    expect(await screen.findByTitle('Black the audience screen')).toBeTruthy()
+  })
 })

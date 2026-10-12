@@ -1363,6 +1363,13 @@ describe('SongsMode — the transport is stable ground (#85)', () => {
     expect(verb(/^Next/).textContent?.trim()).toBe('Next ›');
     expect(verb(/^Next/).getAttribute('title')).toBe('Next section');
   });
+
+  it('titles Take down "Black the audience screen"', async () => {
+    installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(verb(/Take down/).getAttribute('title')).toBe('Black the audience screen');
+  });
 });
 
 describe('SongsMode: status chip names the page that owns the screen (decision 6)', () => {

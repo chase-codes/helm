@@ -169,7 +169,7 @@ export function Header({
       <button
         style={liveStatusStyle}
         onClick={handleLiveClick}
-        title={isLive ? 'Take down — clears the screen from anywhere' : 'Nothing on screen'}
+        title={isLive ? 'Black the audience screen' : 'Nothing on screen'}
       >
         <span style={liveDotStyle} />
         <span

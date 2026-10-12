@@ -129,6 +129,11 @@ describe('SermonCenter — the transport is stable ground (#85)', () => {
     expect(btn(/Take down/).style.width).toBe(btn(/Go live/).style.width)
     expect(btn(/Go live/).style.width).toBeTruthy()
   })
+
+  it('titles Take down "Black the audience screen", the one tooltip every page uses', () => {
+    render(<SermonCenter {...baseProps('verse')} output="live" />)
+    expect(btn(/Take down/).getAttribute('title')).toBe('Black the audience screen')
+  })
 })
 
 // #47: the hero label is the leader's handle on what's on screen; when cued-but-not-live

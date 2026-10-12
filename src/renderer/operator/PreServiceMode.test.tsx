@@ -563,6 +563,13 @@ describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => 
       fireEvent.click(takeDownBtn())
       expect(setOutput).toHaveBeenCalledWith('black')
     })
+
+    it('titles itself "Black the audience screen"', async () => {
+      installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
+      renderMode()
+      await screen.findByText('LIVE ON SCREEN')
+      expect(takeDownBtn().getAttribute('title')).toBe('Black the audience screen')
+    })
   })
 
   describe('keyboard delegate', () => {
