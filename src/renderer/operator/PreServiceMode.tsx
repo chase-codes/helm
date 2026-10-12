@@ -12,6 +12,7 @@ import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
 import { tintChip } from './railTint';
 import { MONO } from '../shared/fonts';
@@ -140,6 +141,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   //                    disabled state. Enter is therefore never a take-down here, unlike
   //                    Songs/Sermon where the same button toggles.
   //   Take down      → the last rung of the Escape ladder, as everywhere else.
+  //   1-9            → a tap on card N (select + showCard), so it inherits the tap's guarantee.
   //
   // Escape runs the shared ladder (escapeLadder.ts) with no blur rung: the only text entry
   // on this page lives inside PreCardEditor, which the first rung closes outright.
@@ -167,6 +169,16 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
       isModalOpen: () => editing !== null,
       onDelete: () => {
         if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
+      },
+      // A digit is a tap on card N: it selects the row and calls showCard, which switches the
+      // screen only while pre-service already owns it (BUG-018), never starts it. No search
+      // on this page, so `/` is a deliberate no-op (Shortcuts says so).
+      onAction: (a: ResolvedHotkey) => {
+        if (a.id !== 'item.jump' || !a.digit) return;
+        const card = cards[a.digit - 1];
+        if (!card) return;
+        sel.select(card.id);
+        window.helm.preservice.showCard(a.digit - 1);
       }
     };
     return () => {
