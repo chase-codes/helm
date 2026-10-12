@@ -1779,6 +1779,30 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
   })
 
+  it('a quote from another tape, picked while a quote is live, is QUEUED and named on Go live', async () => {
+    const QS: QuoteScheduleItem[] = [
+      { id: 'q1', msgId: 'm1', ord: 1, label: '2', tapeNo: '47-0412', title: 'Faith Is The Substance' }
+    ]
+    const OTHER_TAPE_LIVE: PresentationState = {
+      output: 'live',
+      liveKey: 'msg:m9:0',
+      liveSnap: { kind: 'quote', text: 'x' },
+      cuedKey: null,
+      cuedSnap: null
+    }
+    const { resolveChapter } = installHelmStub(OTHER_TAPE_LIVE, [], { tape: TAPE, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    const row = (await screen.findByText('¶2 · Tape 47-0412')).closest('button') as HTMLButtonElement
+    fireEvent.click(row)
+
+    await waitFor(() => expect(within(row).getByText('QUEUED')).toBeTruthy())
+    const primary = within(trackPanel('message')).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(primary.title).toMatch(/^Go live with Tape 47-0412/)
+  })
+
   // Keeping the tracks mounted must not let them drive main's presentation/video state
   // while another track is the surface the operator is using — the same hazard the
   // scripture show effect's `active && track === 'scripture'` gate closes one level up.

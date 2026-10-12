@@ -13,7 +13,7 @@ import { usePresentationState } from '../shared/useHelm';
 import { useTakeGuard } from './useTakeGuard';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
-import { sameFlow } from '../../shared/presentation/core';
+import { isQueuedBehind, sameFlow } from '../../shared/presentation/core';
 import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
 import { MessageSearchRail, type MsgQuoteRow, type MsgScheduleRow, type MsgTapeRow } from './MessageSearchRail';
@@ -282,6 +282,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // nothing to do — not one broadcast round-trip later. Key equality here made the button
   // flash green for the gap between the cue send and the liveKey broadcast returning.
   const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
+  // Decision 7: a quote from another tape lined up behind the one on screen.
+  const queued = isQueuedBehind(output, liveKey, curKey);
 
   const stepPara = (dir: 1 | -1): void => {
     if (!liveMsg) return;
@@ -500,27 +502,32 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         onDoubleClick: () => activateQuote(r.msgId, r.ord)
       }))
     : [];
-  const scheduleRows: MsgScheduleRow[] = schedule.map((it) => ({
-    id: it.id,
-    title: it.title,
-    meta: `¶${it.label} · Tape ${it.tapeNo}`,
-    isCurrent: it.msgId === msgId && it.ord === msgIdx,
-    isSelected: sel.isSelected(it.id),
-    onClick: (e) => {
-      // Shift-click extends the delete-selection and deliberately leaves the cue alone —
-      // the same split the scripture and media rails make.
-      if (e.shiftKey) sel.selectTo(it.id);
-      else {
-        sel.select(it.id);
-        selectQuote(it.msgId, it.ord);
-      }
-    },
-    // Shift-double-click is two range-selection clicks landing fast, not a take.
-    onDoubleClick: (e) => {
-      if (!e.shiftKey) activateQuote(it.msgId, it.ord);
-    },
-    onContextMenu: (e) => contextMenu.open(e, deleteMenuItems(sel, it.id, 'quotes', removeQuotes))
-  }));
+  const scheduleRows: MsgScheduleRow[] = schedule.map((it) => {
+    const isCurrent = it.msgId === msgId && it.ord === msgIdx;
+    return {
+      id: it.id,
+      title: it.title,
+      meta: `¶${it.label} · Tape ${it.tapeNo}`,
+      isCurrent,
+      isSelected: sel.isSelected(it.id),
+      isLive: output === 'live' && liveKey === keyForMessageQuote(it.msgId, it.ord),
+      isQueued: isCurrent && queued,
+      onClick: (e) => {
+        // Shift-click extends the delete-selection and deliberately leaves the cue alone —
+        // the same split the scripture and media rails make.
+        if (e.shiftKey) sel.selectTo(it.id);
+        else {
+          sel.select(it.id);
+          selectQuote(it.msgId, it.ord);
+        }
+      },
+      // Shift-double-click is two range-selection clicks landing fast, not a take.
+      onDoubleClick: (e) => {
+        if (!e.shiftKey) activateQuote(it.msgId, it.ord);
+      },
+      onContextMenu: (e) => contextMenu.open(e, deleteMenuItems(sel, it.id, 'quotes', removeQuotes))
+    };
+  });
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
@@ -604,6 +611,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         // No tape loaded means an empty hero; a green, armed-looking Go live over it is a
         // lie a brand-new operator has no way to read (#88).
         canGoLive={liveMsg !== null}
+        queuedTitle={queued && heroLabel ? heroLabel : undefined}
         onTakeDown={takeDown}
       />
       <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
