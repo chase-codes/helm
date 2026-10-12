@@ -26,6 +26,7 @@ import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
 import { filterPending, useDeferredRemove } from './useDeferredRemove';
 import { deleteMenuItems, useListSelection } from './useListSelection';
+import { clearSelectionRung } from './escapeLadder';
 import type { PanelWidthControl } from './usePanelWidth';
 
 /** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
@@ -53,6 +54,9 @@ export interface MessageKeyHandler {
   onGoLive: () => void;
   /** Delete/Backspace: remove the quote-schedule selection, if any (#90/#8). */
   onDelete: () => void;
+  /** Escape's clear-selection rung (grammar rule 9): drop the quote-schedule selection and
+   * report true, or false when none is on screen. */
+  clearSelection: () => boolean;
 }
 export type MessageKeyRef = MutableRefObject<MessageKeyHandler | null>;
 
@@ -393,7 +397,10 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         // so without this guard Delete would remove quotes the operator cannot see.
         if (norm(q)) return;
         if (sel.selectedIds.length > 0) removeQuotes(sel.selectedIds);
-      }
+      },
+      // Same visibility guard as onDelete: under a query the schedule is not on screen, so a
+      // selection the operator cannot see must not eat their Escape.
+      clearSelection: () => (norm(q) ? false : clearSelectionRung(sel)())
     };
     return () => {
       messageKeyRef.current = null;

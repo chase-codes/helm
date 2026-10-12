@@ -2419,6 +2419,56 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     expect(goLive.disabled).toBe(true)
     expect(screen.getByText(/No messages yet/)).toBeTruthy()
   })
+
+  it('Escape clears the quote selection before it touches the screen', async () => {
+    const { resolveChapter, setOutput } = installHelmStub(GEN_1_1_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('2'))
+    expect(quoteRow('2').getAttribute('data-selected')).toBe('true')
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(quoteRow('2').getAttribute('data-selected')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('Escape in the search box clears the query first, then leaves the field', async () => {
+    const { resolveChapter, setOutput } = installHelmStub(GEN_1_1_LIVE, [], {
+      tape: TAPE_M,
+      quoteSchedule: QS,
+      search: SEARCH_HITS
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    // Mirror App: the document dispatcher forwards a bubbled Escape to the ladder.
+    const onDoc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') void keyHandlerRef.current?.onEscape()
+    }
+    document.addEventListener('keydown', onDoc)
+    try {
+      searchBox().focus()
+      fireEvent.change(searchBox(), { target: { value: 'faith' } })
+
+      fireEvent.keyDown(searchBox(), { key: 'Escape' })
+      expect(searchBox().value).toBe('')
+      expect(document.activeElement).toBe(searchBox())
+
+      fireEvent.keyDown(searchBox(), { key: 'Escape' })
+      expect(document.activeElement).not.toBe(searchBox())
+      expect(setOutput).not.toHaveBeenCalled()
+    } finally {
+      document.removeEventListener('keydown', onDoc)
+    }
+  })
 })
 
 describe('SermonMode — verse text search from the entry', () => {

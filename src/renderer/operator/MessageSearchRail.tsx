@@ -183,6 +183,12 @@ export function MessageSearchRail({
 
   const onQKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Backspace' && !q && scopeLabel) onClearScope();
+    else if (e.key === 'Escape' && q) {
+      // One key, one action, as in the Songs and Scripture boxes: a non-empty query consumes
+      // the press (clear only); the next press reaches the page ladder, which blurs.
+      e.stopPropagation();
+      onQChange('');
+    }
   };
 
   return (

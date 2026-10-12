@@ -1045,7 +1045,11 @@ export function SermonMode({
             setBuilder(initialBuilder());
             return true;
           },
-          clearSelection: () => track === 'scripture' && clearSelectionRung(sel)(),
+          // Slides has no rung: its media list is a library with no multi-select (decision 2).
+          clearSelection: () => {
+            if (track === 'message') return messageKeyRef.current?.clearSelection() ?? false;
+            return track === 'scripture' && clearSelectionRung(sel)();
+          },
           takeDown: takeDownWhenLive(output, takeDown)
         }),
       onArrow: (dir) => {
