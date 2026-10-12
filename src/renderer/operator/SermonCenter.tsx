@@ -7,12 +7,14 @@ import { logoSlide } from '../../shared/presentation/core';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
 import { MONO } from '../shared/fonts';
+import { liveRing } from './railTint';
+import { LiveBadge } from './StateBadge';
 
 export interface SermonCenterProps {
   theme: Theme;
   output: OutputMode;
   cuedIsLive: boolean;
-  /** Track accent driving the cued-live hero border/label color — T.scripture for the
+  /** Track accent driving the cued-live hero label color (the ring is red, rule 1) — T.scripture for the
    * verse variant, T.message for the quote variant, T.sermon for the slide variant
    * (Lectern.pretty.html:1318/1320; Lectern.dc.html:953 `trackColor`). */
   accent: string;
@@ -32,6 +34,9 @@ export interface SermonCenterProps {
    * sitting there green and armed over an empty hero (#88). Defaults to true, so the
    * scripture track (whose hero always has a cursor) needs no opinion. */
   canGoLive?: boolean;
+  /** Decision 7: an item is lined up behind what is live. The primary slot stays "Go live"
+   * (rule 2), arms even while the cue is live, and its tooltip names what it will put up. */
+  queuedTitle?: string;
   /** Blacks the screen. Its own permanent slot rather than a second meaning bolted onto
    * the primary button — see the transport comment below (#85). */
   onTakeDown: () => void;
@@ -85,6 +90,7 @@ export function SermonCenter({
   onNext,
   onGoLive,
   canGoLive = true,
+  queuedTitle,
   onTakeDown
 }: SermonCenterProps): JSX.Element {
   const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
@@ -112,9 +118,10 @@ export function SermonCenter({
     ...(variant === 'slide'
       ? ({ overflowY: 'hidden', containerType: 'size' } as CSSProperties)
       : { overflowY: 'auto' }),
+    position: 'relative',
     borderRadius: '14px',
     background: T.panel,
-    boxShadow: cuedIsLive ? `inset 0 0 0 2px ${accent}66` : `inset 0 0 0 1px ${T.hairline}`
+    boxShadow: cuedIsLive ? liveRing(T) : `inset 0 0 0 1px ${T.hairline}`
   };
   const heroLabelStyle: CSSProperties = {
     fontFamily: MONO,
@@ -169,7 +176,7 @@ export function SermonCenter({
   // Nothing to put up while the cued verse is already the one on screen — the slot ghosts
   // rather than re-labelling itself "Take down" the way it used to (#85).
   const canTakeDown = output === 'live';
-  const primaryLive = canGoLive && !cuedIsLive;
+  const primaryLive = canGoLive && (!cuedIsLive || !!queuedTitle);
   const goLiveStyle = primaryBtnStyle(T, primaryLive ? 'go' : 'ghost');
   const takeDownStyle = primaryBtnStyle(T, canTakeDown ? 'down' : 'ghost');
 
@@ -181,7 +188,10 @@ export function SermonCenter({
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={heroCardStyle}>
+        <div style={heroCardStyle} data-hero-card>
+          {cuedIsLive && (
+            <LiveBadge theme={T} chip style={{ position: 'absolute', top: '12px', right: '14px', zIndex: 1 }} />
+          )}
           {variant === 'verse' ? (
             <div style={{ margin: 'auto', width: '100%', maxWidth: '92%', textAlign: 'center', padding: '22px 30px' }}>
               <div style={heroLabelStyle}>{heroLabel}</div>
@@ -268,7 +278,9 @@ export function SermonCenter({
           title={
             !canGoLive
               ? 'Nothing to take — there is nothing cued yet'
-              : cuedIsLive
+              : queuedTitle
+                ? `Go live with ${queuedTitle}`
+                : cuedIsLive
                 ? 'Already on screen'
                 : undefined
           }
