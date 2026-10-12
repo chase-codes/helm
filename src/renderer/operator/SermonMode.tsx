@@ -1074,8 +1074,16 @@ export function SermonMode({
         } else if (track === 'message') messageKeyRef.current?.onDelete();
         else if (track === 'slides') slidesKeyRef.current?.onDelete();
       },
+      // Registry actions follow the track on screen, like arrows, Enter and Delete above.
       onAction: (a: ResolvedHotkey) => {
-        if (track !== 'scripture') return;
+        if (track === 'message') {
+          messageKeyRef.current?.onAction(a);
+          return;
+        }
+        if (track === 'slides') {
+          slidesKeyRef.current?.onAction(a);
+          return;
+        }
         if (a.id === 'item.jump' && a.digit) {
           const r = schedule[a.digit - 1];
           if (r) jumpToReading(r);

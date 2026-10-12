@@ -29,6 +29,7 @@ import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -48,6 +49,8 @@ export interface SlidesKeyHandler {
   /** Delete/Backspace: remove the library selection, if any (#90). The media library is a
    * schedule-shaped list like the scripture rail, so it answers the same key. */
   onDelete: () => void;
+  /** Registry actions SermonMode routes here while this track is on screen. */
+  onAction: (a: ResolvedHotkey) => void;
 }
 export type SlidesKeyRef = MutableRefObject<SlidesKeyHandler | null>;
 
@@ -375,7 +378,8 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       isModalOpen: () => deckFallback !== null,
       onDelete: () => {
         if (sel.selectedIds.length > 0) removeItems(sel.selectedIds);
-      }
+      },
+      onAction: () => {}
     };
     return () => {
       slidesKeyRef.current = null;

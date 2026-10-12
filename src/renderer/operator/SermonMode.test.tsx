@@ -2495,6 +2495,56 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
       document.removeEventListener('keydown', onDoc)
     }
   })
+
+  it('/ focuses the message search box', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'focus.search' }))
+    expect(document.activeElement).toBe(searchBox())
+  })
+
+  it('Mod+Backspace clears the message search', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS, search: SEARCH_HITS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.change(searchBox(), { target: { value: 'faith' } })
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'field.clear' }))
+    expect(searchBox().value).toBe('')
+  })
+
+  it('digit 3 picks the third planned quote, exactly as a click would', async () => {
+    const { resolveChapter, cue } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 3 }))
+    expect(quoteRow('3').getAttribute('data-selected')).toBe('true')
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('msg:m1:2', expect.anything()))
+  })
+
+  it('a digit is ignored while search results cover the schedule, or past its end', async () => {
+    const { resolveChapter, cue } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS, search: SEARCH_HITS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+    await settleAndClear(cue, 'msg:m1:0', expect.anything())
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 9 }))
+    fireEvent.change(searchBox(), { target: { value: 'faith' } })
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 3 }))
+    await act(async () => {})
+    expect(cue).not.toHaveBeenCalled()
+  })
 })
 
 describe('SermonMode — verse text search from the entry', () => {

@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent, Ref } from 'react';
 import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
@@ -57,6 +57,8 @@ export interface MessageSearchRailProps {
   hasTapes: boolean;
   /** Opens Settings, where message import lives — the affordance the empty state names. */
   onImportMessages: () => void;
+  /** The search input, so the page's `/` key can focus it (grammar rule 9). */
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 /** Body of the Message track's left rail: scope chip + search box, TAPES/QUOTES search
@@ -76,7 +78,8 @@ export function MessageSearchRail({
   tapePlayer,
   undo,
   hasTapes,
-  onImportMessages
+  onImportMessages,
+  inputRef
 }: MessageSearchRailProps): JSX.Element {
   const schedInputStyle: CSSProperties = {
     display: 'flex',
@@ -204,6 +207,7 @@ export function MessageSearchRail({
             <span style={{ fontFamily: MONO, fontSize: '14px', color: T.message }}>&rsaquo;</span>
           )}
           <input
+            ref={inputRef}
             style={{ flex: 1, fontSize: '13.5px', minWidth: 0 }}
             value={q}
             onChange={(e) => onQChange(e.target.value)}
