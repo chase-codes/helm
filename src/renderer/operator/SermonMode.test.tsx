@@ -2647,3 +2647,159 @@ describe('SermonMode — verse text search from the entry', () => {
     expect(search).not.toHaveBeenCalled()
   })
 })
+
+describe('SermonMode: a schedule click while scripture is live queues it (decision 3)', () => {
+  const TWO: ScriptureReading[] = [
+    { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+    { id: 'r2', book: 'Genesis', ch: 1, from: 3, to: 3 }
+  ]
+  // The hero and on-deck strip echo the same references, so address rows by their marker.
+  const ROW_ID: Record<string, string> = { 'Genesis 1:1': 'r1', 'Genesis 1:3': 'r2' }
+  const rowButton = (title: string): HTMLElement =>
+    document.querySelector(`[data-schedule-row="${ROW_ID[title]}"]`) as HTMLElement
+
+  it('a single click queues the reading and leaves the screen and the hero alone', async () => {
+    const { show, take, resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+    await settleAndClear(show, 'scr:Genesis:1:1', expect.anything())
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+
+    expect(within(rowButton('Genesis 1:3')).getByText('QUEUED')).toBeTruthy()
+    expect(within(rowButton('Genesis 1:1')).getByText('LIVE')).toBeTruthy()
+    await act(async () => {})
+    expect(show).not.toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything())
+    expect(take).not.toHaveBeenCalled()
+    expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2) // row + hero: the hero stayed on the live verse
+  })
+
+  it('clicking the queued row again clears it; clicking the live reading clears it too', async () => {
+    const { resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    fireEvent.click(rowButton('Genesis 1:3'))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    fireEvent.click(rowButton('Genesis 1:1'))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('a double click while live takes the reading and clears the queue', async () => {
+    const { take, resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    // jsdom's doubleClick dispatches only 'dblclick'; a real one lands a click first.
+    fireEvent.click(rowButton('Genesis 1:3'))
+    fireEvent.doubleClick(rowButton('Genesis 1:3'))
+
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('the reading hotkey queues while live, exactly like a click', async () => {
+    const { show, resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+    await settleAndClear(show, 'scr:Genesis:1:1', expect.anything())
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 2 }))
+
+    expect(within(rowButton('Genesis 1:3')).getByText('QUEUED')).toBeTruthy()
+    await act(async () => {})
+    expect(show).not.toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything())
+  })
+
+  it('while nothing is live a click still moves the cursor (unchanged)', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2))
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:3')).toHaveLength(2))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('Go live takes the queued reading, and its tooltip names it', async () => {
+    const { take, resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    const primary = within(trackPanel('scripture')).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(primary.disabled).toBe(false)
+    expect(primary.title).toBe('Go live with Genesis 1:3')
+    fireEvent.click(primary)
+
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+  })
+
+  it('Enter takes the queued reading too', async () => {
+    const { take, resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    act(() => keyHandlerRef.current?.onGoLive())
+
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+  })
+
+  it('Escape clears the queue before it touches the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE, TWO)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    let handled: boolean | undefined
+    act(() => {
+      handled = keyHandlerRef.current?.onEscape()
+    })
+    expect(handled).toBe(true)
+    expect(screen.queryByText('QUEUED')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+
+  it('taking the screen down turns the queued reading into the cursor', async () => {
+    const { resolveChapter, pushState } = installHelmStub(GEN_1_1_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    pushState(NOTHING_LIVE)
+
+    await waitFor(() => expect(screen.getAllByText('Genesis 1:3')).toHaveLength(2)) // row + hero
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('another page taking the screen drops the queue without moving the cursor', async () => {
+    const { resolveChapter, pushState } = installHelmStub(GEN_1_1_LIVE, TWO)
+    render(<Harness />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    fireEvent.click(rowButton('Genesis 1:3'))
+    pushState({ ...GEN_1_1_LIVE, liveKey: 'song:s1:0', liveSnap: { kind: 'lyrics', label: 'x', lines: ['x'] } })
+    pushState(GEN_1_1_LIVE)
+
+    expect(screen.queryByText('QUEUED')).toBeNull()
+    expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2)
+  })
+})
