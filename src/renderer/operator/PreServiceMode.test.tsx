@@ -361,10 +361,19 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     expect(await screen.findByText(/Removed/)).toBeTruthy()
   })
 
-  it('invites the operator to add a card when the loop is empty (#88)', async () => {
+  it('+ Add a card sits at the top of the rail, above the cards', async () => {
+    installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Greeting')
+    const add = screen.getByRole('button', { name: /^\+ Add a card/ })
+    expect(add.compareDocumentPosition(rowFor('Greeting')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('the empty loop names the add chip (#88)', async () => {
     installHelmStub({ ...baseState, cards: [] })
     renderMode()
-    expect(await screen.findByText(/The loop is empty/)).toBeTruthy()
+    const empty = await screen.findByText(/The loop is empty/)
+    expect(empty.querySelector('b')?.textContent).toBe('+ Add a card')
   })
 
   it('shows no empty state while the loop has cards', async () => {
