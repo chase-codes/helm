@@ -1471,3 +1471,13 @@ describe('song section label readable when not live (#47)', () => {
     );
   });
 });
+
+describe('SongsMode: red means live (rule 1)', () => {
+  it('the live section card wears the red ring', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const card = within(screen.getByTestId('rail-wrap')).getByText('LIVE').closest('button') as HTMLButtonElement;
+    expect(card.style.boxShadow).toBe(`inset 0 0 0 2px ${themeFor('classic', 'dark').live}`);
+  });
+});

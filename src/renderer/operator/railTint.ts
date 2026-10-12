@@ -56,7 +56,8 @@ export interface RailTier {
 }
 
 /** The rail card: background from the tint ladder, ring strength descending with the
- *  same tiers. selected and live share the full-strength 2px ring. */
+ *  same tiers. selected and live both take a 2px ring; live's is red (rule 1) and wins
+ *  inside a range. */
 export function railRowStyle(T: Theme, accent: string, dark: boolean, tier: RailTier): CSSProperties {
   const { live, cued, planned, selected = false } = tier;
   return {
@@ -76,8 +77,9 @@ export function railRowStyle(T: Theme, accent: string, dark: boolean, tier: Rail
           : planned
             ? railTint(accent, 'planned', dark)
             : T.panel2,
-    boxShadow:
-      selected || live
+    boxShadow: live
+      ? liveRing(T)
+      : selected
         ? `inset 0 0 0 2px ${accent}`
         : cued
           ? `inset 0 0 0 1.5px ${accent}66`

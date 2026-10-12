@@ -71,7 +71,7 @@ describe('rail card builders', () => {
     }
   })
 
-  it('railRowStyle reproduces the ChapterRail ladder for every tier combination', () => {
+  it('railRowStyle: live wears the red ring and outranks the range selection', () => {
     const legacy = (isLive: boolean, isCued: boolean, planned: boolean, selected: boolean): CSSProperties => ({
       display: 'block',
       width: '100%',
@@ -89,9 +89,9 @@ describe('rail card builders', () => {
             : planned
               ? railTint(T.scripture, 'planned', true)
               : T.panel2,
-      boxShadow: selected
-        ? `inset 0 0 0 2px ${T.scripture}`
-        : isLive
+      boxShadow: isLive
+        ? `inset 0 0 0 2px ${T.live}`
+        : selected
           ? `inset 0 0 0 2px ${T.scripture}`
           : isCued
             ? `inset 0 0 0 1.5px ${T.scripture}66`
