@@ -2545,6 +2545,13 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     await act(async () => {})
     expect(cue).not.toHaveBeenCalled()
   })
+  it('numbers the quote schedule rows', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+    expect(quoteRow('2').querySelector('[data-row-number]')?.textContent).toBe('2')
+  })
 })
 
 describe('SermonMode — verse text search from the entry', () => {

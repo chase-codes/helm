@@ -16,6 +16,7 @@ import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
 import { tintChip } from './railTint';
 import { MONO } from '../shared/fonts';
+import { RowNumber } from './RowNumber';
 import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
 export interface PreServiceModeProps {
@@ -453,7 +454,10 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
-                  <div style={labelStyle}>{card.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                    <RowNumber n={i + 1} color={T.faint} />
+                    <div style={labelStyle}>{card.title}</div>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     {isShowing && <span style={showingBadge}>● ON SCREEN</span>}
                     {isArmed && <span style={armedBadge}>● ARMED</span>}

@@ -4,6 +4,7 @@ import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
+import { RowNumber } from './RowNumber';
 
 export interface MsgScheduleRow {
   id: string;
@@ -272,7 +273,7 @@ export function MessageSearchRail({
                   No messages yet — import one with <b>+ Import</b> to search its quotes.
                 </ListEmpty>
               ))}
-            {scheduleRows.map((r) => (
+            {scheduleRows.map((r, i) => (
               <button
                 key={r.id}
                 data-quote-row={r.id}
@@ -282,6 +283,7 @@ export function MessageSearchRail({
                 onDoubleClick={r.onDoubleClick}
                 onContextMenu={r.onContextMenu}
               >
+                <RowNumber n={i + 1} color={T.faint} />
                 <div style={scheduleIconStyle}>&#10077;</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={rowTitleStyle}>{r.title}</div>

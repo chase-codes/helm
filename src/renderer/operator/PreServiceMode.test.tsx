@@ -223,6 +223,12 @@ describe('PreServiceMode', () => {
     act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 9 }))
     expect(showCard).not.toHaveBeenCalled()
   })
+  it('numbers the cards', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Psalm 122:1')
+    expect(document.querySelector('[data-pre-card="b"] [data-row-number]')?.textContent).toBe('2')
+  })
 })
 
 describe('PreServiceMode — card removal speaks the in-service grammar (#86, #90)', () => {
