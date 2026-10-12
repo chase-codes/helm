@@ -8,7 +8,8 @@ import { PreCardEditor } from './PreCardEditor';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { useContextMenu } from './useContextMenu';
-import { useListSelection } from './useListSelection';
+import { deleteMenuItems, useListSelection } from './useListSelection';
+import type { ContextMenuItem } from './ContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
@@ -425,20 +426,19 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                   if (!e.shiftKey) window.helm.preservice.takeCard(i);
                 }}
                 onContextMenu={(e) => {
-                  const batchMenu = isSelected && sel.selectedIds.length > 1;
-                  if (!batchMenu) sel.select(card.id);
-                  const ids = batchMenu ? sel.selectedIds : [card.id];
-                  // The count names what will ACTUALLY go, so a range that happens to
-                  // include the undeletable logo card doesn't promise more than it does.
-                  const deletable = cards.filter((c) => ids.includes(c.id) && isDeletable(c));
+                  // Edit opens one card, so it is offered for the row under the pointer only,
+                  // never inside a range; the logo card has no editor at all.
+                  const inRange = isSelected && sel.selectedIds.length > 1;
+                  const edit: ContextMenuItem[] =
+                    canEdit && !inRange ? [{ label: 'Edit', onSelect: () => setEditing(card) }] : [];
                   contextMenu.open(e, [
-                    deletable.length === 0
-                      ? { label: 'The logo card can’t be deleted', disabled: true, onSelect: () => {} }
-                      : {
-                          label: deletable.length === 1 ? 'Delete' : `Delete ${deletable.length} cards`,
-                          danger: true,
-                          onSelect: () => removeCards(deletable.map((c) => c.id))
-                        }
+                    ...edit,
+                    ...deleteMenuItems(sel, card.id, 'cards', removeCards, {
+                      // The logo card has no creation path, so it never goes (see isDeletable);
+                      // the count names only the cards that actually will.
+                      canDelete: (id) => cards.some((c) => c.id === id && isDeletable(c)),
+                      blockedLabel: 'The logo card can’t be deleted'
+                    })
                   ]);
                 }}
               >
