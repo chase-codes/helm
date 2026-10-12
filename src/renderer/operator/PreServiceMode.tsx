@@ -15,6 +15,7 @@ import type { PreCard } from '../../shared/types';
 import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
 import { tintChip } from './railTint';
 import { MONO } from '../shared/fonts';
+import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
 export interface PreServiceModeProps {
   active: boolean;
@@ -140,28 +141,25 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   //                    Songs/Sermon where the same button toggles.
   //   Take down      → the last rung of the Escape ladder, as everywhere else.
   //
-  // The ladder has no blur rung: the only text entry on this page lives inside
-  // PreCardEditor, which the first rung closes outright.
+  // Escape runs the shared ladder (escapeLadder.ts) with no blur rung: the only text entry
+  // on this page lives inside PreCardEditor, which the first rung closes outright.
   useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
-      onEscape: () => {
-        if (editing !== null) {
-          setEditing(null);
-          return true;
-        }
-        // Back out the most recent intent before touching the screen: a stray Escape while
-        // a delete-range is picked out must drop the range, not black the projector.
-        if (sel.selectedIds.length > 0) {
-          sel.clear();
-          return true;
-        }
-        if (canTakeDown) {
-          takeDown();
-          return true;
-        }
-        return false;
-      },
+      onEscape: () =>
+        runEscapeLadder({
+          closeOverlay: () => {
+            if (editing === null) return false;
+            setEditing(null);
+            return true;
+          },
+          // A stray Escape while a delete-range is picked out drops the range, not the screen.
+          clearSelection: clearSelectionRung(sel),
+          // The only text entry on this page lives inside PreCardEditor, which rung 1 closes.
+          leaveField: false,
+          // `takeDown` also disengages the loop (see its comment above).
+          takeDown: takeDownWhenLive(output, takeDown)
+        }),
       onArrow: (dir) => window.helm.preservice.step(dir),
       onGoLive: () => {
         if (armed) window.helm.preservice.showNow();
