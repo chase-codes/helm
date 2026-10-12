@@ -352,7 +352,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
         return;
       }
       // Toggle off on the armed row, arm on any other row. Arming is silent: no selection
-      // change, no cue, no screen traffic — Enter or the Switch button commits.
+      // change, no cue, no screen traffic — Enter or Go live commits.
       setArmedNextId((cur) => (cur === id ? null : id));
       return;
     }
@@ -1038,13 +1038,9 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             style={goLiveStyle}
             onClick={armed ? commitSwitch : goLive}
             disabled={!canGoLive}
-            title={armed ? `Switch to ${armed.title}` : cuedIsLive ? 'Already on screen' : undefined}
+            title={armed ? `Go live with ${armed.title}` : cuedIsLive ? 'Already on screen' : undefined}
           >
-            {armed ? '⇄ Switch' : (
-              <>
-                <GoLiveIcon size={14} /> Go live
-              </>
-            )}
+            <GoLiveIcon size={14} /> Go live
           </button>
         </div>
       </div>
