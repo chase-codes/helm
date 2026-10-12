@@ -12,7 +12,7 @@ export interface PreCardEditorProps {
   card: PreCard | null;
   onClose: () => void;
   /** Removal is PreServiceMode's to perform, not this modal's: it owns the rail's undo
-   * affordance, and a card removed from here must land in the same 5-second "Removed —
+   * affordance, and a card removed from here must land in the same 5-second "Deleted …
    * Undo" bar as one removed by right-click or the Delete key (#86). */
   onRemove: (card: PreCard) => void;
 }

@@ -583,7 +583,7 @@ export function SermonMode({
     setScrV(v);
   };
 
-  // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog):
+  // Immediate remove + a self-clearing "Deleted … Undo" affordance (no blocking dialog):
   // the in-service half of the destructive-action grammar (#86). The rows leave the rail on
   // the keystroke rather than after an IPC round trip — mid-service, a delete that visibly
   // lags is worse than one that optimistically leads, and `undo.commit` resyncs if the

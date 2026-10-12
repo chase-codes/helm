@@ -231,7 +231,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     // Immediate, NOT deferred: the loop lives in main, and a card left there could still
     // rotate onto the audience screen after the operator removed it.
     expect(removeCard).toHaveBeenCalledWith('c')
-    expect(await screen.findByText(/Removed/)).toBeTruthy()
+    expect(await screen.findByText(/Deleted/)).toBeTruthy()
   })
 
   it('undo restores the card at its original index', async () => {
@@ -259,12 +259,12 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     try {
       fireEvent.contextMenu(rowFor('Announcements'))
       fireEvent.click(screen.getByText('Delete'))
-      expect(screen.getByText(/Removed/)).toBeTruthy()
+      expect(screen.getByText(/Deleted/)).toBeTruthy()
 
       act(() => {
         vi.advanceTimersByTime(5000)
       })
-      expect(screen.queryByText(/Removed/)).toBeNull()
+      expect(screen.queryByText(/Deleted/)).toBeNull()
       expect(restoreCard).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
@@ -358,7 +358,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     fireEvent.click(await screen.findByText('Remove card'))
 
     expect(removeCard).toHaveBeenCalledWith('c')
-    expect(await screen.findByText(/Removed/)).toBeTruthy()
+    expect(await screen.findByText(/Deleted/)).toBeTruthy()
   })
 
   it('+ Add a card sits at the top of the rail, above the cards', async () => {
@@ -432,7 +432,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     fireEvent.click(rowFor('Logo'))
     act(() => keyHandlerRef.current?.onDelete?.())
     expect(removeCard).not.toHaveBeenCalled()
-    expect(screen.queryByText(/Removed/)).toBeNull()
+    expect(screen.queryByText(/Deleted/)).toBeNull()
   })
 })
 

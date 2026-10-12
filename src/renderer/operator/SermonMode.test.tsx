@@ -2092,10 +2092,10 @@ describe('SermonMode — schedule multi-select and bulk delete', () => {
     fireEvent.click(rowButton('Genesis 1:2'))
     act(() => keyHandlerRef.current?.onDelete?.())
 
-    // Toast label is the ref, not "1 verses". Anchor on the toast's own "Removed"
+    // Toast label is the ref, not "1 verses". Anchor on the toast's own "Deleted"
     // text — the row title also reads "Genesis 1:2", so matching the ref alone could
     // pass against the not-yet-unmounted row.
-    await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/Genesis 1:2/))
+    await waitFor(() => expect(screen.getByText(/Deleted/).textContent).toMatch(/Genesis 1:2/))
     expect(screen.queryByText(/1 verses/)).toBeNull()
     expect(scheduleRowTitles()).toEqual(['Genesis 1:1', 'Genesis 1:3'])
   })
@@ -2314,7 +2314,7 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     act(() => keyHandlerRef.current?.onDelete?.())
 
     await waitFor(() => expect(quoteRowIds()).toEqual(['q1', 'q3']))
-    await waitFor(() => expect(screen.getByText(/Removed/).textContent).toMatch(/¶2/))
+    await waitFor(() => expect(screen.getByText(/Deleted/).textContent).toMatch(/¶2/))
   })
 
   it('defers the real removeMany until the undo window closes', async () => {

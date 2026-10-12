@@ -64,7 +64,7 @@ describe('SchedulePanel', () => {
   it('renders the undo toast and fires onUndo', () => {
     const onUndo = vi.fn()
     render(<SchedulePanel {...baseProps} undo={{ label: 'John 3:16', onUndo }} />)
-    expect(screen.getByText(/Removed/)).toBeTruthy()
+    expect(screen.getByText(/Deleted/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(onUndo).toHaveBeenCalledTimes(1)
   })

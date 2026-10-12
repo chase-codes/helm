@@ -1102,7 +1102,7 @@ describe('SongsMode — Delete from library confirms rather than undoing (#90)',
     await waitFor(() => expect(screen.queryByText('Only Believe')).toBeNull());
     expect(rowFor('Amazing Grace')).toBeTruthy();
     // Confirm-grammar surfaces do not also offer an undo.
-    expect(screen.queryByText(/Removed/)).toBeNull();
+    expect(screen.queryByText(/Deleted/)).toBeNull();
   });
 
   it('the arm lapses back to the plain label after the confirm window', async () => {
