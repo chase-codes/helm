@@ -583,6 +583,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
           tapePlayer={tapePlayer}
           hasTapes={list.length > 0}
           onImportMessages={onOpenSettings}
+          onClearAll={() => removeQuotes(schedule.map((it) => it.id))}
           add={liveMsg && curPara ? { label: `+ Add ¶${curPara.label}`, onAdd: addCuedQuote, planned: cuedPlanned } : null}
           undo={
             undo.pending

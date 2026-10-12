@@ -2252,6 +2252,29 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     )
   })
 
+  it('Clear all empties the quote schedule with one removeMany and one undo', async () => {
+    const { resolveChapter, quoteRemoveMany } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(within(trackPanel('message')).getByRole('button', { name: 'Clear all' }))
+      expect(quoteRowIds()).toEqual([])
+      expect(screen.getByText(/3 quotes/)).toBeTruthy()
+      expect(quoteRemoveMany).not.toHaveBeenCalled()
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(quoteRemoveMany).toHaveBeenCalledTimes(1)
+      expect(quoteRemoveMany).toHaveBeenCalledWith(['q1', 'q2', 'q3'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shift-click selects the contiguous run of quotes', async () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
     render(<Harness />)

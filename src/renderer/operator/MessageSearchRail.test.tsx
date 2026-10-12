@@ -101,15 +101,35 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
     expect(screen.getByRole('button', { name: '+ Import' })).toBeTruthy()
   })
 
-  // The import affordance is rail chrome, not empty-state furniture — the same
-  // heading + "+ Import" row the Slides track carries, present with or without tapes.
-  it('carries the standard + Import button in the QUOTE SCHEDULE header', () => {
+  // Import is the secondary row under the add chip, as on Songs; the list header's right
+  // slot belongs to Clear all, as on Scripture. Present during a search too.
+  it('carries + Import at the top of the rail, under the add chip', () => {
     const onImportMessages = vi.fn()
     render(
-      <MessageSearchRail {...baseProps} scheduleRows={[scheduleRow()]} hasTapes onImportMessages={onImportMessages} />
+      <MessageSearchRail
+        {...baseProps}
+        q="faith"
+        add={{ label: '+ Add ¶3', onAdd: vi.fn(), planned: false }}
+        onImportMessages={onImportMessages}
+      />
     )
-    fireEvent.click(screen.getByRole('button', { name: '+ Import' }))
+    const add = screen.getByRole('button', { name: '+ Add ¶3' })
+    const imp = screen.getByRole('button', { name: '+ Import' })
+    expect(add.compareDocumentPosition(imp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(imp)
     expect(onImportMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it('Clear all sits in the QUOTE SCHEDULE header once the schedule has rows', () => {
+    const onClearAll = vi.fn()
+    render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow()]} onClearAll={onClearAll} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(onClearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no Clear all on an empty schedule', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[]} onClearAll={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
   })
 
   it('shows no empty state once the schedule has rows', () => {

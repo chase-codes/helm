@@ -2,6 +2,7 @@ import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent }
 import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
+import { DangerGhostButton } from './DangerGhostButton';
 import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
 
@@ -61,6 +62,9 @@ export interface MessageSearchRailProps {
    * files the cued verse. Null while no tape is loaded. `planned` ghosts it in place (same
    * footprint, rule 5) when that paragraph is already in the schedule. */
   add?: { label: string; onAdd: () => void; planned: boolean } | null;
+  /** Clear-schedule control (#86), same as Scripture's: renders only with rows, and the
+   * caller routes it through the same removeMany + undo as a row delete. */
+  onClearAll?: () => void;
 }
 
 /** Body of the Message track's left rail: scope chip + search box, TAPES/QUOTES search
@@ -81,7 +85,8 @@ export function MessageSearchRail({
   undo,
   hasTapes,
   onImportMessages,
-  add
+  add,
+  onClearAll
 }: MessageSearchRailProps): JSX.Element {
   const schedInputStyle: CSSProperties = {
     display: 'flex',
@@ -145,22 +150,20 @@ export function MessageSearchRail({
         : 'none',
     userSelect: 'none'
   });
-  // The Slides rail's header verb, character-exact — import is rail chrome here too,
-  // not empty-state furniture (the deviation the other two rails never had).
-  const importHeaderBtnStyle: CSSProperties = {
+  // Songs' import row: the secondary action under the add chip. The list header's right
+  // slot is Clear all's, as on Scripture.
+  const importRowStyle: CSSProperties = {
+    width: '100%',
     height: '26px',
-    padding: '0 10px',
+    marginTop: '5px',
     borderRadius: '8px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '12px',
+    fontSize: '11.5px',
     fontWeight: 600,
-    background: 'transparent',
-    // Must survive the rail's 200px minimum in one piece — the heading beside it gives
-    // way instead.
-    whiteSpace: 'nowrap',
-    flexShrink: 0
+    color: T.faint,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'transparent'
   };
   // Scripture's add chip (SchedulePanel's schedAddStyle) in the message colour.
   const addChipStyle = (planned: boolean): CSSProperties => ({
@@ -240,6 +243,9 @@ export function MessageSearchRail({
             {add.label}
           </button>
         )}
+        <button style={importRowStyle} onClick={onImportMessages}>
+          + Import
+        </button>
       </div>
 
       {hasSearch ? (
@@ -277,9 +283,13 @@ export function MessageSearchRail({
             <div style={{ ...sectionHeaderStyle(''), minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="Quote schedule">
               QUOTE SCHEDULE
             </div>
-            <button style={importHeaderBtnStyle} onClick={onImportMessages}>
-              + Import
-            </button>
+            {onClearAll && scheduleRows.length > 0 && (
+              <DangerGhostButton
+                label="Clear all"
+                onClick={onClearAll}
+                title="Delete every quote, undoable for five seconds"
+              />
+            )}
           </div>
           <div style={scrollWrapStyle}>
             {scheduleRows.length === 0 &&
@@ -289,7 +299,7 @@ export function MessageSearchRail({
               ) : (
                 // Nothing installed at all: a search box the operator cannot make match
                 // anything is not an invitation, so name the import instead (#88) — the
-                // header's + Import, the same verb the Slides rail teaches.
+                // + Import at the top of the rail, the same verb the Slides rail teaches.
                 <ListEmpty>
                   No messages yet — import one with <b>+ Import</b> to search its quotes.
                 </ListEmpty>
