@@ -2,6 +2,7 @@
 import { render, screen, fireEvent, cleanup, act, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HERO_LINE_FONT, SongsMode } from './SongsMode';
+import { LIBRARY_DELETE, LIBRARY_DELETE_ARMED } from './useLibraryDelete';
 import { ThemeCtx } from './ThemeCtx';
 import { themeFor } from '../../shared/theme';
 import { dispatchModeKey } from './keyDispatch';
@@ -1035,7 +1036,7 @@ describe('double-click to go live (#58)', () => {
   });
 });
 
-describe('SongsMode — Remove from library confirms rather than undoing (#90)', () => {
+describe('SongsMode — Delete from library confirms rather than undoing (#90)', () => {
   const TWO: Song[] = [
     { id: 's1', title: 'Amazing Grace', author: 'Newton', sections: [{ label: 'Verse 1', lines: ['a'] }], source: 'manual', createdAt: 0 },
     { id: 's2', title: 'Only Believe', author: 'Rader', sections: [{ label: 'Verse 1', lines: ['b'] }], source: 'manual', createdAt: 1 }
@@ -1057,7 +1058,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     vi.useFakeTimers();
     try {
       fireEvent.contextMenu(rowFor(title));
-      fireEvent.click(screen.getByText('Remove from library'));
+      fireEvent.click(screen.getByText(LIBRARY_DELETE));
       act(() => {
         vi.advanceTimersByTime(400); // > CONFIRM_ARM_GUARD_MS
       });
@@ -1066,14 +1067,14 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     }
   };
 
-  it('offers Remove from library on the row menu, alongside Edit', async () => {
+  it('offers Delete from library on the row menu, alongside Edit', async () => {
     installHelmStubWith(TWO, NOTHING_LIVE);
     renderMode({ current: null });
     await awaitRow('Only Believe');
     fireEvent.contextMenu(rowFor('Only Believe'));
 
     expect(await screen.findByText('Edit')).toBeTruthy();
-    expect(screen.getByText('Remove from library')).toBeTruthy();
+    expect(screen.getByText(LIBRARY_DELETE)).toBeTruthy();
   });
 
   it('the first click only arms — the song survives and the menu stays open', async () => {
@@ -1081,11 +1082,11 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     renderMode({ current: null });
     await awaitRow('Only Believe');
     fireEvent.contextMenu(rowFor('Only Believe'));
-    fireEvent.click(await screen.findByText('Remove from library'));
+    fireEvent.click(await screen.findByText(LIBRARY_DELETE));
 
     // The library is precious: no single click may take a song out of it.
     expect(remove).not.toHaveBeenCalled();
-    expect(await screen.findByText('Remove — sure?')).toBeTruthy();
+    expect(await screen.findByText(LIBRARY_DELETE_ARMED)).toBeTruthy();
     expect(screen.getByRole('menu')).toBeTruthy();
     expect(screen.getByText('Only Believe')).toBeTruthy();
   });
@@ -1095,7 +1096,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     renderMode({ current: null });
     await awaitRow('Only Believe');
     armRemoveConfirm('Only Believe');
-    fireEvent.click(screen.getByText('Remove — sure?'));
+    fireEvent.click(screen.getByText(LIBRARY_DELETE_ARMED));
 
     expect(remove).toHaveBeenCalledWith('s2');
     await waitFor(() => expect(screen.queryByText('Only Believe')).toBeNull());
@@ -1112,14 +1113,14 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     vi.useFakeTimers();
     try {
       fireEvent.contextMenu(rowFor('Only Believe'));
-      fireEvent.click(screen.getByText('Remove from library'));
-      expect(screen.getByText('Remove — sure?')).toBeTruthy();
+      fireEvent.click(screen.getByText(LIBRARY_DELETE));
+      expect(screen.getByText(LIBRARY_DELETE_ARMED)).toBeTruthy();
 
       act(() => {
         vi.advanceTimersByTime(4000);
       });
-      expect(screen.queryByText('Remove — sure?')).toBeNull();
-      expect(screen.getByText('Remove from library')).toBeTruthy();
+      expect(screen.queryByText(LIBRARY_DELETE_ARMED)).toBeNull();
+      expect(screen.getByText(LIBRARY_DELETE)).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
@@ -1131,14 +1132,14 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     await awaitRow('Only Believe');
 
     fireEvent.contextMenu(rowFor('Only Believe'));
-    fireEvent.click(await screen.findByText('Remove from library'));
+    fireEvent.click(await screen.findByText(LIBRARY_DELETE));
     fireEvent.contextMenu(rowFor('Amazing Grace'));
 
     // The fresh menu must open disarmed, or one click would remove a song the operator
     // never confirmed.
-    expect(await screen.findByText('Remove from library')).toBeTruthy();
-    expect(screen.queryByText('Remove — sure?')).toBeNull();
-    fireEvent.click(screen.getByText('Remove from library'));
+    expect(await screen.findByText(LIBRARY_DELETE)).toBeTruthy();
+    expect(screen.queryByText(LIBRARY_DELETE_ARMED)).toBeNull();
+    fireEvent.click(screen.getByText(LIBRARY_DELETE));
     expect(remove).not.toHaveBeenCalled();
   });
 
@@ -1149,7 +1150,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
 
     // Amazing Grace is selected on load (first song); remove it.
     armRemoveConfirm('Amazing Grace');
-    fireEvent.click(screen.getByText('Remove — sure?'));
+    fireEvent.click(screen.getByText(LIBRARY_DELETE_ARMED));
 
     await waitFor(() => expect(screen.queryByText('Amazing Grace')).toBeNull());
     // The heading tracks the selection, so it having moved on is what proves it.
@@ -1157,7 +1158,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
   });
 
   // The confirm re-labels in place, so without a guard the second half of a double-click
-  // lands on 'Remove — sure?' at the same coordinates and deletes in one gesture.
+  // lands on the armed label at the same coordinates and deletes in one gesture.
   it('a double-click arms without also confirming', async () => {
     const { remove } = installHelmStubWith(TWO, NOTHING_LIVE);
     renderMode({ current: null });
@@ -1166,18 +1167,18 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     vi.useFakeTimers();
     try {
       fireEvent.contextMenu(rowFor('Only Believe'));
-      fireEvent.click(screen.getByText('Remove from library'));
+      fireEvent.click(screen.getByText(LIBRARY_DELETE));
       // The very next click, landing immediately on the re-labelled item, is the tail of
       // the double-click — not a decision.
-      fireEvent.click(screen.getByText('Remove — sure?'));
+      fireEvent.click(screen.getByText(LIBRARY_DELETE_ARMED));
       expect(remove).not.toHaveBeenCalled();
-      expect(screen.getByText('Remove — sure?')).toBeTruthy();
+      expect(screen.getByText(LIBRARY_DELETE_ARMED)).toBeTruthy();
 
       // A deliberate click after the guard elapses still works.
       act(() => {
         vi.advanceTimersByTime(400);
       });
-      fireEvent.click(screen.getByText('Remove — sure?'));
+      fireEvent.click(screen.getByText(LIBRARY_DELETE_ARMED));
       expect(remove).toHaveBeenCalledWith('s2');
     } finally {
       vi.useRealTimers();
@@ -1192,7 +1193,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     vi.useFakeTimers();
     try {
       fireEvent.contextMenu(rowFor('Only Believe'));
-      fireEvent.click(screen.getByText('Remove from library'));
+      fireEvent.click(screen.getByText(LIBRARY_DELETE));
       // Escape out, then open the SECTION menu, which offers only Edit.
       fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
       fireEvent.contextMenu(screen.getByText('Verse 1').closest('button') as HTMLElement);
@@ -1202,8 +1203,8 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
         vi.advanceTimersByTime(4000);
       });
       // The lapsing song-confirm must not turn this into the song menu.
-      expect(screen.queryByText('Remove from library')).toBeNull();
-      expect(screen.queryByText('Remove — sure?')).toBeNull();
+      expect(screen.queryByText(LIBRARY_DELETE)).toBeNull();
+      expect(screen.queryByText(LIBRARY_DELETE_ARMED)).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -1226,7 +1227,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     expect(item.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(item);
     expect(remove).not.toHaveBeenCalled();
-    expect(screen.queryByText('Remove from library')).toBeNull();
+    expect(screen.queryByText(LIBRARY_DELETE)).toBeNull();
   });
 
   it('still offers removal for songs that are not the live one', async () => {
@@ -1242,7 +1243,7 @@ describe('SongsMode — Remove from library confirms rather than undoing (#90)',
     await awaitRow('Amazing Grace');
 
     fireEvent.contextMenu(rowFor('Amazing Grace'));
-    expect(await screen.findByText('Remove from library')).toBeTruthy();
+    expect(await screen.findByText(LIBRARY_DELETE)).toBeTruthy();
   });
 
   it('never answers the Delete key — no keystroke removes a library song', async () => {
