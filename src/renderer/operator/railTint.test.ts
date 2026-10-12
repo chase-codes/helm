@@ -46,7 +46,17 @@ describe('railTint', () => {
   })
 })
 
-import { railBadgeStyle, railFont, railLabelStyle, railRowStyle, railTextStyle, tintChip } from './railTint'
+import {
+  liveRing,
+  queuedBadgeStyle,
+  railBadgeStyle,
+  railFont,
+  railLabelStyle,
+  railRowStyle,
+  railTextStyle,
+  scheduleRowStyle,
+  tintChip
+} from './railTint'
 import type { CSSProperties } from 'react'
 
 // #136/#140: the shared builders must return byte-identical objects to the rail-local
@@ -153,5 +163,41 @@ describe('rail card builders', () => {
       boxShadow: `inset 0 0 0 1px ${T.live}55`,
       color: T.live
     })
+  })
+})
+
+describe('live and queued signals (rule 1, decision 7)', () => {
+  const T = themeFor('classic', 'dark')
+
+  it('liveRing is the 2px red ring in every family', () => {
+    for (const family of FAMILY_KEYS) {
+      const t = themeFor(family, 'dark')
+      expect(liveRing(t)).toBe(`inset 0 0 0 2px ${t.live}`)
+    }
+  })
+
+  it('scheduleRowStyle: live outranks the selection, which outranks the cue', () => {
+    const ring = (tier: { live: boolean; selected: boolean; current: boolean }): unknown =>
+      scheduleRowStyle(T, T.scripture, tier).boxShadow
+    expect(ring({ live: true, selected: true, current: true })).toBe(liveRing(T))
+    expect(ring({ live: false, selected: true, current: true })).toBe(`inset 0 0 0 1.5px ${T.scripture}`)
+    expect(ring({ live: false, selected: false, current: true })).toBe(`inset 0 0 0 1px ${T.scripture}55`)
+    expect(ring({ live: false, selected: false, current: false })).toBe('none')
+  })
+
+  it('scheduleRowStyle never paints the cue or the selection gold or red', () => {
+    for (const tier of [
+      { live: false, selected: true, current: false },
+      { live: false, selected: false, current: true }
+    ]) {
+      const ring = String(scheduleRowStyle(T, T.message, tier).boxShadow)
+      expect(ring).not.toContain(T.accent)
+      expect(ring).not.toContain(T.live)
+    }
+  })
+
+  it('queuedBadgeStyle inks the track colour and ghosts at 0.45', () => {
+    expect(queuedBadgeStyle(T.sermon, false)).toMatchObject({ color: T.sermon, opacity: 1, flexShrink: 0 })
+    expect(queuedBadgeStyle(T.sermon, true).opacity).toBe(0.45)
   })
 })
