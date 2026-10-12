@@ -64,8 +64,17 @@ function iconFor(item: MediaItem): string {
   return '▣';
 }
 
+/** What kind of file a deck came from. Decks keep their source filename as the title
+ * (main/mediaImport.ts), so the extension says it; a PDF is not a PowerPoint. */
+function deckKind(title: string): string {
+  const ext = title.slice(title.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'pdf') return 'PDF';
+  if (ext === 'ppt' || ext === 'pptx') return 'PowerPoint';
+  return 'Presentation';
+}
+
 function metaFor(item: MediaItem): string {
-  if (item.type === 'deck') return `PowerPoint · ${item.slides.length} ${item.slides.length === 1 ? 'slide' : 'slides'}`;
+  if (item.type === 'deck') return `${deckKind(item.title)} · ${item.slides.length} ${item.slides.length === 1 ? 'slide' : 'slides'}`;
   if (item.type === 'video') return 'Video clip';
   return 'Image';
 }
@@ -659,12 +668,12 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       {deckFallback && (
         <ModalShell onClose={() => setDeckFallback(null)} variant="card" width="100%" maxWidth="420px">
           <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>
-            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import PowerPoint"}
+            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import that file"}
           </div>
           <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5 }}>
             {deckFallback === 'no-libreoffice'
               ? 'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
-              : "Couldn't convert that PowerPoint file."}
+              : "Couldn't convert that presentation or PDF."}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
             <button style={deckFallbackCloseBtnStyle} onClick={() => setDeckFallback(null)}>

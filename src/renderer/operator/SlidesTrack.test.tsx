@@ -333,6 +333,29 @@ describe('SlidesTrack', () => {
     expect(left.startDrag).toHaveBeenCalled()
     expect(right.startDrag).not.toHaveBeenCalled()
   })
+
+  it('labels a PDF deck PDF, not PowerPoint', async () => {
+    installHelmStub()
+    const pdf: MediaItem = { id: 'pdf1', type: 'deck', title: 'Notes.pdf', filePath: null, slides: ['pdf1/1.png'], createdAt: 9 }
+    ;(window as unknown as { helm: { media: { list: () => Promise<MediaItem[]> } } }).helm.media.list = () =>
+      Promise.resolve([...items, pdf])
+    renderTrack()
+    expect(await screen.findByText('PDF · 1 slide')).toBeTruthy()
+    expect(screen.getByText('PowerPoint · 2 slides')).toBeTruthy()
+  })
+
+  it('a failed deck import does not blame PowerPoint', async () => {
+    installHelmStub()
+    vi.spyOn(console, 'error').mockImplementation(() => {}) // runImport logs the rejection
+    ;(window as unknown as { helm: { media: { importDeck: () => Promise<never> } } }).helm.media.importDeck = () =>
+      Promise.reject(new Error('rasterize failed'))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click(screen.getByText('+ Import'))
+    fireEvent.click(screen.getByText('Slides / PDF'))
+    expect(await screen.findByText("Couldn't import that file")).toBeTruthy()
+    expect(screen.getByText("Couldn't convert that presentation or PDF.")).toBeTruthy()
+  })
 })
 
 describe('SlidesTrack: Delete from library confirms rather than undoing (decision 2)', () => {

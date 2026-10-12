@@ -7,6 +7,7 @@ import { verseText } from '../../shared/scripture/preVerse';
 import { cleanListPoints } from '../../shared/preservice/listPoints';
 import { preSlideFor } from '../../shared/preservice/cards';
 import { SlideCanvas } from '../shared/SlideCanvas';
+import { INSTALL_HINT } from '../../shared/scripture/labels';
 
 export interface PreCardEditorProps {
   card: PreCard | null;
@@ -52,7 +53,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
     try {
       const manifest = await window.helm.bibles.manifest();
       const primary = manifest.find((m) => m.installed);
-      if (!primary) { setLookupMsg('Install a Bible first (Settings → Bibles)'); return; }
+      if (!primary) { setLookupMsg(INSTALL_HINT); return; }
       const chapter = await window.helm.bibles.getChapter(parsed.book, parsed.ch);
       if (chapter.verseCount === 0) { setLookupMsg(`${parsed.book} has no chapter ${parsed.ch} in ${primary.abbr}`); return; }
       const text = verseText(chapter, parsed.from, primary.id);
