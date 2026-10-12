@@ -492,7 +492,7 @@ describe('SongsMode armed switching', () => {
     // Center unchanged: hero still shows the live song (title appears twice — rail row + hero header).
     expect(screen.getAllByText('With Chorus').length).toBeGreaterThan(1);
     expect(screen.getByText('⇄ Switch')).toBeTruthy();
-    expect(screen.getByText('NEXT')).toBeTruthy();
+    expect(screen.getByText('QUEUED')).toBeTruthy();
     // Arming is silent: no cue, no goLive.
     expect(cue).not.toHaveBeenCalled();
     expect(goLive).not.toHaveBeenCalled();
@@ -590,9 +590,9 @@ describe('SongsMode armed switching', () => {
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
     fireEvent.click(screen.getByText('Blessed Assurance'));
-    expect(screen.getByText('NEXT')).toBeTruthy();
+    expect(screen.getByText('QUEUED')).toBeTruthy();
     fireEvent.click(screen.getByText('Blessed Assurance')); // armed row toggles off
-    expect(screen.queryByText('NEXT')).toBeNull();
+    expect(screen.queryByText('QUEUED')).toBeNull();
     fireEvent.click(screen.getByText('Blessed Assurance')); // re-arm
     // "With Chorus" also appears in the (unclickable) hero header — target the rail row specifically.
     const liveRowBtn = screen
@@ -600,7 +600,7 @@ describe('SongsMode armed switching', () => {
       .map((el) => el.closest('button'))
       .find((b): b is HTMLButtonElement => !!b)!;
     fireEvent.click(liveRowBtn); // live row disarms
-    expect(screen.queryByText('NEXT')).toBeNull();
+    expect(screen.queryByText('QUEUED')).toBeNull();
   });
 
   it('both Take down and Switch render while armed; Take down sends output black', async () => {
@@ -991,7 +991,7 @@ describe('double-click to go live (#58)', () => {
     const row = (await screen.findAllByText('With Chorus'))[0];
     fireEvent.doubleClick(row);
     await waitFor(() => expect(take).toHaveBeenCalledWith('song:s2:0', expect.anything()));
-    expect(screen.queryByText('NEXT')).toBeNull(); // took it, did not merely arm it
+    expect(screen.queryByText('QUEUED')).toBeNull(); // took it, did not merely arm it
   });
 
   // #76: the live song's own row re-takes the section that is already on screen. Section 0
@@ -1362,12 +1362,12 @@ describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
 
     const railRow = screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement;
     fireEvent.mouseEnter(railRow);
-    expect(screen.getByText('NEXT?')).toBeTruthy();
+    expect(screen.getByText('QUEUE?')).toBeTruthy();
 
     // Committing the arm replaces the forecast with the real badge.
     fireEvent.click(railRow);
-    expect(screen.queryByText('NEXT?')).toBeNull();
-    expect(screen.getByText('NEXT')).toBeTruthy();
+    expect(screen.queryByText('QUEUE?')).toBeNull();
+    expect(screen.getByText('QUEUED')).toBeTruthy();
   });
 
   it('stays quiet when nothing is live — a click there only moves the cue', async () => {
@@ -1376,7 +1376,7 @@ describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
 
     fireEvent.mouseEnter(screen.getByText('Blessed Assurance').closest('button') as HTMLButtonElement);
-    expect(screen.queryByText('NEXT?')).toBeNull();
+    expect(screen.queryByText('QUEUE?')).toBeNull();
   });
 });
 

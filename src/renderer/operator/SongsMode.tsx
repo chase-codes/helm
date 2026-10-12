@@ -94,7 +94,13 @@ function slideFor(song: Song, section: { label: string; lines: string[] }): Slid
   };
 }
 
-function toRow(song: Song, snippet: string, activeSongId: string | null, armedId: string | null = null): SongRow {
+function toRow(
+  song: Song,
+  snippet: string,
+  activeSongId: string | null,
+  armedId: string | null = null,
+  liveSongId: string | null = null
+): SongRow {
   return {
     id: song.id,
     title: song.title,
@@ -102,7 +108,8 @@ function toRow(song: Song, snippet: string, activeSongId: string | null, armedId
     snippet,
     hasSnippet: !!snippet,
     isActive: song.id === activeSongId,
-    isArmed: song.id === armedId
+    isArmed: song.id === armedId,
+    isLive: song.id === liveSongId
   };
 }
 
@@ -558,13 +565,14 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
   };
 
   const hasQuery = !!q.trim();
+  const liveSongId = locked && liveParsed ? liveParsed.songId : null;
   const displayedRows: SongRow[] = hasQuery
-    ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId, armed?.id ?? null))
-    : library.map((s) => toRow(s, '', activeSongId, armed?.id ?? null));
+    ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId, armed?.id ?? null, liveSongId))
+    : library.map((s) => toRow(s, '', activeSongId, armed?.id ?? null, liveSongId));
   const noResults = hasQuery && results.length === 0;
   const secondaryResults =
     field === 'title' && hasQuery ? secondaryLyricRows(results, lyricHint, SECONDARY_TITLE_MAX, SECONDARY_LIMIT) : [];
-  const secondaryRows: SongRow[] = secondaryResults.map((r) => toRow(r.song, r.snippet, activeSongId));
+  const secondaryRows: SongRow[] = secondaryResults.map((r) => toRow(r.song, r.snippet, activeSongId, null, liveSongId));
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
@@ -1008,7 +1016,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             arrive only once something is armed — and the primary slot never takes on its
             meaning. The armed song's title rides in the tooltip rather than the label,
             because a label that names a song makes the bar's width a function of the song
-            library; the rail's gold NEXT badge already says which song is queued. */}
+            library; the rail's QUEUED badge already says which song is queued. */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexShrink: 0 }} data-transport-bar>
           <button style={ghostBtn} onClick={() => step(-1)}>
             ‹ Prev
