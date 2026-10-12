@@ -86,18 +86,10 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
     expect(rowFor('Hope').getAttribute('data-selected')).toBeNull()
   })
 
-  it('invites the operator to search when tapes exist but the schedule is empty (#88)', () => {
+  it('names the add chip when tapes exist but the schedule is empty (#88)', () => {
     render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes />)
-    expect(screen.getByText(/Search above to find a quote/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Import a message' })).toBeNull()
-  })
-
-  // Nothing in the app calls quoteSchedule.add, so copy promising that clicking a quote
-  // files it here would describe a workflow the operator cannot perform. Delete this test
-  // when the add affordance lands — and update the copy with it.
-  it('does not promise an add-to-schedule gesture that does not exist', () => {
-    render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes />)
-    expect(screen.queryByText(/Quotes you add will wait here/)).toBeNull()
+    const empty = screen.getByText(/No quotes yet/)
+    expect(empty.querySelector('b')?.textContent).toBe('+ Add')
   })
 
   it('points at the import when no tapes are installed at all (#88)', () => {
@@ -137,5 +129,31 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
   it('shows no undo toast when nothing is pending', () => {
     render(<MessageSearchRail {...baseProps} />)
     expect(screen.queryByText(/Removed/)).toBeNull()
+  })
+})
+
+describe('MessageSearchRail: + Add files the cued paragraph', () => {
+  it('renders the add chip at the top of the rail and fires onAdd', () => {
+    const onAdd = vi.fn()
+    render(<MessageSearchRail {...baseProps} add={{ label: '+ Add ¶3', onAdd, planned: false }} />)
+    const chip = screen.getByRole('button', { name: '+ Add ¶3' })
+    // Above the list header: one add chip, top of every rail.
+    expect(chip.compareDocumentPosition(screen.getByTitle('Quote schedule')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(chip)
+    expect(onAdd).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays mounted while a search has the rail, so a found quote can be filed', () => {
+    render(<MessageSearchRail {...baseProps} q="faith" add={{ label: '+ Add ¶3', onAdd: vi.fn(), planned: false }} />)
+    expect(screen.getByRole('button', { name: '+ Add ¶3' })).toBeTruthy()
+  })
+
+  it('ghosts in place, rather than vanishing, when the cued paragraph is already planned', () => {
+    const onAdd = vi.fn()
+    render(<MessageSearchRail {...baseProps} add={{ label: '+ Add ¶3', onAdd, planned: true }} />)
+    const chip = screen.getByRole('button', { name: '+ Add ¶3' }) as HTMLButtonElement
+    expect(chip.disabled).toBe(true)
+    fireEvent.click(chip)
+    expect(onAdd).not.toHaveBeenCalled()
   })
 })

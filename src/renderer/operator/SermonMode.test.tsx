@@ -94,6 +94,7 @@ function installHelmStub(
   removeMany: ReturnType<typeof vi.fn>
   scheduleList: ReturnType<typeof vi.fn>
   quoteScheduleList: ReturnType<typeof vi.fn>
+  quoteAdd: ReturnType<typeof vi.fn>
   quoteRemoveMany: ReturnType<typeof vi.fn>
   cue: ReturnType<typeof vi.fn>
   mediaList: ReturnType<typeof vi.fn>
@@ -127,7 +128,14 @@ function installHelmStub(
   // A spy, not an inline arrow: undo now restores by RE-READING the schedule rather than
   // re-adding rows, so tests need to see this call.
   const scheduleList = vi.fn(() => Promise.resolve([...db]))
-  const quoteScheduleList = vi.fn(() => Promise.resolve(opts.quoteSchedule ?? []))
+  const quoteDb: QuoteScheduleItem[] = [...(opts.quoteSchedule ?? [])]
+  const quoteScheduleList = vi.fn(() => Promise.resolve([...quoteDb]))
+  const quoteAdd = vi.fn((msgId: string, ord: number) => {
+    if (!quoteDb.some((q) => q.msgId === msgId && q.ord === ord)) {
+      quoteDb.push({ id: `qa-${ord}`, msgId, ord, label: String(ord + 1), tapeNo: '47-0412', title: 'Faith Is The Substance' })
+    }
+    return Promise.resolve([...quoteDb])
+  })
   const quoteRemoveMany = vi.fn(() => Promise.resolve([]))
   const cue = vi.fn()
   const mediaList = vi.fn(() => Promise.resolve(opts.media ?? []))
@@ -199,7 +207,7 @@ function installHelmStub(
         Promise.resolve(typeof opts.search === 'function' ? opts.search(q, scope) : (opts.search ?? { tapes: [], quotes: [] })),
       onAudioProgress: () => () => {}
     },
-    quoteSchedule: { list: quoteScheduleList, add: vi.fn(() => Promise.resolve([])), remove: vi.fn(() => Promise.resolve([])), removeMany: quoteRemoveMany },
+    quoteSchedule: { list: quoteScheduleList, add: quoteAdd, remove: vi.fn(() => Promise.resolve([])), removeMany: quoteRemoveMany },
     media: {
       list: mediaList,
       importImages: vi.fn(),
@@ -229,6 +237,7 @@ function installHelmStub(
     removeMany,
     scheduleList,
     quoteScheduleList,
+    quoteAdd,
     quoteRemoveMany,
     cue,
     mediaList,
@@ -2225,6 +2234,23 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     clickTab('Message')
     await screen.findByText('¶1 · Tape 47-0412')
   }
+
+  it('+ Add files the cued paragraph into the quote schedule', async () => {
+    const { resolveChapter, quoteAdd } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: [] })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+
+    // The tape loads with its first paragraph cued; the chip names it.
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add ¶1' }))
+    expect(quoteAdd).toHaveBeenCalledWith('m1', 0)
+    await waitFor(() => expect(quoteRowIds()).toEqual(['qa-0']))
+    // Now planned, so the chip ghosts instead of offering a duplicate.
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: '+ Add ¶1' }) as HTMLButtonElement).disabled).toBe(true)
+    )
+  })
 
   it('shift-click selects the contiguous run of quotes', async () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
