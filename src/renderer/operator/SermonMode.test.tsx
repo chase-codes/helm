@@ -684,7 +684,13 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     await act(async () => {})
     expect(take).not.toHaveBeenCalled()
 
-    // The operator backs out: Escape blacks the screen, and main broadcasts that back.
+    // The operator backs out. The double-click left reading 2 selected, so press 1 drops the
+    // selection (the clear-selection rung) and press 2 blacks the screen, which main then
+    // broadcasts back.
+    act(() => {
+      keyHandlerRef.current?.onEscape()
+    })
+    expect(setOutput).not.toHaveBeenCalled()
     act(() => {
       keyHandlerRef.current?.onEscape()
     })
@@ -1467,6 +1473,51 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
 
     act(() => void keyHandlerRef.current?.onEscape())
     expect(setOutput).not.toHaveBeenCalled()
+  })
+
+  it('drops a rail range before it touches the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    // Shift-tap builds Genesis 1:1-3 in the entry; the entry itself is not focused.
+    fireEvent.click(verseCard(3), { shiftKey: true })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 1:1-3'))
+    expect(document.activeElement).not.toBe(entry())
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(entryValue()).toBe('')
+    expect(verseCard(3).dataset.selected).toBe('false')
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('clears a schedule selection before it touches the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+      { id: 'r2', book: 'Genesis', ch: 1, from: 2, to: 3 }
+    ])
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+    const row = (id: string): HTMLElement => document.querySelector(`[data-schedule-row="${id}"]`) as HTMLElement
+
+    fireEvent.click(row('r1'))
+    fireEvent.click(row('r2'), { shiftKey: true })
+    expect(row('r2').getAttribute('data-selected')).toBe('true')
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(row('r1').getAttribute('data-selected')).toBeNull()
+    expect(row('r2').getAttribute('data-selected')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
   })
 })
 
