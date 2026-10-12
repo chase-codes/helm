@@ -92,7 +92,7 @@ export function SermonCenter({
 
   const centerStyle: CSSProperties = { flex: 1, minWidth: 0, background: T.appBg, display: 'flex', flexDirection: 'column', padding: '16px 22px', minHeight: 0 };
   const nowBarStyle: CSSProperties = {
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-end',
     ...statusChipStyle(outColor),
     height: '28px',
     padding: '0 12px',
@@ -175,7 +175,7 @@ export function SermonCenter({
 
   return (
     <div style={centerStyle}>
-      <div style={nowBarStyle}>
+      <div style={nowBarStyle} data-status-chip>
         <span style={projDotStyle} />
         <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
       </div>
