@@ -2,6 +2,7 @@ import { useEffect, useRef, type CSSProperties, type JSX } from 'react'
 import type { Theme } from '../../shared/theme'
 import { railBadgeStyle, railFont, railLabelStyle, railRowStyle, railTextStyle } from './railTint'
 import { MONO } from '../shared/fonts'
+import { railHint } from './railHints'
 
 export interface ChapterRailProps {
   theme: Theme
@@ -34,7 +35,7 @@ export interface ChapterRailProps {
   onScrollConsumed?: (nonce: number) => void
 }
 
-const HINT = 'Tap a verse to go there — on screen when you\'re live. Shift-tap to build a range.'
+const HINT = railHint('verse', { range: 'build a range' })
 
 /** Right rail for the Scripture track: one card per verse in the current chapter,
  * tinted by planned/cued/live tier. Tapping reports `(verse, shiftKey)` and leaves the

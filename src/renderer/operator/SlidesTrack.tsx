@@ -26,6 +26,7 @@ import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
+import { railHint } from './railHints';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -589,7 +590,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
               <div style={{ fontFamily: MONO, fontSize: '10px', color: T.sermon }}>{slides.length} slides</div>
             </div>
             <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45 }}>
-              Tap any slide to put it on screen — jump anywhere, not just next.
+              {railHint('slide')}
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>

@@ -1461,7 +1461,7 @@ describe('SongsMode — collapsible section rail', () => {
     await screen.findAllByText('Amazing grace');
 
     fireEvent.click(screen.getByTitle('Hide sections — bigger lyrics'));
-    expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
+    expect(screen.queryByText(/Click a section to cue it/)).toBeNull();
     // The hero (the confidence monitor) is untouched.
     expect(within(screen.getByTestId('song-hero')).getByText('Amazing grace')).toBeTruthy();
     // The wrapper GLIDES shut rather than snapping — the width transition is what lets
@@ -1471,7 +1471,7 @@ describe('SongsMode — collapsible section rail', () => {
     expect(wrap.style.transition).toContain('width');
 
     fireEvent.click(screen.getByTitle('Show sections'));
-    expect(screen.getByText('SECTIONS — TAP TO SING')).toBeTruthy();
+    expect(screen.getByText(/Click a section to cue it/)).toBeTruthy();
     // Default rail width (380) + the divider's 12px hit area.
     expect(screen.getByTestId('rail-wrap').style.width).toBe('392px');
   });
@@ -1486,7 +1486,7 @@ describe('SongsMode — collapsible section rail', () => {
     installHelmStubWith(SONGS, NOTHING_LIVE);
     renderMode({ current: null });
     await screen.findAllByText('Amazing grace');
-    expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
+    expect(screen.queryByText(/Click a section to cue it/)).toBeNull();
     expect(screen.getByTitle('Show sections')).toBeTruthy();
   });
 

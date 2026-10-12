@@ -8,6 +8,7 @@ import type { MediaItem, PresentationState } from '../../shared/types'
 import type { PanelWidthControl } from './usePanelWidth'
 import { settleAndClear } from '../../test/mocks'
 import { LIBRARY_DELETE, LIBRARY_DELETE_ARMED } from './useLibraryDelete'
+import { railHint } from './railHints'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -123,6 +124,14 @@ describe('SlidesTrack', () => {
     fireEvent.click(deckRow)
     expect(await screen.findByText('1')).toBeTruthy()
     expect(await screen.findByText('2')).toBeTruthy()
+  })
+
+  it('the deck rail hint promises a cue, not a take (the old hint said "put it on screen")', async () => {
+    installHelmStub()
+    renderTrack()
+    fireEvent.click((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    expect(await screen.findByText(railHint('slide'))).toBeTruthy()
+    expect(screen.queryByText(/put it on screen/)).toBeNull()
   })
 
   it('does not show a slide rail for a single-slide image item', async () => {

@@ -7,6 +7,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { PreCard, PreState, PresentationState } from '../../shared/types'
 import { settleAndClear } from '../../test/mocks'
+import { railHint } from './railHints'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -202,6 +203,15 @@ describe('PreServiceMode', () => {
       fireEvent.click(btn)
       expect(showNow).not.toHaveBeenCalled()
     })
+  })
+
+  it('speaks the shared rail sentence and says click, not tap', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+    expect(screen.getByText(new RegExp(railHint('card', { range: 'select a range' }).replace(/[.?]/g, '\\$&')))).toBeTruthy()
+    expect(screen.getByText(/Once pre-service is live, a click switches cards/)).toBeTruthy()
+    expect(screen.queryByText(/[Tt]ap a card/)).toBeNull()
   })
 })
 

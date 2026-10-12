@@ -17,6 +17,7 @@ import { screenToneColor, statusChipStyle, statusDotStyle, transportGhostBtn } f
 import { screenStatus } from '../../shared/presentation/screenOwner';
 import { tintChip } from './railTint';
 import { MONO } from '../shared/fonts';
+import { railHint } from './railHints';
 
 export interface PreServiceModeProps {
   active: boolean;
@@ -40,10 +41,10 @@ const isDeletable = (c: PreCard): boolean => c.type !== 'logo';
 
 const PRE_RAIL_W = 320;
 
-// Must keep the engine's promise exactly (BUG-018): a tap is navigation, so it switches the
+// Must keep the engine's promise exactly (BUG-018): a click is navigation, so it switches the
 // screen only while pre-service is already projecting, and never starts projecting.
 const PRE_HINT =
-  'The loop rotates through the cards on the left while people arrive. Tap a card to select and preview it — "Start loop" or "Show this card" puts it on the screen. Once pre-service is projecting, a tap switches cards straight away. Move to Songs when the music starts.';
+  'The loop rotates through the cards on the left while people arrive. Click a card to cue it; "Start loop" or "Show this card" puts it on the screen. Once pre-service is live, a click switches cards straight away. Move to Songs when the music starts.';
 
 /** Port of the prototype's per-row snippet logic (Lectern.dc.html ~L1023–1027). */
 function snippetFor(card: PreCard): string {
@@ -323,7 +324,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             <span style={loopCountTag}>{`${enabledCount} IN LOOP`}</span>
           </div>
           <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '5px', lineHeight: 1.4 }}>
-            Tap a card to select it — while pre-service is on the screen, that switches it. Toggle cards in or out of the rotation.
+            {`${railHint('card', { range: 'select a range' })} Toggle cards in or out of the rotation.`}
           </div>
           <button style={addChipStyle} onClick={() => setEditing('new')}>
             + Add a card — verse, announcements, prayer…
