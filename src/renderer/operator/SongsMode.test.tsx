@@ -1355,6 +1355,35 @@ describe('SongsMode — the transport is stable ground (#85)', () => {
   });
 });
 
+describe('SongsMode: status chip names the page that owns the screen (decision 6)', () => {
+  const T = themeFor('classic', 'dark');
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+  };
+  const SCRIPTURE_LIVE: PresentationState = { output: 'live', liveKey: 'scr:John:3:16', liveSnap: null, cuedKey: null, cuedSnap: null };
+
+  it('reads LIVE FROM SERMON, faint, while scripture is up', async () => {
+    installHelmStubWith([CHORUS_SONG], SCRIPTURE_LIVE);
+    renderMode({ current: null });
+    const label = await screen.findByText('LIVE FROM SERMON');
+    expect((label.parentElement as HTMLElement).style.color).toBe(rgb(T.faint));
+    expect(screen.queryByText('LIVE ON SCREEN')).toBeNull();
+  });
+
+  it('reads LIVE ON SCREEN while one of its own songs is up', async () => {
+    installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    expect(await screen.findByText('LIVE ON SCREEN')).toBeTruthy();
+  });
+
+  it('reads NOTHING ON SCREEN when black', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    expect(await screen.findByText('NOTHING ON SCREEN')).toBeTruthy();
+  });
+});
+
 describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
   it('offers NEXT? on hover only while a song holds the screen', async () => {
     installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);

@@ -604,6 +604,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         variant="quote"
         accent={T.message}
         output={output}
+        liveKey={liveKey}
         cuedIsLive={cuedIsLive}
         heroLabel={heroLabel}
         quoteText={quoteText}

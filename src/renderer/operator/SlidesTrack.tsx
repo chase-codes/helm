@@ -560,6 +560,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         variant="slide"
         accent={T.sermon}
         output={output}
+        liveKey={liveKey}
         cuedIsLive={cuedIsLive}
         heroLabel=""
         slide={curSlide}

@@ -1175,6 +1175,7 @@ export function SermonMode({
             variant="verse"
             accent={T.scripture}
             output={output}
+            liveKey={liveKey}
             cuedIsLive={cuedIsLive}
             heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
             cols={liveCols}

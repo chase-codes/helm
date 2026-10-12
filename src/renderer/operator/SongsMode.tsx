@@ -34,7 +34,15 @@ import { useTakeGuard } from './useTakeGuard';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
-import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import {
+  primaryBtnStyle,
+  screenToneColor,
+  statusChipStyle,
+  statusDotStyle,
+  transportGhostBtn,
+  verbDividerStyle
+} from './transport';
+import { screenStatus } from '../../shared/presentation/screenOwner';
 import { MONO } from '../shared/fonts';
 
 export interface SongsModeProps {
@@ -722,15 +730,16 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     };
   });
 
-  const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
-  const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
+  const status = screenStatus({ output, liveKey }, 'songs');
+  const outColor = screenToneColor(T, status.tone);
+  const projText = status.text;
 
   const emptyText = `No match for “${q}”. Try another word, or add it as a new song above.`;
 
   // ---------------- styles ----------------
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const projBarStyle: CSSProperties = statusChipStyle(outColor);
-  const projDotStyle: CSSProperties = statusDotStyle(outColor, output === 'live');
+  const projDotStyle: CSSProperties = statusDotStyle(outColor, status.tone === 'live');
   const bigVerseWrapStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,

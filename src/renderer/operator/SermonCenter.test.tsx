@@ -11,6 +11,7 @@ afterEach(cleanup)
 const baseProps = (variant: SermonCenterProps['variant']): SermonCenterProps => ({
   theme: themeFor('classic', 'dark'),
   output: 'black',
+  liveKey: null,
   cuedIsLive: false,
   accent: '#c9a55c',
   heroLabel: 'Label',
@@ -155,5 +156,37 @@ describe('SermonCenter — hero labels readable when cued but not live (#47)', (
   it('the live hero label still uses the track accent', () => {
     render(<SermonCenter {...baseProps('verse')} cuedIsLive />)
     expect(screen.getByText('Label').style.color).toBe(rgb('#c9a55c'))
+  })
+})
+
+// Decision 6: the chip names the page that owns the screen, and only this page's own
+// content is red. Another page's content is faint: the Header already carries the red.
+describe('SermonCenter: status chip names the page that owns the screen', () => {
+  const T = themeFor('classic', 'dark')
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const chip = (text: string): HTMLElement => screen.getByText(text).parentElement as HTMLElement
+
+  it("reads LIVE ON SCREEN, red, for any Sermon track's content", () => {
+    render(<SermonCenter {...baseProps('quote')} output="live" liveKey="scr:John:3:16" />)
+    expect(chip('LIVE ON SCREEN').style.color).toBe(rgb(T.live))
+  })
+
+  it('reads LIVE FROM SONGS, faint, while a song is up', () => {
+    render(<SermonCenter {...baseProps('verse')} output="live" liveKey="song:s1:0" />)
+    expect(chip('LIVE FROM SONGS').style.color).toBe(rgb(T.faint))
+    expect(screen.queryByText('LIVE ON SCREEN')).toBeNull()
+  })
+
+  it('reads LIVE FROM PRE-SERVICE while the loop is up', () => {
+    render(<SermonCenter {...baseProps('slide')} output="live" liveKey="pre:c1" />)
+    expect(screen.getByText('LIVE FROM PRE-SERVICE')).toBeTruthy()
+  })
+
+  it('reads NOTHING ON SCREEN, dim, when black', () => {
+    render(<SermonCenter {...baseProps('verse')} output="black" />)
+    expect(chip('NOTHING ON SCREEN').style.color).toBe(rgb(T.dim))
   })
 })

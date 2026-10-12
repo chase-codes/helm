@@ -5,12 +5,22 @@ import { SlideCanvas } from '../shared/SlideCanvas';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import { logoSlide } from '../../shared/presentation/core';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
-import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import {
+  primaryBtnStyle,
+  screenToneColor,
+  statusChipStyle,
+  statusDotStyle,
+  transportGhostBtn,
+  verbDividerStyle
+} from './transport';
+import { screenStatus } from '../../shared/presentation/screenOwner';
 import { MONO } from '../shared/fonts';
 
 export interface SermonCenterProps {
   theme: Theme;
   output: OutputMode;
+  /** The live key, so the chip can say which page owns the screen (decision 6). */
+  liveKey: string | null;
   cuedIsLive: boolean;
   /** Track accent driving the cued-live hero border/label color — T.scripture for the
    * verse variant, T.message for the quote variant, T.sermon for the slide variant
@@ -66,6 +76,7 @@ export const SLIDE_HERO_WIDTH = 'min(100%, calc(100cqh * 16 / 9))';
 export function SermonCenter({
   theme: T,
   output,
+  liveKey,
   cuedIsLive,
   accent,
   heroLabel,
@@ -87,8 +98,9 @@ export function SermonCenter({
   canGoLive = true,
   onTakeDown
 }: SermonCenterProps): JSX.Element {
-  const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
-  const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
+  const status = screenStatus({ output, liveKey }, 'sermon');
+  const outColor = screenToneColor(T, status.tone);
+  const projText = status.text;
 
   const centerStyle: CSSProperties = { flex: 1, minWidth: 0, background: T.appBg, display: 'flex', flexDirection: 'column', padding: '16px 22px', minHeight: 0 };
   const nowBarStyle: CSSProperties = {
@@ -98,7 +110,7 @@ export function SermonCenter({
     padding: '0 12px',
     marginBottom: '4px'
   };
-  const projDotStyle: CSSProperties = statusDotStyle(outColor, output === 'live');
+  const projDotStyle: CSSProperties = statusDotStyle(outColor, status.tone === 'live');
   const heroCardStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
