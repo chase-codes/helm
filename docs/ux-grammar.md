@@ -17,12 +17,17 @@ family. Green (`T.go`) is reserved for the opposite meaning — "put this on scr
 never reports state. Every on-air resolver is the same expression:
 `black → T.dim, logo → T.accent, live → T.live`.
 
+Every page reports the screen in one place: the status chip at the top right of the centre
+pane, the right end of its first row, directly under the header's own chip. Page text to
+its left truncates; the chip keeps its footprint.
+
 **Enforced by**
 - `src/shared/theme.ts:4` — `live` token on the `Theme` interface; every one of the ten palettes (`theme.ts:18-31`) defines it as a red, and `go` as a green.
 - `src/renderer/operator/Header.tsx:52`, `SermonCenter.tsx:90`, `SongsMode.tsx:784` — the three identical on-air colour resolvers.
-- `src/renderer/operator/PreServiceMode.tsx:261-267` — `projColor = preOwnsScreen ? T.live : T.faint`; the comment records the hard-coded green this replaced (#87).
+- `src/renderer/operator/PreServiceMode.tsx:277` — `projColor = preOwnsScreen ? T.live : T.faint`; the comment above records the hard-coded green this replaced (#87).
+- The three chip sites, all `data-status-chip`: `SongsMode.tsx:938` (end of the title row), `SermonCenter.tsx:94-100` (`nowBarStyle`, `alignSelf: 'flex-end'`), `PreServiceMode.tsx:512` (end of the status row). Pinned by "the status chip sits top right" in `SongsMode.test.tsx` and `SermonCenter.test.tsx`, and "centre pane layout matches Songs and Sermon" in `PreServiceMode.test.tsx`.
 - `src/renderer/operator/transport.ts:11-13` — `go` documented as "the only colour that ever means put this on screen".
-- `src/renderer/operator/PreServiceMode.test.tsx:432-449` — pins PROJECTING to `T.live` across two families and asserts `#3fb950` never renders.
+- `src/renderer/operator/PreServiceMode.test.tsx:442-455` — pins PROJECTING to `T.live` across two families and asserts `#3fb950` never renders.
 
 **Why:** the operator's most important signal must not change colour with the page they are on.
 
@@ -34,11 +39,18 @@ ever means "put this on screen". Anything variable-width sits to the *left* of t
 spacer, so state changes recolour and relabel, never reflow. A varying song title rides in
 the tooltip, never the label.
 
+Pre-service draws the same row: ‹ and ›, the loop verb (Start loop / Stop loop) and the
+dwell control left of the spacer, then Take down and the primary slot, which carries Show
+this card. Stop loop puts nothing on screen, so it stays out of the green slot; its
+`neutral` look (accent, never green or red) is there for whichever slot it sits in. Which
+pre-service verb owns the slot is decided in one function, `preVerbs` (`preTransport.ts`).
+
 **Enforced by**
-- `src/renderer/operator/transport.ts:5-9` — `TRANSPORT_VERB_W = '150px'`, applied unconditionally at `:23` by `primaryBtnStyle`; `:10-18` the `go | down | ghost` looks; `:45-62` Prev/Next content-sized because they sit left of the spacer; `:90-97` the divider between adjacent opposite verbs.
-- `src/renderer/operator/SongsMode.tsx:985-1019` — the bar: spacer, Take down, divider, primary; `:1011` armed title in `title=`, `:1013` label swaps only to the constant `⇄ Switch`.
+- `src/renderer/operator/transport.ts:5-9` — `TRANSPORT_VERB_W = '150px'`, applied unconditionally by `primaryBtnStyle` (`:23`); `:11-21` the `go | down | neutral | ghost` looks; `:51` Prev/Next content-sized because they sit left of the spacer; `:71` `secondaryVerbStyle`, a page's own content-sized verb left of the spacer; `:106` the divider between adjacent opposite verbs.
+- `src/renderer/operator/preTransport.ts:85` — `preVerbs`, the one place the pre-service green slot is chosen; `PreServiceMode.tsx:534` the row that renders it.
+- `src/renderer/operator/SongsMode.tsx:1005-1034` — the bar: spacer, Take down, divider, primary; `:1011` armed title in `title=`, `:1013` label swaps only to the constant `⇄ Switch`.
 - `src/renderer/operator/SermonCenter.tsx:171-174`, `:241-277` — same slots; the version picker stays left of the verbs.
-- `src/renderer/operator/SermonCenter.test.tsx:69-110` and `SongsMode.test.tsx:1245-1291` — "the transport is stable ground (#85)": Take down always present, primary never relabels to the opposite verb, right-anchored ordering under a wide picker.
+- `src/renderer/operator/SermonCenter.test.tsx:73`, `SongsMode.test.tsx:1284` and `PreServiceMode.test.tsx:645` — "the transport is stable ground (#85)": Take down always present, primary never relabels to the opposite verb, right-anchored ordering under a wide picker, and on Pre-service a row that never wraps. `preTransport.test.ts` holds the slot's invariants.
 
 **Why:** the transport is the one row an operator must be able to hit without looking.
 
@@ -57,6 +69,8 @@ Only `goLive` toggles, so only the button and its keyboard twin can take the scr
 a card gesture routes through `takeLive` and can never black the projector. Deletes use a
 fifth, non-gesture verb, `invalidate`: deleted content that is live goes black, a black or
 logo screen keeps its mode. Enter is the button's twin and ghosts where the button ghosts.
+On Pre-service, Enter runs the primary slot's verb (Show this card); neither pre-service
+verb blacks the screen, so Enter never does there.
 
 **Exception:** scripture is a cursor model, not a cue model — while output is live a plain
 tap on a verse moves the cursor onto the screen. That is allowed only because the rail
@@ -69,8 +83,9 @@ switches cards only while pre-service is already projecting, never starts it.
 - `src/renderer/operator/SermonMode.tsx:631-637`, `:696-701` — Shift+Enter and search-hit activation use `take`, not `goLive`, "blanking is never what was asked for".
 - `src/renderer/operator/keyDispatch.ts:71-76` — `go.live` → `handler.onGoLive()` behind the modal guard.
 - `src/renderer/operator/ChapterRail.tsx:37-45`, `:132-134` — the cursor-model hint and the rail's contract; `SermonMode.tsx:492-516` the show effect (cue-on-move + show) + `:523` `cuedIsLive` via `sameKind`.
-- `src/renderer/operator/PreServiceMode.tsx:41-44` — `PRE_HINT` and the BUG-018 promise.
+- `src/renderer/operator/PreServiceMode.tsx:54-55` — `PRE_HINT` and the BUG-018 promise.
 - `src/shared/presentation/core.test.ts` — `takeLive` idempotent on the live key; `SongsMode.test.tsx:1273` — Enter is a no-op, not a take-down, when the cue is already live.
+- `src/renderer/operator/PreServiceMode.tsx:194` — `onGoLive` runs `verbs.primary` behind its `enabled` flag; `PreServiceMode.test.tsx:536` — "Enter does exactly what clicking the primary slot does" across five screen states.
 
 **Why:** an impatient extra click on the card already showing must never black the projector (#58).
 
@@ -126,11 +141,16 @@ Shift-click ranges from an anchor that stays put — a second shift-click re-ran
 grows — and the scripture rail's `railSelect` makes the same anchor-vs-selection split for
 verses, including the idempotence a shift-double-click depends on.
 
+The powers survive a page switch: all three pages stay mounted (`App.tsx` keep-alive) and
+register their keyboard delegate only while `active`, so a selection or a pending undo is
+still there on return. Every side rail resizes through `usePanelWidth` + `PanelDivider`.
+
 **Enforced by**
 - `src/renderer/operator/useListSelection.ts:4-17` — the `ListSelection` API; `:19-26` the kit stated; `:41-55` `selectTo` pivot; `:68-86` `deleteMenuItems`.
 - `src/shared/scripture/selection.ts:16-22`, `:24-45`, `:68-89` — `RailSelection.anchor`, the anchor precedence ladder, the carried/typed anchor rules (#22, #58).
 - `src/renderer/operator/App.tsx:42-47` — `onDelete` contract; `keyDispatch.ts:77-83` — `item.delete` guarded behind Settings/modals; `src/shared/hotkeys/actions.ts:48`.
-- Adopters: `SermonMode.tsx:143`/`:964` (`'verses'`), `MessageMode.tsx:114`/`:522` (`'quotes'`), `SlidesTrack.tsx:118`/`:592` (`'items'`), `PreServiceMode.tsx:77`.
+- Adopters: `SermonMode.tsx:143`/`:964` (`'verses'`), `MessageMode.tsx:114`/`:522` (`'quotes'`), `SlidesTrack.tsx:118`/`:592` (`'items'`), `PreServiceMode.tsx:88`.
+- `src/renderer/operator/App.tsx:168-179` — Pre-service joins the keep-alive wrapper; `PreServiceMode.tsx:89` `railPanel` and `:91-96` the menu-close guard while hidden. Pinned by "kept alive across page switches" and "the card rail resizes like every other side rail" in `PreServiceMode.test.tsx`.
 - Deliberate non-adopter: `SongsMode.tsx:450-453` — the library (rule 4 carve-out).
 - `src/shared/scripture/selection.test.ts:148` — "the same semantics `useListSelection.selectTo` gives the schedule."
 - `docs/superpowers/specs/2026-07-06-interaction-primitives-design.md`, `2026-08-15-scripture-schedule-multiselect-design.md`.
@@ -146,9 +166,9 @@ tooltips say why.
 
 **Enforced by**
 - `src/renderer/operator/ListEmpty.tsx:4-18` — the shared empty state and its prop contract (#88).
-- First-run lines: `SongSearchRail.tsx:327-330`, `SchedulePanel.tsx:222-224`, `SlidesTrack.tsx:565-567`, `MessageSearchRail.tsx:253-263`, `PreServiceMode.tsx:325-328`, `ScriptureSearchResults.tsx:98-99`.
+- First-run lines: `SongSearchRail.tsx:327-330`, `SchedulePanel.tsx:222-224`, `SlidesTrack.tsx:565-567`, `MessageSearchRail.tsx:253-263`, `PreServiceMode.tsx:334-337`, `ScriptureSearchResults.tsx:98-99`.
 - `src/renderer/operator/SermonCenter.tsx:30-34` — `canGoLive` contract; `:172-174`, `:267-274` ghost + "Nothing to take" tooltip; `:259` "Nothing on screen".
-- `src/renderer/operator/SongsMode.tsx:882-885`, `:1002`, `:1010`; `PreServiceMode.tsx:241-248`.
+- `src/renderer/operator/SongsMode.tsx:882-885`, `:1002`, `:1010`; `preTransport.ts:57-73` (Show this card ghosts with "add a card first" on an empty loop, pinned in `preTransport.test.ts`).
 - `src/renderer/operator/transport.ts:36-42` — the ghost look, "the slot holds its ground, disabled".
 - `src/shared/presentation/core.ts:99-107` — kernel counterpart: `'live'` with no key is refused.
 
@@ -179,11 +199,10 @@ chrome. `LeaderView` renders operator-dark by design (`theme.ts:42`) and uses `D
 
 ## Known gaps
 
-Facts as of 2026-08-28, not tasks:
+Facts as of 2026-10-12, not tasks:
 
 - Rule 8 has no lint enforcement. `eslint.config.mjs:24-28` carries no raw-colour rule; the only automated check is the single `not.toContain('3fb950')` assertion.
 - `T.live` doubles as the danger/error colour (`ContextMenu.tsx:200`, `DangerGhostButton.tsx:34`, `SettingsModal.tsx:275-295`, `QuickAdd.tsx:287`, and others), so rule 1's "only red" holds for on-air state but red does not mean *only* on-air.
-- There is no `goInk` token alongside `accentInk`; `'#fff'` is hard-coded on the green verb at `transport.ts:34`, `PreServiceMode.tsx:232` and `TrackTabs.tsx:37`.
+- There is no `goInk` token alongside `accentInk`; `'#fff'` is hard-coded on the green verb at `transport.ts:37` and `TrackTabs.tsx:37`.
 - `src/renderer/output/LeaderView.tsx:209` and `:225` hard-code `#221d10` and `#b4b1aa`, which are `CLASSIC_DARK.selBg` and `CLASSIC_DARK.lineDim`.
-- The pre-service transport does not use `primaryBtnStyle`; it fakes rule 2 with `minWidth: '150px'` (`PreServiceMode.tsx:240-242`) and still sets `flexWrap: 'wrap'` (`:285`).
 - The `Header` live chip changes height with state (`Header.tsx:96`, 28 → 32 px), a documented exception (`transport.ts:64-67`).
