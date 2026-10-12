@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+import type { JSX } from 'react'
 import { PreServiceMode } from './PreServiceMode'
 import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
@@ -730,5 +731,114 @@ describe('PreServiceMode, the transport is stable ground (#85)', () => {
     fireEvent.click(secondary)
     expect(stub.disengage).toHaveBeenCalledTimes(1)
     expect(stub.setOutput).not.toHaveBeenCalled()
+  })
+})
+
+// Pre-service now stays mounted like Songs and Sermon (App.tsx keep-alive), so it must
+// behave while hidden: no keyboard delegate, no menu left open behind another page.
+describe('PreServiceMode, kept alive across page switches', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const theme = themeFor('classic', 'dark')
+  const page = (active: boolean, keyHandlerRef: ModeKeyHandlerRef): JSX.Element => (
+    <ThemeCtx.Provider value={theme}>
+      <PreServiceMode active={active} keyHandlerRef={keyHandlerRef} />
+    </ThemeCtx.Provider>
+  )
+
+  it('never registers, or clobbers, the key handler while inactive', async () => {
+    installHelmStub(baseState)
+    const songs = {
+      onEscape: () => false,
+      onArrow: () => {},
+      onGoLive: () => {},
+      isModalOpen: () => false
+    }
+    const keyHandlerRef: ModeKeyHandlerRef = { current: songs }
+    render(page(false, keyHandlerRef))
+    await screen.findByText('Greeting')
+    expect(keyHandlerRef.current).toBe(songs)
+  })
+
+  it('keeps the selection and the pending undo through a hide and show', async () => {
+    const { removeCard } = installHelmStub({
+      ...baseState,
+      cards: [
+        ...cards,
+        { id: 'c', type: 'list', title: 'Announcements', points: ['Potluck'], enabled: true }
+      ]
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { rerender } = render(page(true, keyHandlerRef))
+    await screen.findByText('Announcements')
+
+    fireEvent.contextMenu(screen.getByText('Announcements').closest('button') as HTMLElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    expect(removeCard).toHaveBeenCalledWith('c')
+    fireEvent.click(screen.getByText('Greeting').closest('button') as HTMLElement)
+
+    rerender(page(false, keyHandlerRef))
+    rerender(page(true, keyHandlerRef))
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(screen.getByText('Greeting').closest('button')?.getAttribute('data-selected')).toBe(
+      'true'
+    )
+    expect(keyHandlerRef.current).not.toBeNull()
+  })
+
+  it('closes an open context menu when the page is hidden', async () => {
+    installHelmStub(baseState)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { rerender } = render(page(true, keyHandlerRef))
+    await screen.findByText('Greeting')
+
+    fireEvent.contextMenu(screen.getByText('Psalm 122:1').closest('button') as HTMLElement)
+    expect(await screen.findByRole('menu')).toBeTruthy()
+    rerender(page(false, keyHandlerRef))
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+})
+
+describe('PreServiceMode, the card rail resizes like every other side rail', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    localStorage.removeItem('helmPreRailW')
+  })
+
+  const rail = (): HTMLElement => document.querySelector('[data-pre-rail]') as HTMLElement
+
+  it('drags from its divider and remembers the width', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    expect(rail().style.width).toBe('320px')
+    const divider = screen.getByTitle('Drag to resize')
+    fireEvent.mouseDown(divider, { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 130 })
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('helmPreRailW')).toBe('350') // 320 + 30
+    expect(rail().style.width).toBe('350px')
+  })
+
+  it('stops at the widest rail the transport still fits beside', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    fireEvent.mouseDown(screen.getByTitle('Drag to resize'), { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 400 })
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('helmPreRailW')).toBe('360')
+  })
+
+  it('opens at the stored width', async () => {
+    localStorage.setItem('helmPreRailW', '280')
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+    expect(rail().style.width).toBe('280px')
   })
 })

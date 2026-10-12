@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useState, type CSSProperties, type JSX } from 'react';
+import { useContext, useEffect, useLayoutEffect, useState, type CSSProperties, type JSX } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { usePreState, usePresentationState } from '../shared/useHelm';
 import { preSlideFor } from '../../shared/preservice/cards';
@@ -10,6 +10,8 @@ import { UndoToast } from './UndoToast';
 import { useContextMenu } from './useContextMenu';
 import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
+import { usePanelWidth } from './usePanelWidth';
+import { PanelDivider } from './PanelDivider';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
 import {
@@ -43,7 +45,9 @@ interface RemovedCard {
  */
 const isDeletable = (c: PreCard): boolean => c.type !== 'logo';
 
-const PRE_RAIL_W = 320;
+// Same shape as SermonMode's SERMON_LEFT. The max is the transport's constraint, not the
+// rail's: at the 1200px minimum window the shared row has to fit in what the rail leaves.
+const PRE_RAIL = { def: 320, min: 240, max: 360, anchor: 'left' } as const;
 
 // Must keep the engine's promise exactly (BUG-018): a tap is navigation, so it switches the
 // screen only while pre-service is already projecting, and never starts projecting.
@@ -82,6 +86,14 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // delete must never move what the congregation is looking at.
   const contextMenu = useContextMenu();
   const sel = useListSelection(cards.map((c) => c.id));
+  const railPanel = usePanelWidth('helmPreRailW', PRE_RAIL);
+
+  // Kept alive while hidden (App.tsx), so a menu opened here must not outlive the page
+  // being on screen: a page hotkey would otherwise leave it open behind Songs or Sermon.
+  const { close: closeMenu } = contextMenu;
+  useEffect(() => {
+    if (!active) closeMenu();
+  }, [active, closeMenu]);
   const undo = useTimedUndo<RemovedCard[]>();
 
   // Unlike the schedule rails, this delete is NOT deferred: the rotation lives in main,
@@ -152,6 +164,12 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   //
   // The ladder has no blur rung: the only text entry on this page lives inside
   // PreCardEditor, which the first rung closes outright.
+  //
+  // While inactive, skip touching the ref entirely rather than nulling it: App keeps all
+  // three pages mounted (keep-alive contract), so a mode switch re-runs every page's
+  // effects in the same commit, and an inactive page writing null could clobber the
+  // handler the newly active page just registered. Deactivation is handled by this
+  // effect's own cleanup, which only fires when this page was the one that last set it.
   useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
@@ -187,7 +205,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   });
 
   // ---------------- styles (ported verbatim from Lectern.dc.html's computed values) ----------------
-  const preRailStyle: CSSProperties = { width: `${PRE_RAIL_W}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
+  const preRailStyle: CSSProperties = { width: `${railPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
   const loopCountTag: CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
@@ -301,7 +319,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
 
   return (
     <div style={rootStyle}>
-      <div style={preRailStyle}>
+      <div style={preRailStyle} data-pre-rail>
         <div style={{ padding: '13px 13px 9px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>PRE-SERVICE LOOP</span>
@@ -479,6 +497,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
           />
         )}
       </div>
+      <PanelDivider active={railPanel.dragging} onMouseDown={railPanel.startDrag} background={T.appBg} />
 
       <div style={centerStyle}>
         <div style={statusRowStyle}>
