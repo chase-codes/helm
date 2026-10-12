@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, cleanup, fireEvent } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Header } from './Header'
 import { ThemeCtx } from './ThemeCtx'
@@ -26,5 +26,28 @@ describe('Header feedback button', () => {
     expect(onOpenFeedback).toHaveBeenCalledTimes(1)
     const settings = getByTitle('Settings')
     expect(settings.nextElementSibling).toBe(getByTitle('Send feedback'))
+  })
+})
+
+// The beforeEach stub's presentation.get resolves null; these tests install a real state.
+const setPresentation = (st: unknown): void => {
+  ;(window as unknown as { helm: { presentation: unknown } }).helm.presentation = {
+    get: vi.fn(async () => st),
+    onState: vi.fn(() => () => {})
+  }
+}
+const renderHeader = (): ReturnType<typeof render> =>
+  render(
+    <ThemeCtx.Provider value={themeFor('helm', 'dark')}>
+      <Header mode="songs" setMode={() => {}} themeMode="dark" toggleTheme={() => {}} onOpenSettings={() => {}} onOpenFeedback={() => {}} hotkeyOverrides={{}} />
+    </ThemeCtx.Provider>
+  )
+
+describe('Header status chip', () => {
+  it('reads NOTHING ON SCREEN when the output is black (vocabulary)', async () => {
+    setPresentation({ output: 'black', liveKey: null, liveSnap: null, cuedKey: null, cuedSnap: null })
+    renderHeader()
+    expect(await screen.findByText('NOTHING ON SCREEN')).toBeTruthy()
+    expect(screen.queryByText('SCREEN BLACK')).toBeNull()
   })
 })

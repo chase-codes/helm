@@ -179,7 +179,7 @@ describe('LeaderView', () => {
     expect(r.getByTestId('leader-verse-3').dataset.live).toBe('true')
     expect(r.getByTestId('leader-verse-1').dataset.live).toBe('false')
     expect(r.getByText('CUED')).toBeTruthy()
-    expect(r.getByText('BLACK')).toBeTruthy()
+    expect(r.getByText('NOTHING ON SCREEN')).toBeTruthy()
   })
 
   it('keeps the cued verse up while the chapter is still fetching — never a black flash (#188 review)', async () => {
@@ -410,7 +410,7 @@ describe('LeaderView', () => {
     await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
     expect(r.getByTestId('leader-section-1').dataset.live).toBe('true')
     expect(r.getByText('CUED')).toBeTruthy()
-    expect(r.getByText('BLACK')).toBeTruthy()
+    expect(r.getByText('NOTHING ON SCREEN')).toBeTruthy()
   })
 
   it('shows LIVE when the displayed section is what the congregation sees', async () => {

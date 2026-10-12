@@ -183,7 +183,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     scr && scrSnap && scrChapter && scrChapter.verseCount > 0 && scr.v <= scrChapter.verseCount && !!primaryId
 
   const isLive = st.output === 'live' && st.liveKey === shownKey
-  const outChip = st.output === 'logo' ? 'LOGO' : st.output === 'black' ? 'BLACK' : null
+  const outChip = st.output === 'logo' ? 'LOGO' : st.output === 'black' ? 'NOTHING ON SCREEN' : null
 
   const rootStyle: CSSProperties = {
     position: 'fixed',

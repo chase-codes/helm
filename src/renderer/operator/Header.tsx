@@ -47,7 +47,7 @@ export function Header({
   const snapLbl = liveSnap ? (liveSnap.label ?? liveSnap.ref ?? liveSnap.title ?? '') : ''
   const outLabel =
     output === 'black'
-      ? 'SCREEN BLACK'
+      ? 'NOTHING ON SCREEN'
       : output === 'logo'
         ? 'LOGO'
         : 'LIVE' + (snapLbl ? ' — ' + snapLbl.toUpperCase().slice(0, 30) : '')
