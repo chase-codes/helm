@@ -349,13 +349,13 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     expect(keyHandlerRef.current?.onEscape()).toBe(false)
   })
 
-  it('Remove card in the editor lands in the same undo bar', async () => {
+  it('Delete card in the editor lands in the same undo bar', async () => {
     const { removeCard } = installHelmStub(THREE)
     renderMode()
     await screen.findByText('Announcements')
 
     fireEvent.click(within(rowFor('Announcements')).getByTitle('Edit card'))
-    fireEvent.click(await screen.findByText('Remove card'))
+    fireEvent.click(await screen.findByText('Delete card'))
 
     expect(removeCard).toHaveBeenCalledWith('c')
     expect(await screen.findByText(/Deleted/)).toBeTruthy()

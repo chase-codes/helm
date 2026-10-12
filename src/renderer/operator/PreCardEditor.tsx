@@ -317,7 +317,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
       <div style={{ display: 'flex', gap: '10px', marginTop: '20px', alignItems: 'center' }}>
         {!isNew && (
           <button style={removeStyle} onClick={remove}>
-            Remove card
+            Delete card
           </button>
         )}
         <div style={{ flex: 1 }} />
