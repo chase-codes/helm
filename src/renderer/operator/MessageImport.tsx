@@ -225,7 +225,7 @@ export function MessageImport({ open, onClose, onSaved }: MessageImportProps): J
           Cancel
         </button>
         <button style={saveBtnStyle(canSave)} onClick={save} disabled={!canSave}>
-          {saving ? 'Saving…' : 'Save to library'}
+          {saving ? 'Saving…' : 'Add to library'}
         </button>
       </div>
     </ModalShell>
