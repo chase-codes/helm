@@ -17,12 +17,22 @@ family. Green (`T.go`) is reserved for the opposite meaning — "put this on scr
 never reports state. Every on-air resolver is the same expression:
 `black → T.dim, logo → T.accent, live → T.live`.
 
+On rows and heroes the signal is one ring and one word: whatever is on the audience
+screen wears `liveRing(T)` (2px `T.live`) and the red `LIVE` badge, on every rail and both
+heroes. The cued item, the delete-selection and the `QUEUED` badge wear the track colour
+(`T.accent` for Songs and Pre-service, `T.scripture`, `T.message`, `T.sermon` for Slides),
+never red.
+
 **Enforced by**
 - `src/shared/theme.ts:4` — `live` token on the `Theme` interface; every one of the ten palettes (`theme.ts:18-31`) defines it as a red, and `go` as a green.
 - `src/renderer/operator/Header.tsx:52`, `SermonCenter.tsx:90`, `SongsMode.tsx:784` — the three identical on-air colour resolvers.
 - `src/renderer/operator/PreServiceMode.tsx:261-267` — `projColor = preOwnsScreen ? T.live : T.faint`; the comment records the hard-coded green this replaced (#87).
 - `src/renderer/operator/transport.ts:11-13` — `go` documented as "the only colour that ever means put this on screen".
 - `src/renderer/operator/PreServiceMode.test.tsx:432-449` — pins PROJECTING to `T.live` across two families and asserts `#3fb950` never renders.
+- `src/renderer/operator/railTint.ts:135` `liveRing`, `:166` `scheduleRowStyle` (live outranks the selection), `:61` `railRowStyle` (live ring is red, outranks a range).
+- `src/renderer/operator/StateBadge.tsx` — `LiveBadge`, `QueuedBadge`, `RowStateMark` (LIVE over QUEUED over the cue dot).
+- `src/renderer/operator/SermonCenter.tsx:191`, `SongsMode.tsx:956` — `data-hero-card`: red ring and LIVE badge only while the hero is on screen.
+- Tests: `railTint.test.ts` and `StateBadge.test.tsx` "live and queued signals"; the "live and queued signals" describes in `SchedulePanel.test.tsx`, `SlidesTrack.test.tsx`, `MessageSearchRail.test.tsx`, `SongSearchRail.test.tsx`; `theme.test.ts` "the Slides track colour is not a second green".
 
 **Why:** the operator's most important signal must not change colour with the page they are on.
 
@@ -31,13 +41,14 @@ never reports state. Every on-air resolver is the same expression:
 Take down and Go live have fixed slots at a fixed width (`150px`) in every state; Take down
 is always rendered (ghosted when there is nothing to take down) and the primary slot only
 ever means "put this on screen". Anything variable-width sits to the *left* of the flex
-spacer, so state changes recolour and relabel, never reflow. A varying song title rides in
-the tooltip, never the label.
+spacer, so state changes recolour and relabel, never reflow. The primary is labelled Go
+live in every state, including while a song or reading is queued; what it will put up rides
+in the tooltip (`Go live with <title>`), never the label.
 
 **Enforced by**
 - `src/renderer/operator/transport.ts:5-9` — `TRANSPORT_VERB_W = '150px'`, applied unconditionally at `:23` by `primaryBtnStyle`; `:10-18` the `go | down | ghost` looks; `:45-62` Prev/Next content-sized because they sit left of the spacer; `:90-97` the divider between adjacent opposite verbs.
-- `src/renderer/operator/SongsMode.tsx:985-1019` — the bar: spacer, Take down, divider, primary; `:1011` armed title in `title=`, `:1013` label swaps only to the constant `⇄ Switch`.
-- `src/renderer/operator/SermonCenter.tsx:171-174`, `:241-277` — same slots; the version picker stays left of the verbs.
+- `src/renderer/operator/SongsMode.tsx:1020-1047` — the bar: spacer, Take down, divider, primary; `:1041` the queued song's title in `title=`, the label always Go live.
+- `src/renderer/operator/SermonCenter.tsx:256-290` — same slots; the version picker stays left of the verbs; `:39` `queuedTitle` arms Go live and names the queued item in the tooltip.
 - `src/renderer/operator/SermonCenter.test.tsx:69-110` and `SongsMode.test.tsx:1245-1291` — "the transport is stable ground (#85)": Take down always present, primary never relabels to the opposite verb, right-anchored ordering under a wide picker.
 
 **Why:** the transport is the one row an operator must be able to hit without looking.
@@ -58,10 +69,23 @@ a card gesture routes through `takeLive` and can never black the projector. Dele
 fifth, non-gesture verb, `invalidate`: deleted content that is live goes black, a black or
 logo screen keeps its mode. Enter is the button's twin and ghosts where the button ghosts.
 
-**Exception:** scripture is a cursor model, not a cue model — while output is live a plain
-tap on a verse moves the cursor onto the screen. That is allowed only because the rail
-carries the hint on-surface (`ChapterRail.tsx:37`). Pre-service is the same shape: a tap
-switches cards only while pre-service is already projecting, never starts it.
+**QUEUED.** When content of one kind holds the screen and the operator clicks a different
+item of that kind, the click lines it up instead of switching: the row says `QUEUED` in the
+track colour and Go live, Enter or a double click takes it. Songs (`armedNextId`), the
+Scripture schedule (`queuedReadingId`), Message quote rows (`queuedQuote` for the tape on
+screen, `isQueuedBehind` for another tape) and Slides (`isQueuedBehind`, `core.ts:50`).
+Escape clears a queue before it touches the screen; taking the screen down turns the
+queued item into the cue.
+
+**Exception:** scripture's verse rail and Message's paragraph rail are cursor models, not
+cue models: while their content is live, a plain tap on a verse or paragraph card (and the
+arrows) moves the cursor onto the screen. That is allowed only because the rail carries the
+hint on-surface (`ChapterRail.tsx:37`). The Scripture **schedule** and Message **quote rows**
+are not part of the exception: a click (or the reading hotkey) while that content is live
+only queues it (decision 3, 2026-10-11, `SermonMode.tsx:652` `pickReading`; the quote-row
+default of 2026-10-12, `MessageMode.tsx:433` `pickQuote`); double click or Go live takes it.
+Pre-service is the same shape as the verse rail: a tap switches cards only while
+pre-service is already projecting, never starts it.
 
 **Enforced by**
 - `src/shared/presentation/core.ts:46-51` `applyCue`; `:52-58` `goLive` (toggle branch); `:59-75` `takeLive` (identity return so `stateStore.take` skips the broadcast); `:76-98` `showLive` (`sameKind` guard); `:108-129` `invalidate`; `:99-107` `setOutput` refuses `'live'` with no key.
@@ -70,7 +94,8 @@ switches cards only while pre-service is already projecting, never starts it.
 - `src/renderer/operator/keyDispatch.ts:71-76` — `go.live` → `handler.onGoLive()` behind the modal guard.
 - `src/renderer/operator/ChapterRail.tsx:37-45`, `:132-134` — the cursor-model hint and the rail's contract; `SermonMode.tsx:492-516` the show effect (cue-on-move + show) + `:523` `cuedIsLive` via `sameKind`.
 - `src/renderer/operator/PreServiceMode.tsx:41-44` — `PRE_HINT` and the BUG-018 promise.
-- `src/shared/presentation/core.test.ts` — `takeLive` idempotent on the live key; `SongsMode.test.tsx:1273` — Enter is a no-op, not a take-down, when the cue is already live.
+- `src/shared/presentation/core.test.ts` — `takeLive` idempotent on the live key; `isQueuedBehind`; `SongsMode.test.tsx:1273` — Enter is a no-op, not a take-down, when the cue is already live.
+- `SermonMode.test.tsx` "a schedule click while scripture is live queues it (decision 3)" and "a quote row in the tape on screen only queues (2026-10-12 default)".
 
 **Why:** an impatient extra click on the card already showing must never black the projector (#58).
 
@@ -107,7 +132,7 @@ with variable steps get a fixed frame.
 
 **Enforced by**
 - `src/renderer/operator/transport.ts:9`, `:23` — fixed verb width, ghosts still occupy the slot.
-- `src/renderer/operator/SongSearchRail.tsx:52-61`, `:122-144` — NEXT badge `flexShrink: 0`, dims rather than swaps copy; title/author truncate.
+- `src/renderer/operator/StateBadge.tsx`, `railTint.ts:142` `queuedBadgeStyle` — QUEUED badge `flexShrink: 0`, nowrap; on the Songs rail (`SongSearchRail.tsx:136-137`) it dims on the row whose click clears it rather than swapping copy; title/author truncate.
 - `src/renderer/operator/SermonCenter.tsx:233-237`, `SlidesTrack.tsx:598-601`, `SongsMode.tsx:918`, `UndoToast.tsx:28-30` — the `minWidth: 0` + ellipsis pair.
 - `src/renderer/operator/Header.tsx:45-51`, `:100` — live label clamped to 30 chars, nowrap.
 - `src/renderer/operator/railTint.ts:115-130` — two-line clamp for rail bodies.
