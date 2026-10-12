@@ -19,7 +19,7 @@ const baseProps = (variant: SermonCenterProps['variant']): SermonCenterProps => 
   ondeckTagColor: '#c9a55c',
   ondeckTitle: 'Up next',
   ondeckPreview: 'Preview',
-  nextLabel: 'Next slide ›',
+  unit: 'slide',
   onPrev: () => {},
   onNext: () => {},
   onGoLive: () => {},
@@ -188,5 +188,22 @@ describe('SermonCenter: status chip names the page that owns the screen', () => 
   it('reads NOTHING ON SCREEN, dim, when black', () => {
     render(<SermonCenter {...baseProps('verse')} output="black" />)
     expect(chip('NOTHING ON SCREEN').style.color).toBe(rgb(T.dim))
+  })
+})
+
+// Decision 5: the same two labels on every page, the unit only in the tooltip.
+describe('SermonCenter: Previous / Next', () => {
+  it('labels the steps ‹ Previous / Next › and names the unit in the tooltip', () => {
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    render(<SermonCenter {...baseProps('verse')} unit="verse" onPrev={onPrev} onNext={onNext} />)
+    const prev = screen.getByRole('button', { name: '‹ Previous' })
+    const next = screen.getByRole('button', { name: 'Next ›' })
+    expect(prev.getAttribute('title')).toBe('Previous verse')
+    expect(next.getAttribute('title')).toBe('Next verse')
+    fireEvent.click(prev)
+    fireEvent.click(next)
+    expect(onPrev).toHaveBeenCalledTimes(1)
+    expect(onNext).toHaveBeenCalledTimes(1)
   })
 })

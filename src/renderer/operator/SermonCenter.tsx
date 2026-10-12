@@ -31,9 +31,9 @@ export interface SermonCenterProps {
   ondeckTagColor: string;
   ondeckTitle: string;
   ondeckPreview: string;
-  /** "Next verse ›" / "Next ¶ ›" / "Next slide ›" (Lectern.pretty.html:1326) — the
-   * "‹ Back" label never varies by track. */
-  nextLabel: string;
+  /** The step unit, named only in the Previous / Next tooltips (decision 5): 'verse',
+   * 'paragraph' or 'slide'. The button labels never vary by track. */
+  unit: string;
   onPrev: () => void;
   onNext: () => void;
   onGoLive: () => void;
@@ -87,7 +87,7 @@ export function SermonCenter({
   ondeckTagColor,
   ondeckTitle,
   ondeckPreview,
-  nextLabel,
+  unit,
   versionPicker,
   variant,
   slide,
@@ -256,11 +256,11 @@ export function SermonCenter({
           Go live are therefore the last two controls in the row, at the same coordinates in
           every state, and neither ever takes on the other's meaning. */}
       <div style={{ display: 'flex', gap: '10px', marginTop: '13px', flexShrink: 0 }} data-transport-bar>
-        <button style={ghostBtn} onClick={onPrev}>
-          &lsaquo; Back
+        <button style={ghostBtn} onClick={onPrev} title={`Previous ${unit}`}>
+          &lsaquo; Previous
         </button>
-        <button style={ghostBtn} onClick={onNext}>
-          {nextLabel}
+        <button style={ghostBtn} onClick={onNext} title={`Next ${unit}`}>
+          Next &rsaquo;
         </button>
         <div style={{ flex: 1 }} />
         {versionPicker}

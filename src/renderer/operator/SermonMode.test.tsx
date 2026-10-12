@@ -1136,8 +1136,8 @@ describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', 
     resolveChapter()
     await waitFor(() => expect(show).toHaveBeenCalled())
     show.mockClear()
-    fireEvent.click(screen.getByText('Next verse ›'))
-    fireEvent.click(screen.getByText('Next verse ›'))
+    fireEvent.click(screen.getByTitle('Next verse'))
+    fireEvent.click(screen.getByTitle('Next verse'))
     expect(show.mock.calls.every((c) => c[0] !== 'scr:Genesis:1:1')).toBe(true)
   })
 })
@@ -1154,8 +1154,8 @@ describe('SermonMode — arrows during the stale-chapter tick', () => {
 
     const row = await screen.findByText('Genesis 1:3')
     fireEvent.click(row.closest('button') as HTMLElement)
-    fireEvent.click(screen.getByText('Next verse ›'))
-    fireEvent.click(screen.getByText('Next verse ›'))
+    fireEvent.click(screen.getByTitle('Next verse'))
+    fireEvent.click(screen.getByTitle('Next verse'))
     expect(show).not.toHaveBeenCalled()
 
     resolveChapter()
@@ -1736,7 +1736,7 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     clickTab('Slides')
     // Deck loaded, cued on slide 1 → the on-deck strip previews slide 2.
     await waitFor(() => expect(screen.getByText('Slide 2 of 3')).toBeTruthy())
-    fireEvent.click(screen.getByText('Next slide ›'))
+    fireEvent.click(screen.getByTitle('Next slide'))
     await waitFor(() => expect(screen.getByText('Slide 3 of 3')).toBeTruthy())
 
     clickTab('Scripture')
@@ -1752,7 +1752,7 @@ describe('SermonMode — track state survives switching away (#60)', () => {
 
     clickTab('Message')
     await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶1')).toBeTruthy())
-    fireEvent.click(screen.getByText('Next ¶ ›'))
+    fireEvent.click(screen.getByTitle('Next paragraph'))
     await waitFor(() => expect(screen.getByText('Tape 47-0412 — ¶2')).toBeTruthy())
 
     clickTab('Scripture')
@@ -1818,7 +1818,7 @@ describe('SermonMode — track state survives switching away (#60)', () => {
 
     clickTab('Slides')
     await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:d1:0', expect.anything()))
-    fireEvent.click(screen.getByText('Next slide ›'))
+    fireEvent.click(screen.getByTitle('Next slide'))
     await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:d1:1', expect.anything()))
 
     clickTab('Scripture')

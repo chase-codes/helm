@@ -569,7 +569,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         ondeckTagColor={ondeckTagColor}
         ondeckTitle={ondeckTitle}
         ondeckPreview={ondeckPreview}
-        nextLabel={'Next slide ›'}
+        unit="slide"
         onPrev={() => stepSlide(-1)}
         onNext={() => stepSlide(1)}
         onGoLive={goLive}

@@ -366,7 +366,7 @@ describe('SongsMode hotkey jumps', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
-    fireEvent.click(screen.getByText('Cue next ›'));
+    fireEvent.click(screen.getByTitle('Next section'));
     await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus')).toBeTruthy());
     // No pushState: the broadcast is still in flight.
     const btn = screen.getByText('Go live').closest('button') as HTMLButtonElement;
@@ -1352,6 +1352,16 @@ describe('SongsMode — the transport is stable ground (#85)', () => {
     const primary = verb(/Switch/);
     expect(primary.textContent?.trim()).toBe('⇄ Switch');
     expect(primary.title).toBe('Switch to Blessed Assurance');
+  });
+
+  it('steps with ‹ Previous / Next ›, the unit only in the tooltip (decision 5)', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(verb(/Previous/).textContent?.trim()).toBe('‹ Previous');
+    expect(verb(/Previous/).getAttribute('title')).toBe('Previous section');
+    expect(verb(/^Next/).textContent?.trim()).toBe('Next ›');
+    expect(verb(/^Next/).getAttribute('title')).toBe('Next section');
   });
 });
 

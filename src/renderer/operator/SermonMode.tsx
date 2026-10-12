@@ -1183,7 +1183,7 @@ export function SermonMode({
             ondeckTagColor={ondeckTagColor}
             ondeckTitle={ondeckTitle}
             ondeckPreview={ondeckPreview}
-            nextLabel={'Next verse ›'}
+            unit="verse"
             versionPicker={versionPicker}
             onPrev={() => stepVerse(-1)}
             onNext={() => stepVerse(1)}

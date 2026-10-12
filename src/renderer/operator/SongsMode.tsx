@@ -938,11 +938,11 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             because a label that names a song makes the bar's width a function of the song
             library; the rail's gold NEXT badge already says which song is queued. */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexShrink: 0 }} data-transport-bar>
-          <button style={ghostBtn} onClick={() => step(-1)}>
-            ‹ Prev
+          <button style={ghostBtn} onClick={() => step(-1)} title="Previous section">
+            ‹ Previous
           </button>
-          <button style={ghostBtn} onClick={() => step(1)}>
-            Cue next ›
+          <button style={ghostBtn} onClick={() => step(1)} title="Next section">
+            Next ›
           </button>
           <div style={{ flex: 1 }} />
           <button
