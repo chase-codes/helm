@@ -1519,6 +1519,32 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     act(() => void keyHandlerRef.current?.onEscape())
     expect(setOutput).toHaveBeenCalledWith('black')
   })
+
+  it('closes the translation picker instead of blacking the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    const onDoc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') void keyHandlerRef.current?.onEscape()
+    }
+    document.addEventListener('keydown', onDoc)
+    try {
+      fireEvent.click(within(trackPanel('scripture')).getByTitle('Choose translations'))
+      expect(screen.getByText('TRANSLATIONS')).toBeTruthy()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByText('TRANSLATIONS')).toBeNull()
+      expect(setOutput).not.toHaveBeenCalled()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(setOutput).toHaveBeenCalledWith('black')
+    } finally {
+      document.removeEventListener('keydown', onDoc)
+    }
+  })
 })
 
 describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4)', () => {

@@ -238,4 +238,18 @@ describe('OutputViewPopover', () => {
     await waitFor(() => expect(r.getByText('Projector')).toBeTruthy())
     expect(r.queryByText('Lobby TV')).toBeNull()
   })
+  it('Escape closes the popover without reaching the page key dispatcher', () => {
+    installHelmStub()
+    const onClose = vi.fn()
+    const page = vi.fn()
+    document.addEventListener('keydown', page)
+    try {
+      renderPopover(onClose)
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalled()
+      expect(page).not.toHaveBeenCalled()
+    } finally {
+      document.removeEventListener('keydown', page)
+    }
+  })
 })
