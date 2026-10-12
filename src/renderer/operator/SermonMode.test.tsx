@@ -1765,6 +1765,23 @@ describe('SermonMode — track state survives switching away (#60)', () => {
     await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
   })
 
+  it('Follow along reaches main through the non-toggling take, never goLive', async () => {
+    const { resolveChapter, take, goLive } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    const follow = await screen.findByText('Follow along ›')
+
+    // A second click on the live reading view must be a no-op, not a take-down.
+    fireEvent.click(follow)
+    fireEvent.click(follow)
+
+    await waitFor(() => expect(take).toHaveBeenCalledTimes(2))
+    expect(take.mock.calls[0][0]).toBe('read:m1')
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
   it('double-clicking a quote-schedule row takes that quote live', async () => {
     const QS: QuoteScheduleItem[] = [
       { id: 'q1', msgId: 'm1', ord: 1, label: '2', tapeNo: '47-0412', title: 'Faith Is The Substance' }

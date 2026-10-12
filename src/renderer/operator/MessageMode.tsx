@@ -345,9 +345,11 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
 
   // "Follow along": puts the scrolling reading view on screen at the tape's current
   // position (separate from — and doesn't disturb — the quote-slide Go Live path above).
+  // Uses `take`, never `goLive`: a second click on a reading view that is already live
+  // must be a no-op, not a take-down (ux-grammar rule 3).
   const followAlong = (): void => {
     if (!liveMsg) return;
-    window.helm.presentation.goLive(keyForReading(msgId), buildReadingSlide(liveMsg, activeOrd));
+    window.helm.presentation.take(keyForReading(msgId), buildReadingSlide(liveMsg, activeOrd));
   };
 
   const takeDown = (): void => {
