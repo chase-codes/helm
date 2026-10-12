@@ -139,8 +139,10 @@ function installHelmStub(
     )
   )
   // Main broadcasts presentation state; usePresentationState subscribes via onState. Keep
-  // the subscriber so a test can push a later state (logo -> live) after mount.
-  let emit: (s: PresentationState) => void = () => {}
+  // every subscriber (SermonMode and each track subscribe on their own, and main reaches
+  // them all) so a test can push a later state (logo -> live) after mount.
+  const subscribers = new Set<(s: PresentationState) => void>()
+  const emit = (s: PresentationState): void => subscribers.forEach((cb) => cb(s))
   let release: () => void = () => {}
   // One pending promise shared by both getChapter call sites (live + preview), so the
   // chapter stays unresolved until the test releases it.
@@ -177,9 +179,9 @@ function installHelmStub(
     presentation: {
       get: () => Promise.resolve(pres),
       onState: (cb: (s: PresentationState) => void) => {
-        emit = cb
+        subscribers.add(cb)
         return () => {
-          emit = () => {}
+          subscribers.delete(cb)
         }
       },
       show,
@@ -2825,5 +2827,102 @@ describe('SermonMode: a schedule click while scripture is live queues it (decisi
 
     expect(screen.queryByText('QUEUED')).toBeNull()
     expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2)
+  })
+})
+
+describe('SermonMode: a quote row in the tape on screen only queues (2026-10-12 default)', () => {
+  const QS: QuoteScheduleItem[] = [
+    { id: 'q0', msgId: 'm1', ord: 0, label: '1', tapeNo: '47-0412', title: 'Faith Is The Substance' },
+    { id: 'q1', msgId: 'm1', ord: 1, label: '2', tapeNo: '47-0412', title: 'Faith Is The Substance' }
+  ]
+  const M1_LIVE: PresentationState = {
+    output: 'live',
+    liveKey: 'msg:m1:0',
+    liveSnap: { kind: 'quote', text: 'First paragraph' },
+    cuedKey: 'msg:m1:0',
+    cuedSnap: null
+  }
+  const quoteRow = (id: string): HTMLButtonElement =>
+    document.querySelector(`[data-quote-row="${id}"]`) as HTMLButtonElement
+  const setup = async (
+    keyHandlerRef?: ModeKeyHandlerRef
+  ): Promise<ReturnType<typeof installHelmStub>> => {
+    const stub = installHelmStub(M1_LIVE, [], { tape: TAPE, quoteSchedule: QS })
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    stub.resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+    clickTab('Message')
+    await waitFor(() => expect(quoteRow('q1')).toBeTruthy())
+    await awaitCuedLive('message')
+    return stub
+  }
+
+  it('a single click queues the quote and leaves the screen alone', async () => {
+    const { cue, take, goLive } = await setup()
+    await settleAndClear(cue, 'msg:m1:0', expect.anything())
+
+    fireEvent.click(quoteRow('q1'))
+
+    expect(within(quoteRow('q1')).getByText('QUEUED')).toBeTruthy()
+    expect(within(quoteRow('q0')).getByText('LIVE')).toBeTruthy()
+    await act(async () => {})
+    expect(cue).not.toHaveBeenCalled()
+    expect(take).not.toHaveBeenCalled()
+    expect(goLive).not.toHaveBeenCalled()
+  })
+
+  it('clicking the queued quote again, or the live one, clears the queue', async () => {
+    await setup()
+    fireEvent.click(quoteRow('q1'))
+    fireEvent.click(quoteRow('q1'))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+
+    fireEvent.click(quoteRow('q1'))
+    fireEvent.click(quoteRow('q0'))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('Go live names the queued quote and takes it; so does Enter', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { take } = await setup(keyHandlerRef)
+    fireEvent.click(quoteRow('q1'))
+
+    const primary = within(trackPanel('message')).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(primary.disabled).toBe(false)
+    expect(primary.title).toBe('Go live with Tape 47-0412 · ¶2')
+    act(() => keyHandlerRef.current?.onGoLive())
+
+    await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('a double click takes the quote straight away', async () => {
+    const { take } = await setup()
+    fireEvent.click(quoteRow('q1'))
+    fireEvent.doubleClick(quoteRow('q1'))
+    await waitFor(() => expect(take).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
+  })
+
+  it('Escape clears the queue before it touches the screen', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { setOutput } = await setup(keyHandlerRef)
+    fireEvent.click(quoteRow('q1'))
+
+    let handled: boolean | undefined
+    act(() => {
+      handled = keyHandlerRef.current?.onEscape()
+    })
+    expect(handled).toBe(true)
+    expect(screen.queryByText('QUEUED')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+
+  it('taking the screen down turns the queued quote into the cue', async () => {
+    const { cue, pushState } = await setup()
+    fireEvent.click(quoteRow('q1'))
+    pushState({ ...M1_LIVE, output: 'black' })
+
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('msg:m1:1', expect.anything()))
+    expect(screen.queryByText('QUEUED')).toBeNull()
   })
 })

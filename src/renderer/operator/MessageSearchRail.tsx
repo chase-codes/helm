@@ -5,7 +5,7 @@ import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
 import { scheduleRowStyle } from './railTint';
-import { RowStateMark } from './StateBadge';
+import { QueuedBadge, RowStateMark } from './StateBadge';
 
 export interface MsgScheduleRow {
   id: string;
@@ -36,6 +36,8 @@ export interface MsgQuoteRow {
   id: string;
   title: string;
   preview: string;
+  /** Lined up behind the live quote of the same tape; Go live takes it. */
+  isQueued?: boolean;
   onClick: () => void;
   /** Double-click: take this row's quote live (#58). */
   onDoubleClick: () => void;
@@ -216,7 +218,10 @@ export function MessageSearchRail({
               <div style={sectionHeaderStyle('6px 4px 2px')}>{quotesHeader}</div>
               {quoteRows.map((r) => (
                 <button key={r.id} style={quoteRowStyle} onClick={r.onClick} onDoubleClick={r.onDoubleClick}>
-                  <div style={quoteTitleStyle}>{r.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ ...quoteTitleStyle, flex: 1, minWidth: 0 }}>{r.title}</div>
+                    {r.isQueued && <QueuedBadge accent={T.message} />}
+                  </div>
                   <div style={quotePreviewStyle}>{r.preview}</div>
                 </button>
               ))}

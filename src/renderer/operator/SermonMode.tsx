@@ -1091,6 +1091,7 @@ export function SermonMode({
       // track-gated — blur covers whichever rail input is focused, and black is black.
       onEscape: () => {
         if (track === 'slides' && slidesKeyRef.current?.onEscape()) return true;
+        if (track === 'message' && messageKeyRef.current?.onEscape()) return true;
         // The scripture queue (decision 3), like Songs' armed song: cleared before the
         // screen is touched.
         if (track === 'scripture' && queuedReadingId !== null) {
