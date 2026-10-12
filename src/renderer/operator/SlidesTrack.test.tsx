@@ -285,6 +285,15 @@ describe('SlidesTrack', () => {
     expect(menu.style.top).not.toBe('')
   })
 
+  it('+ Import is the full-width chip at the top of the rail, above the library header', async () => {
+    installHelmStub()
+    renderTrack()
+    const chip = (await screen.findByText('+ Import')).closest('button') as HTMLButtonElement
+    const header = screen.getByTitle('Presentations & media')
+    expect(chip.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(chip.style.width).toBe('100%')
+  })
+
   it('renders both resize dividers wired to the panel controls', async () => {
     installHelmStub()
     const left = stubPanel(270)

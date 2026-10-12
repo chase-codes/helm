@@ -378,24 +378,24 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     userSelect: 'none'
   });
   const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
-  const importHeaderBtnStyle: CSSProperties = {
-    height: '26px',
-    padding: '0 10px',
-    borderRadius: '8px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '12px',
+  // The add chip every rail carries at the top (Scripture's schedAddStyle, Songs' addChip),
+  // in this track's colour. Import is the verb because the source is a file.
+  const importChipStyle: CSSProperties = {
+    width: '100%',
+    height: '34px',
+    borderRadius: '9px',
+    background: `${T.sermon}22`,
+    color: T.sermon,
+    fontSize: '12.5px',
     fontWeight: 600,
-    background: 'transparent',
-    // The verb must survive the rail's 200px minimum in one piece — the heading beside it
-    // may wrap, the button may not ("+" over "Import" reads as two controls).
-    whiteSpace: 'nowrap',
-    flexShrink: 0
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    whiteSpace: 'nowrap'
   };
   const importPopStyle: CSSProperties = {
     position: 'absolute',
-    top: '30px',   // opens DOWNWARD from the header button (was bottom: 46px)
+    top: '38px', // opens DOWNWARD from the add chip (was bottom: 46px)
     right: 0,
     zIndex: Z_POPOVER,
     width: '180px',
@@ -483,17 +483,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         <div style={{ padding: '12px 12px 10px', flexShrink: 0 }}>
           <TrackTabs theme={T} track={track} setTrack={setTrack} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 9px', flexShrink: 0 }}>
-          <div
-            // One line that gives way to the button: at the rail's 200px minimum the
-            // heading truncates rather than wrapping into a two-line cram beside +Import.
-            style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-            title="Presentations & media"
-          >
-            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
-          </div>
+        <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
           <div style={{ position: 'relative' }}>
-            <button style={importHeaderBtnStyle} onClick={() => setImportOpen((o) => !o)}>
+            <button style={importChipStyle} onClick={() => setImportOpen((o) => !o)}>
               + Import
             </button>
             {importOpen && (
@@ -506,6 +498,16 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 </div>
               </>
             )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 9px', flexShrink: 0 }}>
+          <div
+            // One line: at the rail's 200px minimum the heading truncates rather than
+            // wrapping, so the Imported ✓ flash stays on the same line.
+            style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title="Presentations & media"
+          >
+            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
