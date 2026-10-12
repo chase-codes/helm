@@ -13,7 +13,8 @@ import type { ContextMenuItem } from './ContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
-import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
+import { screenToneColor, statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
+import { screenStatus } from '../../shared/presentation/screenOwner';
 import { tintChip } from './railTint';
 import { MONO } from '../shared/fonts';
 
@@ -108,12 +109,11 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   const enabledCount = cards.filter((c) => c.enabled).length;
 
   const isCardLive = (c: PreCard): boolean => output === 'live' && liveKey === `pre:${c.id}`;
-  const preOwnsScreen = output === 'live' && (liveKey?.startsWith('pre:') ?? false);
-  // "Armed" = selected and in the preview, but NOT on the audience screen — whether that's
+  // "Cued" = selected and in the preview, but NOT on the audience screen — whether that's
   // because a song owns it or because nothing is up yet. Deliberately broader than "another
   // flow is live": the roadmap's pre-live selection marker asks for this state before
   // anything is live, so the operator can see which card Start loop would put up.
-  // Visually distinct from ● ON SCREEN, which means actually live.
+  // Visually distinct from ● LIVE, which means actually live.
   const selectedIsLive = current ? isCardLive(current) : false;
   const armed = current !== undefined && !selectedIsLive;
 
@@ -240,7 +240,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // selection is armed, and falls back to a quiet ghost once that card is already live so
   // it never competes with Start loop for attention.
   // The label no longer reports state ("On screen") the way it used to: every toggle in
-  // the app now says what the click DOES, and the ● ON SCREEN badge on the card already
+  // the app now says what the click DOES, and the ● LIVE badge on the card already
   // says what is up (#92). That also makes the row's width constant across both states,
   // which the min-width below used to have to fake.
   const showBtn: CSSProperties = armed
@@ -265,15 +265,15 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     alignItems: 'center'
   };
 
-  // Red is the whole app's word for "the congregation sees this" (#87). This bar used to
-  // say it in a hard-coded green, so the operator's most important signal changed colour
-  // with the page they were on and ignored the theme families outright. The two not-ours
-  // states stay faint on purpose: the bar reports THIS page's claim on the screen, and the
-  // header already carries the global on-air state.
-  const projColor = preOwnsScreen ? T.live : T.faint;
+  // Red is the whole app's word for "the congregation sees this" (#87), and the words are
+  // the shared ones (docs/ux-vocabulary.md): this page's own card reads LIVE ON SCREEN in
+  // red; another page's content reads LIVE FROM <PAGE> in faint, because the header
+  // already carries the global on-air red.
+  const status = screenStatus({ output, liveKey }, 'pre');
+  const projColor = screenToneColor(T, status.tone);
   const projBarStyle: CSSProperties = statusChipStyle(projColor);
-  const projDotStyle: CSSProperties = statusDotStyle(projColor, preOwnsScreen);
-  const projText = preOwnsScreen ? 'PROJECTING' : output === 'live' ? 'ANOTHER FLOW LIVE' : 'OFF SCREEN';
+  const projDotStyle: CSSProperties = statusDotStyle(projColor, status.tone === 'live');
+  const projText = status.text;
 
   const dividerStyle: CSSProperties = { width: '1px', height: '28px', background: T.hairline, margin: '0 4px' };
   // The transport is a sibling of the preview rather than a child of it, so it can run wider
@@ -452,8 +452,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
                   <div style={labelStyle}>{card.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {isShowing && <span style={showingBadge}>● ON SCREEN</span>}
-                    {isArmed && <span style={armedBadge}>● ARMED</span>}
+                    {isShowing && <span style={showingBadge}>● LIVE</span>}
+                    {isArmed && <span style={armedBadge}>● CUED</span>}
                     {canEdit && (
                       <span
                         style={editChipStyle}
@@ -500,7 +500,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               <span style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PREVIEW — CURRENT CARD</span>
               {armed && (
                 <span style={{ fontFamily: MONO, fontSize: '9.5px', letterSpacing: '0.06em', fontWeight: 600, color: T.accent }}>
-                  ● ARMED
+                  ● CUED
                 </span>
               )}
             </span>

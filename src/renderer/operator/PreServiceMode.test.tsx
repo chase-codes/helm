@@ -139,31 +139,31 @@ describe('PreServiceMode', () => {
   })
 
   // BUG-008: these badges must follow the real presentation state, never the engine's
-  // `engaged` flag — the two diverge exactly when the operator most needs the truth.
+  // `engaged` flag. The words are the shared ones from docs/ux-vocabulary.md.
   describe('screen-ownership badges', () => {
-    it('reports OFF SCREEN and arms the selection when nothing is live', async () => {
+    it('reports NOTHING ON SCREEN and cues the selection when nothing is live', async () => {
       installHelmStub(baseState)
       renderMode()
-      expect(await screen.findByText('OFF SCREEN')).toBeTruthy()
-      // Two by design: the row badge and the preview header both mark the armed card.
-      expect(screen.getAllByText('● ARMED')).toHaveLength(2)
-      expect(screen.queryByText('● ON SCREEN')).toBeNull()
+      expect(await screen.findByText('NOTHING ON SCREEN')).toBeTruthy()
+      // Two by design: the row badge and the preview header both mark the cued card.
+      expect(screen.getAllByText('● CUED')).toHaveLength(2)
+      expect(screen.queryByText('● LIVE')).toBeNull()
     })
 
-    it('does not claim the screen while a song is live', async () => {
+    it('names the page that owns the screen while a song is live', async () => {
       installHelmStub({ ...baseState, engaged: true }, SONG_LIVE)
       renderMode()
-      expect(await screen.findByText('ANOTHER FLOW LIVE')).toBeTruthy()
-      expect(screen.queryByText('● ON SCREEN')).toBeNull()
-      expect(screen.queryByText('PROJECTING')).toBeNull()
+      expect(await screen.findByText('LIVE FROM SONGS')).toBeTruthy()
+      expect(screen.queryByText('● LIVE')).toBeNull()
+      expect(screen.queryByText('LIVE ON SCREEN')).toBeNull()
     })
 
-    it('marks the genuinely live card ON SCREEN and stops arming it', async () => {
+    it('marks the genuinely live card LIVE and stops cueing it', async () => {
       installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
       renderMode()
-      expect(await screen.findByText('PROJECTING')).toBeTruthy()
-      expect(screen.getByText('● ON SCREEN')).toBeTruthy()
-      expect(screen.queryByText('● ARMED')).toBeNull()
+      expect(await screen.findByText('LIVE ON SCREEN')).toBeTruthy()
+      expect(screen.getByText('● LIVE')).toBeTruthy()
+      expect(screen.queryByText('● CUED')).toBeNull()
     })
   })
 
@@ -493,27 +493,35 @@ describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => 
   describe('on-air colour', () => {
     // Red means "the congregation sees this" on every other page. Pinned against a
     // second family so a re-hard-coded constant can't pass by matching one palette.
-    it.each(['classic', 'contrast'] as const)('paints PROJECTING with %s live', async (family) => {
+    it.each(['classic', 'contrast'] as const)('paints LIVE ON SCREEN with %s live', async (family) => {
       const theme = themeFor(family, 'dark')
       installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
       const { container } = renderMode({ current: null }, theme)
 
-      const bar = (await screen.findByText('PROJECTING')).closest('div') as HTMLElement
+      const bar = (await screen.findByText('LIVE ON SCREEN')).closest('div') as HTMLElement
       expect(bar.style.color).toBe(rgb(theme.live))
       const dot = bar.querySelector('span') as HTMLElement
       expect(dot.style.background).toBe(rgb(theme.live))
       expect(container.innerHTML).not.toContain('3fb950')
     })
 
-    // The bar reports THIS page's claim on the screen; the header carries the global
-    // on-air state. Off screen stays quiet rather than borrowing the live red.
-    it('stays faint while pre-service does not own the screen', async () => {
+    // Another page's content is faint: the header carries the global on-air red.
+    it('stays faint while another page owns the screen', async () => {
+      const theme = themeFor('classic', 'dark')
+      installHelmStub(baseState, SONG_LIVE)
+      renderMode({ current: null }, theme)
+
+      const bar = (await screen.findByText('LIVE FROM SONGS')).closest('div') as HTMLElement
+      expect(bar.style.color).toBe(rgb(theme.faint))
+    })
+
+    it('uses the shared black when nothing is on screen', async () => {
       const theme = themeFor('classic', 'dark')
       installHelmStub(baseState, NOTHING_LIVE)
       renderMode({ current: null }, theme)
 
-      const bar = (await screen.findByText('OFF SCREEN')).closest('div') as HTMLElement
-      expect(bar.style.color).toBe(rgb(theme.faint))
+      const bar = (await screen.findByText('NOTHING ON SCREEN')).closest('div') as HTMLElement
+      expect(bar.style.color).toBe(rgb(theme.dim))
     })
   })
 
