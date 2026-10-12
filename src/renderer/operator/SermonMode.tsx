@@ -972,6 +972,8 @@ export function SermonMode({
       meta: `${n} ${n === 1 ? 'verse' : 'verses'} · ${primary}`,
       isCurrent,
       isSelected: sel.isSelected(r.id),
+      isLive: false,
+      isQueued: false,
       onClick: (e) => {
         if (e.shiftKey) sel.selectTo(r.id);
         else jumpToReading(r);
