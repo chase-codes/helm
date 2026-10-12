@@ -24,10 +24,13 @@ the "Status" line under the table says which change delivers it.
 | **Import** | Bring things in from a file or another program. Always with `+`. | `+ Import`, `+ Import a song library` | Import without the `+` |
 | **Delete** | Take something out of a list. In-service lists delete at once and show `Deleted <thing>` with Undo for five seconds. Libraries (songs, media) ask for a confirm click instead and have no undo. | Context menu (`Delete`, `Delete 3 verses`), toast, card editor (`Delete card`), song library (`Delete from library`, then `Really delete?`), Shortcuts (`Delete selected`), Clear all tooltip | Remove, Removed |
 
+The status chip words come from `screenStatus()`; the step labels from SermonCenter,
+SongsMode and PreServiceMode; the toast from `UndoToast.tsx`.
+
 Status: the `QUEUED` badge (decision 7), the Scripture schedule's cue-only click
-(decision 3) and the media library's confirm (decision 2) are delivered by separate
+(decision 3) and the Pre-service transport row (decision 4) are delivered by separate
 changes. Until they land, Songs still shows `NEXT`, a Scripture schedule click still moves
-the live cursor, and the media library still uses the in-service undo.
+the live cursor, and Pre-service still steps with bare `‹` / `›`.
 
 ## Supporting words
 
@@ -59,6 +62,10 @@ schedule never moves the screen on a single click (decision 3), so its hint drop
 follow clause: "Click a reading to cue it. Double-click to go live. Shift-click to select
 a range."
 
+Used by `SectionRail.tsx` (sections), `ChapterRail.tsx:38` (verses), `ParagraphRail.tsx:23`
+(paragraphs), the `SlidesTrack.tsx` deck rail (slides) and the `PreServiceMode.tsx` rail
+hint (cards). The Scripture schedule's hint lands with decision 3.
+
 ## Fixed messages
 
 - No Bible installed: "Install a Bible in Settings → Bibles" (`INSTALL_HINT`,
@@ -74,6 +81,6 @@ Each is visible on the surface, so the operator is never surprised.
 - **Pre-service** has the loop: `Start loop` / `Stop loop`, `Show this card`, the dwell
   control, and `IN LOOP` / `SKIPPED` instead of "planned". Where `Start loop` sits in the
   row is decision 4, still open.
-- **Libraries confirm** (songs, and media once decision 2 lands).
+- **Libraries confirm** (songs and media).
 - **Page tools**: chorus / bridge / tag jumps (Songs), the translation picker (Scripture),
   the tape player and `Follow along ›` (Message), video Play / Pause / Mute (Slides).
