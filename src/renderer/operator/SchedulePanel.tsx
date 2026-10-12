@@ -9,6 +9,7 @@ import { ScriptureSearchResults, type ScriptureSearchState } from './ScriptureSe
 import { MONO } from '../shared/fonts';
 import { scheduleRowStyle } from './railTint';
 import { RowStateMark } from './StateBadge';
+import { railHint } from './railHints';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
@@ -208,6 +209,11 @@ export function SchedulePanel({
                   />
                 )}
               </div>
+              {rows.length > 0 && (
+                <div style={{ fontSize: '11.5px', color: T.faint, lineHeight: 1.45, padding: '0 14px 8px', flexShrink: 0 }}>
+                  {railHint('reading', { follows: false, range: 'select a range' })}
+                </div>
+              )}
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {rows.length === 0 && (
                   <ListEmpty>

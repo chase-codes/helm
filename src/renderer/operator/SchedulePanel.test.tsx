@@ -3,6 +3,7 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SchedulePanel, type ScheduleRow } from './SchedulePanel'
 import { themeFor } from '../../shared/theme'
+import { railHint } from './railHints'
 
 afterEach(cleanup)
 
@@ -157,6 +158,18 @@ describe('SchedulePanel', () => {
   it('shows no empty state once the schedule has rows', () => {
     render(<SchedulePanel {...baseProps} />)
     expect(screen.queryByText(/No verses yet/)).toBeNull()
+  })
+
+  // Decision 3: a schedule click only cues; double-click is the take. No follow clause.
+  it('explains the schedule gestures without promising the screen follows a click', () => {
+    render(<SchedulePanel {...baseProps} />)
+    expect(screen.getByText(railHint('reading', { follows: false, range: 'select a range' }))).toBeTruthy()
+    expect(screen.queryByText(/screen follows/)).toBeNull()
+  })
+
+  it('leaves the hint to the empty state when there are no readings', () => {
+    render(<SchedulePanel {...baseProps} rows={[]} />)
+    expect(screen.queryByText(/Click a reading/)).toBeNull()
   })
 })
 
