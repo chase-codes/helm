@@ -36,6 +36,8 @@ import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
 import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
 import { MONO } from '../shared/fonts';
+import { liveRing } from './railTint';
+import { LiveBadge } from './StateBadge';
 
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
@@ -813,9 +815,10 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     // hidden, not auto: the fit below guarantees the section fits, and a scrollbar
     // appearing mid-measure would change the box being measured.
     overflow: 'hidden',
+    position: 'relative',
     borderRadius: '14px',
     background: T.panel,
-    boxShadow: cuedIsLive ? `inset 0 0 0 2px ${T.accent}66` : `inset 0 0 0 1px ${T.hairline}`
+    boxShadow: cuedIsLive ? liveRing(T) : `inset 0 0 0 1px ${T.hairline}`
   };
   const bigVerseLabelStyle: CSSProperties = {
     flexShrink: 0,
@@ -942,7 +945,11 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
         </div>
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '2px' }}>
-          <div style={bigVerseWrapStyle}>
+          <div style={bigVerseWrapStyle} data-hero-card>
+            {/* Absolutely positioned, so the fit box (heroFitRef) never re-measures for it. */}
+            {cuedIsLive && (
+              <LiveBadge theme={T} chip style={{ position: 'absolute', top: '14px', right: '16px', zIndex: 1 }} />
+            )}
             <div style={bigVerseLabelStyle}>{currentSectionObj?.label ? `NOW SINGING · ${currentSectionObj.label}` : ''}</div>
             <div ref={heroFitRef} style={heroFitStyle} data-testid="song-hero">
               <div

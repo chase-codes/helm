@@ -1480,4 +1480,22 @@ describe('SongsMode: red means live (rule 1)', () => {
     const card = within(screen.getByTestId('rail-wrap')).getByText('LIVE').closest('button') as HTMLButtonElement;
     expect(card.style.boxShadow).toBe(`inset 0 0 0 2px ${themeFor('classic', 'dark').live}`);
   });
+
+  it('the live hero wears the red ring and a LIVE badge; a merely cued hero does not', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const hero = document.querySelector('[data-hero-card]') as HTMLElement;
+    await waitFor(() => expect(hero.style.boxShadow).toBe(`inset 0 0 0 2px ${themeFor('classic', 'dark').live}`));
+    expect(within(hero).getByText('LIVE')).toBeTruthy();
+  });
+
+  it('no red on the hero while nothing is live', async () => {
+    installHelmStubWith([CHORUS_SONG, NEXT_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const hero = document.querySelector('[data-hero-card]') as HTMLElement;
+    expect(hero.style.boxShadow).not.toContain(themeFor('classic', 'dark').live);
+    expect(within(hero).queryByText('LIVE')).toBeNull();
+  });
 });
