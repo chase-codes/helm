@@ -1076,7 +1076,7 @@ export function SermonMode({
       },
       onAction: (a: ResolvedHotkey) => {
         if (track !== 'scripture') return;
-        if (a.id === 'scripture.reading' && a.digit) {
+        if (a.id === 'item.jump' && a.digit) {
           const r = schedule[a.digit - 1];
           if (r) jumpToReading(r);
         } else if (a.id === 'focus.search') {

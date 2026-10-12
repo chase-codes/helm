@@ -113,7 +113,7 @@ export function ShortcutsSettings({ overrides, onChange }: ShortcutsSettingsProp
         Click a key to rebind it, then press the new key. Single-letter keys never fire while
         you&rsquo;re typing in a field.
       </div>
-      {GROUPS.map((g) => (
+      {GROUPS.filter((g) => HOTKEY_ACTIONS.some((a) => a.scope === g.scope)).map((g) => (
         <div key={g.scope}>
           <div style={groupTitleStyle}>{g.title}</div>
           {HOTKEY_ACTIONS.filter((a) => a.scope === g.scope).map((a) => {
@@ -149,6 +149,14 @@ export function ShortcutsSettings({ overrides, onChange }: ShortcutsSettingsProp
                 >
                   {a.label}
                   {overridden && <span style={{ color: T.accent }}> •</span>}
+                  {a.note && (
+                    <span
+                      data-note
+                      style={{ display: 'block', marginTop: '2px', fontSize: '11.5px', fontWeight: 400, color: T.faint }}
+                    >
+                      {a.note}
+                    </span>
+                  )}
                 </span>
                 {capturing && conflict && (
                   <span data-conflict style={{ fontSize: '11.5px', color: T.live }}>

@@ -61,12 +61,12 @@ describe('resolveHotkey', () => {
     expect(resolveHotkey(ev('Home'), opts({ scope: 'songs' }))).toEqual({ id: 'song.chorus' })
     expect(resolveHotkey(ev('b'), opts({ scope: 'songs' }))).toEqual({ id: 'song.bridge' })
   })
-  it('digit blocks report which digit: 3 → song.verse/3 in songs, scripture.reading/3 in scripture', () => {
+  it('digit blocks report which digit: song.verse in songs, item.jump everywhere else', () => {
     expect(resolveHotkey(ev('3'), opts({ scope: 'songs' }))).toEqual({ id: 'song.verse', digit: 3 })
-    expect(resolveHotkey(ev('3'), opts({ scope: 'scripture' }))).toEqual({ id: 'scripture.reading', digit: 3 })
+    expect(resolveHotkey(ev('3'), opts({ scope: 'scripture' }))).toEqual({ id: 'item.jump', digit: 3 })
   })
-  it('unscoped digit resolves nothing', () => {
-    expect(resolveHotkey(ev('3'), opts())).toBeNull()
+  it('an unscoped digit (Pre-service) resolves to item.jump', () => {
+    expect(resolveHotkey(ev('3'), opts())).toEqual({ id: 'item.jump', digit: 3 })
   })
   it('typing suppresses unmodified bindings but not Mod bindings', () => {
     expect(resolveHotkey(ev('c'), opts({ scope: 'songs', typing: true }))).toBeNull()
@@ -99,13 +99,13 @@ describe('bindingConflict', () => {
     expect(bindingConflict('Enter', 'song.tag', {})?.id).toBe('go.live')
   })
   it('digit-block keys are protected', () => {
-    expect(bindingConflict('4', 'song.chorus', {})?.id).toBe('song.verse')
+    // The global item.jump block holds the digits on every page, Songs included.
+    expect(bindingConflict('4', 'song.chorus', {})?.id).toBe('item.jump')
   })
-  it('songs↔scripture do not clash (different pages)', () => {
-    // scripture.reading holds '1'–'9', but so does song.verse — both use digit blocks but
-    // in different scopes. Checking if we can bind '3' to song.verse must not see a conflict
-    // with scripture.reading (even though both hold that digit).
-    expect(bindingConflict('3', 'song.verse', {})).toBeNull()
+  it('song.verse shadows the global digit block on the Songs page', () => {
+    // Both are fixed, so no rebind can reach this; it documents that the digits are taken
+    // on every page and that the Songs block wins by scope in resolveHotkey.
+    expect(bindingConflict('3', 'song.verse', {})?.id).toBe('item.jump')
   })
   it('respects overrides when detecting clashes', () => {
     expect(bindingConflict('X', 'song.tag', { 'song.bridge': ['X'] })?.id).toBe('song.bridge')

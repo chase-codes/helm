@@ -77,4 +77,16 @@ describe('ShortcutsSettings', () => {
     expect(screen.queryByRole('button', { name: /rebind Close \/ clear/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /rebind Jump to Verse/i })).toBeNull()
   })
+  it('lists the global digit block and says where a key does something else or nothing', () => {
+    renderPane()
+    expect(screen.getByText('Jump to schedule item 1\u20139')).toBeTruthy()
+    expect(screen.getByText(/Slides and Pre-service have no search/)).toBeTruthy()
+    expect(screen.getByText(/On Songs, digits jump to Verse/)).toBeTruthy()
+  })
+
+  it('hides a page group that has no keys of its own', () => {
+    renderPane()
+    expect(screen.queryByText('Scripture page')).toBeNull()
+    expect(screen.getByText('Songs page')).toBeTruthy()
+  })
 })

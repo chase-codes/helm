@@ -1200,7 +1200,7 @@ describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', (
 })
 
 describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
-  it('scripture.reading digit 2 jumps to the 2nd scheduled reading', async () => {
+  it('item.jump digit 2 jumps to the 2nd scheduled reading', async () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
       { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
       { id: 'r2', book: 'Genesis', ch: 1, from: 3, to: 3 }
@@ -1215,7 +1215,7 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
     // and reading 1 is cued" precondition this jump needs.
     await waitFor(() => expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2))
 
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 2 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 2 }))
     await waitFor(() => expect(screen.getAllByText('Genesis 1:3')).toHaveLength(2))
     expect(screen.getAllByText('Genesis 1:1')).toHaveLength(1) // hero left reading 1
   })
@@ -1261,7 +1261,7 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
 
     // Fire the reading hotkey while on the Message track — the `track !== 'scripture'`
     // guard must swallow it rather than moving the (currently invisible) cursor.
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 1 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 1 }))
 
     // The hero label is the cursor's own text ("Genesis 1:1"); the schedule row for
     // reading 1 ("Genesis 1:3") stays on screen regardless, so asserting the hero still
@@ -1568,7 +1568,7 @@ describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4
     await waitFor(() => expect(screen.getByText('Romans 1')).toBeTruthy())
 
     // Reading 1 hotkey (digit press) jumps into Genesis — a different book than the builder.
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 1 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 1 }))
 
     expect(entryValue()).toBe('')
     await waitFor(() => expect(screen.getByText('Genesis 1')).toBeTruthy())

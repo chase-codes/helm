@@ -157,13 +157,28 @@ describe('dispatchModeKey — hotkey actions', () => {
     expect(onAction).not.toHaveBeenCalled()
   })
 
-  it('digit 3 routes per scope (song.verse vs scripture.reading)', () => {
+  it('digits jump to item N on every page; Songs keeps Verse 1-9', () => {
     const onAction = vi.fn()
-    dispatchModeKey(ev('3'), { ...baseCtx({ scope: 'songs' }), handler: makeHandler({ onAction }) })
-    expect(onAction).toHaveBeenCalledWith({ id: 'song.verse', digit: 3 })
-    onAction.mockClear()
-    dispatchModeKey(ev('3'), { ...baseCtx({ scope: 'scripture' }), handler: makeHandler({ onAction }) })
-    expect(onAction).toHaveBeenCalledWith({ id: 'scripture.reading', digit: 3 })
+    for (const scope of [null, 'scripture'] as const) {
+      dispatchModeKey(ev('4'), { ...baseCtx({ scope }), handler: makeHandler({ onAction }) })
+      expect(onAction).toHaveBeenLastCalledWith({ id: 'item.jump', digit: 4 })
+    }
+    dispatchModeKey(ev('4'), { ...baseCtx({ scope: 'songs' }), handler: makeHandler({ onAction }) })
+    expect(onAction).toHaveBeenLastCalledWith({ id: 'song.verse', digit: 4 })
+  })
+
+  it('a digit never jumps while typing or behind a modal', () => {
+    const onAction = vi.fn()
+    dispatchModeKey(ev('4', { tag: 'input' }), { ...baseCtx(), handler: makeHandler({ onAction }) })
+    dispatchModeKey(ev('4'), { ...baseCtx(), handler: makeHandler({ onAction, isModalOpen: () => true }) })
+    dispatchModeKey(ev('4'), { ...baseCtx({ settingsOpen: true }), handler: makeHandler({ onAction }) })
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it('slash reaches onAction on Pre-service too (scope null); the page decides', () => {
+    const onAction = vi.fn()
+    dispatchModeKey(ev('/'), { ...baseCtx({ scope: null }), handler: makeHandler({ onAction }) })
+    expect(onAction).toHaveBeenCalledWith({ id: 'focus.search' })
   })
 
   it('slash focuses search when idle but is ignored while typing', () => {

@@ -19,6 +19,9 @@ export interface HotkeyAction {
   fixed?: boolean
   /** defaults are the nine digits '1'–'9'; resolveHotkey reports which digit matched. */
   digitBlock?: boolean
+  /** One line Settings → Shortcuts shows under the label: where this key does something
+   * different, or nothing (a page with no search, a page whose digits mean something else). */
+  note?: string
 }
 
 /** User rebinds, persisted under the settings-store key 'hotkeys'. Absent id = defaults. */
@@ -38,7 +41,13 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'song.search', label: 'Song search', scope: 'global', defaults: ['Mod+L'] },
   { id: 'scripture.lookup', label: 'Scripture lookup', scope: 'global', defaults: ['Mod+K'] },
   { id: 'displays.release', label: 'Release / take screens', scope: 'global', defaults: ['Mod+B'] },
-  { id: 'focus.search', label: 'Focus search / entry', scope: 'global', defaults: ['/', '\\'] },
+  {
+    id: 'focus.search',
+    label: 'Focus search / entry',
+    scope: 'global',
+    defaults: ['/', '\\'],
+    note: 'Songs, Scripture and Message. Slides and Pre-service have no search, so it does nothing there.'
+  },
   { id: 'field.clear', label: 'Clear field', scope: 'global', defaults: ['Mod+Backspace', 'Mod+Delete'] },
   // Enter only (#52): Space went live too, and a stray thumb on the space bar mid-service
   // is exactly the accidental take the pilot church asked to be rid of.
@@ -46,12 +55,22 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'nav.next', label: 'Next', scope: 'global', defaults: ['ArrowRight', 'ArrowDown'] },
   { id: 'nav.prev', label: 'Previous', scope: 'global', defaults: ['ArrowLeft', 'ArrowUp'] },
   { id: 'item.delete', label: 'Delete selected', scope: 'global', defaults: ['Delete', 'Backspace'] },
+  // One digit block for every page (grammar rule 9). Songs shadows it by scope with Verse
+  // 1-9; Slides reads it as slide N of the cued deck (see SlidesTrack's onAction).
+  {
+    id: 'item.jump',
+    label: 'Jump to schedule item 1\u20139',
+    scope: 'global',
+    defaults: DIGITS,
+    fixed: true,
+    digitBlock: true,
+    note: 'Scripture readings, Message quotes and Pre-service cards. On Songs, digits jump to Verse 1\u20139; on Slides, to slide N of the cued deck.'
+  },
   { id: 'app.escape', label: 'Close / clear', scope: 'global', defaults: ['Escape'], fixed: true },
   { id: 'song.chorus', label: 'Jump to chorus', scope: 'songs', defaults: ['Home', 'C'] },
   { id: 'song.bridge', label: 'Jump to bridge', scope: 'songs', defaults: ['B'] },
   { id: 'song.tag', label: 'Jump to tag / ending', scope: 'songs', defaults: ['T'] },
-  { id: 'song.verse', label: 'Jump to Verse 1–9', scope: 'songs', defaults: DIGITS, fixed: true, digitBlock: true },
-  { id: 'scripture.reading', label: 'Jump to reading 1–9', scope: 'scripture', defaults: DIGITS, fixed: true, digitBlock: true }
+  { id: 'song.verse', label: 'Jump to Verse 1–9', scope: 'songs', defaults: DIGITS, fixed: true, digitBlock: true }
 ]
 
 const NON_FIXED_ACTION_IDS = new Set(HOTKEY_ACTIONS.filter((a) => !a.fixed).map((a) => a.id))
