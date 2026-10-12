@@ -12,8 +12,15 @@ import { useListSelection } from './useListSelection';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
-import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
-import { tintChip } from './railTint';
+import {
+  primaryBtnStyle,
+  secondaryVerbStyle,
+  statusChipStyle,
+  statusDotStyle,
+  transportGhostBtn,
+  verbDividerStyle
+} from './transport';
+import { preVerbs, runPreVerb } from './preTransport';
 import { MONO } from '../shared/fonts';
 
 export interface PreServiceModeProps {
@@ -115,6 +122,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // Visually distinct from ● ON SCREEN, which means actually live.
   const selectedIsLive = current ? isCardLive(current) : false;
   const armed = current !== undefined && !selectedIsLive;
+  // Decision 4 is made in preVerbs, not here: the row and Enter both read `verbs.primary`.
+  const verbs = preVerbs({ engaged, armed, hasCards: cards.length > 0 });
 
   // The page's missing verb (#87). "Stop loop" halts the rotation but leaves the card lit,
   // so until now the only way to clear the screen from here was the header chip. Same reach
@@ -135,9 +144,10 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // sits next to, and inherits that control's guarantees:
   //   ‹ ›            → `step`, which routes through the engine's navigate-only path and so
   //                    can never light a dark screen.
-  //   Show this card → `showNow`, but only while `armed`, mirroring the button's own
-  //                    disabled state. Enter is therefore never a take-down here, unlike
-  //                    Songs/Sermon where the same button toggles.
+  //   Enter          → `verbs.primary`, the green slot's own verb, gated on the same
+  //                    `enabled` flag as the button (rule 3: Enter is the button's twin).
+  //                    Neither pre-service verb blacks the screen, so Enter never does,
+  //                    unlike Songs/Sermon where the same button toggles.
   //   Take down      → the last rung of the Escape ladder, as everywhere else.
   //
   // The ladder has no blur rung: the only text entry on this page lives inside
@@ -164,7 +174,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
       },
       onArrow: (dir) => window.helm.preservice.step(dir),
       onGoLive: () => {
-        if (armed) window.helm.preservice.showNow();
+        if (verbs.primary.enabled) runPreVerb(verbs.primary.id);
       },
       isModalOpen: () => editing !== null,
       onDelete: () => {
@@ -210,53 +220,35 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   };
 
   const ghostBtn: CSSProperties = transportGhostBtn(T);
-  const primaryBtn: CSSProperties = {
+  const takeDownStyle = primaryBtnStyle(T, canTakeDown ? 'down' : 'ghost');
+  // One bordered group instead of three loose controls, so the row fits beside a
+  // resizable rail at the 1200px minimum window (main/index.ts).
+  const dwellGroupStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
     height: '46px',
-    padding: '0 22px',
     borderRadius: '11px',
-    background: T.accent,
-    color: T.accentInk,
-    fontSize: '14.5px',
-    fontWeight: 700,
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    flexShrink: 0
+  };
+  const dwellStepStyle: CSSProperties = {
+    width: '34px',
+    height: '46px',
+    background: 'transparent',
+    color: T.dim,
+    fontSize: '15px',
+    fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: '7px'
+    justifyContent: 'center'
   };
-  // Green = go, the same convention SermonCenter and SongsMode use for their Go live
-  // buttons (#91). Start loop is this page's equivalent verb, so it wears the same colour.
-  // Stop loop drops back to the accent rather than turning red: red is take-down, and
-  // stopping the rotation leaves the current card lit — see `takeDown` above.
-  const loopBtn: CSSProperties = engaged
-    ? primaryBtn
-    : { ...primaryBtn, background: T.go, color: '#fff' };
-  // "Show this card" — the deliberate single-card takeover. Reads as an action while the
-  // selection is armed, and falls back to a quiet ghost once that card is already live so
-  // it never competes with Start loop for attention.
-  // The label no longer reports state ("On screen") the way it used to: every toggle in
-  // the app now says what the click DOES, and the ● ON SCREEN badge on the card already
-  // says what is up (#92). That also makes the row's width constant across both states,
-  // which the min-width below used to have to fake.
-  const showBtn: CSSProperties = armed
-    ? { ...primaryBtn, minWidth: '150px', background: 'transparent', color: T.accent, boxShadow: `inset 0 0 0 1.5px ${T.accent}` }
-    : { ...ghostBtn, minWidth: '150px', cursor: 'default' };
-  // Tinted rather than filled: a solid red button would out-shout Start loop, and this is
-  // the page's escape hatch, not its primary verb. Same `1c`/`55` formula as the on-air bar
-  // below, so the two red things on the page read as one signal.
-  const takeDownBtn: CSSProperties = canTakeDown
-    ? { ...ghostBtn, ...tintChip(T.live) }
-    : { ...ghostBtn, cursor: 'default' };
-  const smallGhost: CSSProperties = {
-    height: '46px',
-    padding: '0 14px',
-    borderRadius: '11px',
-    background: 'transparent',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    fontSize: '13px',
-    fontWeight: 600,
+  const dwellLabelStyle: CSSProperties = {
+    fontFamily: MONO,
+    fontSize: '12px',
     color: T.dim,
-    display: 'flex',
-    alignItems: 'center'
+    minWidth: '74px',
+    textAlign: 'center',
+    fontVariantNumeric: 'tabular-nums'
   };
 
   // Red is the whole app's word for "the congregation sees this" (#87). This bar used to
@@ -269,21 +261,10 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   const projDotStyle: CSSProperties = statusDotStyle(projColor, preOwnsScreen);
   const projText = preOwnsScreen ? 'PROJECTING' : output === 'live' ? 'ANOTHER FLOW LIVE' : 'OFF SCREEN';
 
-  const dividerStyle: CSSProperties = { width: '1px', height: '28px', background: T.hairline, margin: '0 4px' };
-  // The transport is a sibling of the preview rather than a child of it, so it can run wider
-  // than the 680px the slide is clamped to. With Take down added, eight controls no longer
-  // fit in 680 — and wrapping would put the page's one destructive verb on an orphan second
-  // line, which is the last control that should move about.
-  const transportStyle: CSSProperties = {
-    width: '100%',
-    maxWidth: '820px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '10px',
-    marginTop: '20px',
-    flexWrap: 'wrap'
-  };
+  // Full pane width, pinned to the bottom, the same row Songs and Sermon draw (rule 2):
+  // ‹ › and this page's extras left of the spacer, then Take down and the primary slot.
+  // It never wraps, so Take down can't land on an orphan second line.
+  const transportStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '14px', flexShrink: 0 };
   const hintStyle: CSSProperties = {
     width: '100%',
     maxWidth: '680px',
@@ -298,12 +279,22 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   const centerStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    padding: '16px 12px',
+    background: T.appBg
+  };
+  // Same shape as the Songs title row: page text left and truncating, the status chip
+  // fixed-footprint at the right end.
+  const statusRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px', flexShrink: 0 };
+  const stageStyle: CSSProperties = {
+    flex: 1,
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: '26px',
-    background: T.appBg
+    justifyContent: 'center'
   };
 
   const cardForSlide: PreCard = current ?? { id: '', type: 'logo', title: '', enabled: true };
@@ -490,76 +481,82 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
       </div>
 
       <div style={centerStyle}>
-        <div style={{ width: '100%', maxWidth: '680px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
-              <span style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PREVIEW — CURRENT CARD</span>
-              {armed && (
-                <span style={{ fontFamily: MONO, fontSize: '9.5px', letterSpacing: '0.06em', fontWeight: 600, color: T.accent }}>
-                  ● ARMED
-                </span>
-              )}
-            </span>
-            <div style={projBarStyle}>
-              <span style={projDotStyle} />
-              <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
-            </div>
-          </div>
-          <div
-            style={{
-              width: '100%',
-              aspectRatio: '16/9',
-              borderRadius: '14px',
-              overflow: 'hidden',
-              position: 'relative',
-              boxShadow: '0 18px 50px rgba(0,0,0,.3)'
-            }}
-          >
-            <SlideCanvas slide={preSlideFor(cardForSlide)} fill />
+        <div style={statusRowStyle}>
+          <span style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
+            <span style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PREVIEW — CURRENT CARD</span>
+            {armed && (
+              <span style={{ fontFamily: MONO, fontSize: '9.5px', letterSpacing: '0.06em', fontWeight: 600, color: T.accent }}>
+                ● ARMED
+              </span>
+            )}
+          </span>
+          <div style={projBarStyle} data-status-chip>
+            <span style={projDotStyle} />
+            <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
           </div>
         </div>
-        <div style={transportStyle}>
+        <div style={stageStyle}>
+          <div style={{ width: '100%', maxWidth: '680px' }}>
+            <div
+              style={{
+                width: '100%',
+                aspectRatio: '16/9',
+                borderRadius: '14px',
+                overflow: 'hidden',
+                position: 'relative',
+                boxShadow: '0 18px 50px rgba(0,0,0,.3)'
+              }}
+            >
+              <SlideCanvas slide={preSlideFor(cardForSlide)} fill />
+            </div>
+          </div>
+          <div style={hintStyle}>{PRE_HINT}</div>
+        </div>
+        <div style={transportStyle} data-transport-bar>
           <button style={ghostBtn} onClick={() => window.helm.preservice.step(-1)} title="Previous card">
             ‹
-          </button>
-          <button
-            style={showBtn}
-            onClick={() => window.helm.preservice.showNow()}
-            disabled={!armed}
-            title={armed ? 'Put this card on the audience screen now — no rotation' : 'This card is already on screen'}
-          >
-            Show this card
-          </button>
-          <button
-            style={loopBtn}
-            onClick={() => (engaged ? window.helm.preservice.disengage() : window.helm.preservice.engage())}
-          >
-            {engaged ? 'Stop loop' : 'Start loop'}
           </button>
           <button style={ghostBtn} onClick={() => window.helm.preservice.step(1)} title="Next card">
             ›
           </button>
-          <div style={dividerStyle} />
-          <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(-1)}>
-            −
-          </button>
-          <span style={{ fontFamily: MONO, fontSize: '12px', color: T.dim, minWidth: '74px' }}>
-            {`${dwellS}s / card`}
-          </span>
-          <button style={smallGhost} onClick={() => window.helm.preservice.setDwell(1)}>
-            +
-          </button>
-          <div style={dividerStyle} />
           <button
-            style={takeDownBtn}
+            style={secondaryVerbStyle(T, verbs.secondary.enabled)}
+            onClick={() => runPreVerb(verbs.secondary.id)}
+            disabled={!verbs.secondary.enabled}
+            title={verbs.secondary.title}
+            data-secondary-verb
+          >
+            {verbs.secondary.label}
+          </button>
+          <div style={dwellGroupStyle} data-dwell>
+            <button style={dwellStepStyle} onClick={() => window.helm.preservice.setDwell(-1)} title="Less time on each card">
+              −
+            </button>
+            <span style={dwellLabelStyle}>{`${dwellS}s / card`}</span>
+            <button style={dwellStepStyle} onClick={() => window.helm.preservice.setDwell(1)} title="More time on each card">
+              +
+            </button>
+          </div>
+          <div style={{ flex: 1 }} />
+          <button
+            style={takeDownStyle}
             onClick={takeDown}
             disabled={!canTakeDown}
             title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
           >
             <ScreenBlackIcon size={14} /> Take down
           </button>
+          <div style={verbDividerStyle(T)} />
+          <button
+            style={primaryBtnStyle(T, verbs.primary.kind)}
+            onClick={() => runPreVerb(verbs.primary.id)}
+            disabled={!verbs.primary.enabled}
+            title={verbs.primary.title}
+            data-primary-verb
+          >
+            {verbs.primary.label}
+          </button>
         </div>
-        <div style={hintStyle}>{PRE_HINT}</div>
       </div>
 
       {editing !== null && (
