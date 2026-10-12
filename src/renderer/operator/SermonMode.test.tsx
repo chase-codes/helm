@@ -1140,6 +1140,16 @@ describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', 
     fireEvent.click(screen.getByTitle('Next verse'))
     expect(show.mock.calls.every((c) => c[0] !== 'scr:Genesis:1:1')).toBe(true)
   })
+
+  it('at the end of a chapter the on-deck strip points at the reference entry, which is on the left', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [{ id: 'r1', book: 'Genesis', ch: 1, from: 5, to: 5 }])
+    render(<Harness />)
+    const row = await screen.findByText('Genesis 1:5')
+    fireEvent.click(row.closest('button') as HTMLElement)
+    resolveChapter()
+    expect(await screen.findByText('End of Genesis 1')).toBeTruthy()
+    expect(screen.getByText('Type the next reference, or pick a reading on the left')).toBeTruthy()
+  })
 })
 
 describe('SermonMode — arrows during the stale-chapter tick', () => {

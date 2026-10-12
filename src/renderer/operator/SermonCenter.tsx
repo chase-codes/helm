@@ -239,7 +239,7 @@ export function SermonCenter({
 
       <div style={ondeckStyle}>
         <div style={{ fontFamily: MONO, fontSize: '10px', letterSpacing: '0.12em', color: T.faint }}>
-          UP NEXT — TAP OR PRESS →
+          UP NEXT
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '7px' }}>
           <div style={ondeckTagStyle}>{ondeckTag}</div>

@@ -1013,7 +1013,7 @@ export function SermonMode({
     ondeckPreview = previewOf(nv);
   } else {
     ondeckTitle = `End of ${scrBook} ${scrCh}`;
-    ondeckPreview = 'Pick the next verse on the left';
+    ondeckPreview = 'Type the next reference, or pick a reading on the left';
   }
 
   // Registers this mode's keyboard delegate only while active — App keeps both Songs

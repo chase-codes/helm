@@ -212,3 +212,11 @@ describe('SermonCenter: Previous / Next', () => {
     expect(onNext).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('SermonCenter: on-deck strip', () => {
+  it('reads UP NEXT and promises no tap it does not answer', () => {
+    render(<SermonCenter {...baseProps('verse')} />)
+    expect(screen.getByText('UP NEXT')).toBeTruthy()
+    expect(screen.queryByText(/TAP/)).toBeNull()
+  })
+})
