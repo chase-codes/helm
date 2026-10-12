@@ -147,23 +147,34 @@ describe('PreServiceMode', () => {
       expect(await screen.findByText('OFF SCREEN')).toBeTruthy()
       // Two by design: the row badge and the preview header both mark the armed card.
       expect(screen.getAllByText('● ARMED')).toHaveLength(2)
-      expect(screen.queryByText('● ON SCREEN')).toBeNull()
+      expect(screen.queryByText('LIVE')).toBeNull()
     })
 
     it('does not claim the screen while a song is live', async () => {
       installHelmStub({ ...baseState, engaged: true }, SONG_LIVE)
       renderMode()
       expect(await screen.findByText('ANOTHER FLOW LIVE')).toBeTruthy()
-      expect(screen.queryByText('● ON SCREEN')).toBeNull()
+      expect(screen.queryByText('LIVE')).toBeNull()
       expect(screen.queryByText('PROJECTING')).toBeNull()
     })
 
-    it('marks the genuinely live card ON SCREEN and stops arming it', async () => {
+    it('marks the genuinely live card LIVE and stops arming it', async () => {
       installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
       renderMode()
       expect(await screen.findByText('PROJECTING')).toBeTruthy()
-      expect(screen.getByText('● ON SCREEN')).toBeTruthy()
+      expect(screen.getByText('LIVE')).toBeTruthy()
       expect(screen.queryByText('● ARMED')).toBeNull()
+    })
+
+    it('the live card and the preview ring red; the armed card stays gold', async () => {
+      const theme = themeFor('classic', 'dark')
+      installHelmStub({ ...baseState, engaged: true, idx: 0 }, cardLive('a'))
+      renderMode({ current: null }, theme)
+      expect(await screen.findByText('PROJECTING')).toBeTruthy()
+      const live = document.querySelector('[data-pre-card="a"]') as HTMLButtonElement
+      expect(live.style.boxShadow).toBe(`inset 0 0 0 2px ${theme.live}`)
+      const preview = document.querySelector('[data-pre-preview]') as HTMLElement
+      expect(preview.style.boxShadow).toContain(theme.live)
     })
   })
 
