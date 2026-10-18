@@ -15,7 +15,8 @@ import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
 import { screenToneColor, statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
 import { screenStatus } from '../../shared/presentation/screenOwner';
-import { tintChip } from './railTint';
+import { liveRing, tintChip } from './railTint';
+import { LiveBadge } from './StateBadge';
 import { MONO } from '../shared/fonts';
 import { railHint } from './railHints';
 
@@ -350,15 +351,16 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               cursor: 'pointer',
               userSelect: 'none',
               opacity: card.enabled || isShowing || isArmed ? 1 : 0.55,
-              // Live gets the filled treatment; armed gets the ring only — the operator
-              // must be able to tell "this is on the screen" from "this is queued up".
-              // A delete-selection ring outranks both: while a range is picked out, what
-              // Delete would take has to be the unambiguous thing on the rail.
+              // Live gets the filled treatment and the red ring (rule 1); armed gets a
+              // track-colour ring only, so the operator can tell "this is on the screen"
+              // from "this is queued up". Live outranks a delete-selection ring, as on every
+              // other list, so the card on screen always reads red; the selection ring
+              // outranks armed, so what Delete would take stays unambiguous.
               background: isShowing ? T.selBg : T.panel2,
-              boxShadow: isSelected
-                ? `inset 0 0 0 1.5px ${T.accent}`
-                : isShowing
-                  ? `inset 0 0 0 1.5px ${T.accent}88`
+              boxShadow: isShowing
+                ? liveRing(T)
+                : isSelected
+                  ? `inset 0 0 0 1.5px ${T.accent}`
                   : isArmed
                     ? `inset 0 0 0 1.5px ${T.accent}44`
                     : `inset 0 0 0 1px ${T.hairline}`
@@ -403,16 +405,15 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               background: card.enabled ? `${T.accent}1c` : 'transparent',
               boxShadow: card.enabled ? 'none' : `inset 0 0 0 1px ${T.border}`
             };
-            const showingBadge: CSSProperties = {
+            const armedBadge: CSSProperties = {
               fontFamily: MONO,
               fontSize: '9px',
               letterSpacing: '0.06em',
               fontWeight: 600,
-              color: T.live,
+              color: T.accent,
               whiteSpace: 'nowrap',
               flexShrink: 0
             };
-            const armedBadge: CSSProperties = { ...showingBadge, color: T.accent };
             return (
               <button
                 key={card.id}
@@ -453,7 +454,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
                   <div style={labelStyle}>{card.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {isShowing && <span style={showingBadge}>● LIVE</span>}
+                    {isShowing && <LiveBadge theme={T} />}
                     {isArmed && <span style={armedBadge}>● CUED</span>}
                     {canEdit && (
                       <span
@@ -511,13 +512,14 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             </div>
           </div>
           <div
+            data-pre-preview
             style={{
               width: '100%',
               aspectRatio: '16/9',
               borderRadius: '14px',
               overflow: 'hidden',
               position: 'relative',
-              boxShadow: '0 18px 50px rgba(0,0,0,.3)'
+              boxShadow: selectedIsLive ? `0 0 0 2px ${T.live}, 0 18px 50px rgba(0,0,0,.3)` : '0 18px 50px rgba(0,0,0,.3)'
             }}
           >
             <SlideCanvas slide={preSlideFor(cardForSlide)} fill />

@@ -4,8 +4,7 @@ import { tintChip } from './railTint';
 import type { ScreenTone } from '../../shared/presentation/screenOwner';
 
 /** Both transport verbs are this wide in every state (#85). Fixed rather than
- * content-sized: "Go live", "Take down" and "⇄ Switch" all have to occupy the same
- * footprint, or the slot beside them moves as the state changes — and the bar's width
+ * content-sized: "Go live" and "Take down" have to occupy the same footprint, or the slot beside them moves as the state changes — and the bar's width
  * would become a function of the song library, which is what the issue is about. */
 export const TRANSPORT_VERB_W = '150px';
 

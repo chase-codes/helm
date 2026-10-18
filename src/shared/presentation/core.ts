@@ -43,6 +43,17 @@ export function sameKind(a: string | null, b: string | null): boolean {
   if (!a || !b) return false
   return a.split(':')[0] === b.split(':')[0]
 }
+/** Decision 7 (2026-10-11): the cued item is QUEUED when content of its own kind holds the
+ * screen and the cue is a different item. A same-flow cue follows the screen (`applyCue`),
+ * so it is live, not queued; another kind on screen leaves the rail in plain cue mode,
+ * exactly as SongsMode's live lock does. */
+export function isQueuedBehind(
+  output: OutputMode,
+  liveKey: string | null,
+  cuedKey: string | null
+): boolean {
+  return output === 'live' && sameKind(liveKey, cuedKey) && !sameFlow(liveKey, cuedKey)
+}
 export function applyCue(st: PresentationState, key: string, slide: Slide): PresentationState {
   const cued = { ...st, cuedKey: key, cuedSnap: slide }
   if (st.output === 'live' && sameFlow(st.liveKey, key))
@@ -125,7 +136,12 @@ export function setOutput(st: PresentationState, mode: OutputMode): Presentation
 export function invalidate(st: PresentationState, key: string): PresentationState {
   const k = st.liveKey
   if (k === null || !(k === key || k.startsWith(key + ':'))) return st
-  return { ...st, output: st.output === 'live' ? 'black' : st.output, liveKey: null, liveSnap: null }
+  return {
+    ...st,
+    output: st.output === 'live' ? 'black' : st.output,
+    liveKey: null,
+    liveSnap: null
+  }
 }
 export function outputPayload(
   st: PresentationState,

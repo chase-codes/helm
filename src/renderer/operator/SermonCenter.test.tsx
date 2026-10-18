@@ -220,3 +220,32 @@ describe('SermonCenter: on-deck strip', () => {
     expect(screen.queryByText(/TAP/)).toBeNull()
   })
 })
+
+describe('SermonCenter: live and queued signals (rule 1, decision 7)', () => {
+  const T = themeFor('classic', 'dark')
+  const card = (): HTMLElement => document.querySelector('[data-hero-card]') as HTMLElement
+
+  it('the live hero wears the red ring and a LIVE badge', () => {
+    render(<SermonCenter {...baseProps('verse')} output="live" cuedIsLive />)
+    expect(card().style.boxShadow).toBe(`inset 0 0 0 2px ${T.live}`)
+    expect(within(card()).getByText('LIVE')).toBeTruthy()
+  })
+
+  it('a cued hero that is not on screen carries no red and no badge', () => {
+    render(<SermonCenter {...baseProps('slide')} output="live" cuedIsLive={false} />)
+    expect(card().style.boxShadow).not.toContain(T.live)
+    expect(within(card()).queryByText('LIVE')).toBeNull()
+  })
+
+  it('a queued item re-arms Go live, keeps the label, and names itself in the tooltip', () => {
+    const onGoLive = vi.fn()
+    render(
+      <SermonCenter {...baseProps('verse')} output="live" cuedIsLive queuedTitle="Genesis 1:3" onGoLive={onGoLive} />
+    )
+    const btn = screen.getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    expect(btn.title).toBe('Go live with Genesis 1:3')
+    fireEvent.click(btn)
+    expect(onGoLive).toHaveBeenCalledTimes(1)
+  })
+})

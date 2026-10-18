@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SongSearchRail, type SongRow } from './SongSearchRail'
 import { themeFor } from '../../shared/theme'
@@ -7,7 +7,7 @@ import { themeFor } from '../../shared/theme'
 afterEach(cleanup)
 
 const rows: SongRow[] = [
-  { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: false, isArmed: false }
+  { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: false, isArmed: false, isLive: false }
 ]
 
 const baseProps = {
@@ -118,41 +118,41 @@ describe('SongSearchRail', () => {
 // click. Hover now says which one you are about to get.
 describe('SongSearchRail — hover forecasts what a click will do while locked (#89)', () => {
   const LOCKED = [
-    { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false },
-    { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: false }
+    { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false, isLive: true },
+    { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: false, isLive: false }
   ]
   const row = (title: string): HTMLButtonElement =>
     screen.getByText(title).closest('button') as HTMLButtonElement
 
-  it('shows a ghost NEXT? on a row that a click would arm', () => {
+  it('shows a ghost QUEUE? on a row that a click would arm', () => {
     render(<SongSearchRail {...baseProps} rows={LOCKED} locked />)
-    expect(screen.queryByText('NEXT?')).toBeNull()
+    expect(screen.queryByText('QUEUE?')).toBeNull()
     fireEvent.mouseEnter(row('Blessed Assurance'))
-    expect(screen.getByText('NEXT?')).toBeTruthy()
+    expect(screen.getByText('QUEUE?')).toBeTruthy()
     fireEvent.mouseLeave(row('Blessed Assurance'))
-    expect(screen.queryByText('NEXT?')).toBeNull()
+    expect(screen.queryByText('QUEUE?')).toBeNull()
   })
 
   it('leaves the live row alone — a click there only returns to base', () => {
     render(<SongSearchRail {...baseProps} rows={LOCKED} locked />)
     fireEvent.mouseEnter(row('Amazing Grace'))
-    expect(screen.queryByText('NEXT?')).toBeNull()
+    expect(screen.queryByText('QUEUE?')).toBeNull()
     expect(row('Amazing Grace').title).toBe('Already on screen')
   })
 
   it('does not forecast arming when nothing is live — a click there just selects', () => {
     render(<SongSearchRail {...baseProps} rows={LOCKED} />)
     fireEvent.mouseEnter(row('Blessed Assurance'))
-    expect(screen.queryByText('NEXT?')).toBeNull()
+    expect(screen.queryByText('QUEUE?')).toBeNull()
   })
 
-  it('keeps NEXT on the armed row and says the click would clear it', () => {
+  it('keeps QUEUED on the armed row and says the click would clear it', () => {
     const armed = LOCKED.map((r) => (r.id === 's2' ? { ...r, isArmed: true } : r))
     render(<SongSearchRail {...baseProps} rows={armed} locked />)
     fireEvent.mouseEnter(row('Blessed Assurance'))
-    expect(screen.getByText('NEXT')).toBeTruthy()
-    expect(screen.queryByText('NEXT?')).toBeNull()
-    expect(row('Blessed Assurance').title).toBe('Clear this — nothing queued next')
+    expect(screen.getByText('QUEUED')).toBeTruthy()
+    expect(screen.queryByText('QUEUE?')).toBeNull()
+    expect(row('Blessed Assurance').title).toBe('Queued. Click to clear it')
   })
 
   it('forecasts on the "also in lyrics" rows too — the same click, the same meaning', () => {
@@ -165,6 +165,42 @@ describe('SongSearchRail — hover forecasts what a click will do while locked (
       />
     )
     fireEvent.mouseEnter(row('Solid Rock'))
-    expect(screen.getByText('NEXT?')).toBeTruthy()
+    expect(screen.getByText('QUEUE?')).toBeTruthy()
+  })
+})
+
+describe('SongSearchRail: live and queued signals (rule 1, decision 7)', () => {
+  const T = themeFor('classic', 'dark')
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const row = (title: string): HTMLButtonElement => screen.getByText(title).closest('button') as HTMLButtonElement
+  const LIVE_ROW: SongRow = { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false, isLive: true }
+  const QUEUED_ROW: SongRow = { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: true, isLive: false }
+
+  it('the live song wears the red ring and a LIVE badge', () => {
+    render(<SongSearchRail {...baseProps} rows={[LIVE_ROW, QUEUED_ROW]} locked />)
+    expect(row('Amazing Grace').style.boxShadow).toBe(`inset 0 0 0 2px ${T.live}`)
+    expect(within(row('Amazing Grace')).getByText('LIVE')).toBeTruthy()
+  })
+
+  it('the queued song wears QUEUED in the track colour and no red', () => {
+    render(<SongSearchRail {...baseProps} rows={[LIVE_ROW, QUEUED_ROW]} locked />)
+    const badge = within(row('Blessed Assurance')).getByText('QUEUED') as HTMLElement
+    expect(badge.style.color).toBe(rgb(T.accent))
+    expect(row('Blessed Assurance').style.boxShadow).not.toContain(T.live)
+    expect(row('Blessed Assurance').title).toBe('Queued. Click to clear it')
+  })
+
+  it('a selected song that is not on screen gets no LIVE badge', () => {
+    render(<SongSearchRail {...baseProps} rows={[{ ...LIVE_ROW, isLive: false }]} />)
+    expect(within(row('Amazing Grace')).queryByText('LIVE')).toBeNull()
+  })
+
+  it('the rail eyebrow dot is the Songs colour, not Scripture blue', () => {
+    render(<SongSearchRail {...baseProps} />)
+    const dot = document.querySelector('[data-rail-eyebrow-dot]') as HTMLElement
+    expect(dot.style.background).toBe(rgb(T.accent))
   })
 })
