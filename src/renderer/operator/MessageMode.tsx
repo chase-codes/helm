@@ -2,12 +2,14 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
   type CSSProperties,
   type JSX,
   type MutableRefObject
 } from 'react';
 import type { ThemeMode } from './App';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from '../shared/useHelm';
 import { useTakeGuard } from './useTakeGuard';
@@ -26,6 +28,7 @@ import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
 import { filterPending, useDeferredRemove } from './useDeferredRemove';
 import { deleteMenuItems, useListSelection } from './useListSelection';
+import { clearSelectionRung } from './escapeLadder';
 import type { PanelWidthControl } from './usePanelWidth';
 
 /** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
@@ -53,6 +56,12 @@ export interface MessageKeyHandler {
   onGoLive: () => void;
   /** Delete/Backspace: remove the quote-schedule selection, if any (#90/#8). */
   onDelete: () => void;
+  /** Escape's clear-selection rung (grammar rule 9): drop the quote-schedule selection and
+   * report true, or false when none is on screen. */
+  clearSelection: () => boolean;
+  /** Registry actions SermonMode routes here while this track is on screen: `/` focuses the
+   * search, Mod+Backspace clears it, a digit picks quote-schedule row N (grammar rule 9). */
+  onAction: (a: ResolvedHotkey) => void;
 }
 export type MessageKeyRef = MutableRefObject<MessageKeyHandler | null>;
 
@@ -88,6 +97,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const [msg, setMsg] = useState<Message | null>(null);
   const [msgIdx, setMsgIdx] = useState(0);
   const [q, setQ] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [scope, setScope] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<QuoteScheduleItem[]>([]);
   // Carries the `scope` the results were FETCHED for, not just the rows: the quote rows are
@@ -393,6 +403,21 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         // so without this guard Delete would remove quotes the operator cannot see.
         if (norm(q)) return;
         if (sel.selectedIds.length > 0) removeQuotes(sel.selectedIds);
+      },
+      // Same visibility guard as onDelete: under a query the schedule is not on screen, so a
+      // selection the operator cannot see must not eat their Escape.
+      clearSelection: () => (norm(q) ? false : clearSelectionRung(sel)()),
+      onAction: (a) => {
+        if (a.id === 'focus.search') searchInputRef.current?.focus();
+        else if (a.id === 'field.clear') setQ('');
+        else if (a.id === 'item.jump' && a.digit) {
+          // A digit is a click on row N, so only while the schedule is the list on screen.
+          if (norm(q)) return;
+          const it = schedule[a.digit - 1];
+          if (!it) return;
+          sel.select(it.id);
+          selectQuote(it.msgId, it.ord);
+        }
       }
     };
     return () => {
@@ -560,6 +585,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         </div>
         <MessageSearchRail
           theme={T}
+          inputRef={searchInputRef}
           q={q}
           onQChange={setQ}
           scopeLabel={scopeTitle}

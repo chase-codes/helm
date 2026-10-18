@@ -203,6 +203,32 @@ describe('PreServiceMode', () => {
       expect(showNow).not.toHaveBeenCalled()
     })
   })
+  it('digit 2 selects card 2 and taps it, exactly as a click would', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { showCard } = installHelmStub(baseState)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Psalm 122:1')
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 2 }))
+    expect(showCard).toHaveBeenCalledWith(1)
+    expect(document.querySelector('[data-pre-card="b"]')?.getAttribute('data-selected')).toBe('true')
+  })
+
+  it('a digit past the last card does nothing', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { showCard } = installHelmStub(baseState)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Psalm 122:1')
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 9 }))
+    expect(showCard).not.toHaveBeenCalled()
+  })
+  it('numbers the cards', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Psalm 122:1')
+    expect(document.querySelector('[data-pre-card="b"] [data-row-number]')?.textContent).toBe('2')
+  })
 })
 
 describe('PreServiceMode — card removal speaks the in-service grammar (#86, #90)', () => {

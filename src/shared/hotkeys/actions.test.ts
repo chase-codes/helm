@@ -40,12 +40,12 @@ describe('sanitizeOverrides', () => {
     })
   })
 
-  it('drops entries keyed by a fixed action id (app.escape, song.verse, scripture.reading)', () => {
+  it('drops entries keyed by a fixed action id (app.escape, song.verse, item.jump)', () => {
     expect(
       sanitizeOverrides({
         'app.escape': ['Z'],
         'song.verse': ['A'],
-        'scripture.reading': ['B'],
+        'item.jump': ['B'],
         'song.bridge': ['C']
       })
     ).toEqual({ 'song.bridge': ['C'] })
@@ -77,5 +77,16 @@ describe('HOTKEY_ACTIONS', () => {
   it('focus.search ships both / and \\ as default bindings', () => {
     const action = HOTKEY_ACTIONS.find((a) => a.id === 'focus.search')!
     expect(action.defaults).toEqual(['/', '\\'])
+  })
+  it('digits are one global, fixed block: item.jump, with no Scripture-only twin', () => {
+    const jump = HOTKEY_ACTIONS.find((a) => a.id === 'item.jump')!
+    expect(jump.scope).toBe('global')
+    expect(jump.digitBlock).toBe(true)
+    expect(jump.fixed).toBe(true)
+    expect(HOTKEY_ACTIONS.find((a) => a.id === 'scripture.reading')).toBeUndefined()
+  })
+
+  it('focus.search says where there is no search to focus', () => {
+    expect(HOTKEY_ACTIONS.find((a) => a.id === 'focus.search')!.note).toMatch(/Slides and Pre-service/)
   })
 })

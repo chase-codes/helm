@@ -56,6 +56,7 @@ import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { PanelDivider } from './PanelDivider';
+import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
 export interface SermonModeProps {
   themeMode: ThemeMode;
@@ -1029,28 +1030,28 @@ export function SermonMode({
   useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
-      // Progressive back-out, the same ladder SongsMode implements (spec §3), minus the
-      // armed-switch rung Sermon doesn't have. Overlays first (the slides track owns two:
-      // the deck-fallback modal and the import popover; Settings is App's, handled above
-      // the mode layer), then leave a text field, and only then touch the screen — a
-      // typing operator must never black the screen with a stray Escape. (A first Escape
-      // with text in the scripture entry never even gets here: onEntryKeyDown clears the
-      // builder and stops propagation.) The blur/black rungs are deliberately not
-      // track-gated — blur covers whichever rail input is focused, and black is black.
-      onEscape: () => {
-        if (track === 'slides' && slidesKeyRef.current?.onEscape()) return true;
-        const el = document.activeElement as HTMLElement | null;
-        const tag = el?.tagName?.toLowerCase();
-        if (tag === 'input' || tag === 'textarea') {
-          el?.blur();
-          return true;
-        }
-        if (output === 'live') {
-          window.helm.presentation.setOutput('black');
-          return true;
-        }
-        return false;
-      },
+      // The shared Escape ladder (escapeLadder.ts, grammar rule 9). Overlays first (the
+      // slides track owns two: the deck-fallback modal and the import popover; the version
+      // picker closes itself, see useEscapeToClose; Settings is App's). Then a reference
+      // left half-built in the entry or a rail shift-tap range, then picked-out schedule
+      // rows, then the focused field, and only then the screen. A first Escape with text in
+      // the FOCUSED entry never reaches this: onEntryKeyDown clears the builder and stops
+      // propagation. Blur and take down are deliberately not track-gated.
+      onEscape: () =>
+        runEscapeLadder({
+          closeOverlay: () => track === 'slides' && (slidesKeyRef.current?.onEscape() ?? false),
+          cancelEdit: () => {
+            if (track !== 'scripture' || renderBuilder(builder) === '') return false;
+            setBuilder(initialBuilder());
+            return true;
+          },
+          // Slides has no rung: its media list is a library with no multi-select (decision 2).
+          clearSelection: () => {
+            if (track === 'message') return messageKeyRef.current?.clearSelection() ?? false;
+            return track === 'scripture' && clearSelectionRung(sel)();
+          },
+          takeDown: takeDownWhenLive(output, takeDown)
+        }),
       onArrow: (dir) => {
         if (track === 'scripture') stepVerse(dir);
         else if (track === 'message') messageKeyRef.current?.onArrow(dir);
@@ -1073,9 +1074,17 @@ export function SermonMode({
         } else if (track === 'message') messageKeyRef.current?.onDelete();
         else if (track === 'slides') slidesKeyRef.current?.onDelete();
       },
+      // Registry actions follow the track on screen, like arrows, Enter and Delete above.
       onAction: (a: ResolvedHotkey) => {
-        if (track !== 'scripture') return;
-        if (a.id === 'scripture.reading' && a.digit) {
+        if (track === 'message') {
+          messageKeyRef.current?.onAction(a);
+          return;
+        }
+        if (track === 'slides') {
+          slidesKeyRef.current?.onAction(a);
+          return;
+        }
+        if (a.id === 'item.jump' && a.digit) {
           const r = schedule[a.digit - 1];
           if (r) jumpToReading(r);
         } else if (a.id === 'focus.search') {

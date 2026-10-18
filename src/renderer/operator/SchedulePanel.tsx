@@ -7,6 +7,7 @@ import { DangerGhostButton } from './DangerGhostButton';
 import { ListEmpty } from './ListEmpty';
 import { ScriptureSearchResults, type ScriptureSearchState } from './ScriptureSearchResults';
 import { MONO } from '../shared/fonts';
+import { RowNumber } from './RowNumber';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
@@ -224,7 +225,7 @@ export function SchedulePanel({
                     No verses yet — enter a reference above and add it with <b>+ Add</b>.
                   </ListEmpty>
                 )}
-                {rows.map((r) => (
+                {rows.map((r, i) => (
                   <button
                     key={r.id}
                     style={rowStyle(r.isCurrent, r.isSelected)}
@@ -234,6 +235,7 @@ export function SchedulePanel({
                     onDoubleClick={r.onDoubleClick}
                     onContextMenu={r.onContextMenu}
                   >
+                    <RowNumber n={i + 1} color={T.faint} />
                     <div style={iconStyle}>&#10013;</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>

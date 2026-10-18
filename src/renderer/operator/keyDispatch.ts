@@ -6,9 +6,9 @@ export interface KeyDispatchCtx {
   settingsOpen: boolean;
   closeSettings: () => void;
   handler: ModeKeyHandler | null;
-  /** Which mode-scope bindings are in play: Songs page → 'songs', Sermon page →
-   * 'scripture' (SermonMode ignores scripture actions on its message/slides tracks),
-   * Pre-service → null (global only). */
+  /** Which mode-scope bindings are in play: Songs page → 'songs' (its Verse 1-9 block
+   * shadows the global item.jump digits), Sermon page → 'scripture', Pre-service → null
+   * (global only). Global actions, digits included, reach every page's onAction. */
   scope: 'songs' | 'scripture' | null;
   overrides: HotkeyOverrides;
   onAppAction: (id: AppActionId) => void;
