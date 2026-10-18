@@ -8,14 +8,17 @@ import type { ScreenTone } from '../../shared/presentation/screenOwner';
  * would become a function of the song library, which is what the issue is about. */
 export const TRANSPORT_VERB_W = '150px';
 
-/** The three looks a transport verb can wear:
- *  - `go`    — green, the only colour that ever means "put this on screen"
- *  - `down`  — the live tint, salmon-on-tinted rather than filled, so the panic control
- *              reads as urgent without out-shouting the primary verb (same `1c`/`55`
- *              formula the on-air bars use, borrowed from PreServiceMode)
- *  - `ghost` — nothing to do in this state; the slot holds its ground, disabled
+/** The four looks a transport verb can wear:
+ *  - `go`      — green, the only colour that ever means "put this on screen"
+ *  - `down`    — the live tint, salmon-on-tinted rather than filled, so the panic control
+ *                reads as urgent without out-shouting the primary verb (same `1c`/`55`
+ *                formula the on-air bars use, borrowed from PreServiceMode)
+ *  - `neutral` — an enabled verb that changes neither what is on screen nor whether
+ *                anything is: Pre-service's Stop loop, which halts the rotation and
+ *                leaves the current card lit. Accent, never green or red (rule 1).
+ *  - `ghost`   — nothing to do in this state; the slot holds its ground, disabled
  */
-export type VerbKind = 'go' | 'down' | 'ghost';
+export type VerbKind = 'go' | 'down' | 'neutral' | 'ghost';
 
 export function primaryBtnStyle(T: Theme, kind: VerbKind): CSSProperties {
   const base: CSSProperties = {
@@ -33,6 +36,7 @@ export function primaryBtnStyle(T: Theme, kind: VerbKind): CSSProperties {
   };
   if (kind === 'go') return { ...base, background: T.go, color: '#fff' };
   if (kind === 'down') return { ...base, ...tintChip(T.live) };
+  if (kind === 'neutral') return { ...base, background: T.accent, color: T.accentInk };
   return {
     ...base,
     background: 'transparent',
@@ -59,6 +63,16 @@ export function transportGhostBtn(T: Theme): CSSProperties {
     justifyContent: 'center',
     gap: '7px'
   };
+}
+
+/** A page's own verb that sits LEFT of the spacer (Pre-service's secondary verb).
+ * Content-sized like Prev/Next, because nothing to its right depends on its width; an
+ * accent outline when it would do something, the faint ghost when it would not. */
+export function secondaryVerbStyle(T: Theme, enabled: boolean): CSSProperties {
+  const base: CSSProperties = { ...transportGhostBtn(T), whiteSpace: 'nowrap' };
+  return enabled
+    ? { ...base, background: 'transparent', color: T.accent, boxShadow: `inset 0 0 0 1.5px ${T.accent}` }
+    : { ...base, color: T.faint, cursor: 'default' };
 }
 
 /** The on-air status chip: dot + mono label on the house tint (#137). This base carries

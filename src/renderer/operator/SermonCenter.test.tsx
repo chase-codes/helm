@@ -249,3 +249,17 @@ describe('SermonCenter: live and queued signals (rule 1, decision 7)', () => {
     expect(onGoLive).toHaveBeenCalledTimes(1)
   })
 })
+
+// The status chip sits at the top right of the centre pane on every page, as on Songs
+// and Pre-service.
+describe('SermonCenter, the status chip sits top right', () => {
+  it.each(['verse', 'quote', 'slide'] as const)(
+    'right-aligns the chip above the %s hero',
+    (variant) => {
+      render(<SermonCenter {...baseProps(variant)} />)
+      const chip = document.querySelector('[data-status-chip]') as HTMLElement
+      expect(chip).toBeTruthy()
+      expect(chip.style.alignSelf).toBe('flex-end')
+    }
+  )
+})
