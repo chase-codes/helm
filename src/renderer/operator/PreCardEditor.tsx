@@ -7,12 +7,13 @@ import { verseText } from '../../shared/scripture/preVerse';
 import { cleanListPoints } from '../../shared/preservice/listPoints';
 import { preSlideFor } from '../../shared/preservice/cards';
 import { SlideCanvas } from '../shared/SlideCanvas';
+import { INSTALL_HINT } from '../../shared/scripture/labels';
 
 export interface PreCardEditorProps {
   card: PreCard | null;
   onClose: () => void;
   /** Removal is PreServiceMode's to perform, not this modal's: it owns the rail's undo
-   * affordance, and a card removed from here must land in the same 5-second "Removed —
+   * affordance, and a card removed from here must land in the same 5-second "Deleted …
    * Undo" bar as one removed by right-click or the Delete key (#86). */
   onRemove: (card: PreCard) => void;
 }
@@ -52,7 +53,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
     try {
       const manifest = await window.helm.bibles.manifest();
       const primary = manifest.find((m) => m.installed);
-      if (!primary) { setLookupMsg('Install a Bible first (Settings → Bibles)'); return; }
+      if (!primary) { setLookupMsg(INSTALL_HINT); return; }
       const chapter = await window.helm.bibles.getChapter(parsed.book, parsed.ch);
       if (chapter.verseCount === 0) { setLookupMsg(`${parsed.book} has no chapter ${parsed.ch} in ${primary.abbr}`); return; }
       const text = verseText(chapter, parsed.from, primary.id);
@@ -317,7 +318,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
       <div style={{ display: 'flex', gap: '10px', marginTop: '20px', alignItems: 'center' }}>
         {!isNew && (
           <button style={removeStyle} onClick={remove}>
-            Remove card
+            Delete card
           </button>
         )}
         <div style={{ flex: 1 }} />

@@ -26,6 +26,7 @@ import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
+import { railHint } from './railHints';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -63,8 +64,17 @@ function iconFor(item: MediaItem): string {
   return '▣';
 }
 
+/** What kind of file a deck came from. Decks keep their source filename as the title
+ * (main/mediaImport.ts), so the extension says it; a PDF is not a PowerPoint. */
+function deckKind(title: string): string {
+  const ext = title.slice(title.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'pdf') return 'PDF';
+  if (ext === 'ppt' || ext === 'pptx') return 'PowerPoint';
+  return 'Presentation';
+}
+
 function metaFor(item: MediaItem): string {
-  if (item.type === 'deck') return `PowerPoint · ${item.slides.length} ${item.slides.length === 1 ? 'slide' : 'slides'}`;
+  if (item.type === 'deck') return `${deckKind(item.title)} · ${item.slides.length} ${item.slides.length === 1 ? 'slide' : 'slides'}`;
   if (item.type === 'video') return 'Video clip';
   return 'Image';
 }
@@ -560,6 +570,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         variant="slide"
         accent={T.sermon}
         output={output}
+        liveKey={liveKey}
         cuedIsLive={cuedIsLive}
         heroLabel=""
         slide={curSlide}
@@ -568,7 +579,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         ondeckTagColor={ondeckTagColor}
         ondeckTitle={ondeckTitle}
         ondeckPreview={ondeckPreview}
-        nextLabel={'Next slide ›'}
+        unit="slide"
         onPrev={() => stepSlide(-1)}
         onNext={() => stepSlide(1)}
         onGoLive={goLive}
@@ -588,7 +599,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
               <div style={{ fontFamily: MONO, fontSize: '10px', color: T.sermon }}>{slides.length} slides</div>
             </div>
             <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45 }}>
-              Tap any slide to put it on screen — jump anywhere, not just next.
+              {railHint('slide')}
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -657,12 +668,12 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       {deckFallback && (
         <ModalShell onClose={() => setDeckFallback(null)} variant="card" width="100%" maxWidth="420px">
           <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>
-            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import PowerPoint"}
+            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import that file"}
           </div>
           <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5 }}>
             {deckFallback === 'no-libreoffice'
               ? 'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
-              : "Couldn't convert that PowerPoint file."}
+              : "Couldn't convert that presentation or PDF."}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
             <button style={deckFallbackCloseBtnStyle} onClick={() => setDeckFallback(null)}>

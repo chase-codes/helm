@@ -3,6 +3,7 @@ import type { Theme } from '../../shared/theme';
 import { railBadgeStyle, railLabelStyle, railRowStyle, railTextStyle } from './railTint';
 import type { MessageParagraph } from '../../shared/types';
 import { MONO } from '../shared/fonts';
+import { railHint } from './railHints';
 
 export interface ParagraphRailProps {
   theme: Theme;
@@ -19,7 +20,7 @@ export interface ParagraphRailProps {
   onActivate: (ord: number) => void;
 }
 
-const HINT = 'Planned quotes are highlighted. Tap any paragraph — and keep reading right past the plan.';
+const HINT = railHint('paragraph');
 
 /** Right rail for the Message track: one card per paragraph in the current tape,
  * tinted by planned/cued/live tier, click jumps `msgIdx` (MessageMode's cue effect

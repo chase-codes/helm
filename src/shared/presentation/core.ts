@@ -98,7 +98,7 @@ export function showLive(st: PresentationState, key: string, slide: Slide): Pres
 }
 /** Going 'live' with no live key is refused and lands on 'black' instead: there is nothing
  * to show, so the audience sees a dark screen either way — but 'live'+null is an incoherent
- * state (badges read it as ANOTHER FLOW LIVE, and BUG-018's tap rule can't hold in it, see
+ * state (badges read it as LIVE FROM <PAGE>, and BUG-018's tap rule can't hold in it, see
  * BUG-021). The logo toggles (Songs/Sermon/Message/Slides) all route through here, so the
  * state can no longer be produced. */
 export function setOutput(st: PresentationState, mode: OutputMode): PresentationState {

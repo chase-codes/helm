@@ -67,7 +67,7 @@ describe('SongSearchRail', () => {
   it('renders the import row above the song list and fires onImportSongs', () => {
     const onImportSongs = vi.fn()
     render(<SongSearchRail {...baseProps} onImportSongs={onImportSongs} />)
-    const imp = screen.getByText('Import a song library')
+    const imp = screen.getByText('+ Import a song library')
     fireEvent.click(imp)
     expect(onImportSongs).toHaveBeenCalledTimes(1)
     // Import row must precede the first song row in DOM order (fixed header, not list bottom).
@@ -90,7 +90,7 @@ describe('SongSearchRail', () => {
     render(<SongSearchRail {...baseProps} rows={[]} libraryEmpty />)
     const empty = screen.getByText(/No songs yet/)
     expect(empty.textContent).toMatch(/\+ Add a song/)
-    expect(empty.textContent).toMatch(/Import a song library/)
+    expect(empty.textContent).toMatch(/\+ Import a song library/)
   })
 
   it('shows no empty state while the library has rows', () => {
@@ -104,6 +104,12 @@ describe('SongSearchRail', () => {
     )
     expect(screen.getByText(/No match for/)).toBeTruthy()
     expect(screen.queryByText(/No songs yet/)).toBeNull()
+  })
+
+  it('heads the rail SONG LIBRARY, like the other rails name their list', () => {
+    render(<SongSearchRail {...baseProps} />)
+    expect(screen.getByText('SONG LIBRARY')).toBeTruthy()
+    expect(screen.queryByText(/FIND A SONG/)).toBeNull()
   })
 })
 

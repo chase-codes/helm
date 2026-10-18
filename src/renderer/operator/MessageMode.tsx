@@ -606,6 +606,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         variant="quote"
         accent={T.message}
         output={output}
+        liveKey={liveKey}
         cuedIsLive={cuedIsLive}
         heroLabel={heroLabel}
         quoteText={quoteText}
@@ -614,7 +615,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         ondeckTagColor={ondeckTagColor}
         ondeckTitle={ondeckTitle}
         ondeckPreview={ondeckPreview}
-        nextLabel={'Next ¶ ›'}
+        unit="paragraph"
         onPrev={() => stepPara(-1)}
         onNext={() => stepPara(1)}
         onGoLive={goLive}
