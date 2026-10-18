@@ -37,12 +37,12 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   // expressible, since eventToBinding drops Shift for printable keys.
   { id: 'song.search', label: 'Song search', scope: 'global', defaults: ['Mod+L'] },
   { id: 'scripture.lookup', label: 'Scripture lookup', scope: 'global', defaults: ['Mod+K'] },
-  { id: 'displays.release', label: 'Release / take screens', scope: 'global', defaults: ['Mod+B'] },
+  { id: 'displays.release', label: 'Release / take back screens', scope: 'global', defaults: ['Mod+B'] },
   { id: 'focus.search', label: 'Focus search / entry', scope: 'global', defaults: ['/', '\\'] },
   { id: 'field.clear', label: 'Clear field', scope: 'global', defaults: ['Mod+Backspace', 'Mod+Delete'] },
   // Enter only (#52): Space went live too, and a stray thumb on the space bar mid-service
   // is exactly the accidental take the pilot church asked to be rid of.
-  { id: 'go.live', label: 'Go live / take down', scope: 'global', defaults: ['Enter'] },
+  { id: 'go.live', label: 'Go live', scope: 'global', defaults: ['Enter'] },
   { id: 'nav.next', label: 'Next', scope: 'global', defaults: ['ArrowRight', 'ArrowDown'] },
   { id: 'nav.prev', label: 'Previous', scope: 'global', defaults: ['ArrowLeft', 'ArrowUp'] },
   { id: 'item.delete', label: 'Delete selected', scope: 'global', defaults: ['Delete', 'Backspace'] },

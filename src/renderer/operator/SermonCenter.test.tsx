@@ -11,6 +11,7 @@ afterEach(cleanup)
 const baseProps = (variant: SermonCenterProps['variant']): SermonCenterProps => ({
   theme: themeFor('classic', 'dark'),
   output: 'black',
+  liveKey: null,
   cuedIsLive: false,
   accent: '#c9a55c',
   heroLabel: 'Label',
@@ -18,7 +19,7 @@ const baseProps = (variant: SermonCenterProps['variant']): SermonCenterProps => 
   ondeckTagColor: '#c9a55c',
   ondeckTitle: 'Up next',
   ondeckPreview: 'Preview',
-  nextLabel: 'Next slide ›',
+  unit: 'slide',
   onPrev: () => {},
   onNext: () => {},
   onGoLive: () => {},
@@ -128,6 +129,11 @@ describe('SermonCenter — the transport is stable ground (#85)', () => {
     expect(btn(/Take down/).style.width).toBe(btn(/Go live/).style.width)
     expect(btn(/Go live/).style.width).toBeTruthy()
   })
+
+  it('titles Take down "Black the audience screen", the one tooltip every page uses', () => {
+    render(<SermonCenter {...baseProps('verse')} output="live" />)
+    expect(btn(/Take down/).getAttribute('title')).toBe('Black the audience screen')
+  })
 })
 
 // #47: the hero label is the leader's handle on what's on screen; when cued-but-not-live
@@ -155,5 +161,62 @@ describe('SermonCenter — hero labels readable when cued but not live (#47)', (
   it('the live hero label still uses the track accent', () => {
     render(<SermonCenter {...baseProps('verse')} cuedIsLive />)
     expect(screen.getByText('Label').style.color).toBe(rgb('#c9a55c'))
+  })
+})
+
+// Decision 6: the chip names the page that owns the screen, and only this page's own
+// content is red. Another page's content is faint: the Header already carries the red.
+describe('SermonCenter: status chip names the page that owns the screen', () => {
+  const T = themeFor('classic', 'dark')
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const chip = (text: string): HTMLElement => screen.getByText(text).parentElement as HTMLElement
+
+  it("reads LIVE ON SCREEN, red, for any Sermon track's content", () => {
+    render(<SermonCenter {...baseProps('quote')} output="live" liveKey="scr:John:3:16" />)
+    expect(chip('LIVE ON SCREEN').style.color).toBe(rgb(T.live))
+  })
+
+  it('reads LIVE FROM SONGS, faint, while a song is up', () => {
+    render(<SermonCenter {...baseProps('verse')} output="live" liveKey="song:s1:0" />)
+    expect(chip('LIVE FROM SONGS').style.color).toBe(rgb(T.faint))
+    expect(screen.queryByText('LIVE ON SCREEN')).toBeNull()
+  })
+
+  it('reads LIVE FROM PRE-SERVICE while the loop is up', () => {
+    render(<SermonCenter {...baseProps('slide')} output="live" liveKey="pre:c1" />)
+    expect(screen.getByText('LIVE FROM PRE-SERVICE')).toBeTruthy()
+  })
+
+  it('reads NOTHING ON SCREEN, dim, when black', () => {
+    render(<SermonCenter {...baseProps('verse')} output="black" />)
+    expect(chip('NOTHING ON SCREEN').style.color).toBe(rgb(T.dim))
+  })
+})
+
+// Decision 5: the same two labels on every page, the unit only in the tooltip.
+describe('SermonCenter: Previous / Next', () => {
+  it('labels the steps ‹ Previous / Next › and names the unit in the tooltip', () => {
+    const onPrev = vi.fn()
+    const onNext = vi.fn()
+    render(<SermonCenter {...baseProps('verse')} unit="verse" onPrev={onPrev} onNext={onNext} />)
+    const prev = screen.getByRole('button', { name: '‹ Previous' })
+    const next = screen.getByRole('button', { name: 'Next ›' })
+    expect(prev.getAttribute('title')).toBe('Previous verse')
+    expect(next.getAttribute('title')).toBe('Next verse')
+    fireEvent.click(prev)
+    fireEvent.click(next)
+    expect(onPrev).toHaveBeenCalledTimes(1)
+    expect(onNext).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SermonCenter: on-deck strip', () => {
+  it('reads UP NEXT and promises no tap it does not answer', () => {
+    render(<SermonCenter {...baseProps('verse')} />)
+    expect(screen.getByText('UP NEXT')).toBeTruthy()
+    expect(screen.queryByText(/TAP/)).toBeNull()
   })
 })

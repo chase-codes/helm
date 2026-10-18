@@ -583,7 +583,7 @@ export function SermonMode({
     setScrV(v);
   };
 
-  // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog):
+  // Immediate remove + a self-clearing "Deleted … Undo" affordance (no blocking dialog):
   // the in-service half of the destructive-action grammar (#86). The rows leave the rail on
   // the keystroke rather than after an IPC round trip — mid-service, a delete that visibly
   // lags is worse than one that optimistically leads, and `undo.commit` resyncs if the
@@ -1013,7 +1013,7 @@ export function SermonMode({
     ondeckPreview = previewOf(nv);
   } else {
     ondeckTitle = `End of ${scrBook} ${scrCh}`;
-    ondeckPreview = 'Pick the next verse on the left';
+    ondeckPreview = 'Type the next reference, or pick a reading on the left';
   }
 
   // Registers this mode's keyboard delegate only while active — App keeps both Songs
@@ -1175,6 +1175,7 @@ export function SermonMode({
             variant="verse"
             accent={T.scripture}
             output={output}
+            liveKey={liveKey}
             cuedIsLive={cuedIsLive}
             heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
             cols={liveCols}
@@ -1182,7 +1183,7 @@ export function SermonMode({
             ondeckTagColor={ondeckTagColor}
             ondeckTitle={ondeckTitle}
             ondeckPreview={ondeckPreview}
-            nextLabel={'Next verse ›'}
+            unit="verse"
             versionPicker={versionPicker}
             onPrev={() => stepVerse(-1)}
             onNext={() => stepVerse(1)}

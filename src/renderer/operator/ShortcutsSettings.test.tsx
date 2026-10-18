@@ -77,4 +77,15 @@ describe('ShortcutsSettings', () => {
     expect(screen.queryByRole('button', { name: /rebind Close \/ clear/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /rebind Jump to Verse/i })).toBeNull()
   })
+
+  it('uses the vocabulary: Go live, take back screens, tab names for pages', () => {
+    renderPane()
+    expect(screen.getByText('Go live')).toBeTruthy()
+    expect(screen.queryByText('Go live / take down')).toBeNull()
+    expect(screen.getByText('Release / take back screens')).toBeTruthy()
+    expect(screen.getByText('Delete selected')).toBeTruthy()
+    expect(screen.getByText('Songs page')).toBeTruthy()
+    expect(screen.getByText('Sermon page · Scripture track')).toBeTruthy()
+    expect(screen.queryByText('Scripture page')).toBeNull()
+  })
 })

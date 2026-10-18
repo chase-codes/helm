@@ -11,7 +11,7 @@ export interface UndoToastProps {
   accent?: string;
 }
 
-/** Transient "Removed <label> — Undo" bar. Track-agnostic: drop it into any list panel. */
+/** Transient "Deleted <label>" bar with Undo. Track-agnostic: drop it into any list panel. */
 export function UndoToast({ label, onUndo, accent }: UndoToastProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const barStyle: CSSProperties = {
@@ -28,7 +28,7 @@ export function UndoToast({ label, onUndo, accent }: UndoToastProps): JSX.Elemen
   return (
     <div style={barStyle}>
       <span style={{ flex: 1, fontSize: '12px', color: T.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        Removed {label}
+        Deleted {label}
       </span>
       <button style={{ fontSize: '12px', fontWeight: 700, color: accent ?? T.accent, padding: '2px 4px' }} onClick={onUndo}>
         Undo

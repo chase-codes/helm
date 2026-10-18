@@ -4,6 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ChapterRail, type ChapterRailProps } from './ChapterRail'
 import { themeFor } from '../../shared/theme'
+import { railHint } from './railHints'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -70,6 +71,11 @@ describe('ChapterRail', () => {
     fireEvent.click(screen.getByText('Verse 3'))
     expect(onSelectVerse).toHaveBeenCalledWith(3, false)
     expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  it('explains its gestures in the shared rail sentence, with the range clause', () => {
+    render(<ChapterRail {...baseProps} />)
+    expect(screen.getByText(railHint('verse', { range: 'build a range' }))).toBeTruthy()
   })
 })
 

@@ -7,6 +7,7 @@ import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { PreCard, PreState, PresentationState } from '../../shared/types'
 import { settleAndClear } from '../../test/mocks'
+import { railHint } from './railHints'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -139,31 +140,31 @@ describe('PreServiceMode', () => {
   })
 
   // BUG-008: these badges must follow the real presentation state, never the engine's
-  // `engaged` flag — the two diverge exactly when the operator most needs the truth.
+  // `engaged` flag. The words are the shared ones from docs/ux-vocabulary.md.
   describe('screen-ownership badges', () => {
-    it('reports OFF SCREEN and arms the selection when nothing is live', async () => {
+    it('reports NOTHING ON SCREEN and cues the selection when nothing is live', async () => {
       installHelmStub(baseState)
       renderMode()
-      expect(await screen.findByText('OFF SCREEN')).toBeTruthy()
-      // Two by design: the row badge and the preview header both mark the armed card.
-      expect(screen.getAllByText('● ARMED')).toHaveLength(2)
-      expect(screen.queryByText('● ON SCREEN')).toBeNull()
+      expect(await screen.findByText('NOTHING ON SCREEN')).toBeTruthy()
+      // Two by design: the row badge and the preview header both mark the cued card.
+      expect(screen.getAllByText('● CUED')).toHaveLength(2)
+      expect(screen.queryByText('● LIVE')).toBeNull()
     })
 
-    it('does not claim the screen while a song is live', async () => {
+    it('names the page that owns the screen while a song is live', async () => {
       installHelmStub({ ...baseState, engaged: true }, SONG_LIVE)
       renderMode()
-      expect(await screen.findByText('ANOTHER FLOW LIVE')).toBeTruthy()
-      expect(screen.queryByText('● ON SCREEN')).toBeNull()
-      expect(screen.queryByText('PROJECTING')).toBeNull()
+      expect(await screen.findByText('LIVE FROM SONGS')).toBeTruthy()
+      expect(screen.queryByText('● LIVE')).toBeNull()
+      expect(screen.queryByText('LIVE ON SCREEN')).toBeNull()
     })
 
-    it('marks the genuinely live card ON SCREEN and stops arming it', async () => {
+    it('marks the genuinely live card LIVE and stops cueing it', async () => {
       installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
       renderMode()
-      expect(await screen.findByText('PROJECTING')).toBeTruthy()
-      expect(screen.getByText('● ON SCREEN')).toBeTruthy()
-      expect(screen.queryByText('● ARMED')).toBeNull()
+      expect(await screen.findByText('LIVE ON SCREEN')).toBeTruthy()
+      expect(screen.getByText('● LIVE')).toBeTruthy()
+      expect(screen.queryByText('● CUED')).toBeNull()
     })
   })
 
@@ -203,6 +204,15 @@ describe('PreServiceMode', () => {
       expect(showNow).not.toHaveBeenCalled()
     })
   })
+
+  it('speaks the shared rail sentence and says click, not tap', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+    expect(screen.getByText(new RegExp(railHint('card', { range: 'select a range' }).replace(/[.?]/g, '\\$&')))).toBeTruthy()
+    expect(screen.getByText(/Once pre-service is live, a click switches cards/)).toBeTruthy()
+    expect(screen.queryByText(/[Tt]ap a card/)).toBeNull()
+  })
 })
 
 describe('PreServiceMode — card removal speaks the in-service grammar (#86, #90)', () => {
@@ -231,7 +241,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     // Immediate, NOT deferred: the loop lives in main, and a card left there could still
     // rotate onto the audience screen after the operator removed it.
     expect(removeCard).toHaveBeenCalledWith('c')
-    expect(await screen.findByText(/Removed/)).toBeTruthy()
+    expect(await screen.findByText(/Deleted/)).toBeTruthy()
   })
 
   it('undo restores the card at its original index', async () => {
@@ -259,12 +269,12 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     try {
       fireEvent.contextMenu(rowFor('Announcements'))
       fireEvent.click(screen.getByText('Delete'))
-      expect(screen.getByText(/Removed/)).toBeTruthy()
+      expect(screen.getByText(/Deleted/)).toBeTruthy()
 
       act(() => {
         vi.advanceTimersByTime(5000)
       })
-      expect(screen.queryByText(/Removed/)).toBeNull()
+      expect(screen.queryByText(/Deleted/)).toBeNull()
       expect(restoreCard).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
@@ -349,16 +359,16 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     expect(keyHandlerRef.current?.onEscape()).toBe(false)
   })
 
-  it('Remove card in the editor lands in the same undo bar', async () => {
+  it('Delete card in the editor lands in the same undo bar', async () => {
     const { removeCard } = installHelmStub(THREE)
     renderMode()
     await screen.findByText('Announcements')
 
     fireEvent.click(within(rowFor('Announcements')).getByTitle('Edit card'))
-    fireEvent.click(await screen.findByText('Remove card'))
+    fireEvent.click(await screen.findByText('Delete card'))
 
     expect(removeCard).toHaveBeenCalledWith('c')
-    expect(await screen.findByText(/Removed/)).toBeTruthy()
+    expect(await screen.findByText(/Deleted/)).toBeTruthy()
   })
 
   it('+ Add a card sits at the top of the rail, above the cards', async () => {
@@ -432,7 +442,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     fireEvent.click(rowFor('Logo'))
     act(() => keyHandlerRef.current?.onDelete?.())
     expect(removeCard).not.toHaveBeenCalled()
-    expect(screen.queryByText(/Removed/)).toBeNull()
+    expect(screen.queryByText(/Deleted/)).toBeNull()
   })
 })
 
@@ -493,27 +503,35 @@ describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => 
   describe('on-air colour', () => {
     // Red means "the congregation sees this" on every other page. Pinned against a
     // second family so a re-hard-coded constant can't pass by matching one palette.
-    it.each(['classic', 'contrast'] as const)('paints PROJECTING with %s live', async (family) => {
+    it.each(['classic', 'contrast'] as const)('paints LIVE ON SCREEN with %s live', async (family) => {
       const theme = themeFor(family, 'dark')
       installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
       const { container } = renderMode({ current: null }, theme)
 
-      const bar = (await screen.findByText('PROJECTING')).closest('div') as HTMLElement
+      const bar = (await screen.findByText('LIVE ON SCREEN')).closest('div') as HTMLElement
       expect(bar.style.color).toBe(rgb(theme.live))
       const dot = bar.querySelector('span') as HTMLElement
       expect(dot.style.background).toBe(rgb(theme.live))
       expect(container.innerHTML).not.toContain('3fb950')
     })
 
-    // The bar reports THIS page's claim on the screen; the header carries the global
-    // on-air state. Off screen stays quiet rather than borrowing the live red.
-    it('stays faint while pre-service does not own the screen', async () => {
+    // Another page's content is faint: the header carries the global on-air red.
+    it('stays faint while another page owns the screen', async () => {
+      const theme = themeFor('classic', 'dark')
+      installHelmStub(baseState, SONG_LIVE)
+      renderMode({ current: null }, theme)
+
+      const bar = (await screen.findByText('LIVE FROM SONGS')).closest('div') as HTMLElement
+      expect(bar.style.color).toBe(rgb(theme.faint))
+    })
+
+    it('uses the shared black when nothing is on screen', async () => {
       const theme = themeFor('classic', 'dark')
       installHelmStub(baseState, NOTHING_LIVE)
       renderMode({ current: null }, theme)
 
-      const bar = (await screen.findByText('OFF SCREEN')).closest('div') as HTMLElement
-      expect(bar.style.color).toBe(rgb(theme.faint))
+      const bar = (await screen.findByText('NOTHING ON SCREEN')).closest('div') as HTMLElement
+      expect(bar.style.color).toBe(rgb(theme.dim))
     })
   })
 
@@ -554,6 +572,13 @@ describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => 
       expect(takeDownBtn().disabled).toBe(false)
       fireEvent.click(takeDownBtn())
       expect(setOutput).toHaveBeenCalledWith('black')
+    })
+
+    it('titles itself "Black the audience screen"', async () => {
+      installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
+      renderMode()
+      await screen.findByText('LIVE ON SCREEN')
+      expect(takeDownBtn().getAttribute('title')).toBe('Black the audience screen')
     })
   })
 
