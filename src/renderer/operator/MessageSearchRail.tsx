@@ -2,6 +2,7 @@ import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent }
 import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
+import { DangerGhostButton } from './DangerGhostButton';
 import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
 
@@ -57,6 +58,13 @@ export interface MessageSearchRailProps {
   hasTapes: boolean;
   /** Opens Settings, where message import lives — the affordance the empty state names. */
   onImportMessages: () => void;
+  /** The quote schedule's add chip: files the cued paragraph, as Scripture's `+ Add <ref>`
+   * files the cued verse. Null while no tape is loaded. `planned` ghosts it in place (same
+   * footprint, rule 5) when that paragraph is already in the schedule. */
+  add?: { label: string; onAdd: () => void; planned: boolean } | null;
+  /** Clear-schedule control (#86), same as Scripture's: renders only with rows, and the
+   * caller routes it through the same removeMany + undo as a row delete. */
+  onClearAll?: () => void;
 }
 
 /** Body of the Message track's left rail: scope chip + search box, TAPES/QUOTES search
@@ -76,7 +84,9 @@ export function MessageSearchRail({
   tapePlayer,
   undo,
   hasTapes,
-  onImportMessages
+  onImportMessages,
+  add,
+  onClearAll
 }: MessageSearchRailProps): JSX.Element {
   const schedInputStyle: CSSProperties = {
     display: 'flex',
@@ -140,23 +150,41 @@ export function MessageSearchRail({
         : 'none',
     userSelect: 'none'
   });
-  // The Slides rail's header verb, character-exact — import is rail chrome here too,
-  // not empty-state furniture (the deviation the other two rails never had).
-  const importHeaderBtnStyle: CSSProperties = {
+  // Songs' import row: the secondary action under the add chip. The list header's right
+  // slot is Clear all's, as on Scripture.
+  const importRowStyle: CSSProperties = {
+    width: '100%',
     height: '26px',
-    padding: '0 10px',
+    marginTop: '5px',
     borderRadius: '8px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '12px',
+    fontSize: '11.5px',
     fontWeight: 600,
-    background: 'transparent',
-    // Must survive the rail's 200px minimum in one piece — the heading beside it gives
-    // way instead.
-    whiteSpace: 'nowrap',
-    flexShrink: 0
+    color: T.faint,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'transparent'
   };
+  // Scripture's add chip (SchedulePanel's schedAddStyle) in the message colour.
+  const addChipStyle = (planned: boolean): CSSProperties => ({
+    width: '100%',
+    height: '34px',
+    marginTop: '8px',
+    borderRadius: '9px',
+    background: `${T.message}22`,
+    color: T.message,
+    fontSize: '12.5px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 10px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    opacity: planned ? 0.45 : 1,
+    cursor: planned ? 'default' : 'pointer'
+  });
   const quoteRowStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
   const quoteTitleStyle: CSSProperties = { fontWeight: 600, fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const quotePreviewStyle: CSSProperties = {
@@ -205,6 +233,19 @@ export function MessageSearchRail({
             placeholder={placeholder}
           />
         </div>
+        {add && (
+          <button
+            style={addChipStyle(add.planned)}
+            onClick={add.onAdd}
+            disabled={add.planned}
+            title={add.planned ? 'Already in the quote schedule' : undefined}
+          >
+            {add.label}
+          </button>
+        )}
+        <button style={importRowStyle} onClick={onImportMessages}>
+          + Import
+        </button>
       </div>
 
       {hasSearch ? (
@@ -242,22 +283,23 @@ export function MessageSearchRail({
             <div style={{ ...sectionHeaderStyle(''), minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="Quote schedule">
               QUOTE SCHEDULE
             </div>
-            <button style={importHeaderBtnStyle} onClick={onImportMessages}>
-              + Import
-            </button>
+            {onClearAll && scheduleRows.length > 0 && (
+              <DangerGhostButton
+                label="Clear all"
+                onClick={onClearAll}
+                title="Delete every quote, undoable for five seconds"
+              />
+            )}
           </div>
           <div style={scrollWrapStyle}>
             {scheduleRows.length === 0 &&
               (hasTapes ? (
-                // Deliberately does NOT promise "click a quote to add it here": nothing in
-                // the app calls quoteSchedule.add, so this list cannot currently gain rows
-                // and that copy would describe a workflow the operator cannot perform.
-                // When an add affordance lands, this line should name it.
-                <ListEmpty>Search above to find a quote and put it in the preview.</ListEmpty>
+                // Names the chip at the top of the rail (#88), which files the cued paragraph.
+                <ListEmpty>No quotes yet. Find one above or tap a paragraph, then add it with <b>+ Add</b>.</ListEmpty>
               ) : (
                 // Nothing installed at all: a search box the operator cannot make match
                 // anything is not an invitation, so name the import instead (#88) — the
-                // header's + Import, the same verb the Slides rail teaches.
+                // + Import at the top of the rail, the same verb the Slides rail teaches.
                 <ListEmpty>
                   No messages yet — import one with <b>+ Import</b> to search its quotes.
                 </ListEmpty>
