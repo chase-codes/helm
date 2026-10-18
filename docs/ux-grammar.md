@@ -67,6 +67,7 @@ switches cards only while pre-service is already projecting, never starts it.
 - `src/shared/presentation/core.ts:46-51` `applyCue`; `:52-58` `goLive` (toggle branch); `:59-75` `takeLive` (identity return so `stateStore.take` skips the broadcast); `:76-98` `showLive` (`sameKind` guard); `:108-129` `invalidate`; `:99-107` `setOutput` refuses `'live'` with no key.
 - `docs/superpowers/specs/2026-08-14-double-click-go-live-design.md` — the eight double-click surfaces, `onActivate` mirrors `onSelect`, no debounce, `userSelect: 'none'`.
 - `src/renderer/operator/SermonMode.tsx:631-637`, `:696-701` — Shift+Enter and search-hit activation use `take`, not `goLive`, "blanking is never what was asked for".
+- `src/renderer/operator/MessageMode.tsx:350-353` `followAlong` uses `take`, so a repeat click on the live reading view is a no-op; pinned by `SermonMode.test.tsx:1768`.
 - `src/renderer/operator/keyDispatch.ts:71-76` — `go.live` → `handler.onGoLive()` behind the modal guard.
 - `src/renderer/operator/ChapterRail.tsx:37-45`, `:132-134` — the cursor-model hint and the rail's contract; `SermonMode.tsx:492-516` the show effect (cue-on-move + show) + `:523` `cuedIsLive` via `sameKind`.
 - `src/renderer/operator/PreServiceMode.tsx:41-44` — `PRE_HINT` and the BUG-018 promise.
