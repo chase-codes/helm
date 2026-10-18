@@ -695,7 +695,13 @@ describe('SermonMode — double-click a verse goes live (#58)', () => {
     await act(async () => {})
     expect(take).not.toHaveBeenCalled()
 
-    // The operator backs out: Escape blacks the screen, and main broadcasts that back.
+    // The operator backs out. The double-click left reading 2 selected, so press 1 drops the
+    // selection (the clear-selection rung) and press 2 blacks the screen, which main then
+    // broadcasts back.
+    act(() => {
+      keyHandlerRef.current?.onEscape()
+    })
+    expect(setOutput).not.toHaveBeenCalled()
     act(() => {
       keyHandlerRef.current?.onEscape()
     })
@@ -1215,7 +1221,7 @@ describe('SermonMode — the scripture-lookup hotkey (App bumps lookupNonce)', (
 })
 
 describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
-  it('scripture.reading digit 2 jumps to the 2nd scheduled reading', async () => {
+  it('item.jump digit 2 jumps to the 2nd scheduled reading', async () => {
     const { resolveChapter } = installHelmStub(NOTHING_LIVE, [
       { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
       { id: 'r2', book: 'Genesis', ch: 1, from: 3, to: 3 }
@@ -1230,7 +1236,7 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
     // and reading 1 is cued" precondition this jump needs.
     await waitFor(() => expect(screen.getAllByText('Genesis 1:1')).toHaveLength(2))
 
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 2 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 2 }))
     await waitFor(() => expect(screen.getAllByText('Genesis 1:3')).toHaveLength(2))
     expect(screen.getAllByText('Genesis 1:1')).toHaveLength(1) // hero left reading 1
   })
@@ -1276,7 +1282,7 @@ describe('SermonMode — onAction wiring (scripture track hotkeys)', () => {
 
     // Fire the reading hotkey while on the Message track — the `track !== 'scripture'`
     // guard must swallow it rather than moving the (currently invisible) cursor.
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 1 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 1 }))
 
     // The hero label is the cursor's own text ("Genesis 1:1"); the schedule row for
     // reading 1 ("Genesis 1:3") stays on screen regardless, so asserting the hero still
@@ -1489,6 +1495,77 @@ describe('SermonMode — Escape backs out progressively (#54)', () => {
     act(() => void keyHandlerRef.current?.onEscape())
     expect(setOutput).not.toHaveBeenCalled()
   })
+
+  it('drops a rail range before it touches the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    // Shift-tap builds Genesis 1:1-3 in the entry; the entry itself is not focused.
+    fireEvent.click(verseCard(3), { shiftKey: true })
+    await waitFor(() => expect(entryValue()).toBe('Genesis 1:1-3'))
+    expect(document.activeElement).not.toBe(entry())
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(entryValue()).toBe('')
+    expect(verseCard(3).dataset.selected).toBe('false')
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('clears a schedule selection before it touches the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE, [
+      { id: 'r1', book: 'Genesis', ch: 1, from: 1, to: 1 },
+      { id: 'r2', book: 'Genesis', ch: 1, from: 2, to: 3 }
+    ])
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+    const row = (id: string): HTMLElement => document.querySelector(`[data-schedule-row="${id}"]`) as HTMLElement
+
+    fireEvent.click(row('r1'))
+    fireEvent.click(row('r2'), { shiftKey: true })
+    expect(row('r2').getAttribute('data-selected')).toBe('true')
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(row('r1').getAttribute('data-selected')).toBeNull()
+    expect(row('r2').getAttribute('data-selected')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('closes the translation picker instead of blacking the screen', async () => {
+    const { setOutput, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await awaitCuedLive('scripture')
+
+    const onDoc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') void keyHandlerRef.current?.onEscape()
+    }
+    document.addEventListener('keydown', onDoc)
+    try {
+      fireEvent.click(within(trackPanel('scripture')).getByTitle('Choose translations'))
+      expect(screen.getByText('TRANSLATIONS')).toBeTruthy()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(screen.queryByText('TRANSLATIONS')).toBeNull()
+      expect(setOutput).not.toHaveBeenCalled()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(setOutput).toHaveBeenCalledWith('black')
+    } finally {
+      document.removeEventListener('keydown', onDoc)
+    }
+  })
 })
 
 describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4)', () => {
@@ -1512,7 +1589,7 @@ describe('SermonMode — jumpToReading resets a stale builder preview (Finding 4
     await waitFor(() => expect(screen.getByText('Romans 1')).toBeTruthy())
 
     // Reading 1 hotkey (digit press) jumps into Genesis — a different book than the builder.
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 1 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 1 }))
 
     expect(entryValue()).toBe('')
     await waitFor(() => expect(screen.getByText('Genesis 1')).toBeTruthy())
@@ -2469,6 +2546,113 @@ describe('SermonMode — quote schedule list kit (#90/#8)', () => {
     const goLive = within(messagePanel).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
     expect(goLive.disabled).toBe(true)
     expect(screen.getByText(/No messages yet/)).toBeTruthy()
+  })
+
+  it('Escape clears the quote selection before it touches the screen', async () => {
+    const { resolveChapter, setOutput } = installHelmStub(GEN_1_1_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.click(quoteRow('2'))
+    expect(quoteRow('2').getAttribute('data-selected')).toBe('true')
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(quoteRow('2').getAttribute('data-selected')).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+
+    act(() => void keyHandlerRef.current?.onEscape())
+    expect(setOutput).toHaveBeenCalledWith('black')
+  })
+
+  it('Escape in the search box clears the query first, then leaves the field', async () => {
+    const { resolveChapter, setOutput } = installHelmStub(GEN_1_1_LIVE, [], {
+      tape: TAPE_M,
+      quoteSchedule: QS,
+      search: SEARCH_HITS
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    // Mirror App: the document dispatcher forwards a bubbled Escape to the ladder.
+    const onDoc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') void keyHandlerRef.current?.onEscape()
+    }
+    document.addEventListener('keydown', onDoc)
+    try {
+      searchBox().focus()
+      fireEvent.change(searchBox(), { target: { value: 'faith' } })
+
+      fireEvent.keyDown(searchBox(), { key: 'Escape' })
+      expect(searchBox().value).toBe('')
+      expect(document.activeElement).toBe(searchBox())
+
+      fireEvent.keyDown(searchBox(), { key: 'Escape' })
+      expect(document.activeElement).not.toBe(searchBox())
+      expect(setOutput).not.toHaveBeenCalled()
+    } finally {
+      document.removeEventListener('keydown', onDoc)
+    }
+  })
+
+  it('/ focuses the message search box', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'focus.search' }))
+    expect(document.activeElement).toBe(searchBox())
+  })
+
+  it('Mod+Backspace clears the message search', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS, search: SEARCH_HITS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    fireEvent.change(searchBox(), { target: { value: 'faith' } })
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'field.clear' }))
+    expect(searchBox().value).toBe('')
+  })
+
+  it('digit 3 picks the third planned quote, exactly as a click would', async () => {
+    const { resolveChapter, cue } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 3 }))
+    expect(quoteRow('3').getAttribute('data-selected')).toBe('true')
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('msg:m1:2', expect.anything()))
+  })
+
+  it('a digit is ignored while search results cover the schedule, or past its end', async () => {
+    const { resolveChapter, cue } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS, search: SEARCH_HITS })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await openMessageTrack()
+    await settleAndClear(cue, 'msg:m1:0', expect.anything())
+
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 9 }))
+    fireEvent.change(searchBox(), { target: { value: 'faith' } })
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 3 }))
+    await act(async () => {})
+    expect(cue).not.toHaveBeenCalled()
+  })
+  it('numbers the quote schedule rows', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { tape: TAPE_M, quoteSchedule: QS })
+    render(<Harness />)
+    resolveChapter()
+    await openMessageTrack()
+    expect(quoteRow('2').querySelector('[data-row-number]')?.textContent).toBe('2')
   })
 })
 

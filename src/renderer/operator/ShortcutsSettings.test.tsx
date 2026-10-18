@@ -88,4 +88,17 @@ describe('ShortcutsSettings', () => {
     expect(screen.getByText('Sermon page · Scripture track')).toBeTruthy()
     expect(screen.queryByText('Scripture page')).toBeNull()
   })
+
+  it('lists the global digit block and says where a key does something else or nothing', () => {
+    renderPane()
+    expect(screen.getByText('Jump to schedule item 1\u20139')).toBeTruthy()
+    expect(screen.getByText(/Slides and Pre-service have no search/)).toBeTruthy()
+    expect(screen.getByText(/On Songs, digits jump to Verse/)).toBeTruthy()
+  })
+
+  it('hides a page group that has no keys of its own', () => {
+    renderPane()
+    expect(screen.queryByText('Scripture page')).toBeNull()
+    expect(screen.getByText('Songs page')).toBeTruthy()
+  })
 })

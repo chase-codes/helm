@@ -29,6 +29,7 @@ import { MONO } from '../shared/fonts';
 import { railHint } from './railHints';
 import { scheduleRowStyle } from './railTint';
 import { LiveBadge, RowStateMark } from './StateBadge';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -45,6 +46,8 @@ export interface SlidesKeyHandler {
   /** True while the deck-fallback modal is up — a blocking modal, so SermonMode reports
    * it and App suppresses Enter/Delete behind it (same contract as SongsMode's QuickAdd). */
   isModalOpen: () => boolean;
+  /** Registry actions SermonMode routes here while this track is on screen. */
+  onAction: (a: ResolvedHotkey) => void;
 }
 export type SlidesKeyRef = MutableRefObject<SlidesKeyHandler | null>;
 
@@ -350,7 +353,15 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       onArrow: stepSlide,
       onGoLive: goLive,
       onEscape: escapeOverlays,
-      isModalOpen: () => deckFallback !== null
+      isModalOpen: () => deckFallback !== null,
+      // A digit taps row N of the deck's own numbered slide rail: the cue moves, and while
+      // this deck is live the screen follows, exactly as the rail's tap does. Single-slide
+      // items have no rail, so there is nothing to jump to.
+      onAction: (a) => {
+        if (a.id !== 'item.jump' || !a.digit) return;
+        if (selected?.type !== 'deck' || a.digit > slides.length) return;
+        setSlideIdx(a.digit - 1);
+      }
     };
     return () => {
       slidesKeyRef.current = null;

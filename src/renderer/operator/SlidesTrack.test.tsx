@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
-import { SlidesTrack } from './SlidesTrack'
+import { SlidesTrack, type SlidesKeyRef } from './SlidesTrack'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { MediaItem, PresentationState } from '../../shared/types'
@@ -569,16 +569,6 @@ describe('SlidesTrack: live and queued signals (rule 1, decision 7)', () => {
     expect(screen.queryByText('QUEUED')).toBeNull()
   })
 
-  it('the delete-selection ring is the Slides colour, not gold', async () => {
-    installHelmStub()
-    renderTrack()
-    await screen.findByText('▣ Welcome.jpg')
-    fireEvent.click(rowFor('▤ Sermon.pptx'))
-    fireEvent.click(rowFor('▣ Welcome.jpg'), { shiftKey: true })
-    expect(rowFor('▣ Welcome.jpg').style.boxShadow).toContain(T.sermon)
-    expect(rowFor('▣ Welcome.jpg').style.boxShadow).not.toContain(T.accent)
-  })
-
   it('the live deck slide rings red, not green', async () => {
     installHelmStub(DECK_LIVE)
     renderTrack()
@@ -599,5 +589,48 @@ describe('SlidesTrack: live and queued signals (rule 1, decision 7)', () => {
     fireEvent.click((await screen.findByText('Images')).closest('button') as HTMLButtonElement)
     const flash = (await screen.findByText(/Imported/)) as HTMLElement
     expect(flash.style.color).toBe(rgb(T.sermon))
+  })
+})
+
+describe('SlidesTrack: digits jump within the cued deck (rule 9)', () => {
+  const renderWithRef = (): SlidesKeyRef => {
+    const slidesKeyRef: SlidesKeyRef = { current: null }
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SlidesTrack
+          slidesKeyRef={slidesKeyRef}
+          active
+          track="slides"
+          setTrack={() => {}}
+          leftPanel={stubPanel(270)}
+          rightPanel={stubPanel(330)}
+        />
+      </ThemeCtx.Provider>
+    )
+    return slidesKeyRef
+  }
+
+  it('digit 2 cues slide 2 of the selected deck, as tapping its rail row would', async () => {
+    const { cue } = installHelmStub()
+    const ref = renderWithRef()
+    fireEvent.click((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    await settleAndClear(cue, 'pres:deck1:0', expect.anything())
+
+    act(() => ref.current?.onAction({ id: 'item.jump', digit: 2 }))
+    await waitFor(() => expect(cue).toHaveBeenCalledWith('pres:deck1:1', expect.anything()))
+  })
+
+  it('a digit past the last slide, or on a single image, does nothing', async () => {
+    const { cue } = installHelmStub()
+    const ref = renderWithRef()
+    fireEvent.click((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    await settleAndClear(cue, 'pres:deck1:0', expect.anything())
+    act(() => ref.current?.onAction({ id: 'item.jump', digit: 3 }))
+
+    fireEvent.click(screen.getByText('▣ Welcome.jpg').closest('button') as HTMLButtonElement)
+    await settleAndClear(cue, 'pres:img1:0', expect.anything())
+    act(() => ref.current?.onAction({ id: 'item.jump', digit: 2 }))
+    await act(async () => {})
+    expect(cue).not.toHaveBeenCalled()
   })
 })

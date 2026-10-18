@@ -13,12 +13,15 @@ import type { ContextMenuItem } from './ContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { screenToneColor, statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
 import { screenStatus } from '../../shared/presentation/screenOwner';
 import { liveRing, tintChip } from './railTint';
 import { LiveBadge } from './StateBadge';
 import { MONO } from '../shared/fonts';
 import { railHint } from './railHints';
+import { RowNumber } from './RowNumber';
+import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
 export interface PreServiceModeProps {
   active: boolean;
@@ -142,29 +145,27 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   //                    disabled state. Enter is therefore never a take-down here, unlike
   //                    Songs/Sermon where the same button toggles.
   //   Take down      → the last rung of the Escape ladder, as everywhere else.
+  //   1-9            → a tap on card N (select + showCard), so it inherits the tap's guarantee.
   //
-  // The ladder has no blur rung: the only text entry on this page lives inside
-  // PreCardEditor, which the first rung closes outright.
+  // Escape runs the shared ladder (escapeLadder.ts) with no blur rung: the only text entry
+  // on this page lives inside PreCardEditor, which the first rung closes outright.
   useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
-      onEscape: () => {
-        if (editing !== null) {
-          setEditing(null);
-          return true;
-        }
-        // Back out the most recent intent before touching the screen: a stray Escape while
-        // a delete-range is picked out must drop the range, not black the projector.
-        if (sel.selectedIds.length > 0) {
-          sel.clear();
-          return true;
-        }
-        if (canTakeDown) {
-          takeDown();
-          return true;
-        }
-        return false;
-      },
+      onEscape: () =>
+        runEscapeLadder({
+          closeOverlay: () => {
+            if (editing === null) return false;
+            setEditing(null);
+            return true;
+          },
+          // A stray Escape while a delete-range is picked out drops the range, not the screen.
+          clearSelection: clearSelectionRung(sel),
+          // The only text entry on this page lives inside PreCardEditor, which rung 1 closes.
+          leaveField: false,
+          // `takeDown` also disengages the loop (see its comment above).
+          takeDown: takeDownWhenLive(output, takeDown)
+        }),
       onArrow: (dir) => window.helm.preservice.step(dir),
       onGoLive: () => {
         if (armed) window.helm.preservice.showNow();
@@ -172,6 +173,16 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
       isModalOpen: () => editing !== null,
       onDelete: () => {
         if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
+      },
+      // A digit is a tap on card N: it selects the row and calls showCard, which switches the
+      // screen only while pre-service already owns it (BUG-018), never starts it. No search
+      // on this page, so `/` is a deliberate no-op (Shortcuts says so).
+      onAction: (a: ResolvedHotkey) => {
+        if (a.id !== 'item.jump' || !a.digit) return;
+        const card = cards[a.digit - 1];
+        if (!card) return;
+        sel.select(card.id);
+        window.helm.preservice.showCard(a.digit - 1);
       }
     };
     return () => {
@@ -452,7 +463,10 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>
-                  <div style={labelStyle}>{card.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                    <RowNumber n={i + 1} color={T.faint} />
+                    <div style={labelStyle}>{card.title}</div>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     {isShowing && <LiveBadge theme={T} />}
                     {isArmed && <span style={armedBadge}>● CUED</span>}

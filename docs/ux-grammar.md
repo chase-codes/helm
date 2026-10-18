@@ -1,6 +1,6 @@
 # Helm UX interaction grammar
 
-Eight rules the operator UI follows. The code already encodes them — mostly as comments
+Nine rules the operator UI follows. The code already encodes them — mostly as comments
 beside the guard that enforces each one — and this file consolidates them so a new
 surface inherits the rules instead of re-deciding them. Each rule cites the code and tests
 that enforce it. The rules came out of the 2026-08-15 operator UX eval and the issue cluster
@@ -175,7 +175,9 @@ selection, `ModeKeyHandler.onDelete` for the Delete key, and `deleteMenuItems` f
 right-click menu (`Delete N <noun>` inside a multi-selection, otherwise select-then-`Delete`).
 Shift-click ranges from an anchor that stays put — a second shift-click re-ranges, it never
 grows — and the scripture rail's `railSelect` makes the same anchor-vs-selection split for
-verses, including the idempotence a shift-double-click depends on. `deleteMenuItems`
+verses, including the idempotence a shift-double-click depends on. The same kit answers the
+keyboard: Escape clears the selection before it can touch the screen, and digits 1 to 9
+click row N (rule 9). `deleteMenuItems`
 takes an optional `canDelete` filter for rows that may never go (the pre-service logo
 card); the label counts only what will actually be deleted.
 
@@ -240,6 +242,30 @@ chrome. `LeaderView` renders operator-dark by design (`theme.ts:42`) and uses `D
 
 **Why:** a colour written once in a component is a colour that ignores four of the five theme families.
 
+## 9. Every page answers the same keys.
+
+Escape backs out one layer per press, in one order on every page: close the popover or
+modal, cancel the edit in progress, clear the selection (or the queued song), leave the
+text field, and only then take the screen down, and only while something is live. A
+popover that keeps its own open state closes itself before the page ladder runs. `/`
+focuses the page's search and Mod+Backspace clears it; Slides and Pre-service have no
+search, so the key does nothing there and Settings → Shortcuts says so. Digits 1 to 9 act
+as a click on row N of the page's schedule, and the first nine rows wear their digit;
+Songs reads digits as Verse N and Slides as slide N of the cued deck, whose rail is already
+numbered. Shift+Enter is an entry-field gesture (the Scripture entry's "take this reference
+live") and has no page-level binding.
+
+**Enforced by**
+- `src/renderer/operator/escapeLadder.ts:21-36`: `EscapeLadder` and `runEscapeLadder`, the rung order; `:40` `blurFocusedField`, `:49` `takeDownWhenLive`, `:59` `clearSelectionRung`; `escapeLadder.test.ts`.
+- Adopters: `SongsMode.tsx:745` (`onEscape`), `SermonMode.tsx:1040` (`onEscape`; `:1049` routes `clearSelection` and `:1078` routes `onAction` to `MessageKeyHandler` / `SlidesKeyHandler`), `MessageMode.tsx:409-421`, `SlidesTrack.tsx:385`, `PreServiceMode.tsx:152` (`onEscape`), `:177` (`onAction`).
+- `src/renderer/operator/useEscapeToClose.ts:11`: capture-phase close for `VersionPicker.tsx:23` and `OutputViewPopover.tsx:31`; `ContextMenu.tsx:165` keeps the same contract for its own keys.
+- `src/shared/hotkeys/actions.ts:60-68`: the global `item.jump` digit block, shadowed on Songs by `song.verse` (`:73`); `:24` `note`, rendered by `ShortcutsSettings.tsx:152-159`.
+- `src/renderer/operator/keyDispatch.ts:34`: Escape first; `:85` registry actions behind the typing and modal guards; `keyDispatch.test.ts:160` pins digits on every scope.
+- `src/renderer/operator/RowNumber.tsx:8`: `SchedulePanel.tsx:238`, `MessageSearchRail.tsx:286`, `PreServiceMode.tsx:458`.
+- Mode tests: "Escape backs out progressively" (`SermonMode.test.tsx:1274`) and the quote schedule list kit (`:2284`), "SongsMode escape chain" (`SongsMode.test.tsx:680`), "the Escape ladder" (`PreServiceMode.test.tsx:570`).
+
+**Why:** an operator moving between pages must not have to remember which page blacks the screen on the first Escape, or which page ignores the number keys.
+
 ## Known gaps
 
 Facts as of 2026-10-12, not tasks:
@@ -252,3 +278,5 @@ Facts as of 2026-10-12, not tasks:
 - The status chip is page-level (decision 6): on the Sermon page a live slide from the Slides track reads `LIVE ON SCREEN` on the Scripture track too.
 - Message's `+ Import` opens Settings (`MessageMode.tsx:585` `onOpenSettings`) rather than the import modal itself; Slides and Songs import in place.
 - The `Header` live chip changes height with state (`Header.tsx:96`, 28 → 32 px), a documented exception (`transport.ts:64-67`).
+- The Message quote schedule has no add path (`MessageSearchRail.tsx` empty-state comment), so its digit jumps and row numbers have nothing to act on until one lands.
+- Escape's clear-selection rung fires on any non-empty selection, and a plain click selects a row on Scripture, Message and Pre-service, so after a click Escape takes two presses to reach the screen. `clearSelectionRung` is the one place to change if that should apply to ranges only.
