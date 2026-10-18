@@ -935,7 +935,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             </div>
             <div style={{ fontSize: '13px', color: T.dim, marginTop: '2px' }}>{activeSong?.author ?? ''}</div>
           </div>
-          <div style={projBarStyle}>
+          <div style={projBarStyle} data-status-chip>
             <span style={projDotStyle} />
             <span style={{ fontFamily: MONO, fontSize: '11.5px', letterSpacing: '0.06em' }}>{projText}</span>
           </div>

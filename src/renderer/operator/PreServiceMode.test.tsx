@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+import type { JSX } from 'react'
 import { PreServiceMode } from './PreServiceMode'
 import type { ModeKeyHandlerRef } from './App'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
 import type { PreCard, PreState, PresentationState } from '../../shared/types'
 import { settleAndClear } from '../../test/mocks'
+import { TRANSPORT_VERB_W } from './transport'
+import { preVerbs } from './preTransport'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -52,6 +55,7 @@ function installHelmStub(
   removeCard: ReturnType<typeof vi.fn>
   restoreCard: ReturnType<typeof vi.fn>
   step: ReturnType<typeof vi.fn>
+  engage: ReturnType<typeof vi.fn>
   disengage: ReturnType<typeof vi.fn>
   setOutput: ReturnType<typeof vi.fn>
 } {
@@ -61,13 +65,14 @@ function installHelmStub(
   const removeCard = vi.fn()
   const restoreCard = vi.fn()
   const step = vi.fn()
+  const engage = vi.fn()
   const disengage = vi.fn()
   const setOutput = vi.fn()
   ;(window as unknown as { helm: unknown }).helm = {
     preservice: {
       getState: () => Promise.resolve(state),
       onState: () => () => {},
-      engage: vi.fn(),
+      engage,
       disengage,
       showCard,
       step,
@@ -86,7 +91,7 @@ function installHelmStub(
       setOutput
     }
   }
-  return { showCard, showNow, takeCard, removeCard, restoreCard, step, disengage, setOutput }
+  return { showCard, showNow, takeCard, removeCard, restoreCard, step, engage, disengage, setOutput }
 }
 
 const renderMode = (
@@ -519,27 +524,34 @@ describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => 
       expect(takeCard).not.toHaveBeenCalled()
     })
 
-    it('Enter puts the armed card on screen', async () => {
-      const keyHandlerRef: ModeKeyHandlerRef = { current: null }
-      const { showNow } = installHelmStub(baseState, NOTHING_LIVE)
-      renderMode(keyHandlerRef)
-      await screen.findByText('Greeting')
+    // Rule 3: Enter is the primary slot's keyboard twin, whichever verb sits there, and
+    // neither pre-service verb can black the screen.
+    const ENTER_STATES: [string, PreState, PresentationState][] = [
+      ['idle, nothing live', baseState, NOTHING_LIVE],
+      ['loop running on screen', { ...baseState, engaged: true }, cardLive('a')],
+      ['a held card on screen', baseState, cardLive('a')],
+      ['a song owns the screen', baseState, SONG_LIVE],
+      ['an empty loop', { ...baseState, cards: [] }, NOTHING_LIVE]
+    ]
+    it.each(ENTER_STATES)(
+      '%s: Enter does exactly what clicking the primary slot does',
+      async (_name, state, pres) => {
+        const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+        const stub = installHelmStub(state, pres)
+        renderMode(keyHandlerRef)
+        await act(async () => {})
 
-      act(() => keyHandlerRef.current?.onGoLive())
-      expect(showNow).toHaveBeenCalledTimes(1)
-    })
+        const spies = [stub.engage, stub.disengage, stub.showNow, stub.setOutput]
+        const counts = (): number[] => spies.map((m) => m.mock.calls.length)
+        fireEvent.click(document.querySelector('[data-primary-verb]') as HTMLElement)
+        const byClick = counts()
+        for (const m of spies) m.mockClear()
 
-    it('Enter is inert once that card is already on screen', async () => {
-      const keyHandlerRef: ModeKeyHandlerRef = { current: null }
-      const { showNow, setOutput } = installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
-      renderMode(keyHandlerRef)
-      await screen.findByText('Greeting')
-
-      // Mirrors the disabled "On screen" button — Enter is never a take-down here.
-      act(() => keyHandlerRef.current?.onGoLive())
-      expect(showNow).not.toHaveBeenCalled()
-      expect(setOutput).not.toHaveBeenCalled()
-    })
+        act(() => keyHandlerRef.current?.onGoLive())
+        expect(counts()).toEqual(byClick)
+        expect(stub.setOutput).not.toHaveBeenCalled()
+      }
+    )
 
     describe('the Escape ladder', () => {
       const THREE: PreState = {
@@ -594,5 +606,255 @@ describe('PreServiceMode — page chrome speaks the house grammar (#87)', () => 
         expect(setOutput).not.toHaveBeenCalled()
       })
     })
+  })
+})
+
+describe('PreServiceMode — centre pane layout matches Songs and Sermon', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('reads the screen state at the top right of the centre pane', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const chip = document.querySelector('[data-status-chip]') as HTMLElement
+    expect(chip).toBeTruthy()
+    const row = chip.parentElement as HTMLElement
+    expect(row.lastElementChild).toBe(chip)
+    const pane = row.parentElement as HTMLElement
+    expect(pane.firstElementChild).toBe(row)
+  })
+
+  it('pins the transport row to the bottom of the centre pane, full width', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const bar = document.querySelector('[data-transport-bar]') as HTMLElement
+    expect(bar).toBeTruthy()
+    expect(bar.parentElement?.lastElementChild).toBe(bar)
+    expect(bar.style.maxWidth).toBe('')
+    expect(bar.style.justifyContent).toBe('')
+  })
+})
+
+// Grammar rule 2: the same row as Songs and Sermon. Written against `preVerbs`, not a
+// label, so these hold whichever verb decision 4 puts in the green slot.
+describe('PreServiceMode, the transport is stable ground (#85)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const bar = (): HTMLElement => document.querySelector('[data-transport-bar]') as HTMLElement
+  const primary = (): HTMLButtonElement =>
+    bar().querySelector('[data-primary-verb]') as HTMLButtonElement
+  const takeDown = (): HTMLButtonElement =>
+    within(bar()).getByText('Take down').closest('button') as HTMLButtonElement
+
+  it('ends with Take down, a divider, then the primary slot', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const kids = Array.from(bar().children)
+    expect(kids[kids.length - 1]).toBe(primary())
+    expect(kids[kids.length - 3]).toBe(takeDown())
+    expect(kids[kids.length - 2].tagName).toBe('DIV')
+  })
+
+  it('keeps the secondary verb and the dwell controls left of both verbs', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const kids = Array.from(bar().children)
+    const at = (el: Element | null): number => kids.indexOf(el as Element)
+    expect(at(bar().querySelector('[data-secondary-verb]'))).toBeLessThan(at(takeDown()))
+    expect(at(bar().querySelector('[data-dwell]'))).toBeLessThan(at(takeDown()))
+  })
+
+  const WIDTH_STATES: [string, PreState, PresentationState][] = [
+    ['idle', baseState, NOTHING_LIVE],
+    ['looping on screen', { ...baseState, engaged: true }, cardLive('a')]
+  ]
+  it.each(WIDTH_STATES)('gives both verbs the fixed width while %s', async (_name, state, pres) => {
+    installHelmStub(state, pres)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    expect(primary().style.width).toBe(TRANSPORT_VERB_W)
+    expect(takeDown().style.width).toBe(TRANSPORT_VERB_W)
+  })
+
+  // Decision 5: the steps read ‹ Previous / Next › as on Songs and Sermon, with the unit
+  // in the tooltip.
+  it('labels the steps ‹ Previous / Next ›, unit in the tooltip', async () => {
+    const { step } = installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const prev = within(bar()).getByRole('button', { name: '‹ Previous' })
+    const next = within(bar()).getByRole('button', { name: 'Next ›' })
+    expect(prev.getAttribute('title')).toBe('Previous card')
+    expect(next.getAttribute('title')).toBe('Next card')
+    fireEvent.click(prev)
+    fireEvent.click(next)
+    expect(step.mock.calls.map((c) => c[0])).toEqual([-1, 1])
+  })
+
+  it('never wraps, so Take down cannot land on an orphan line', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+    expect(bar().style.flexWrap).not.toBe('wrap')
+  })
+
+  it('the primary slot runs the verb preVerbs puts there', async () => {
+    const stub = installHelmStub(baseState, NOTHING_LIVE)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const expected = preVerbs({ engaged: false, armed: true, hasCards: true }).primary
+    expect(primary().textContent).toBe(expected.label)
+    fireEvent.click(primary())
+    const spy = { startLoop: stub.engage, stopLoop: stub.disengage, showCard: stub.showNow }[
+      expected.id
+    ]
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(stub.setOutput).not.toHaveBeenCalled()
+  })
+
+  it('the primary slot ghosts and stops responding on an empty loop (#88)', async () => {
+    const stub = installHelmStub({ ...baseState, cards: [] }, NOTHING_LIVE)
+    renderMode()
+    await act(async () => {})
+
+    expect(primary().disabled).toBe(true)
+    fireEvent.click(primary())
+    expect(stub.engage).not.toHaveBeenCalled()
+    expect(stub.showNow).not.toHaveBeenCalled()
+  })
+
+  it('the loop verb sits left of the spacer and toggles the rotation', async () => {
+    const stub = installHelmStub({ ...baseState, engaged: true }, cardLive('a'))
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const secondary = bar().querySelector('[data-secondary-verb]') as HTMLButtonElement
+    expect(secondary.textContent).toBe('Stop loop')
+    fireEvent.click(secondary)
+    expect(stub.disengage).toHaveBeenCalledTimes(1)
+    expect(stub.setOutput).not.toHaveBeenCalled()
+  })
+})
+
+// Pre-service now stays mounted like Songs and Sermon (App.tsx keep-alive), so it must
+// behave while hidden: no keyboard delegate, no menu left open behind another page.
+describe('PreServiceMode, kept alive across page switches', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const theme = themeFor('classic', 'dark')
+  const page = (active: boolean, keyHandlerRef: ModeKeyHandlerRef): JSX.Element => (
+    <ThemeCtx.Provider value={theme}>
+      <PreServiceMode active={active} keyHandlerRef={keyHandlerRef} />
+    </ThemeCtx.Provider>
+  )
+
+  it('never registers, or clobbers, the key handler while inactive', async () => {
+    installHelmStub(baseState)
+    const songs = {
+      onEscape: () => false,
+      onArrow: () => {},
+      onGoLive: () => {},
+      isModalOpen: () => false
+    }
+    const keyHandlerRef: ModeKeyHandlerRef = { current: songs }
+    render(page(false, keyHandlerRef))
+    await screen.findByText('Greeting')
+    expect(keyHandlerRef.current).toBe(songs)
+  })
+
+  it('keeps the selection and the pending undo through a hide and show', async () => {
+    const { removeCard } = installHelmStub({
+      ...baseState,
+      cards: [
+        ...cards,
+        { id: 'c', type: 'list', title: 'Announcements', points: ['Potluck'], enabled: true }
+      ]
+    })
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { rerender } = render(page(true, keyHandlerRef))
+    await screen.findByText('Announcements')
+
+    fireEvent.contextMenu(screen.getByText('Announcements').closest('button') as HTMLElement)
+    fireEvent.click(await screen.findByText('Delete'))
+    expect(removeCard).toHaveBeenCalledWith('c')
+    fireEvent.click(screen.getByText('Greeting').closest('button') as HTMLElement)
+
+    rerender(page(false, keyHandlerRef))
+    rerender(page(true, keyHandlerRef))
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    expect(screen.getByText('Greeting').closest('button')?.getAttribute('data-selected')).toBe(
+      'true'
+    )
+    expect(keyHandlerRef.current).not.toBeNull()
+  })
+
+  it('closes an open context menu when the page is hidden', async () => {
+    installHelmStub(baseState)
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { rerender } = render(page(true, keyHandlerRef))
+    await screen.findByText('Greeting')
+
+    fireEvent.contextMenu(screen.getByText('Psalm 122:1').closest('button') as HTMLElement)
+    expect(await screen.findByRole('menu')).toBeTruthy()
+    rerender(page(false, keyHandlerRef))
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+})
+
+describe('PreServiceMode, the card rail resizes like every other side rail', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    localStorage.removeItem('helmPreRailW')
+  })
+
+  const rail = (): HTMLElement => document.querySelector('[data-pre-rail]') as HTMLElement
+
+  it('drags from its divider and remembers the width', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    expect(rail().style.width).toBe('320px')
+    const divider = screen.getByTitle('Drag to resize')
+    fireEvent.mouseDown(divider, { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 130 })
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('helmPreRailW')).toBe('350') // 320 + 30
+    expect(rail().style.width).toBe('350px')
+  })
+
+  it('stops at the widest rail the transport still fits beside', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    fireEvent.mouseDown(screen.getByTitle('Drag to resize'), { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 400 })
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('helmPreRailW')).toBe('360')
+  })
+
+  it('opens at the stored width', async () => {
+    localStorage.setItem('helmPreRailW', '280')
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+    expect(rail().style.width).toBe('280px')
   })
 })
