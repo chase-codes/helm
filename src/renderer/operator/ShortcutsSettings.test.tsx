@@ -85,7 +85,7 @@ describe('ShortcutsSettings', () => {
     expect(screen.getByText('Release / take back screens')).toBeTruthy()
     expect(screen.getByText('Delete selected')).toBeTruthy()
     expect(screen.getByText('Songs page')).toBeTruthy()
-    expect(screen.getByText('Sermon page · Scripture track')).toBeTruthy()
+    // The Sermon page · Scripture track group has no keys of its own once digits are global (rule 9), so it is hidden.
     expect(screen.queryByText('Scripture page')).toBeNull()
   })
 

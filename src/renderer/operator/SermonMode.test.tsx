@@ -2998,7 +2998,7 @@ describe('SermonMode: a schedule click while scripture is live queues it (decisi
     await awaitCuedLive('scripture')
     await settleAndClear(show, 'scr:Genesis:1:1', expect.anything())
 
-    act(() => keyHandlerRef.current?.onAction?.({ id: 'scripture.reading', digit: 2 }))
+    act(() => keyHandlerRef.current?.onAction?.({ id: 'item.jump', digit: 2 }))
 
     expect(within(rowButton('Genesis 1:3')).getByText('QUEUED')).toBeTruthy()
     await act(async () => {})

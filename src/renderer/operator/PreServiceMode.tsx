@@ -27,7 +27,7 @@ import {
 } from './transport';
 import { preVerbs, runPreVerb } from './preTransport';
 import { screenStatus } from '../../shared/presentation/screenOwner';
-import { liveRing, tintChip } from './railTint';
+import { liveRing } from './railTint';
 import { LiveBadge } from './StateBadge';
 import { MONO } from '../shared/fonts';
 import { railHint } from './railHints';
