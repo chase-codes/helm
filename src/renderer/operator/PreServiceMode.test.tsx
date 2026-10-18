@@ -688,6 +688,22 @@ describe('PreServiceMode, the transport is stable ground (#85)', () => {
     expect(takeDown().style.width).toBe(TRANSPORT_VERB_W)
   })
 
+  // Decision 5: the steps read ‹ Previous / Next › as on Songs and Sermon, with the unit
+  // in the tooltip.
+  it('labels the steps ‹ Previous / Next ›, unit in the tooltip', async () => {
+    const { step } = installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Greeting')
+
+    const prev = within(bar()).getByRole('button', { name: '‹ Previous' })
+    const next = within(bar()).getByRole('button', { name: 'Next ›' })
+    expect(prev.getAttribute('title')).toBe('Previous card')
+    expect(next.getAttribute('title')).toBe('Next card')
+    fireEvent.click(prev)
+    fireEvent.click(next)
+    expect(step.mock.calls.map((c) => c[0])).toEqual([-1, 1])
+  })
+
   it('never wraps, so Take down cannot land on an orphan line', async () => {
     installHelmStub(baseState)
     renderMode()

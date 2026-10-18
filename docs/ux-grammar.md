@@ -39,7 +39,7 @@ ever means "put this on screen". Anything variable-width sits to the *left* of t
 spacer, so state changes recolour and relabel, never reflow. A varying song title rides in
 the tooltip, never the label.
 
-Pre-service draws the same row: ‹ and ›, the loop verb (Start loop / Stop loop) and the
+Pre-service draws the same row: ‹ Previous and Next ›, the loop verb (Start loop / Stop loop) and the
 dwell control left of the spacer, then Take down and the primary slot, which carries Show
 this card. Stop loop puts nothing on screen, so it stays out of the green slot; its
 `neutral` look (accent, never green or red) is there for whichever slot it sits in. Which

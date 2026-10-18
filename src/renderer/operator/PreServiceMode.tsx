@@ -533,10 +533,10 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
         </div>
         <div style={transportStyle} data-transport-bar>
           <button style={ghostBtn} onClick={() => window.helm.preservice.step(-1)} title="Previous card">
-            ‹
+            ‹ Previous
           </button>
           <button style={ghostBtn} onClick={() => window.helm.preservice.step(1)} title="Next card">
-            ›
+            Next ›
           </button>
           <button
             style={secondaryVerbStyle(T, verbs.secondary.enabled)}
