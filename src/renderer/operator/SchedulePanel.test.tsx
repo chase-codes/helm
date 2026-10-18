@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SchedulePanel, type ScheduleRow } from './SchedulePanel'
 import { themeFor } from '../../shared/theme'
@@ -14,6 +14,8 @@ function rows(overrides: Partial<ScheduleRow> = {}): ScheduleRow[] {
       meta: '1 verse · KJV',
       isCurrent: false,
       isSelected: false,
+      isLive: false,
+      isQueued: false,
       onClick: vi.fn(),
       onDoubleClick: vi.fn(),
       onContextMenu: vi.fn(),
@@ -189,5 +191,40 @@ describe('SchedulePanel — search results rail', () => {
     expect(screen.queryByText('SCRIPTURE SCHEDULE')).toBeNull()
     expect(screen.queryByText('John 3:16')).toBeNull() // the schedule row is not shown
     expect(screen.getByPlaceholderText(/Add verse/)).toBeTruthy() // entry stays
+  })
+})
+
+describe('SchedulePanel: live and queued signals (rule 1, decisions 3 and 7)', () => {
+  const T = themeFor('classic', 'dark')
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const row = (): HTMLButtonElement => screen.getByText('John 3:16').closest('button') as HTMLButtonElement
+
+  it('a current row that is not on screen wears the scripture colour, never red', () => {
+    render(<SchedulePanel {...baseProps} rows={rows({ isCurrent: true })} />)
+    expect(row().style.boxShadow).toContain(T.scripture)
+    expect(within(row()).queryByText('LIVE')).toBeNull()
+    const dot = row().querySelector('[data-cued-dot]') as HTMLElement
+    expect(dot.style.background).toBe(rgb(T.scripture))
+  })
+
+  it('the live row wears the red ring and the LIVE badge', () => {
+    render(<SchedulePanel {...baseProps} rows={rows({ isCurrent: true, isLive: true })} />)
+    expect(row().style.boxShadow).toBe(`inset 0 0 0 2px ${T.live}`)
+    expect(within(row()).getByText('LIVE')).toBeTruthy()
+  })
+
+  it('a queued row says QUEUED in the scripture colour', () => {
+    render(<SchedulePanel {...baseProps} rows={rows({ isQueued: true, isSelected: true })} />)
+    const badge = within(row()).getByText('QUEUED') as HTMLElement
+    expect(badge.style.color).toBe(rgb(T.scripture))
+  })
+
+  it('the selection ring is the scripture colour, not gold', () => {
+    render(<SchedulePanel {...baseProps} rows={rows({ isSelected: true })} />)
+    expect(row().style.boxShadow).toContain(T.scripture)
+    expect(row().style.boxShadow).not.toContain(T.accent)
   })
 })

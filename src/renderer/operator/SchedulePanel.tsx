@@ -7,6 +7,8 @@ import { DangerGhostButton } from './DangerGhostButton';
 import { ListEmpty } from './ListEmpty';
 import { ScriptureSearchResults, type ScriptureSearchState } from './ScriptureSearchResults';
 import { MONO } from '../shared/fonts';
+import { scheduleRowStyle } from './railTint';
+import { RowStateMark } from './StateBadge';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
@@ -20,6 +22,10 @@ export interface ScheduleRow {
   meta: string;
   isCurrent: boolean;
   isSelected: boolean;
+  /** The reading holds the verse on the audience screen (rule 1: red ring + LIVE). */
+  isLive: boolean;
+  /** Lined up behind the live reading by a click while scripture is live (decision 3). */
+  isQueued: boolean;
   onClick: (e: ReactMouseEvent) => void;
   /** Double-click: take this reading's first verse live (#58). Receives the event so
    * the caller can ignore shift-double-clicks — two quick shift-clicks are range
@@ -117,22 +123,6 @@ export function SchedulePanel({
     overflow: 'hidden',
     textOverflow: 'ellipsis'
   };
-  const rowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    width: '100%',
-    padding: '10px 11px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    userSelect: 'none',
-    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
-    boxShadow: isSelected
-      ? `inset 0 0 0 1.5px ${T.accent}`
-      : isCurrent
-        ? `inset 0 0 0 1px ${T.scripture}55`
-        : 'none'
-  });
   const iconStyle: CSSProperties = {
     width: '28px',
     height: '28px',
@@ -227,7 +217,7 @@ export function SchedulePanel({
                 {rows.map((r) => (
                   <button
                     key={r.id}
-                    style={rowStyle(r.isCurrent, r.isSelected)}
+                    style={scheduleRowStyle(T, T.scripture, { live: r.isLive, selected: r.isSelected, current: r.isCurrent })}
                     data-schedule-row={r.id}
                     data-selected={r.isSelected || undefined}
                     onClick={r.onClick}
@@ -239,7 +229,7 @@ export function SchedulePanel({
                       <div style={{ fontWeight: 600, fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
                       <div style={{ fontSize: '11px', color: T.faint, marginTop: '1px' }}>{r.meta}</div>
                     </div>
-                    {r.isCurrent && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
+                    <RowStateMark theme={T} accent={T.scripture} live={r.isLive} queued={r.isQueued} current={r.isCurrent} />
                   </button>
                 ))}
               </div>

@@ -4,6 +4,8 @@ import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
+import { scheduleRowStyle } from './railTint';
+import { QueuedBadge, RowStateMark } from './StateBadge';
 
 export interface MsgScheduleRow {
   id: string;
@@ -12,6 +14,10 @@ export interface MsgScheduleRow {
   isCurrent: boolean;
   /** In the delete-selection (#90) — distinct from `isCurrent`, which is the cued quote. */
   isSelected: boolean;
+  /** The quote holds the audience screen (rule 1: red ring + LIVE). */
+  isLive: boolean;
+  /** Lined up behind the live quote (decision 7). */
+  isQueued: boolean;
   /** Receives the event so the caller can branch on shiftKey for range selection. */
   onClick: (e: ReactMouseEvent) => void;
   /** Double-click: take this row's quote live (#58). */
@@ -30,6 +36,8 @@ export interface MsgQuoteRow {
   id: string;
   title: string;
   preview: string;
+  /** Lined up behind the live quote of the same tape; Go live takes it. */
+  isQueued?: boolean;
   onClick: () => void;
   /** Double-click: take this row's quote live (#58). */
   onDoubleClick: () => void;
@@ -122,24 +130,6 @@ export function MessageSearchRail({
   };
   const scheduleIconStyle: CSSProperties = { ...tapeIconStyle, fontSize: '14px' };
   const tapeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
-  // Two states, same treatment the scripture and media rails use: the delete-selection
-  // ring wins over the cued tint so a shift-click range reads as one block.
-  const scheduleRowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    width: '100%',
-    padding: '10px 11px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
-    boxShadow: isSelected
-      ? `inset 0 0 0 1.5px ${T.accent}`
-      : isCurrent
-        ? `inset 0 0 0 1px ${T.message}55`
-        : 'none',
-    userSelect: 'none'
-  });
   // The Slides rail's header verb, character-exact — import is rail chrome here too,
   // not empty-state furniture (the deviation the other two rails never had).
   const importHeaderBtnStyle: CSSProperties = {
@@ -228,7 +218,10 @@ export function MessageSearchRail({
               <div style={sectionHeaderStyle('6px 4px 2px')}>{quotesHeader}</div>
               {quoteRows.map((r) => (
                 <button key={r.id} style={quoteRowStyle} onClick={r.onClick} onDoubleClick={r.onDoubleClick}>
-                  <div style={quoteTitleStyle}>{r.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ ...quoteTitleStyle, flex: 1, minWidth: 0 }}>{r.title}</div>
+                    {r.isQueued && <QueuedBadge accent={T.message} />}
+                  </div>
                   <div style={quotePreviewStyle}>{r.preview}</div>
                 </button>
               ))}
@@ -267,7 +260,7 @@ export function MessageSearchRail({
                 key={r.id}
                 data-quote-row={r.id}
                 data-selected={r.isSelected || undefined}
-                style={scheduleRowStyle(r.isCurrent, r.isSelected)}
+                style={scheduleRowStyle(T, T.message, { live: r.isLive, selected: r.isSelected, current: r.isCurrent })}
                 onClick={r.onClick}
                 onDoubleClick={r.onDoubleClick}
                 onContextMenu={r.onContextMenu}
@@ -277,7 +270,7 @@ export function MessageSearchRail({
                   <div style={rowTitleStyle}>{r.title}</div>
                   <div style={rowMetaStyle}>{r.meta}</div>
                 </div>
-                {r.isCurrent && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
+                <RowStateMark theme={T} accent={T.message} live={r.isLive} queued={r.isQueued} current={r.isCurrent} />
               </button>
             ))}
           </div>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { SlidesTrack } from './SlidesTrack'
 import { ThemeCtx } from './ThemeCtx'
@@ -586,5 +586,84 @@ describe('SlidesTrack — double-click to go live (#58)', () => {
     await waitFor(() => expect(take).toHaveBeenCalledWith('pres:deck1:0', expect.anything()))
     expect(goLive).not.toHaveBeenCalled()
     expect(setOutput).not.toHaveBeenCalledWith('black')
+  })
+})
+
+describe('SlidesTrack: live and queued signals (rule 1, decision 7)', () => {
+  const DECK_LIVE: PresentationState = {
+    output: 'live',
+    liveKey: 'pres:deck1:0',
+    liveSnap: { kind: 'image', src: 'helm-media://deck1/1.png' },
+    cuedKey: 'pres:deck1:0',
+    cuedSnap: null
+  }
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const rowFor = (t: string): HTMLButtonElement => screen.getByText(t).closest('button') as HTMLButtonElement
+
+  it('the live deck row says LIVE in red; a selected item that is not live gets no red', async () => {
+    installHelmStub(DECK_LIVE)
+    renderTrack()
+    await screen.findByText('▣ Welcome.jpg')
+    await waitFor(() => expect(within(rowFor('▤ Sermon.pptx')).getByText('LIVE')).toBeTruthy())
+    expect(rowFor('▤ Sermon.pptx').style.boxShadow).toBe(`inset 0 0 0 2px ${T.live}`)
+
+    fireEvent.click(rowFor('▣ Welcome.jpg'))
+    expect(rowFor('▣ Welcome.jpg').style.boxShadow).not.toContain(T.live)
+    expect(within(rowFor('▣ Welcome.jpg')).queryByText('LIVE')).toBeNull()
+  })
+
+  it('selecting another item while a deck is live marks it QUEUED and names it on Go live', async () => {
+    installHelmStub(DECK_LIVE)
+    renderTrack()
+    await screen.findByText('▣ Welcome.jpg')
+    fireEvent.click(rowFor('▣ Welcome.jpg'))
+
+    const badge = await waitFor(() => within(rowFor('▣ Welcome.jpg')).getByText('QUEUED') as HTMLElement)
+    expect(badge.style.color).toBe(rgb(T.sermon))
+    const primary = screen.getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+    expect(primary.title).toBe('Go live with Welcome.jpg')
+  })
+
+  it('nothing is QUEUED while the screen is black', async () => {
+    installHelmStub()
+    renderTrack()
+    await screen.findByText('▣ Welcome.jpg')
+    fireEvent.click(rowFor('▣ Welcome.jpg'))
+    expect(screen.queryByText('QUEUED')).toBeNull()
+  })
+
+  it('the delete-selection ring is the Slides colour, not gold', async () => {
+    installHelmStub()
+    renderTrack()
+    await screen.findByText('▣ Welcome.jpg')
+    fireEvent.click(rowFor('▤ Sermon.pptx'))
+    fireEvent.click(rowFor('▣ Welcome.jpg'), { shiftKey: true })
+    expect(rowFor('▣ Welcome.jpg').style.boxShadow).toContain(T.sermon)
+    expect(rowFor('▣ Welcome.jpg').style.boxShadow).not.toContain(T.accent)
+  })
+
+  it('the live deck slide rings red, not green', async () => {
+    installHelmStub(DECK_LIVE)
+    renderTrack()
+    const first = (await screen.findByText('1')).closest('button') as HTMLButtonElement
+    await waitFor(() => expect(within(first).getByText('LIVE')).toBeTruthy())
+    const thumb = within(first).getByText('LIVE').parentElement as HTMLElement
+    expect(thumb.style.boxShadow).toContain(T.live)
+    expect(thumb.style.boxShadow).not.toContain(T.sermon)
+  })
+
+  it('the Imported confirmation is not red', async () => {
+    installHelmStub()
+    const newItem: MediaItem = { id: 'imgNEW', type: 'image', title: 'New.jpg', filePath: 'imgNEW.jpg', slides: [], createdAt: 9 }
+    window.helm.media.importImages = vi.fn(async () => ({ items: [newItem, ...items] }))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click((await screen.findByText('+ Import')).closest('button') as HTMLButtonElement)
+    fireEvent.click((await screen.findByText('Images')).closest('button') as HTMLButtonElement)
+    const flash = (await screen.findByText(/Imported/)) as HTMLElement
+    expect(flash.style.color).toBe(rgb(T.sermon))
   })
 })
