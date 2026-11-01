@@ -33,9 +33,9 @@ const fixture = {
   ]
 }
 
-test('BIBLE_MANIFEST lists kjv/web/asv/darby with getbible urls, kjv marked bundled', () => {
+test('BIBLE_MANIFEST lists kjv/web/asv/darby/valera with getbible urls, kjv marked bundled', () => {
   const ids = BIBLE_MANIFEST.map((e) => e.id)
-  expect(ids).toEqual(['kjv', 'web', 'asv', 'darby'])
+  expect(ids).toEqual(['kjv', 'web', 'asv', 'darby', 'valera'])
   for (const e of BIBLE_MANIFEST) {
     expect(e.url).toBe(`https://api.getbible.net/v2/${e.id}.json`)
   }
@@ -79,6 +79,60 @@ test('normalizeGetBible throws listing unmapped book names', () => {
   expect(() => normalizeGetBible(broken, kjvEntry)).toThrow(/Not A Real Book/)
 })
 
+const valeraEntry = BIBLE_MANIFEST.find((e) => e.id === 'valera')!
+
+// Shape of api.getbible.net/v2/valera.json: Spanish book names, canonical nr.
+const spanishFixture = {
+  lang: 'es',
+  books: [
+    {
+      nr: 1,
+      name: 'Génesis',
+      chapters: [
+        {
+          chapter: 1,
+          verses: [{ verse: 1, text: 'EN el principio crió Dios los cielos y la tierra.' }]
+        }
+      ]
+    },
+    { nr: 8, name: 'Rut', chapters: [] },
+    {
+      nr: 43,
+      name: 'Juan',
+      chapters: [
+        { chapter: 3, verses: [{ verse: 16, text: 'Porque de tal manera amó Dios al mundo ' }] }
+      ]
+    },
+    { nr: 65, name: 'Judas', chapters: [] },
+    { nr: 66, name: 'Apocalipsis', chapters: [] }
+  ]
+}
+
+test('valera is the Spanish Reina-Valera 1909, mapped by book number', () => {
+  expect(valeraEntry.abbr).toBe('RV1909')
+  expect(valeraEntry.booksByNumber).toBe(true)
+  expect(BIBLE_MANIFEST.filter((e) => e.booksByNumber).map((e) => e.id)).toEqual(['valera'])
+})
+
+test('normalizeGetBible maps Spanish book names onto canonical books by nr', () => {
+  const bible = normalizeGetBible(spanishFixture, valeraEntry)
+  expect(bible.language).toBe('es')
+  expect(bible.books.map((b) => b.name)).toEqual(['Genesis', 'Ruth', 'John', 'Jude', 'Revelation'])
+  const john = bible.books.find((b) => b.name === 'John')!
+  expect(john.chapters[0]).toEqual({
+    n: 3,
+    verses: [{ n: 16, text: 'Porque de tal manera amó Dios al mundo' }]
+  })
+})
+
+test('normalizeGetBible throws on a book number outside the 66-book canon', () => {
+  const broken = {
+    ...spanishFixture,
+    books: [...spanishFixture.books, { nr: 67, name: 'Tobías', chapters: [] }]
+  }
+  expect(() => normalizeGetBible(broken, valeraEntry)).toThrow(/Tobías/)
+})
+
 test('normalizeGetBible on the bundled kjv.json produces all 66 books with expected text', () => {
   const bible = normalizeGetBible(kjvRaw, kjvEntry)
   expect(bible.books).toHaveLength(66)
@@ -91,7 +145,7 @@ test('normalizeGetBible on the bundled kjv.json produces all 66 books with expec
 // installed scripture. The safety argument is that every bundled-KJV name — including
 // the variants "Psalms" and "Song of Songs" — is an EXACT alias, a branch the ranking
 // does not touch. Pin the argument, not just the outcome.
-test('every bundled-KJV book name resolves by exact alias, out of the ranking\'s reach', () => {
+test("every bundled-KJV book name resolves by exact alias, out of the ranking's reach", () => {
   const names: string[] = kjvRaw.books.map((b: { name: string }) => b.name)
   expect(names).toHaveLength(66)
 
