@@ -139,4 +139,40 @@ describe('deleteMenuItems', () => {
     expect(select).toHaveBeenCalledWith('a')
     expect(items[0].label).toBe('Delete')
   })
+
+  it('leaves out rows canDelete refuses, and counts only the rest', () => {
+    const remove = vi.fn()
+    const items = deleteMenuItems(makeSel(['a', 'b', 'logo']), 'b', 'cards', remove, {
+      canDelete: (id) => id !== 'logo'
+    })
+    expect(items).toHaveLength(1)
+    expect(items[0].label).toBe('Delete 2 cards')
+    items[0].onSelect?.()
+    expect(remove).toHaveBeenCalledWith(['a', 'b'])
+  })
+
+  it('a range that filters down to one row reads plain Delete', () => {
+    const remove = vi.fn()
+    const items = deleteMenuItems(makeSel(['a', 'logo']), 'a', 'cards', remove, {
+      canDelete: (id) => id !== 'logo'
+    })
+    expect(items[0].label).toBe('Delete')
+    items[0].onSelect?.()
+    expect(remove).toHaveBeenCalledWith(['a'])
+  })
+
+  it('offers a disabled reason when nothing under the pointer can go', () => {
+    const remove = vi.fn()
+    const select = vi.fn()
+    const items = deleteMenuItems(makeSel([], select), 'logo', 'cards', remove, {
+      canDelete: (id) => id !== 'logo',
+      blockedLabel: 'The logo card can’t be deleted'
+    })
+    expect(select).toHaveBeenCalledWith('logo')
+    expect(items).toHaveLength(1)
+    expect(items[0].label).toBe('The logo card can’t be deleted')
+    expect(items[0].disabled).toBe(true)
+    items[0].onSelect?.()
+    expect(remove).not.toHaveBeenCalled()
+  })
 })

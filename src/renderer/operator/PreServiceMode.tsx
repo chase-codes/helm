@@ -8,7 +8,8 @@ import { PreCardEditor } from './PreCardEditor';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { useContextMenu } from './useContextMenu';
-import { useListSelection } from './useListSelection';
+import { deleteMenuItems, useListSelection } from './useListSelection';
+import type { ContextMenuItem } from './ContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
@@ -193,20 +194,25 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     flexShrink: 0,
     whiteSpace: 'nowrap'
   };
-  const pasteSongStyle: CSSProperties = {
+  // The add chip every rail carries at the top (Songs' addChip, Scripture's schedAddStyle).
+  // It used to be the last list item, so the control that fills the loop moved down the
+  // rail as the loop grew.
+  const addChipStyle: CSSProperties = {
     width: '100%',
-    height: '42px',
-    marginTop: '8px',
-    borderRadius: '11px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '13.5px',
+    height: '34px',
+    marginTop: '10px',
+    padding: '0 10px',
+    borderRadius: '9px',
+    background: `${T.accent}22`,
+    color: T.accent,
+    fontSize: '12.5px',
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'transparent'
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   };
 
   const ghostBtn: CSSProperties = transportGhostBtn(T);
@@ -319,12 +325,14 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
           <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '5px', lineHeight: 1.4 }}>
             Tap a card to select it — while pre-service is on the screen, that switches it. Toggle cards in or out of the rotation.
           </div>
+          <button style={addChipStyle} onClick={() => setEditing('new')}>
+            + Add a card — verse, announcements, prayer…
+          </button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {cards.length === 0 && (
             <ListEmpty>
-              The loop is empty — add a card below to put something on screen before the
-              service.
+              The loop is empty. Use <b>+ Add a card</b> above to put something on screen before the service.
             </ListEmpty>
           )}
           {cards.map((card, i) => {
@@ -425,20 +433,19 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                   if (!e.shiftKey) window.helm.preservice.takeCard(i);
                 }}
                 onContextMenu={(e) => {
-                  const batchMenu = isSelected && sel.selectedIds.length > 1;
-                  if (!batchMenu) sel.select(card.id);
-                  const ids = batchMenu ? sel.selectedIds : [card.id];
-                  // The count names what will ACTUALLY go, so a range that happens to
-                  // include the undeletable logo card doesn't promise more than it does.
-                  const deletable = cards.filter((c) => ids.includes(c.id) && isDeletable(c));
+                  // Edit opens one card, so it is offered for the row under the pointer only,
+                  // never inside a range; the logo card has no editor at all.
+                  const inRange = isSelected && sel.selectedIds.length > 1;
+                  const edit: ContextMenuItem[] =
+                    canEdit && !inRange ? [{ label: 'Edit', onSelect: () => setEditing(card) }] : [];
                   contextMenu.open(e, [
-                    deletable.length === 0
-                      ? { label: 'The logo card can’t be deleted', disabled: true, onSelect: () => {} }
-                      : {
-                          label: deletable.length === 1 ? 'Delete' : `Delete ${deletable.length} cards`,
-                          danger: true,
-                          onSelect: () => removeCards(deletable.map((c) => c.id))
-                        }
+                    ...edit,
+                    ...deleteMenuItems(sel, card.id, 'cards', removeCards, {
+                      // The logo card has no creation path, so it never goes (see isDeletable);
+                      // the count names only the cards that actually will.
+                      canDelete: (id) => cards.some((c) => c.id === id && isDeletable(c)),
+                      blockedLabel: 'The logo card can’t be deleted'
+                    })
                   ]);
                 }}
               >
@@ -475,9 +482,6 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               </button>
             );
           })}
-          <button style={pasteSongStyle} onClick={() => setEditing('new')}>
-            + Add a card — verse, announcements, prayer…
-          </button>
         </div>
         {undo.pending && (
           <UndoToast

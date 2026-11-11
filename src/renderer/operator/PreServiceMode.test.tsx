@@ -361,10 +361,19 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     expect(await screen.findByText(/Removed/)).toBeTruthy()
   })
 
-  it('invites the operator to add a card when the loop is empty (#88)', async () => {
+  it('+ Add a card sits at the top of the rail, above the cards', async () => {
+    installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Greeting')
+    const add = screen.getByRole('button', { name: /^\+ Add a card/ })
+    expect(add.compareDocumentPosition(rowFor('Greeting')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('the empty loop names the add chip (#88)', async () => {
     installHelmStub({ ...baseState, cards: [] })
     renderMode()
-    expect(await screen.findByText(/The loop is empty/)).toBeTruthy()
+    const empty = await screen.findByText(/The loop is empty/)
+    expect(empty.querySelector('b')?.textContent).toBe('+ Add a card')
   })
 
   it('shows no empty state while the loop has cards', async () => {
@@ -424,6 +433,53 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     act(() => keyHandlerRef.current?.onDelete?.())
     expect(removeCard).not.toHaveBeenCalled()
     expect(screen.queryByText(/Removed/)).toBeNull()
+  })
+})
+
+describe('PreServiceMode: right-click Edit, as on Songs', () => {
+  const WITH_LOGO: PreState = {
+    ...baseState,
+    cards: [...cards, { id: 'logo', type: 'logo', title: 'Logo', enabled: false }]
+  }
+  const rowFor = (title: string): HTMLElement =>
+    screen.getByText(title).closest('button') as HTMLElement
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('offers Edit above Delete, and Edit opens the card editor', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    installHelmStub(baseState)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Psalm 122:1')
+
+    fireEvent.contextMenu(rowFor('Psalm 122:1'))
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Edit', 'Delete'])
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(true)
+  })
+
+  it('offers no Edit on the logo card, which has no editor', async () => {
+    installHelmStub(WITH_LOGO)
+    renderMode()
+    await screen.findByText('Logo')
+
+    fireEvent.contextMenu(rowFor('Logo'))
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: /logo card/i }).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('offers no Edit inside a range, only the batch delete', async () => {
+    installHelmStub(WITH_LOGO)
+    renderMode()
+    await screen.findByText('Logo')
+
+    fireEvent.click(rowFor('Greeting'))
+    fireEvent.click(rowFor('Psalm 122:1'), { shiftKey: true })
+    fireEvent.contextMenu(rowFor('Psalm 122:1'))
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Delete 2 cards'])
   })
 })
 

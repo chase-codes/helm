@@ -425,6 +425,19 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   }
 
   const curPara = liveMsg ? liveMsg.paragraphs[Math.max(0, Math.min(msgIdx, liveMsg.paragraphs.length - 1))] : null;
+  // The quote schedule's add path (it had none: nothing called quoteSchedule.add). Files the
+  // cued paragraph; main dedupes. applyRows, not setSchedule: the reply is the whole list,
+  // which during an undo window still holds the rows the operator just deleted.
+  const addCuedQuote = (): void => {
+    if (!liveMsg || !curPara) return;
+    window.helm.quoteSchedule.add(msgId, curPara.ord).then(applyRows).catch(console.error);
+  };
+  // A paragraph waiting out its undo window is still in main's table, so main's dedupe would
+  // swallow an add and the row would never come back. Treat it as planned: Undo is the way back.
+  const cuedPlanned =
+    curPara !== null &&
+    (plannedSet.has(curPara.ord) ||
+      (undo.pending?.some((it) => it.msgId === msgId && it.ord === curPara.ord) ?? false));
   const heroLabel = liveMsg && curPara ? `Tape ${liveMsg.tapeNo} — ¶${curPara.label}` : '';
   const quoteText = curPara?.text ?? '';
   const quoteSource = liveMsg ? `${liveMsg.title} · ${liveMsg.date}` : '';
@@ -570,6 +583,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
           tapePlayer={tapePlayer}
           hasTapes={list.length > 0}
           onImportMessages={onOpenSettings}
+          onClearAll={() => removeQuotes(schedule.map((it) => it.id))}
+          add={liveMsg && curPara ? { label: `+ Add ¶${curPara.label}`, onAdd: addCuedQuote, planned: cuedPlanned } : null}
           undo={
             undo.pending
               ? {
