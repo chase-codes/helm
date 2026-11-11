@@ -66,7 +66,7 @@ describe('PreCardEditor verse look-up', () => {
     installHelm({ manifest: [] })
     renderEditor()
     await lookUp('psalm 122:1')
-    expect(await screen.findByText('Install a Bible first (Settings → Bibles)')).toBeTruthy()
+    expect(await screen.findByText('Install a Bible in Settings → Bibles')).toBeTruthy()
   })
 
   it('shows a message when the verse is absent from the chapter', async () => {

@@ -14,10 +14,12 @@ export interface ShortcutsSettingsProps {
   onChange: (next: HotkeyOverrides) => void
 }
 
+// Page names are the Header tab names (docs/ux-vocabulary.md); a track is named under
+// its page.
 const GROUPS: { scope: HotkeyScope; title: string }[] = [
   { scope: 'global', title: 'Everywhere' },
   { scope: 'songs', title: 'Songs page' },
-  { scope: 'scripture', title: 'Scripture page' }
+  { scope: 'scripture', title: 'Sermon page · Scripture track' }
 ]
 
 /** Settings → Shortcuts. Renders straight from HOTKEY_ACTIONS so the pane can never

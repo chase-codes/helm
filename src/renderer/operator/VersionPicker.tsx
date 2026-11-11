@@ -119,8 +119,10 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
               const mark = sel ? (idx === 0 ? '● PRIMARY' : '◧ COMPARE') : entry.installed ? '' : 'NOT INSTALLED';
               const title = entry.installed
                 ? sel
-                  ? 'Tap to take off screen'
-                  : 'Tap to show — two at once appear side by side'
+                  ? versions.length > 1
+                    ? 'Click to stop showing this translation'
+                    : 'The only translation shown; pick another to compare'
+                  : 'Click to show; two at once appear side by side'
                 : 'Downloadable in a full install';
               return (
                 <button key={entry.id} style={rowStyle(entry.installed, sel)} onClick={() => handleRowClick(entry)} title={title}>

@@ -153,7 +153,7 @@ describe('SongsMode', () => {
     await screen.findByText(/John Newton ·/);
     expect(keyHandlerRef.current?.isModalOpen()).toBe(false);
 
-    fireEvent.click(screen.getByText('Import a song library'));
+    fireEvent.click(screen.getByText('+ Import a song library'));
     expect(await screen.findByText('Import songs')).toBeTruthy();
 
     expect(keyHandlerRef.current?.isModalOpen()).toBe(true);
@@ -197,7 +197,7 @@ describe('SongsMode', () => {
     renderMode(keyHandlerRef);
     await screen.findByText(/John Newton ·/);
 
-    fireEvent.click(screen.getByText('Import a song library'));
+    fireEvent.click(screen.getByText('+ Import a song library'));
     fireEvent.click(await screen.findByText('EasyWorship'));
     fireEvent.click(await screen.findByText(/Import 1 song/));
     await screen.findByText(/Importing…/);
@@ -250,7 +250,7 @@ describe('SongsMode', () => {
     fireEvent.change(input, { target: { value: 'amazing' } });
     await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByText('Import a song library'));
+    fireEvent.click(screen.getByText('+ Import a song library'));
     fireEvent.click(await screen.findByText('EasyWorship'));
     fireEvent.click(await screen.findByText(/Import 1 song/));
     await screen.findByText(/Imported 1 song/);
@@ -366,7 +366,7 @@ describe('SongsMode hotkey jumps', () => {
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
     await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
-    fireEvent.click(screen.getByText('Cue next ›'));
+    fireEvent.click(screen.getByTitle('Next section'));
     await waitFor(() => expect(screen.getByText('NOW SINGING · Chorus')).toBeTruthy());
     // No pushState: the broadcast is still in flight.
     const btn = screen.getByText('Go live').closest('button') as HTMLButtonElement;
@@ -1102,7 +1102,7 @@ describe('SongsMode — Delete from library confirms rather than undoing (#90)',
     await waitFor(() => expect(screen.queryByText('Only Believe')).toBeNull());
     expect(rowFor('Amazing Grace')).toBeTruthy();
     // Confirm-grammar surfaces do not also offer an undo.
-    expect(screen.queryByText(/Removed/)).toBeNull();
+    expect(screen.queryByText(/Deleted/)).toBeNull();
   });
 
   it('the arm lapses back to the plain label after the confirm window', async () => {
@@ -1265,7 +1265,7 @@ describe('SongsMode — empty library invites the operator to fill it (#88)', ()
 
     const empty = await screen.findByText(/No songs yet/);
     expect(empty.textContent).toMatch(/\+ Add a song/);
-    expect(empty.textContent).toMatch(/Import a song library/);
+    expect(empty.textContent).toMatch(/\+ Import a song library/);
   });
 
   it('shows no empty state once the library has songs', async () => {
@@ -1353,6 +1353,52 @@ describe('SongsMode — the transport is stable ground (#85)', () => {
     expect(primary.textContent?.trim()).toBe('⇄ Switch');
     expect(primary.title).toBe('Switch to Blessed Assurance');
   });
+
+  it('steps with ‹ Previous / Next ›, the unit only in the tooltip (decision 5)', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(verb(/Previous/).textContent?.trim()).toBe('‹ Previous');
+    expect(verb(/Previous/).getAttribute('title')).toBe('Previous section');
+    expect(verb(/^Next/).textContent?.trim()).toBe('Next ›');
+    expect(verb(/^Next/).getAttribute('title')).toBe('Next section');
+  });
+
+  it('titles Take down "Black the audience screen"', async () => {
+    installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    expect(verb(/Take down/).getAttribute('title')).toBe('Black the audience screen');
+  });
+});
+
+describe('SongsMode: status chip names the page that owns the screen (decision 6)', () => {
+  const T = themeFor('classic', 'dark');
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+  };
+  const SCRIPTURE_LIVE: PresentationState = { output: 'live', liveKey: 'scr:John:3:16', liveSnap: null, cuedKey: null, cuedSnap: null };
+
+  it('reads LIVE FROM SERMON, faint, while scripture is up', async () => {
+    installHelmStubWith([CHORUS_SONG], SCRIPTURE_LIVE);
+    renderMode({ current: null });
+    const label = await screen.findByText('LIVE FROM SERMON');
+    expect((label.parentElement as HTMLElement).style.color).toBe(rgb(T.faint));
+    expect(screen.queryByText('LIVE ON SCREEN')).toBeNull();
+  });
+
+  it('reads LIVE ON SCREEN while one of its own songs is up', async () => {
+    installHelmStubWith([CHORUS_SONG], LIVE_ON_S2);
+    renderMode({ current: null });
+    expect(await screen.findByText('LIVE ON SCREEN')).toBeTruthy();
+  });
+
+  it('reads NOTHING ON SCREEN when black', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    expect(await screen.findByText('NOTHING ON SCREEN')).toBeTruthy();
+  });
 });
 
 describe('SongsMode — the rail forecasts what a click will do (#89)', () => {
@@ -1415,7 +1461,7 @@ describe('SongsMode — collapsible section rail', () => {
     await screen.findAllByText('Amazing grace');
 
     fireEvent.click(screen.getByTitle('Hide sections — bigger lyrics'));
-    expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
+    expect(screen.queryByText(/Click a section to cue it/)).toBeNull();
     // The hero (the confidence monitor) is untouched.
     expect(within(screen.getByTestId('song-hero')).getByText('Amazing grace')).toBeTruthy();
     // The wrapper GLIDES shut rather than snapping — the width transition is what lets
@@ -1425,7 +1471,7 @@ describe('SongsMode — collapsible section rail', () => {
     expect(wrap.style.transition).toContain('width');
 
     fireEvent.click(screen.getByTitle('Show sections'));
-    expect(screen.getByText('SECTIONS — TAP TO SING')).toBeTruthy();
+    expect(screen.getByText(/Click a section to cue it/)).toBeTruthy();
     // Default rail width (380) + the divider's 12px hit area.
     expect(screen.getByTestId('rail-wrap').style.width).toBe('392px');
   });
@@ -1440,7 +1486,7 @@ describe('SongsMode — collapsible section rail', () => {
     installHelmStubWith(SONGS, NOTHING_LIVE);
     renderMode({ current: null });
     await screen.findAllByText('Amazing grace');
-    expect(screen.queryByText('SECTIONS — TAP TO SING')).toBeNull();
+    expect(screen.queryByText(/Click a section to cue it/)).toBeNull();
     expect(screen.getByTitle('Show sections')).toBeTruthy();
   });
 

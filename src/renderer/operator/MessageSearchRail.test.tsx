@@ -141,14 +141,14 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
   it('renders the undo toast and fires onUndo (#86)', () => {
     const onUndo = vi.fn()
     render(<MessageSearchRail {...baseProps} undo={{ label: '¶2', onUndo }} />)
-    expect(screen.getByText(/Removed/)).toBeTruthy()
+    expect(screen.getByText(/Deleted/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(onUndo).toHaveBeenCalledTimes(1)
   })
 
   it('shows no undo toast when nothing is pending', () => {
     render(<MessageSearchRail {...baseProps} />)
-    expect(screen.queryByText(/Removed/)).toBeNull()
+    expect(screen.queryByText(/Deleted/)).toBeNull()
   })
 })
 

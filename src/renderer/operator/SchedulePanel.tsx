@@ -214,7 +214,7 @@ export function SchedulePanel({
                   <DangerGhostButton
                     label="Clear all"
                     onClick={onClearAll}
-                    title="Remove every verse — undoable for five seconds"
+                    title="Delete every verse (undo for five seconds)"
                   />
                 )}
               </div>

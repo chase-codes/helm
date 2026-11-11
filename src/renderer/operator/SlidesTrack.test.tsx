@@ -8,6 +8,7 @@ import type { MediaItem, PresentationState } from '../../shared/types'
 import type { PanelWidthControl } from './usePanelWidth'
 import { settleAndClear } from '../../test/mocks'
 import { LIBRARY_DELETE, LIBRARY_DELETE_ARMED } from './useLibraryDelete'
+import { railHint } from './railHints'
 
 // This project's vitest config does not set `globals: true`, so
 // @testing-library/react's auto afterEach(cleanup) never registers; without
@@ -123,6 +124,14 @@ describe('SlidesTrack', () => {
     fireEvent.click(deckRow)
     expect(await screen.findByText('1')).toBeTruthy()
     expect(await screen.findByText('2')).toBeTruthy()
+  })
+
+  it('the deck rail hint promises a cue, not a take (the old hint said "put it on screen")', async () => {
+    installHelmStub()
+    renderTrack()
+    fireEvent.click((await screen.findByText('▤ Sermon.pptx')).closest('button') as HTMLButtonElement)
+    expect(await screen.findByText(railHint('slide'))).toBeTruthy()
+    expect(screen.queryByText(/put it on screen/)).toBeNull()
   })
 
   it('does not show a slide rail for a single-slide image item', async () => {
@@ -323,6 +332,29 @@ describe('SlidesTrack', () => {
     fireEvent.mouseDown(dividers[0], { clientX: 10 })
     expect(left.startDrag).toHaveBeenCalled()
     expect(right.startDrag).not.toHaveBeenCalled()
+  })
+
+  it('labels a PDF deck PDF, not PowerPoint', async () => {
+    installHelmStub()
+    const pdf: MediaItem = { id: 'pdf1', type: 'deck', title: 'Notes.pdf', filePath: null, slides: ['pdf1/1.png'], createdAt: 9 }
+    ;(window as unknown as { helm: { media: { list: () => Promise<MediaItem[]> } } }).helm.media.list = () =>
+      Promise.resolve([...items, pdf])
+    renderTrack()
+    expect(await screen.findByText('PDF · 1 slide')).toBeTruthy()
+    expect(screen.getByText('PowerPoint · 2 slides')).toBeTruthy()
+  })
+
+  it('a failed deck import does not blame PowerPoint', async () => {
+    installHelmStub()
+    vi.spyOn(console, 'error').mockImplementation(() => {}) // runImport logs the rejection
+    ;(window as unknown as { helm: { media: { importDeck: () => Promise<never> } } }).helm.media.importDeck = () =>
+      Promise.reject(new Error('rasterize failed'))
+    renderTrack()
+    await screen.findByText('▤ Sermon.pptx')
+    fireEvent.click(screen.getByText('+ Import'))
+    fireEvent.click(screen.getByText('Slides / PDF'))
+    expect(await screen.findByText("Couldn't import that file")).toBeTruthy()
+    expect(screen.getByText("Couldn't convert that presentation or PDF.")).toBeTruthy()
   })
 })
 

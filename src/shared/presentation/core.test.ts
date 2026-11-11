@@ -162,7 +162,7 @@ test('showLive that refuses the screen leaves the cue alone', () => {
 })
 test("setOutput refuses 'live' with no live key — coerces to black (BUG-021)", () => {
   // A logo toggle from a cold start used to produce output 'live' with liveKey null:
-  // a blank slide the badges call ANOTHER FLOW LIVE and a pre-service tap could seize.
+  // a blank slide the badges call LIVE FROM <PAGE> and a pre-service tap could seize.
   const st = setOutput(initialPresentation(), 'live')
   expect(st.output).toBe('black')
 })

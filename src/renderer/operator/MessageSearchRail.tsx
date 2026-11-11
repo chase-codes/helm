@@ -50,7 +50,7 @@ export interface MessageSearchRailProps {
   /** Slot for Task 12's tape player card — rendered as-is at the bottom of the rail,
    * omitted entirely when null (this task has no player yet). */
   tapePlayer: JSX.Element | null;
-  /** "Removed … — Undo" bar for a quote-schedule delete (#86); same 5s grammar as the
+  /** "Deleted …" bar with Undo for a quote-schedule delete (#86); same 5s grammar as the
    * scripture and media rails. */
   undo?: { label: string; onUndo: () => void };
   /** False when no tapes are installed at all — the empty schedule then points at the

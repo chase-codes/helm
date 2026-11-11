@@ -37,6 +37,11 @@ const baseProps = {
 }
 
 describe('SchedulePanel', () => {
+  it('titles Clear all with the Delete verb (decision 1)', () => {
+    render(<SchedulePanel {...baseProps} onClearAll={vi.fn()} />)
+    expect(screen.getByTitle('Delete every verse (undo for five seconds)')).toBeTruthy()
+  })
+
   it('marks the selected row via data-selected', () => {
     render(<SchedulePanel {...baseProps} rows={rows({ isSelected: true })} />)
     const row = screen.getByText('John 3:16').closest('button') as HTMLButtonElement
@@ -64,7 +69,7 @@ describe('SchedulePanel', () => {
   it('renders the undo toast and fires onUndo', () => {
     const onUndo = vi.fn()
     render(<SchedulePanel {...baseProps} undo={{ label: 'John 3:16', onUndo }} />)
-    expect(screen.getByText(/Removed/)).toBeTruthy()
+    expect(screen.getByText(/Deleted/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(onUndo).toHaveBeenCalledTimes(1)
   })

@@ -15,3 +15,6 @@
 
 ## UX grammar
 - Operator interactions follow the eight rules in `docs/ux-grammar.md` (on-air red, stable transport, click cues / double-click takes / Enter commits, undo not confirm, fixed footprints, list kit parity, empty-state invitations, theme tokens only). Read it before adding or changing any operator surface; each rule cites the code that enforces it.
+
+## UX vocabulary
+- What operator controls are called (the ten words, ‹ Previous / Next ›, the rail hint sentence, page names) is fixed in `docs/ux-vocabulary.md`. Use those words in any new operator copy; if a word has to change, change that file in the same commit.
