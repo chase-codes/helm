@@ -5,7 +5,15 @@ import { SlideCanvas } from '../shared/SlideCanvas';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import { logoSlide } from '../../shared/presentation/core';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
-import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import {
+  primaryBtnStyle,
+  screenToneColor,
+  statusChipStyle,
+  statusDotStyle,
+  transportGhostBtn,
+  verbDividerStyle
+} from './transport';
+import { screenStatus } from '../../shared/presentation/screenOwner';
 import { MONO } from '../shared/fonts';
 import { liveRing } from './railTint';
 import { LiveBadge } from './StateBadge';
@@ -13,6 +21,8 @@ import { LiveBadge } from './StateBadge';
 export interface SermonCenterProps {
   theme: Theme;
   output: OutputMode;
+  /** The live key, so the chip can say which page owns the screen (decision 6). */
+  liveKey: string | null;
   cuedIsLive: boolean;
   /** Track accent driving the cued-live hero label color (the ring is red, rule 1) — T.scripture for the
    * verse variant, T.message for the quote variant, T.sermon for the slide variant
@@ -23,9 +33,9 @@ export interface SermonCenterProps {
   ondeckTagColor: string;
   ondeckTitle: string;
   ondeckPreview: string;
-  /** "Next verse ›" / "Next ¶ ›" / "Next slide ›" (Lectern.pretty.html:1326) — the
-   * "‹ Back" label never varies by track. */
-  nextLabel: string;
+  /** The step unit, named only in the Previous / Next tooltips (decision 5): 'verse',
+   * 'paragraph' or 'slide'. The button labels never vary by track. */
+  unit: string;
   onPrev: () => void;
   onNext: () => void;
   onGoLive: () => void;
@@ -71,6 +81,7 @@ export const SLIDE_HERO_WIDTH = 'min(100%, calc(100cqh * 16 / 9))';
 export function SermonCenter({
   theme: T,
   output,
+  liveKey,
   cuedIsLive,
   accent,
   heroLabel,
@@ -81,7 +92,7 @@ export function SermonCenter({
   ondeckTagColor,
   ondeckTitle,
   ondeckPreview,
-  nextLabel,
+  unit,
   versionPicker,
   variant,
   slide,
@@ -93,8 +104,9 @@ export function SermonCenter({
   queuedTitle,
   onTakeDown
 }: SermonCenterProps): JSX.Element {
-  const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
-  const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
+  const status = screenStatus({ output, liveKey }, 'sermon');
+  const outColor = screenToneColor(T, status.tone);
+  const projText = status.text;
 
   const centerStyle: CSSProperties = { flex: 1, minWidth: 0, background: T.appBg, display: 'flex', flexDirection: 'column', padding: '16px 22px', minHeight: 0 };
   const nowBarStyle: CSSProperties = {
@@ -104,7 +116,7 @@ export function SermonCenter({
     padding: '0 12px',
     marginBottom: '4px'
   };
-  const projDotStyle: CSSProperties = statusDotStyle(outColor, output === 'live');
+  const projDotStyle: CSSProperties = statusDotStyle(outColor, status.tone === 'live');
   const heroCardStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
@@ -237,7 +249,7 @@ export function SermonCenter({
 
       <div style={ondeckStyle}>
         <div style={{ fontFamily: MONO, fontSize: '10px', letterSpacing: '0.12em', color: T.faint }}>
-          UP NEXT — TAP OR PRESS →
+          UP NEXT
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '7px' }}>
           <div style={ondeckTagStyle}>{ondeckTag}</div>
@@ -254,11 +266,11 @@ export function SermonCenter({
           Go live are therefore the last two controls in the row, at the same coordinates in
           every state, and neither ever takes on the other's meaning. */}
       <div style={{ display: 'flex', gap: '10px', marginTop: '13px', flexShrink: 0 }} data-transport-bar>
-        <button style={ghostBtn} onClick={onPrev}>
-          &lsaquo; Back
+        <button style={ghostBtn} onClick={onPrev} title={`Previous ${unit}`}>
+          &lsaquo; Previous
         </button>
-        <button style={ghostBtn} onClick={onNext}>
-          {nextLabel}
+        <button style={ghostBtn} onClick={onNext} title={`Next ${unit}`}>
+          Next &rsaquo;
         </button>
         <div style={{ flex: 1 }} />
         {versionPicker}
@@ -266,7 +278,7 @@ export function SermonCenter({
           style={takeDownStyle}
           onClick={onTakeDown}
           disabled={!canTakeDown}
-          title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
+          title={canTakeDown ? 'Black the audience screen' : 'Nothing on screen'}
         >
           <ScreenBlackIcon size={14} /> Take down
         </button>

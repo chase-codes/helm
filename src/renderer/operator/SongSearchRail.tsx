@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
-import { ImportIcon, SearchIcon } from '../shared/icons';
+import { SearchIcon } from '../shared/icons';
 import { ListEmpty } from './ListEmpty';
 import { liveRing } from './railTint';
 import { LiveBadge, QueuedBadge } from './StateBadge';
@@ -290,7 +290,7 @@ export function SongSearchRail({
             data-rail-eyebrow-dot
             style={{ width: '5px', height: '5px', borderRadius: '50%', background: T.accent, display: 'inline-block' }}
           />
-          <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>OPERATOR · FIND A SONG</span>
+          <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>SONG LIBRARY</span>
         </div>
         <div style={opSearchBoxStyle}>
           <span style={{ display: 'inline-flex', opacity: 0.5 }}>
@@ -323,7 +323,7 @@ export function SongSearchRail({
           </span>
         </button>
         <button style={{ ...importRowStyle, display: 'inline-flex', alignItems: 'center', gap: '7px' }} onClick={onImportSongs}>
-          <ImportIcon size={14} /> Import a song library
+          + Import a song library
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>
@@ -332,7 +332,7 @@ export function SongSearchRail({
           // has to point at them.
           <ListEmpty>
             No songs yet — add one with <b>+ Add a song</b>, or bring your existing set in
-            with <b>Import a song library</b>.
+            with <b>+ Import a song library</b>.
           </ListEmpty>
         )}
         {rows.map(row)}
