@@ -22,7 +22,7 @@ never reports state. Every page's status chip takes its words and tone from one 
 `screenToneColor()` (`src/renderer/operator/transport.ts`): own content `T.live`
 (`LIVE ON SCREEN`), another page's content `T.faint` (`LIVE FROM SONGS` / `SERMON` /
 `PRE-SERVICE`), logo `T.accent`, black `T.dim` (`NOTHING ON SCREEN`). The Header chip
-keeps its own resolver (`Header.tsx:54`) because it is global.
+keeps its own resolver (`Header.tsx:52`) because it is global.
 
 On rows and heroes the signal is one ring and one word: whatever is on the audience
 screen wears `liveRing(T)` (2px `T.live`) and the red `LIVE` badge, on every rail and both
@@ -38,7 +38,7 @@ its left truncates; the chip keeps its footprint.
 - `src/shared/theme.ts:4` — `live` token on the `Theme` interface; every one of the ten palettes (`theme.ts:18-31`) defines it as a red, and `go` as a green.
 - `src/shared/presentation/screenOwner.ts` — `pageOfKey` maps each live-key kind to its Header tab; `screenStatus` returns the chip's words and tone. `src/renderer/operator/transport.ts:95` `screenToneColor` turns the tone into a theme colour.
 - `src/renderer/operator/SongsMode.tsx:733`, `SermonCenter.tsx:101`, `PreServiceMode.tsx:273` — every page chip calls `screenStatus`; the Pre-service comment records the hard-coded green this replaced (#87).
-- `src/renderer/operator/Header.tsx:54` — the global chip's own resolver.
+- `src/renderer/operator/Header.tsx:52` — the global chip's own resolver.
 - `src/renderer/operator/transport.ts:11-13` — `go` documented as "the only colour that ever means put this on screen".
 - `src/renderer/operator/PreServiceMode.test.tsx:506` — "paints LIVE ON SCREEN with %s live" pins the chip to `T.live` across two families and asserts `#3fb950` never renders; `src/shared/presentation/screenOwner.test.ts`, `SermonCenter.test.tsx:169` and `SongsMode.test.tsx:1375` pin the `LIVE FROM <PAGE>` words and the faint tone.
 - `src/renderer/operator/railTint.ts:135` `liveRing`, `:166` `scheduleRowStyle` (live outranks the selection), `:61` `railRowStyle` (live ring is red, outranks a range).
@@ -175,11 +175,12 @@ with variable steps get a fixed frame.
 - `src/renderer/operator/transport.ts:9`, `:23` — fixed verb width, ghosts still occupy the slot.
 - `src/renderer/operator/StateBadge.tsx`, `railTint.ts:142` `queuedBadgeStyle` — QUEUED badge `flexShrink: 0`, nowrap; on the Songs rail (`SongSearchRail.tsx:136-137`) it dims on the row whose click clears it rather than swapping copy; title/author truncate.
 - `src/renderer/operator/SermonCenter.tsx:233-237`, `SlidesTrack.tsx:598-601`, `SongsMode.tsx:918`, `UndoToast.tsx:28-30` — the `minWidth: 0` + ellipsis pair.
-- `src/renderer/operator/Header.tsx:45-51`, `:100` — live label clamped to 30 chars, nowrap.
+- `src/renderer/operator/Header.tsx:47-51` — the live chip is a state word plus a detail clamped to 30 chars; `:123` `outDetailStyle` makes that detail the one header item that truncates. Every other header item is nowrap and holds its width, and the service title gives only after the chip is down to its fixed parts, so the header stays on one line down to the minimum window.
+- `src/renderer/operator/transport.ts:51` `transportGhostBtn` — ‹ Previous / Next › are nowrap and unshrinkable, so the bar never grows a second line.
 - `src/renderer/operator/railTint.ts:115-130` — two-line clamp for rail bodies.
 - `src/renderer/operator/PreServiceMode.tsx:236-239` — labels say what the click does (#92), which is what makes the row width constant.
-- `src/renderer/operator/ModalShell.tsx:16-17` — fixed `height` so a wizard does not resize under the operator.
-- `src/renderer/operator/SlidesTrack.tsx:448-450`, `Header.tsx:200` — tabular numerals so counters do not jitter.
+- `src/renderer/operator/ModalShell.tsx:16-17` — fixed `height` so a wizard does not resize under the operator; `SettingsModal.tsx:423` takes one (560px) so switching sections never moves the section list or Done. `PreCardEditor.tsx:225` pins its title and its buttons and scrolls only the fields.
+- `src/renderer/operator/SlidesTrack.tsx:448-450`, `Header.tsx:245` — tabular numerals so counters do not jitter.
 
 **Why:** a control whose position depends on the song library cannot be hit by muscle memory.
 
@@ -246,6 +247,14 @@ derived by suffixing a hex token with alpha (`railTint`, `tintChip`), never spel
 `rgba()`. A new semantic gets a token or it does not ship. Z-index (`zLayers.ts`) and
 type (`fonts.ts`) follow the same one-ladder rule.
 
+Hover, press and keyboard focus are the one part of operator chrome that lives in a
+stylesheet, because an inline style cannot express them. `global.css` says where they go;
+their colours are still theme tokens, handed over as custom properties on the app root: a
+wash of `T.text` over whatever the control already wears, and a ring in `T.accent` (or the
+track colour, on the Scripture and Message entries). A control that does nothing in its
+current state does not answer the pointer: `disabled` and `aria-disabled` opt out, and a
+button kept enabled only for its tooltip carries `data-inert`.
+
 **Carve-out:** the audience and mirror canvases (`SlideCanvas`, `ReadingCanvas`,
 `VideoCanvas`, `OutputRoot`/`OutputApp`/`MirrorView`) render on the projector, which does
 not follow the operator's theme pick. Their palettes and `#000` backgrounds are not themed
@@ -257,6 +266,7 @@ chrome. `LeaderView` renders operator-dark by design (`theme.ts:42`) and uses `D
 - `src/renderer/operator/railTint.ts:5-16`, `:25-40` — `railTint` / `tintChip`, hex-token-plus-alpha only (#91, #140).
 - `src/renderer/operator/ModalShell.tsx:27-35` — `T.scrim` / `T.modalShadow` replaced six hand-rolled rgba pairs.
 - `src/renderer/operator/zLayers.ts`, `src/renderer/shared/fonts.ts`.
+- `src/renderer/operator/global.css:44` — the interaction layer: hover and press wash, `button:focus-visible`, the field ring (`[data-field]` for a bare input inside a framed wrapper). `src/renderer/operator/interactionVars.ts:21` `interactionVars` (set on the root at `App.tsx:162`) and `:31` `focusRing`; `interactionVars.test.ts` holds every palette's `text` to a 6-digit hex so the wash cannot silently vanish.
 - `src/shared/theme.test.ts` — contrast floor on the palettes.
 - `src/renderer/operator/PreServiceMode.test.tsx:449` — the one literal-hex guard.
 
@@ -296,6 +306,6 @@ Facts as of 2026-10-12, not tasks:
 - `src/renderer/output/LeaderView.tsx:209` and `:225` hard-code `#221d10` and `#b4b1aa`, which are `CLASSIC_DARK.selBg` and `CLASSIC_DARK.lineDim`.
 - The status chip is page-level (decision 6): on the Sermon page a live slide from the Slides track reads `LIVE ON SCREEN` on the Scripture track too.
 - Message's `+ Import` opens Settings (`MessageMode.tsx:585` `onOpenSettings`) rather than the import modal itself; Slides and Songs import in place.
-- The `Header` live chip changes height with state (`Header.tsx:96`, 28 → 32 px), a documented exception (`transport.ts:64-67`).
+- The `Header` live chip changes height with state (`Header.tsx:102`, 28 → 32 px), a documented exception (`transport.ts:64-67`).
 - The Message quote schedule has no add path (`MessageSearchRail.tsx` empty-state comment), so its digit jumps and row numbers have nothing to act on until one lands.
 - Escape's clear-selection rung fires on any non-empty selection, and a plain click selects a row on Scripture, Message and Pre-service, so after a click Escape takes two presses to reach the screen. `clearSelectionRung` is the one place to change if that should apply to ranges only.

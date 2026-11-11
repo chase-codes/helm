@@ -31,6 +31,73 @@ textarea {
   color: inherit;
 }
 
+/* A placeholder longer than its field ends in an ellipsis instead of a hard cut. */
+input {
+  text-overflow: ellipsis;
+}
+
+input[type='range'] {
+  accent-color: var(--helm-focus);
+}
+
+/*
+ * Interaction layer: hover, press and focus for the whole operator window.
+ *
+ * Operator chrome is styled inline, which cannot express these states, so they live here
+ * once. Every colour is a custom property that App sets from the active theme
+ * (interactionVars.ts); nothing below names a colour of its own.
+ *
+ * Hover and press are a wash laid OVER the control via background-image, which is why
+ * they need !important: the inline `background` shorthand resets background-image, and
+ * the wash has to sit on top of whatever colour the control already wears (the accent
+ * tab, the green verb, a live-tinted row) rather than replace it.
+ *
+ * Opting out: a control that does nothing in its current state must not answer the
+ * pointer (grammar rule 7). `disabled` and `aria-disabled` are honoured; a button that
+ * stays enabled for its tooltip but is a no-op carries `data-inert`.
+ */
+button {
+  /* Only seen by the wash and the focus ring on buttons that set no radius of their own. */
+  border-radius: 6px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+button:not(:disabled):not([aria-disabled='true']):not([data-inert]):hover {
+  background-image: linear-gradient(var(--helm-hover), var(--helm-hover)) !important;
+}
+
+button:not(:disabled):not([aria-disabled='true']):not([data-inert]):active {
+  background-image: linear-gradient(var(--helm-press), var(--helm-press)) !important;
+}
+
+/* Keyboard focus only: blurOnPointerClick releases focus after a mouse click. */
+button:focus-visible {
+  outline: 2px solid var(--helm-focus);
+  outline-offset: 2px;
+}
+
+/* A text field that draws its own frame. */
+input:not([type]):focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--helm-focus);
+  outline-offset: -1px;
+}
+
+/* A bare input inside a framed wrapper (the rail search boxes): the wrapper wears the
+   ring, so the icon and the clear button sit inside it. */
+[data-field]:focus-within {
+  outline: 2px solid var(--helm-focus);
+  outline-offset: -1px;
+}
+
+[data-field] input:focus-visible {
+  outline: none;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

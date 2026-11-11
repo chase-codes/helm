@@ -222,22 +222,27 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   });
 
   return (
-    <ModalShell onClose={onClose} variant="card" width="100%" maxWidth="640px" maxHeight="90vh">
-      <div style={{ fontWeight: 700, fontSize: '18px' }}>{isNew ? 'Add a card to the loop' : 'Edit card'}</div>
-      {isNew && (
-        <div style={{ display: 'flex', gap: '6px', marginTop: '14px' }}>
-          {TYPE_TABS.map((t) => (
-            <button key={t.id} style={tabStyle(t.id === peType)} onClick={() => setPeType(t.id)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+    // Header and footer stay put and only the fields scroll: as one scrolling card the
+    // full-width preview pushed the save button below the fold of the default window.
+    <ModalShell onClose={onClose} width="100%" maxWidth="640px" maxHeight="90vh">
+      <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: '18px' }}>{isNew ? 'Add a card to the loop' : 'Edit card'}</div>
+        {isNew && (
+          <div style={{ display: 'flex', gap: '6px', marginTop: '14px' }}>
+            {TYPE_TABS.map((t) => (
+              <button key={t.id} style={tabStyle(t.id === peType)} onClick={() => setPeType(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 24px 18px' }}>
       <div
         data-testid="pre-card-preview"
         style={{
-          marginTop: '14px',
-          width: '100%',
+          width: '60%',
+          margin: '0 auto',
           aspectRatio: '16 / 9',
           borderRadius: '10px',
           overflow: 'hidden',
@@ -315,7 +320,17 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
           </>
         )}
       </div>
-      <div style={{ display: 'flex', gap: '10px', marginTop: '20px', alignItems: 'center' }}>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center',
+          padding: '14px 24px',
+          flexShrink: 0,
+          borderTop: `1px solid ${T.hairline}`
+        }}
+      >
         {!isNew && (
           <button style={removeStyle} onClick={remove}>
             Delete card

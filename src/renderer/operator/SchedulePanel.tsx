@@ -11,6 +11,7 @@ import { scheduleRowStyle } from './railTint';
 import { RowStateMark } from './StateBadge';
 import { railHint } from './railHints';
 import { RowNumber } from './RowNumber';
+import { focusRing } from './interactionVars';
 
 /** Shared by the input and its ghost overlay — they must render at the exact same size or
  * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
@@ -147,7 +148,7 @@ export function SchedulePanel({
       {track === 'scripture' && (
         <>
           <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
-            <div style={schedInputStyle}>
+            <div data-field style={{ ...schedInputStyle, ...focusRing(T.scripture) }}>
               <span style={{ fontFamily: MONO, fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
               <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex' }}>
                 <input

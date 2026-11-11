@@ -128,7 +128,7 @@ export function TapePlayer({ theme: T, msg, audioSrc, timing, downloading, onAct
   return (
     <div style={tapeCardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <button style={tapeBtnStyle} onClick={togglePlay}>
+        <button style={tapeBtnStyle} data-inert={downloading ? '' : undefined} onClick={togglePlay}>
           {tapeBtnLabel}
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
