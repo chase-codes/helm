@@ -24,7 +24,7 @@ jobs:
     # let a re-run, or a PR that only touches an unrelated action file matched by
     # the paths filter, go green without vendoring anything at all — defeating
     # the job's purpose. It runs the vendor script directly instead.
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
