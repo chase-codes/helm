@@ -558,6 +558,16 @@ export function SermonMode({
   };
 
   const goLive = (): void => {
+    // A reference in the entry is what the operator just named, so it outranks both the
+    // queue and the cursor: the button puts up what `+ Add` would file, and its tooltip
+    // names it. Without this the button reached past the typed reference to the old hero
+    // verse. A search hit goes through `activateResult` (the builder is not a reference
+    // while searching); a typed reference through `goLiveFromBuilder`, Shift+Enter's path.
+    if (typedRef) {
+      if (query !== null) activateResult(hi);
+      else goLiveFromBuilder();
+      return;
+    }
     // A queued reading (decision 3) is what the operator lined up for this button.
     if (queuedReading) {
       activateReading(queuedReading);
@@ -876,6 +886,13 @@ export function SermonMode({
   // the entry has no clearable affordance, Delete is inert there, and the only rail tap that
   // clears the builder also moves the projector.
   const builderUnresolved = renderBuilder(builder) !== '' && toParsedRef(builder) === null;
+
+  // What the entry names, when it names anything: the highlighted hit while searching, else
+  // the typed reference once it parses. Null for an empty entry (Go live then means the
+  // cursor, as it always has) and for a half-typed one ("Rom"), which names nothing yet —
+  // the button falls back to the hero rather than guessing. This is `addRef` minus the
+  // cursor fallback, so `+ Add` and Go live always agree on what the entry holds.
+  const typedRef: ParsedRef | null = query !== null ? picked : toParsedRef(builder);
 
   // The completion the entry previews. Same function the space/Tab handler commits with,
   // so what the operator sees and what the keystroke does cannot disagree.
@@ -1260,7 +1277,12 @@ export function SermonMode({
             onPrev={() => stepVerse(-1)}
             onNext={() => stepVerse(1)}
             onGoLive={goLive}
-            queuedTitle={queuedReading ? formatRef(queuedReading) : undefined}
+            // The typed reference first, mirroring `goLive`'s order: it arms the button
+            // even while the cursor is live and names what will go up (rule 2: the label
+            // stays Go live, the tooltip carries the title).
+            queuedTitle={
+              typedRef ? formatRef(typedRef) : queuedReading ? formatRef(queuedReading) : undefined
+            }
             onTakeDown={takeDown}
           />
           <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />
