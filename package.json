@@ -1,7 +1,7 @@
 {
   "name": "helm",
   "productName": "Helm",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Church presentation app — run the whole service from one seat.",
   "main": "./out/main/index.js",
   "author": "Helm",
