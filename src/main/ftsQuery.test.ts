@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { andGroupsMatch, ftsTerm, orPrefixMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery';
+import { andGroupsMatch, anyTwoOfMatch, ftsTerm, orPrefixMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery';
 
 test('ftsTerm quotes, escapes embedded quotes, and appends * for prefix', () => {
   expect(ftsTerm('love', true)).toBe('"love"*');
@@ -17,4 +17,10 @@ test('andGroupsMatch ANDs groups; the first alternative of each group is a prefi
 
 test('candidate limit is shared', () => {
   expect(FTS_CANDIDATE_LIMIT).toBe(1000);
+});
+
+test('anyTwoOfMatch ORs every pair of groups', () => {
+  expect(anyTwoOfMatch([['loved'], ['earth'], ['god']])).toBe(
+    '(("loved"*) AND ("earth"*)) OR (("loved"*) AND ("god"*)) OR (("earth"*) AND ("god"*))'
+  );
 });

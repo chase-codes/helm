@@ -26,3 +26,16 @@ export function andGroupsMatch(groups: string[][]): string {
     .map((alts) => `(${alts.map((a, i) => ftsTerm(a, i === 0)).join(' OR ')})`)
     .join(' AND ');
 }
+
+/** The verse CLOSE-match gate. A verse one word short of an N-word query still holds at
+ * least two of any three of its words, so the gate is the three pairs of the three most
+ * selective groups (the caller picks them — longest words) rather than N clauses of N-1
+ * prefix terms each: on a nine-word query that is the difference between a few
+ * milliseconds and a stalled keystroke. Coarser than the rule it serves; the scorer
+ * applies "all but one" to what comes back. */
+export function anyTwoOfMatch(groups: string[][]): string {
+  const pairs: string[] = [];
+  for (let i = 0; i < groups.length; i++)
+    for (let j = i + 1; j < groups.length; j++) pairs.push(`(${andGroupsMatch([groups[i], groups[j]])})`);
+  return pairs.join(' OR ');
+}

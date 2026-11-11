@@ -2810,6 +2810,23 @@ describe('SermonMode — verse text search from the entry', () => {
     await waitFor(() => expect(entryValue()).toBe('Luke 15:11-32'))
   })
 
+  it('a story lists every account; ArrowDown reaches the next gospel and Enter sets its range', async () => {
+    const { resolveChapter } = installHelmStub(NOTHING_LIVE, [], { verseSearch: () => ({ hits: [], total: 0 }) })
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(entry()).toBeTruthy())
+    fireEvent.focus(entry())
+    typeInEntry('resurrection')
+    await waitFor(() => expect(screen.getByText('+ Add Matthew 28:1–10')).toBeTruthy())
+    const metas = Array.from(document.querySelectorAll('[data-search-row]')).slice(0, 4).map((r) => r.children[1]?.textContent)
+    expect(metas).toEqual(['Matthew 28:1–10', 'Mark 16:1–8', 'Luke 24:1–12', 'John 20:1–18'])
+    fireEvent.keyDown(entry(), { key: 'ArrowDown' })
+    fireEvent.keyDown(entry(), { key: 'ArrowDown' })
+    expect(screen.getByText('+ Add Luke 24:1–12')).toBeTruthy()
+    fireEvent.keyDown(entry(), { key: 'Enter' })
+    await waitFor(() => expect(entryValue()).toBe('Luke 24:1-12'))
+  })
+
   it('Shift+Enter on a verse hit takes that verse to the screen', async () => {
     const { resolveChapter, resolveSecondChapter, take, goLive } = installHelmStub(NOTHING_LIVE, [], { verseSearch: hits }, { book: 'Luke', ch: 19, data: LUKE_19 })
     render(<Harness />)

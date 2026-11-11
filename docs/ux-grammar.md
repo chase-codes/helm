@@ -231,7 +231,7 @@ tooltips say why.
 **Enforced by**
 - `src/renderer/operator/ListEmpty.tsx:4-18` — the shared empty state and its prop contract (#88).
 - Every status chip says `NOTHING ON SCREEN` when black (`screenStatus`), as do the Header and leader view.
-- First-run lines: `SongSearchRail.tsx:327-330`, `SchedulePanel.tsx:222-224`, `SlidesTrack.tsx:520-522`, `MessageSearchRail.tsx:298-306`, `PreServiceMode.tsx:335-337` (names `+ Add a card` in bold; `PreServiceMode.test.tsx:382`), `ScriptureSearchResults.tsx:98-99`.
+- First-run lines: `SongSearchRail.tsx:327-330`, `SchedulePanel.tsx:222-224`, `SlidesTrack.tsx:520-522`, `MessageSearchRail.tsx:298-306`, `PreServiceMode.tsx:335-337` (names `+ Add a card` in bold; `PreServiceMode.test.tsx:382`), `ScriptureSearchResults.tsx:106-107`.
 - `src/renderer/operator/SermonCenter.tsx:30-34` — `canGoLive` contract; `:172-174`, `:267-274` ghost + "Nothing to take" tooltip; `:259` "Nothing on screen".
 - `src/renderer/operator/SongsMode.tsx:882-885`, `:1002`, `:1010`; `preTransport.ts:57-73` (Show this card ghosts with "add a card first" on an empty loop, pinned in `preTransport.test.ts`).
 - `src/renderer/operator/transport.ts:36-42` — the ghost look, "the slot holds its ground, disabled".

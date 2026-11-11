@@ -43,7 +43,32 @@ const TOP1: [string, string][] = [
   ['fruit of the spirit', 'Galatians:5:22'],
   ['fiery furnace', 'Daniel:3:6'],
   ['lazarus come forth', 'John:11:43'],
+  // what the pastor SAID, against what the KJV prints (wording.ts)
+  ['love your neighbor as yourself', 'Leviticus:19:18'],
+  ['trust in the lord with all your heart', 'Proverbs:3:5'],
+  ['ask and you shall receive', 'John:16:24'],
+  ['greater love has no man than this', 'John:15:13'],
+  ['god loves a cheerful giver', '2 Corinthians:9:7'],
+  ['be still and know that i am god', 'Psalm:46:10'],
 ]
+
+// [query, expected top CLOSE match] — no verse holds every word; the nearest one leads.
+const NEAR1: [string, string][] = [
+  ['for god so loved the earth', 'John:3:16'],                                  // a misquote
+  ['i can do all things through christ who strengthens me', 'Philippians:4:13'], // "which strengtheneth"
+  ['come to me all who are weary', 'Matthew:11:28'],
+  ['let the little children come to me', 'Matthew:19:14'],
+]
+
+for (const [q, want] of NEAR1) {
+  test(`close match: "${q}" → ${want}`, () => {
+    const r = repo.search(q, 'kjv')
+    expect(r.total).toBe(0)
+    expect(r.hits.length).toBeGreaterThan(0)
+    expect(r.hits.every((h) => h.near)).toBe(true)
+    expect(verseKey(r.hits[0])).toBe(want)
+  })
+}
 
 for (const [q, want] of TOP1) {
   test(`top-1: "${q}" → ${want}`, () => {
@@ -75,6 +100,19 @@ for (const [q, any] of TOP3) {
 
 test('a word the KJV never uses returns nothing (passages layer covers it)', () => {
   expect(repo.search('prodigal', 'kjv').total).toBe(0)
+})
+
+test('a query that finds its verse never carries close matches', () => {
+  expect(repo.search('jesus wept', 'kjv').hits.some((h) => h.near)).toBe(false)
+  expect(repo.search('for god so loved the world', 'kjv').hits.some((h) => h.near)).toBe(false)
+})
+
+test('the close-match pass is fast enough for a keystroke, even on a long or stopword-only query', () => {
+  const t0 = performance.now()
+  repo.search('i can do all things through christ who strengthens me', 'kjv')
+  repo.search('for god so loved the earth', 'kjv')
+  repo.search('and the of zzzz', 'kjv')
+  expect(performance.now() - t0).toBeLessThan(400) // CI-safe; ~10 ms each on a laptop
 })
 
 test('a single-word query over 31k verses is fast enough for a keystroke', () => {

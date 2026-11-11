@@ -273,3 +273,29 @@ scripture, the schedule header + list are replaced by `ScriptureSearchResults` (
 - Bolding in song/quote rails; arrow nav there.
 - Stemming (#14) and `norm` diacritics (#12) — both would benefit verse search via the
   shared tokenizer/normaliser and are fixed in one place.
+
+## Update 2026-11-11: every account of a story, other wording, close matches
+
+Supersedes the Passages section and three of the follow-ups above.
+
+- **A story lists every place it is told.** `passages.ts` now exports `STORIES`
+  (`{ title, aliases, refs[] }`); `matchPassages` flattens the ranked stories to one row
+  per reference (`Passage = ref + title`), capped at `PASSAGE_ROWS` (8). "Resurrection" is
+  four rows — Matthew 28, Mark 16, Luke 24, John 20 — each of which is still a single
+  reference, so Enter / `+ Add` / Shift+Enter are unchanged. Refs list in canonical order
+  unless one account is the one people mean (the Nativity is Luke 2 first). The table grew
+  from ~320 single-reference entries to ~575 stories, including a short Topics block
+  (forgiveness, the second coming, communion…).
+- **Filler words never gate a story** ("the", "of", "jesus", "parable"…): they are dropped
+  from the query and the index for the match, and only the phrase-as-typed tie-break sees
+  them. A query of three or more meaningful words may miss one, at a cost (`MISS_COST`)
+  set above any honest all-words match and below a match made only of typos.
+- **Older and modern wording meet** (`src/shared/search/wording.ts`): your/thy, you/ye,
+  has/hath, -s/-eth, -or/-our. Applied to both sides in the verse scorer, the highlighter
+  and the story matcher; the FTS gate ORs in the other spellings. Index text is unchanged
+  (no `NORM_VERSION` bump).
+- **Close matches.** A query of 3+ unquoted words that no verse holds in full returns up to
+  `NEAR_ROWS` (5) verses one word short, flagged `near`, under a `CLOSE MATCHES` header;
+  `total` stays the exact count (0). The candidate gate is any two of the three longest
+  words (`anyTwoOfMatch`), not N clauses of N-1 prefix terms, to keep it a few
+  milliseconds. Never shown beside exact hits.
