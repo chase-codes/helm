@@ -65,22 +65,40 @@ export function useListSelection(orderedIds: string[]): ListSelection {
   return { selectedIds, selectedId, select, selectTo, clear, isSelected };
 }
 
+export interface DeleteMenuOptions {
+  /** Rows this refuses are left out of the delete and out of its count, so a range that
+   * happens to cross an undeletable row never promises more than it does. */
+  canDelete?: (id: string) => boolean;
+  /** Disabled label when nothing under the pointer can go (default: a disabled `Delete`). */
+  blockedLabel?: string;
+}
+
 /**
  * The list-kit right-click grammar (#90/#8): a right-click inside a multi-selection
  * offers `Delete N <noun>` on the whole batch; anywhere else selects the row under the
  * pointer first, then offers a single `Delete`. `noun` is the plural row noun
- * ('verses', 'quotes', 'items') — the count is always > 1 on the batch branch.
+ * ('verses', 'quotes', 'cards'). `opts.canDelete` filters rows that may never go (the
+ * pre-service logo card).
  */
 export function deleteMenuItems(
   sel: ListSelection,
   id: string,
   noun: string,
-  remove: (ids: string[]) => void
+  remove: (ids: string[]) => void,
+  opts: DeleteMenuOptions = {}
 ): ContextMenuItem[] {
-  if (sel.isSelected(id) && sel.selectedIds.length > 1) {
-    const ids = sel.selectedIds;
-    return [{ label: `Delete ${ids.length} ${noun}`, danger: true, onSelect: () => remove(ids) }];
+  const inRange = sel.isSelected(id) && sel.selectedIds.length > 1;
+  if (!inRange) sel.select(id);
+  const candidates = inRange ? sel.selectedIds : [id];
+  const ids = opts.canDelete ? candidates.filter(opts.canDelete) : candidates;
+  if (ids.length === 0) {
+    return [{ label: opts.blockedLabel ?? 'Delete', disabled: true, onSelect: () => {} }];
   }
-  sel.select(id);
-  return [{ label: 'Delete', danger: true, onSelect: () => remove([id]) }];
+  return [
+    {
+      label: ids.length === 1 ? 'Delete' : `Delete ${ids.length} ${noun}`,
+      danger: true,
+      onSelect: () => remove(ids)
+    }
+  ];
 }

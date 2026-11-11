@@ -112,8 +112,8 @@ describe('ContextMenu', () => {
 
   it('keeps the menu open for a keepOpen item, so a two-step confirm can re-label in place', () => {
     const onSelect = vi.fn()
-    const { onClose } = renderMenu([{ label: 'Remove from library', onSelect, danger: true, keepOpen: true }])
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove from library' }))
+    const { onClose } = renderMenu([{ label: 'Delete from library', onSelect, danger: true, keepOpen: true }])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete from library' }))
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
   })
@@ -128,7 +128,7 @@ describe('ContextMenu', () => {
 
   it('honours keepOpen for keyboard activation too', () => {
     const onSelect = vi.fn()
-    const { onClose } = renderMenu([{ label: 'Remove from library', onSelect, keepOpen: true }])
+    const { onClose } = renderMenu([{ label: 'Delete from library', onSelect, keepOpen: true }])
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()

@@ -2,18 +2,20 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
   type CSSProperties,
   type JSX,
   type MutableRefObject
 } from 'react';
 import type { ThemeMode } from './App';
+import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { ThemeCtx } from './ThemeCtx';
 import { usePresentationState } from '../shared/useHelm';
 import { useTakeGuard } from './useTakeGuard';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { buildQuoteSlide, buildReadingSlide, keyForMessageQuote, keyForReading } from '../../shared/message/slides';
-import { sameFlow } from '../../shared/presentation/core';
+import { isQueuedBehind, sameFlow } from '../../shared/presentation/core';
 import { norm } from '../../shared/search/fuzzy';
 import type { Message, MessageMeta, QuoteRow, QuoteScheduleItem, TapeRow, TimingMap } from '../../shared/types';
 import { MessageSearchRail, type MsgQuoteRow, type MsgScheduleRow, type MsgTapeRow } from './MessageSearchRail';
@@ -26,6 +28,7 @@ import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
 import { filterPending, useDeferredRemove } from './useDeferredRemove';
 import { deleteMenuItems, useListSelection } from './useListSelection';
+import { clearSelectionRung } from './escapeLadder';
 import type { PanelWidthControl } from './usePanelWidth';
 
 /** Absolute filesystem path (as returned by `Message.audioPath`) → a `file://` URL
@@ -53,6 +56,14 @@ export interface MessageKeyHandler {
   onGoLive: () => void;
   /** Delete/Backspace: remove the quote-schedule selection, if any (#90/#8). */
   onDelete: () => void;
+  /** Escape: clear a queued quote. True when it consumed the press. */
+  onEscape: () => boolean;
+  /** Escape's clear-selection rung (grammar rule 9): drop the quote-schedule selection and
+   * report true, or false when none is on screen. */
+  clearSelection: () => boolean;
+  /** Registry actions SermonMode routes here while this track is on screen: `/` focuses the
+   * search, Mod+Backspace clears it, a digit picks quote-schedule row N (grammar rule 9). */
+  onAction: (a: ResolvedHotkey) => void;
 }
 export type MessageKeyRef = MutableRefObject<MessageKeyHandler | null>;
 
@@ -88,8 +99,14 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   const [msg, setMsg] = useState<Message | null>(null);
   const [msgIdx, setMsgIdx] = useState(0);
   const [q, setQ] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [scope, setScope] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<QuoteScheduleItem[]>([]);
+  // A quote picked from the tape that is on screen (2026-10-12 default for the question the
+  // signals plan left open). Main's `applyCue` follows a same-flow cue onto the screen, so
+  // moving the cursor there would jump the projector, the jump decision 3 removed from
+  // Scripture. It is lined up instead; Go live, Enter or a double click takes it.
+  const [queuedQuote, setQueuedQuote] = useState<{ msgId: string; ord: number; title: string } | null>(null);
   // Carries the `scope` the results were FETCHED for, not just the rows: the quote rows are
   // titled and headed differently depending on the scope, so rendering one round trip's
   // quotes under another round trip's scope mislabels them (see quoteRows below).
@@ -282,19 +299,19 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // nothing to do — not one broadcast round-trip later. Key equality here made the button
   // flash green for the gap between the cue send and the liveKey broadcast returning.
   const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
+  // Decision 7: a quote from another tape lined up behind the one on screen.
+  const queued = isQueuedBehind(output, liveKey, curKey);
+  // The in-tape queue only means something while its tape holds the screen and it is not
+  // the quote already there; derived, so a take or another page taking over ends it.
+  const queuedQuoteKey = queuedQuote ? keyForMessageQuote(queuedQuote.msgId, queuedQuote.ord) : null;
+  const inTapeQueued =
+    queuedQuote && output === 'live' && sameFlow(liveKey, queuedQuoteKey) && liveKey !== queuedQuoteKey
+      ? queuedQuote
+      : null;
 
   const stepPara = (dir: 1 | -1): void => {
     if (!liveMsg) return;
     setMsgIdx((i) => Math.max(0, Math.min(liveMsg.paragraphs.length - 1, i + dir)));
-  };
-
-  const goLive = (): void => {
-    // Same stop SermonMode/SongsMode make (#85): when the cued quote is already on screen
-    // the verb has nothing to do. Without this, Enter — the button's keyboard twin, which
-    // ignores the disabled state — would reach main's goLive on the live key and take the
-    // screen down.
-    if (!liveMsg || cuedIsLive) return;
-    window.helm.presentation.goLive(keyForMessageQuote(msgId, msgIdx), buildQuoteSlide(liveMsg, msgIdx));
   };
 
   // Double-click a paragraph card (#58). Takes the quote slide — the same slide `goLive`
@@ -304,6 +321,62 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // fetched for a different tape than the one currently loaded here.
   const takeParagraphLive = (m: Message, ord: number): void => {
     window.helm.presentation.take(keyForMessageQuote(m.id, ord), buildQuoteSlide(m, ord));
+  };
+
+  // Clicking a search row does NOT clear the query. It used to, and that unmounted the very
+  // button being clicked — MessageSearchRail renders either the result rows or the QUOTE
+  // SCHEDULE rows, so flipping `hasSearch` on the first click of a double-click sent the
+  // second click to a different element and `dblclick` never reached the row at all. Its
+  // `onDoubleClick` was dead code in a real browser (#58); jsdom cannot see this, because
+  // `fireEvent.doubleClick` synthesizes the event onto a node it is handed.
+  //
+  // So the results stay put and the row stays mounted indefinitely — the double-click lands
+  // no matter how high the operator has set their OS double-click threshold. The rail returns
+  // to the QUOTE SCHEDULE view on the explicit gesture that has always driven it: editing the
+  // search box (a new query replaces the results, emptying it goes back to the schedule).
+  // Nothing else here is deferred or timed.
+  const selectQuote = (id: string, ord: number): void => {
+    setMsgId(id);
+    setMsgIdx(ord);
+  };
+
+  // Double-click a search/schedule row (#58). The row may name a tape other than the one
+  // loaded in `liveMsg`, and paragraphs only arrive with the message — so resolve it
+  // first, then take. Reuses the already-loaded message when the ids match to spare the
+  // round trip. `takeParagraphLive` builds the key and slide from the RESOLVED message
+  // argument, not from component state, so a late fetch can only ever take ITS OWN tape's
+  // slide — but taking it at all can still be wrong, because `take` starts projecting and
+  // never stops: the operator may have taken the screen down, or double-clicked something
+  // else, while this was in flight. `beginTake` is the guard for that.
+  const activateQuote = (id: string, ord: number): void => {
+    setQueuedQuote(null);
+    selectQuote(id, ord);
+    // Claim the take BEFORE branching, cached path included: that is what cancels an
+    // earlier double-click still waiting on its own fetch (see useTakeGuard).
+    const wanted = beginTake();
+    if (liveMsg && liveMsg.id === id) {
+      takeParagraphLive(liveMsg, ord);
+      return;
+    }
+    void window.helm.message
+      .get(id)
+      .then((m) => {
+        if (m && wanted()) takeParagraphLive(m, ord);
+      })
+      .catch(console.error);
+  };
+
+  const goLive = (): void => {
+    if (inTapeQueued) {
+      activateQuote(inTapeQueued.msgId, inTapeQueued.ord);
+      return;
+    }
+    // Same stop SermonMode/SongsMode make (#85): when the cued quote is already on screen
+    // the verb has nothing to do. Without this, Enter — the button's keyboard twin, which
+    // ignores the disabled state — would reach main's goLive on the live key and take the
+    // screen down.
+    if (!liveMsg || cuedIsLive) return;
+    window.helm.presentation.goLive(keyForMessageQuote(msgId, msgIdx), buildQuoteSlide(liveMsg, msgIdx));
   };
 
   const activateParagraph = (ord: number): void => {
@@ -345,36 +418,52 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
 
   // "Follow along": puts the scrolling reading view on screen at the tape's current
   // position (separate from — and doesn't disturb — the quote-slide Go Live path above).
+  // Uses `take`, never `goLive`: a second click on a reading view that is already live
+  // must be a no-op, not a take-down (ux-grammar rule 3).
   const followAlong = (): void => {
     if (!liveMsg) return;
-    window.helm.presentation.goLive(keyForReading(msgId), buildReadingSlide(liveMsg, activeOrd));
+    window.helm.presentation.take(keyForReading(msgId), buildReadingSlide(liveMsg, activeOrd));
   };
 
   const takeDown = (): void => {
     window.helm.presentation.setOutput('black');
   };
 
-  // Clicking a search row does NOT clear the query. It used to, and that unmounted the very
-  // button being clicked — MessageSearchRail renders either the result rows or the QUOTE
-  // SCHEDULE rows, so flipping `hasSearch` on the first click of a double-click sent the
-  // second click to a different element and `dblclick` never reached the row at all. Its
-  // `onDoubleClick` was dead code in a real browser (#58); jsdom cannot see this, because
-  // `fireEvent.doubleClick` synthesizes the event onto a node it is handed.
-  //
-  // So the results stay put and the row stays mounted indefinitely — the double-click lands
-  // no matter how high the operator has set their OS double-click threshold. The rail returns
-  // to the QUOTE SCHEDULE view on the explicit gesture that has always driven it: editing the
-  // search box (a new query replaces the results, emptying it goes back to the schedule).
-  // Nothing else here is deferred or timed.
-  const selectQuote = (id: string, ord: number): void => {
-    setMsgId(id);
-    setMsgIdx(ord);
-  };
   const scopeToTape = (id: string): void => {
     setScope(id);
     setMsgId(id);
-    setMsgIdx(0);
+    // Scoping to the tape on screen must not jump it back to its first paragraph: the
+    // cursor lands on the paragraph already showing instead.
+    const liveOrd = output === 'live' && liveKey && sameFlow(liveKey, keyForMessageQuote(id, 0))
+      ? Number(liveKey.slice(liveKey.lastIndexOf(':') + 1))
+      : 0;
+    setMsgIdx(liveOrd);
   };
+  // A single click on a quote row (search result or quote schedule). Queues instead of
+  // moving the cursor when the quote is in the tape on screen; clicking the quote already
+  // there, or the queued one again, clears the queue.
+  const pickQuote = (id: string, ord: number, title: string): void => {
+    const key = keyForMessageQuote(id, ord);
+    if (output === 'live' && sameFlow(liveKey, key) && liveKey !== key) {
+      setQueuedQuote((cur) => (cur && cur.msgId === id && cur.ord === ord ? null : { msgId: id, ord, title }));
+      return;
+    }
+    setQueuedQuote(null);
+    selectQuote(id, ord);
+  };
+
+  // Take-down turns the queued quote into the cursor, so the hero (and the leader, via the
+  // cue effect) lands on what was lined up; the same shape as Songs and the Scripture
+  // schedule. A take, or another page taking the screen, simply ends it (`inTapeQueued`).
+  const [prevOutput, setPrevOutput] = useState(output);
+  if (output !== prevOutput) {
+    setPrevOutput(output);
+    if (prevOutput === 'live' && output !== 'live' && queuedQuote) {
+      setQueuedQuote(null);
+      selectQuote(queuedQuote.msgId, queuedQuote.ord);
+    }
+  }
+  if (output === 'live' && queuedQuote && !inTapeQueued) setQueuedQuote(null);
   const clearScope = (): void => setScope(null);
   const showPara = (ord: number): void => setMsgIdx(ord);
 
@@ -387,12 +476,32 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
     messageKeyRef.current = {
       onArrow: stepPara,
       onGoLive: goLive,
+      onEscape: () => {
+        if (!inTapeQueued) return false;
+        setQueuedQuote(null);
+        return true;
+      },
       onDelete: () => {
         // Only while the schedule is the list actually on screen. A query swaps the rail
         // over to search results while the selection made before it survives underneath,
         // so without this guard Delete would remove quotes the operator cannot see.
         if (norm(q)) return;
         if (sel.selectedIds.length > 0) removeQuotes(sel.selectedIds);
+      },
+      // Same visibility guard as onDelete: under a query the schedule is not on screen, so a
+      // selection the operator cannot see must not eat their Escape.
+      clearSelection: () => (norm(q) ? false : clearSelectionRung(sel)()),
+      onAction: (a) => {
+        if (a.id === 'focus.search') searchInputRef.current?.focus();
+        else if (a.id === 'field.clear') setQ('');
+        else if (a.id === 'item.jump' && a.digit) {
+          // A digit is a click on row N, so only while the schedule is the list on screen.
+          if (norm(q)) return;
+          const it = schedule[a.digit - 1];
+          if (!it) return;
+          sel.select(it.id);
+          selectQuote(it.msgId, it.ord);
+        }
       }
     };
     return () => {
@@ -425,6 +534,19 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   }
 
   const curPara = liveMsg ? liveMsg.paragraphs[Math.max(0, Math.min(msgIdx, liveMsg.paragraphs.length - 1))] : null;
+  // The quote schedule's add path (it had none: nothing called quoteSchedule.add). Files the
+  // cued paragraph; main dedupes. applyRows, not setSchedule: the reply is the whole list,
+  // which during an undo window still holds the rows the operator just deleted.
+  const addCuedQuote = (): void => {
+    if (!liveMsg || !curPara) return;
+    window.helm.quoteSchedule.add(msgId, curPara.ord).then(applyRows).catch(console.error);
+  };
+  // A paragraph waiting out its undo window is still in main's table, so main's dedupe would
+  // swallow an add and the row would never come back. Treat it as planned: Undo is the way back.
+  const cuedPlanned =
+    curPara !== null &&
+    (plannedSet.has(curPara.ord) ||
+      (undo.pending?.some((it) => it.msgId === msgId && it.ord === curPara.ord) ?? false));
   const heroLabel = liveMsg && curPara ? `Tape ${liveMsg.tapeNo} — ¶${curPara.label}` : '';
   const quoteText = curPara?.text ?? '';
   const quoteSource = liveMsg ? `${liveMsg.title} · ${liveMsg.date}` : '';
@@ -435,31 +557,6 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
   // result from a just-cleared query never renders — see the search effect's comment.
   // Uses `norm` (not a plain trim) so a punctuation-only query falls back to the QUOTE
   // SCHEDULE idle view, matching the design's `hasMsgSearch` (Lectern.pretty.html:1170).
-  // Double-click a search/schedule row (#58). The row may name a tape other than the one
-  // loaded in `liveMsg`, and paragraphs only arrive with the message — so resolve it
-  // first, then take. Reuses the already-loaded message when the ids match to spare the
-  // round trip. `takeParagraphLive` builds the key and slide from the RESOLVED message
-  // argument, not from component state, so a late fetch can only ever take ITS OWN tape's
-  // slide — but taking it at all can still be wrong, because `take` starts projecting and
-  // never stops: the operator may have taken the screen down, or double-clicked something
-  // else, while this was in flight. `beginTake` is the guard for that.
-  const activateQuote = (id: string, ord: number): void => {
-    selectQuote(id, ord);
-    // Claim the take BEFORE branching, cached path included: that is what cancels an
-    // earlier double-click still waiting on its own fetch (see useTakeGuard).
-    const wanted = beginTake();
-    if (liveMsg && liveMsg.id === id) {
-      takeParagraphLive(liveMsg, ord);
-      return;
-    }
-    void window.helm.message
-      .get(id)
-      .then((m) => {
-        if (m && wanted()) takeParagraphLive(m, ord);
-      })
-      .catch(console.error);
-  };
-
   const hasSearch = !!norm(q);
   // Not gated on `!scope` any more. Scoping is what a tape-row click DOES, so hiding the tape
   // rows the moment it happened unmounted the row mid-double-click just as clearing the query
@@ -496,31 +593,39 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         id: `${r.msgId}:${r.ord}`,
         title: scope ? `¶${r.label}` : `${r.title} — ¶${r.label}`,
         preview: r.text,
-        onClick: () => selectQuote(r.msgId, r.ord),
+        isQueued: inTapeQueued?.msgId === r.msgId && inTapeQueued.ord === r.ord,
+        onClick: () => pickQuote(r.msgId, r.ord, `Tape ${r.tapeNo} · ¶${r.label}`),
         onDoubleClick: () => activateQuote(r.msgId, r.ord)
       }))
     : [];
-  const scheduleRows: MsgScheduleRow[] = schedule.map((it) => ({
-    id: it.id,
-    title: it.title,
-    meta: `¶${it.label} · Tape ${it.tapeNo}`,
-    isCurrent: it.msgId === msgId && it.ord === msgIdx,
-    isSelected: sel.isSelected(it.id),
-    onClick: (e) => {
-      // Shift-click extends the delete-selection and deliberately leaves the cue alone —
-      // the same split the scripture and media rails make.
-      if (e.shiftKey) sel.selectTo(it.id);
-      else {
-        sel.select(it.id);
-        selectQuote(it.msgId, it.ord);
-      }
-    },
-    // Shift-double-click is two range-selection clicks landing fast, not a take.
-    onDoubleClick: (e) => {
-      if (!e.shiftKey) activateQuote(it.msgId, it.ord);
-    },
-    onContextMenu: (e) => contextMenu.open(e, deleteMenuItems(sel, it.id, 'quotes', removeQuotes))
-  }));
+  const scheduleRows: MsgScheduleRow[] = schedule.map((it) => {
+    const isCurrent = it.msgId === msgId && it.ord === msgIdx;
+    return {
+      id: it.id,
+      title: it.title,
+      meta: `¶${it.label} · Tape ${it.tapeNo}`,
+      isCurrent,
+      isSelected: sel.isSelected(it.id),
+      isLive: output === 'live' && liveKey === keyForMessageQuote(it.msgId, it.ord),
+      isQueued: inTapeQueued
+        ? inTapeQueued.msgId === it.msgId && inTapeQueued.ord === it.ord
+        : isCurrent && queued,
+      onClick: (e) => {
+        // Shift-click extends the delete-selection and deliberately leaves the cue alone —
+        // the same split the scripture and media rails make.
+        if (e.shiftKey) sel.selectTo(it.id);
+        else {
+          sel.select(it.id);
+          pickQuote(it.msgId, it.ord, `Tape ${it.tapeNo} · ¶${it.label}`);
+        }
+      },
+      // Shift-double-click is two range-selection clicks landing fast, not a take.
+      onDoubleClick: (e) => {
+        if (!e.shiftKey) activateQuote(it.msgId, it.ord);
+      },
+      onContextMenu: (e) => contextMenu.open(e, deleteMenuItems(sel, it.id, 'quotes', removeQuotes))
+    };
+  });
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
@@ -560,6 +665,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         </div>
         <MessageSearchRail
           theme={T}
+          inputRef={searchInputRef}
           q={q}
           onQChange={setQ}
           scopeLabel={scopeTitle}
@@ -570,6 +676,8 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
           tapePlayer={tapePlayer}
           hasTapes={list.length > 0}
           onImportMessages={onOpenSettings}
+          onClearAll={() => removeQuotes(schedule.map((it) => it.id))}
+          add={liveMsg && curPara ? { label: `+ Add ¶${curPara.label}`, onAdd: addCuedQuote, planned: cuedPlanned } : null}
           undo={
             undo.pending
               ? {
@@ -589,6 +697,7 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         variant="quote"
         accent={T.message}
         output={output}
+        liveKey={liveKey}
         cuedIsLive={cuedIsLive}
         heroLabel={heroLabel}
         quoteText={quoteText}
@@ -597,13 +706,14 @@ export function MessageMode({ themeMode, messageKeyRef, active, track, setTrack,
         ondeckTagColor={ondeckTagColor}
         ondeckTitle={ondeckTitle}
         ondeckPreview={ondeckPreview}
-        nextLabel={'Next ¶ ›'}
+        unit="paragraph"
         onPrev={() => stepPara(-1)}
         onNext={() => stepPara(1)}
         onGoLive={goLive}
         // No tape loaded means an empty hero; a green, armed-looking Go live over it is a
         // lie a brand-new operator has no way to read (#88).
         canGoLive={liveMsg !== null}
+        queuedTitle={inTapeQueued ? inTapeQueued.title : queued && heroLabel ? heroLabel : undefined}
         onTakeDown={takeDown}
       />
       <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />

@@ -3,6 +3,7 @@ import type { Theme } from '../../shared/theme';
 import type { BibleManifestEntry } from '../../shared/types';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
+import { useEscapeToClose } from './useEscapeToClose';
 
 export interface VersionPickerProps {
   theme: Theme;
@@ -17,6 +18,9 @@ export interface VersionPickerProps {
  * NOT INSTALLED rows are dimmed and route to Settings instead of picking. */
 export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSettings }: VersionPickerProps): JSX.Element {
   const [open, setOpen] = useState(false);
+  // The list is a popover the Sermon ladder cannot see: it closes itself on Escape so the
+  // press never reaches the take-down rung.
+  useEscapeToClose(open, () => setOpen(false));
 
   const abbrOf = (id: string): string => manifest.find((m) => m.id === id)?.abbr ?? id.toUpperCase();
   const versionLabel = versions.map(abbrOf).join(' + ');
@@ -119,8 +123,10 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
               const mark = sel ? (idx === 0 ? '● PRIMARY' : '◧ COMPARE') : entry.installed ? '' : 'NOT INSTALLED';
               const title = entry.installed
                 ? sel
-                  ? 'Tap to take off screen'
-                  : 'Tap to show — two at once appear side by side'
+                  ? versions.length > 1
+                    ? 'Click to stop showing this translation'
+                    : 'The only translation shown; pick another to compare'
+                  : 'Click to show; two at once appear side by side'
                 : 'Downloadable in a full install';
               return (
                 <button key={entry.id} style={rowStyle(entry.installed, sel)} onClick={() => handleRowClick(entry)} title={title}>
