@@ -946,6 +946,71 @@ describe('SermonMode — the Go live button does what its label says', () => {
   })
 })
 
+// The entry names a reference, `+ Add` names it, and the Go live button used to reach past
+// it to the hero's verse. The button now puts up what the entry holds, and says so.
+describe('SermonMode — Go live takes the reference in the entry', () => {
+  const goLiveBtn = (): HTMLButtonElement =>
+    within(trackPanel('scripture')).getByRole('button', { name: /Go live/ }) as HTMLButtonElement
+
+  it('takes the typed reference, not the cursor, and files no row', async () => {
+    const { take, goLive, add, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 4')).toBeTruthy())
+
+    typeInEntry('Genesis 1:4')
+    expect(goLiveBtn().title).toBe('Go live with Genesis 1:4')
+    fireEvent.click(goLiveBtn())
+    await waitFor(() => expect(take).toHaveBeenCalled())
+    expect(take.mock.calls[0][0]).toBe('scr:Genesis:1:4')
+    expect(goLive).not.toHaveBeenCalled()
+    expect(add).not.toHaveBeenCalled()
+    // Same path as Shift+Enter: the entry clears and the hero lands on what went up.
+    expect(entryValue()).toBe('')
+    await waitFor(() => expect(within(trackPanel('scripture')).getByText('Genesis 1:4')).toBeTruthy())
+  })
+
+  it('arms while scripture is live, so a typed reference can replace the live verse', async () => {
+    const { take, resolveChapter } = installHelmStub(GEN_1_1_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(goLiveBtn().disabled).toBe(true))
+
+    typeInEntry('Genesis 1:3')
+    expect(goLiveBtn().disabled).toBe(false)
+    fireEvent.click(goLiveBtn())
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything()))
+  })
+
+  it('Enter away from the entry (the button twin) takes the typed reference too', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { take, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness keyHandlerRef={keyHandlerRef} />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 5')).toBeTruthy())
+
+    typeInEntry('Genesis 1:5')
+    act(() => keyHandlerRef.current?.onGoLive())
+    await waitFor(() => expect(take).toHaveBeenCalledWith('scr:Genesis:1:5', expect.anything()))
+  })
+
+  it('a half-typed entry names nothing, so the button still takes the cursor', async () => {
+    const { take, resolveChapter } = installHelmStub(NOTHING_LIVE)
+    render(<Harness />)
+    resolveChapter()
+    await waitFor(() => expect(screen.getByText('Verse 3')).toBeTruthy())
+    fireEvent.click(verseCard(3))
+    await waitFor(() => expect(within(trackPanel('scripture')).getByText('Genesis 1:3')).toBeTruthy())
+
+    typeInEntry('Gen')
+    expect(goLiveBtn().title).not.toMatch(/Go live with/)
+    fireEvent.click(goLiveBtn())
+    expect(take).toHaveBeenCalledWith('scr:Genesis:1:3', expect.anything())
+    // The typing is left alone to be finished.
+    expect(entryValue()).toBe('Gen')
+  })
+})
+
 describe('SermonMode — cursor moves made under the logo', () => {
   // Genesis 1:1 is live, then the operator presses Logo. Main keeps the liveSnap so Logo
   // off can restore it; `showLive` no-ops while output isn't live.
