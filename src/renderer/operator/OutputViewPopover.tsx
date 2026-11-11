@@ -5,6 +5,7 @@ import { DEFAULT_LEADER_SPLIT, LEADER_SPLIT_MAX, LEADER_SPLIT_MIN, OUTPUT_VIEWS 
 import type { OutputViewMode } from '../../shared/types'
 import { Z_STACKED_MODAL } from './zLayers';
 import { MONO } from '../shared/fonts';
+import { useEscapeToClose } from './useEscapeToClose';
 
 const VIEW_LABEL: Record<OutputViewMode, string> = {
   slides: 'Slides',
@@ -25,14 +26,9 @@ export function OutputViewPopover({
   const outputs = displays.filter((d) => !d.isOperator && d.role !== 'off')
   const popRef = useRef<HTMLDivElement | null>(null)
 
-  // Dismiss on Escape key.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Dismiss on Escape, in the capture phase so the press never reaches the page's Escape
+  // ladder (which would take the screen down first).
+  useEscapeToClose(true, onClose)
 
   // Dismiss on outside click (capture phase) or window blur.
   // Check containRef (chip + popover) not just the popover, so clicks on the chip don't dismiss prematurely.

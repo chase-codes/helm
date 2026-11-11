@@ -171,6 +171,16 @@ describe('SchedulePanel', () => {
     render(<SchedulePanel {...baseProps} rows={[]} />)
     expect(screen.queryByText(/Click a reading/)).toBeNull()
   })
+
+  it('numbers the first nine rows; the tenth keeps the column, blank', () => {
+    const many: ScheduleRow[] = Array.from({ length: 10 }, (_, i) => ({ ...rows()[0], id: `r${i + 1}`, title: `John 3:${i + 1}` }))
+    render(<SchedulePanel {...baseProps} rows={many} />)
+    const num = (title: string): string | null =>
+      (screen.getByText(title).closest('button') as HTMLElement).querySelector('[data-row-number]')?.textContent ?? null
+    expect(num('John 3:1')).toBe('1')
+    expect(num('John 3:9')).toBe('9')
+    expect(num('John 3:10')).toBeNull()
+  })
 })
 
 // #85. Dynamic copy is fine as long as the container's footprint doesn't move. The chip is

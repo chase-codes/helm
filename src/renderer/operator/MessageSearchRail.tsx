@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent, Ref } from 'react';
 import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
@@ -7,6 +7,7 @@ import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
 import { scheduleRowStyle } from './railTint';
 import { QueuedBadge, RowStateMark } from './StateBadge';
+import { RowNumber } from './RowNumber';
 
 export interface MsgScheduleRow {
   id: string;
@@ -73,6 +74,8 @@ export interface MessageSearchRailProps {
   /** Clear-schedule control (#86), same as Scripture's: renders only with rows, and the
    * caller routes it through the same removeMany + undo as a row delete. */
   onClearAll?: () => void;
+  /** The search input, so the page's `/` key can focus it (grammar rule 9). */
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 /** Body of the Message track's left rail: scope chip + search box, TAPES/QUOTES search
@@ -94,7 +97,8 @@ export function MessageSearchRail({
   hasTapes,
   onImportMessages,
   add,
-  onClearAll
+  onClearAll,
+  inputRef
 }: MessageSearchRailProps): JSX.Element {
   const schedInputStyle: CSSProperties = {
     display: 'flex',
@@ -201,6 +205,12 @@ export function MessageSearchRail({
 
   const onQKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Backspace' && !q && scopeLabel) onClearScope();
+    else if (e.key === 'Escape' && q) {
+      // One key, one action, as in the Songs and Scripture boxes: a non-empty query consumes
+      // the press (clear only); the next press reaches the page ladder, which blurs.
+      e.stopPropagation();
+      onQChange('');
+    }
   };
 
   return (
@@ -216,6 +226,7 @@ export function MessageSearchRail({
             <span style={{ fontFamily: MONO, fontSize: '14px', color: T.message }}>&rsaquo;</span>
           )}
           <input
+            ref={inputRef}
             style={{ flex: 1, fontSize: '13.5px', minWidth: 0 }}
             value={q}
             onChange={(e) => onQChange(e.target.value)}
@@ -297,7 +308,7 @@ export function MessageSearchRail({
                   No messages yet — import one with <b>+ Import</b> to search its quotes.
                 </ListEmpty>
               ))}
-            {scheduleRows.map((r) => (
+            {scheduleRows.map((r, i) => (
               <button
                 key={r.id}
                 data-quote-row={r.id}
@@ -307,6 +318,7 @@ export function MessageSearchRail({
                 onDoubleClick={r.onDoubleClick}
                 onContextMenu={r.onContextMenu}
               >
+                <RowNumber n={i + 1} color={T.faint} />
                 <div style={scheduleIconStyle}>&#10077;</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={rowTitleStyle}>{r.title}</div>

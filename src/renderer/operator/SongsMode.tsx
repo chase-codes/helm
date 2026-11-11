@@ -46,6 +46,7 @@ import { screenStatus } from '../../shared/presentation/screenOwner';
 import { MONO } from '../shared/fonts';
 import { liveRing } from './railTint';
 import { LiveBadge } from './StateBadge';
+import { runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
@@ -685,51 +686,40 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
   useLayoutEffect(() => {
     if (!active) return;
     keyHandlerRef.current = {
-      onEscape: () => {
-        // QuickAdd takes precedence if somehow both are open — mirrors the fact that
-        // only one of these modals can be triggered at a time from the UI today.
-        if (quickAddOpen) {
-          setQuickAddOpen(false);
-          return true;
-        }
-        if (importOpen) {
-          // Swallow Escape rather than falling through while a commit is running — losing
-          // the wizard mid-import loses the only record of which songs failed to read (see
-          // SongImport's own `dismissible` guard for the overlay/Cancel half of this gate).
-          if (importInFlight) return true;
-          setImportOpen(false);
-          return true;
-        }
-        if (editModalSongId) {
-          setEditModalSongId(null);
-          return true;
-        }
-        // Progressive back-out (spec §3): after modals, undo the most recent intent
-        // first — a section quick-edit in flight, then an armed switch — then leave a
-        // text field, and only then touch the screen. Order matters: a typing operator
-        // must never black the screen with a stray Escape, and cancelling the edit (or
-        // disarming) before blur means "undo my in-progress action" always wins.
-        if (editingSection !== null) {
-          setEditingSection(null);
-          setEditError(false);
-          return true;
-        }
-        if (armedNextId) {
-          setArmedNextId(null);
-          return true;
-        }
-        const el = document.activeElement as HTMLElement | null;
-        const tag = el?.tagName?.toLowerCase();
-        if (tag === 'input' || tag === 'textarea') {
-          el?.blur();
-          return true;
-        }
-        if (output === 'live') {
-          window.helm.presentation.setOutput('black');
-          return true;
-        }
-        return false;
-      },
+      onEscape: () =>
+        runEscapeLadder({
+          // QuickAdd wins if somehow both are open; only one can be opened from the UI.
+          closeOverlay: () => {
+            if (quickAddOpen) {
+              setQuickAddOpen(false);
+              return true;
+            }
+            if (importOpen) {
+              // Swallow the press while a commit runs: the wizard holds the only record of
+              // which songs failed to read (SongImport's `dismissible` guards the other half).
+              if (!importInFlight) setImportOpen(false);
+              return true;
+            }
+            if (editModalSongId) {
+              setEditModalSongId(null);
+              return true;
+            }
+            return false;
+          },
+          cancelEdit: () => {
+            if (editingSection === null) return false;
+            setEditingSection(null);
+            setEditError(false);
+            return true;
+          },
+          // The queued (armed) song is this page's selection: drop it before the screen.
+          clearSelection: () => {
+            if (!armedNextId) return false;
+            setArmedNextId(null);
+            return true;
+          },
+          takeDown: takeDownWhenLive(output, takeDown)
+        }),
       onArrow: step,
       onGoLive: armed ? commitSwitch : goLive,
       isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null,
