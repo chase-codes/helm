@@ -2,8 +2,11 @@ import type { CSSProperties, JSX, KeyboardEvent, MouseEvent as ReactMouseEvent, 
 import type { Theme } from '../../shared/theme';
 import { norm } from '../../shared/search/fuzzy';
 import { ListEmpty } from './ListEmpty';
+import { DangerGhostButton } from './DangerGhostButton';
 import { UndoToast } from './UndoToast';
 import { MONO } from '../shared/fonts';
+import { scheduleRowStyle } from './railTint';
+import { QueuedBadge, RowStateMark } from './StateBadge';
 import { RowNumber } from './RowNumber';
 
 export interface MsgScheduleRow {
@@ -13,6 +16,10 @@ export interface MsgScheduleRow {
   isCurrent: boolean;
   /** In the delete-selection (#90) — distinct from `isCurrent`, which is the cued quote. */
   isSelected: boolean;
+  /** The quote holds the audience screen (rule 1: red ring + LIVE). */
+  isLive: boolean;
+  /** Lined up behind the live quote (decision 7). */
+  isQueued: boolean;
   /** Receives the event so the caller can branch on shiftKey for range selection. */
   onClick: (e: ReactMouseEvent) => void;
   /** Double-click: take this row's quote live (#58). */
@@ -31,6 +38,8 @@ export interface MsgQuoteRow {
   id: string;
   title: string;
   preview: string;
+  /** Lined up behind the live quote of the same tape; Go live takes it. */
+  isQueued?: boolean;
   onClick: () => void;
   /** Double-click: take this row's quote live (#58). */
   onDoubleClick: () => void;
@@ -50,7 +59,7 @@ export interface MessageSearchRailProps {
   /** Slot for Task 12's tape player card — rendered as-is at the bottom of the rail,
    * omitted entirely when null (this task has no player yet). */
   tapePlayer: JSX.Element | null;
-  /** "Removed … — Undo" bar for a quote-schedule delete (#86); same 5s grammar as the
+  /** "Deleted …" bar with Undo for a quote-schedule delete (#86); same 5s grammar as the
    * scripture and media rails. */
   undo?: { label: string; onUndo: () => void };
   /** False when no tapes are installed at all — the empty schedule then points at the
@@ -58,6 +67,13 @@ export interface MessageSearchRailProps {
   hasTapes: boolean;
   /** Opens Settings, where message import lives — the affordance the empty state names. */
   onImportMessages: () => void;
+  /** The quote schedule's add chip: files the cued paragraph, as Scripture's `+ Add <ref>`
+   * files the cued verse. Null while no tape is loaded. `planned` ghosts it in place (same
+   * footprint, rule 5) when that paragraph is already in the schedule. */
+  add?: { label: string; onAdd: () => void; planned: boolean } | null;
+  /** Clear-schedule control (#86), same as Scripture's: renders only with rows, and the
+   * caller routes it through the same removeMany + undo as a row delete. */
+  onClearAll?: () => void;
   /** The search input, so the page's `/` key can focus it (grammar rule 9). */
   inputRef?: Ref<HTMLInputElement>;
 }
@@ -80,6 +96,8 @@ export function MessageSearchRail({
   undo,
   hasTapes,
   onImportMessages,
+  add,
+  onClearAll,
   inputRef
 }: MessageSearchRailProps): JSX.Element {
   const schedInputStyle: CSSProperties = {
@@ -126,41 +144,41 @@ export function MessageSearchRail({
   };
   const scheduleIconStyle: CSSProperties = { ...tapeIconStyle, fontSize: '14px' };
   const tapeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 11px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
-  // Two states, same treatment the scripture and media rails use: the delete-selection
-  // ring wins over the cued tint so a shift-click range reads as one block.
-  const scheduleRowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
+  // Songs' import row: the secondary action under the add chip. The list header's right
+  // slot is Clear all's, as on Scripture.
+  const importRowStyle: CSSProperties = {
+    width: '100%',
+    height: '26px',
+    marginTop: '5px',
+    borderRadius: '8px',
+    fontSize: '11.5px',
+    fontWeight: 600,
+    color: T.faint,
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    width: '100%',
-    padding: '10px 11px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
-    boxShadow: isSelected
-      ? `inset 0 0 0 1.5px ${T.accent}`
-      : isCurrent
-        ? `inset 0 0 0 1px ${T.message}55`
-        : 'none',
-    userSelect: 'none'
-  });
-  // The Slides rail's header verb, character-exact — import is rail chrome here too,
-  // not empty-state furniture (the deviation the other two rails never had).
-  const importHeaderBtnStyle: CSSProperties = {
-    height: '26px',
-    padding: '0 10px',
-    borderRadius: '8px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '12px',
-    fontWeight: 600,
-    background: 'transparent',
-    // Must survive the rail's 200px minimum in one piece — the heading beside it gives
-    // way instead.
-    whiteSpace: 'nowrap',
-    flexShrink: 0
+    justifyContent: 'center',
+    background: 'transparent'
   };
+  // Scripture's add chip (SchedulePanel's schedAddStyle) in the message colour.
+  const addChipStyle = (planned: boolean): CSSProperties => ({
+    width: '100%',
+    height: '34px',
+    marginTop: '8px',
+    borderRadius: '9px',
+    background: `${T.message}22`,
+    color: T.message,
+    fontSize: '12.5px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 10px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    opacity: planned ? 0.45 : 1,
+    cursor: planned ? 'default' : 'pointer'
+  });
   const quoteRowStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '11px', cursor: 'pointer', background: T.panel2, boxShadow: `inset 0 0 0 1px ${T.hairline}`, userSelect: 'none' };
   const quoteTitleStyle: CSSProperties = { fontWeight: 600, fontSize: '12.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const quotePreviewStyle: CSSProperties = {
@@ -216,6 +234,19 @@ export function MessageSearchRail({
             placeholder={placeholder}
           />
         </div>
+        {add && (
+          <button
+            style={addChipStyle(add.planned)}
+            onClick={add.onAdd}
+            disabled={add.planned}
+            title={add.planned ? 'Already in the quote schedule' : undefined}
+          >
+            {add.label}
+          </button>
+        )}
+        <button style={importRowStyle} onClick={onImportMessages}>
+          + Import
+        </button>
       </div>
 
       {hasSearch ? (
@@ -239,7 +270,10 @@ export function MessageSearchRail({
               <div style={sectionHeaderStyle('6px 4px 2px')}>{quotesHeader}</div>
               {quoteRows.map((r) => (
                 <button key={r.id} style={quoteRowStyle} onClick={r.onClick} onDoubleClick={r.onDoubleClick}>
-                  <div style={quoteTitleStyle}>{r.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ ...quoteTitleStyle, flex: 1, minWidth: 0 }}>{r.title}</div>
+                    {r.isQueued && <QueuedBadge accent={T.message} />}
+                  </div>
                   <div style={quotePreviewStyle}>{r.preview}</div>
                 </button>
               ))}
@@ -253,22 +287,23 @@ export function MessageSearchRail({
             <div style={{ ...sectionHeaderStyle(''), minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="Quote schedule">
               QUOTE SCHEDULE
             </div>
-            <button style={importHeaderBtnStyle} onClick={onImportMessages}>
-              + Import
-            </button>
+            {onClearAll && scheduleRows.length > 0 && (
+              <DangerGhostButton
+                label="Clear all"
+                onClick={onClearAll}
+                title="Delete every quote, undoable for five seconds"
+              />
+            )}
           </div>
           <div style={scrollWrapStyle}>
             {scheduleRows.length === 0 &&
               (hasTapes ? (
-                // Deliberately does NOT promise "click a quote to add it here": nothing in
-                // the app calls quoteSchedule.add, so this list cannot currently gain rows
-                // and that copy would describe a workflow the operator cannot perform.
-                // When an add affordance lands, this line should name it.
-                <ListEmpty>Search above to find a quote and put it in the preview.</ListEmpty>
+                // Names the chip at the top of the rail (#88), which files the cued paragraph.
+                <ListEmpty>No quotes yet. Find one above or tap a paragraph, then add it with <b>+ Add</b>.</ListEmpty>
               ) : (
                 // Nothing installed at all: a search box the operator cannot make match
                 // anything is not an invitation, so name the import instead (#88) — the
-                // header's + Import, the same verb the Slides rail teaches.
+                // + Import at the top of the rail, the same verb the Slides rail teaches.
                 <ListEmpty>
                   No messages yet — import one with <b>+ Import</b> to search its quotes.
                 </ListEmpty>
@@ -278,7 +313,7 @@ export function MessageSearchRail({
                 key={r.id}
                 data-quote-row={r.id}
                 data-selected={r.isSelected || undefined}
-                style={scheduleRowStyle(r.isCurrent, r.isSelected)}
+                style={scheduleRowStyle(T, T.message, { live: r.isLive, selected: r.isSelected, current: r.isCurrent })}
                 onClick={r.onClick}
                 onDoubleClick={r.onDoubleClick}
                 onContextMenu={r.onContextMenu}
@@ -289,7 +324,7 @@ export function MessageSearchRail({
                   <div style={rowTitleStyle}>{r.title}</div>
                   <div style={rowMetaStyle}>{r.meta}</div>
                 </div>
-                {r.isCurrent && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
+                <RowStateMark theme={T} accent={T.message} live={r.isLive} queued={r.isQueued} current={r.isCurrent} />
               </button>
             ))}
           </div>

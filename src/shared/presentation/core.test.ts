@@ -4,6 +4,7 @@ import {
   goLive,
   initialPresentation,
   invalidate,
+  isQueuedBehind,
   keyForSong,
   outputPayload,
   parseSongKey,
@@ -162,7 +163,7 @@ test('showLive that refuses the screen leaves the cue alone', () => {
 })
 test("setOutput refuses 'live' with no live key — coerces to black (BUG-021)", () => {
   // A logo toggle from a cold start used to produce output 'live' with liveKey null:
-  // a blank slide the badges call ANOTHER FLOW LIVE and a pre-service tap could seize.
+  // a blank slide the badges call LIVE FROM <PAGE> and a pre-service tap could seize.
   const st = setOutput(initialPresentation(), 'live')
   expect(st.output).toBe('black')
 })
@@ -273,4 +274,20 @@ describe('parseSongKey', () => {
     expect(parseSongKey('scr:kjv:John:3:16')).toBeNull()
     expect(parseSongKey('song:abc:notanumber')).toBeNull()
   })
+})
+
+test('isQueuedBehind: a different item of the live kind is queued (decision 7)', () => {
+  expect(isQueuedBehind('live', 'pres:a:0', 'pres:b:0')).toBe(true)
+  expect(isQueuedBehind('live', 'msg:m1:2', 'msg:m2:0')).toBe(true)
+})
+test('isQueuedBehind: the live flow itself follows the screen, so it is never queued', () => {
+  expect(isQueuedBehind('live', 'pres:a:0', 'pres:a:0')).toBe(false)
+  expect(isQueuedBehind('live', 'pres:a:0', 'pres:a:3')).toBe(false)
+})
+test('isQueuedBehind: nothing queues behind black, the logo, or another kind', () => {
+  expect(isQueuedBehind('black', 'pres:a:0', 'pres:b:0')).toBe(false)
+  expect(isQueuedBehind('logo', 'pres:a:0', 'pres:b:0')).toBe(false)
+  expect(isQueuedBehind('live', 'song:s1:0', 'pres:b:0')).toBe(false)
+  expect(isQueuedBehind('live', 'pres:a:0', null)).toBe(false)
+  expect(isQueuedBehind('live', null, 'pres:b:0')).toBe(false)
 })

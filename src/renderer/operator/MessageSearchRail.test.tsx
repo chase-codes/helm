@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MessageSearchRail, type MsgScheduleRow } from './MessageSearchRail'
 import { themeFor } from '../../shared/theme'
@@ -26,6 +26,8 @@ const scheduleRow = (over: Partial<MsgScheduleRow> = {}): MsgScheduleRow => ({
   meta: '¶2 · Tape 47-0412',
   isCurrent: false,
   isSelected: false,
+  isLive: false,
+  isQueued: false,
   onClick: vi.fn(),
   onDoubleClick: vi.fn(),
   onContextMenu: vi.fn(),
@@ -86,18 +88,10 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
     expect(rowFor('Hope').getAttribute('data-selected')).toBeNull()
   })
 
-  it('invites the operator to search when tapes exist but the schedule is empty (#88)', () => {
+  it('names the add chip when tapes exist but the schedule is empty (#88)', () => {
     render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes />)
-    expect(screen.getByText(/Search above to find a quote/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Import a message' })).toBeNull()
-  })
-
-  // Nothing in the app calls quoteSchedule.add, so copy promising that clicking a quote
-  // files it here would describe a workflow the operator cannot perform. Delete this test
-  // when the add affordance lands — and update the copy with it.
-  it('does not promise an add-to-schedule gesture that does not exist', () => {
-    render(<MessageSearchRail {...baseProps} scheduleRows={[]} hasTapes />)
-    expect(screen.queryByText(/Quotes you add will wait here/)).toBeNull()
+    const empty = screen.getByText(/No quotes yet/)
+    expect(empty.querySelector('b')?.textContent).toBe('+ Add')
   })
 
   it('points at the import when no tapes are installed at all (#88)', () => {
@@ -109,15 +103,35 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
     expect(screen.getByRole('button', { name: '+ Import' })).toBeTruthy()
   })
 
-  // The import affordance is rail chrome, not empty-state furniture — the same
-  // heading + "+ Import" row the Slides track carries, present with or without tapes.
-  it('carries the standard + Import button in the QUOTE SCHEDULE header', () => {
+  // Import is the secondary row under the add chip, as on Songs; the list header's right
+  // slot belongs to Clear all, as on Scripture. Present during a search too.
+  it('carries + Import at the top of the rail, under the add chip', () => {
     const onImportMessages = vi.fn()
     render(
-      <MessageSearchRail {...baseProps} scheduleRows={[scheduleRow()]} hasTapes onImportMessages={onImportMessages} />
+      <MessageSearchRail
+        {...baseProps}
+        q="faith"
+        add={{ label: '+ Add ¶3', onAdd: vi.fn(), planned: false }}
+        onImportMessages={onImportMessages}
+      />
     )
-    fireEvent.click(screen.getByRole('button', { name: '+ Import' }))
+    const add = screen.getByRole('button', { name: '+ Add ¶3' })
+    const imp = screen.getByRole('button', { name: '+ Import' })
+    expect(add.compareDocumentPosition(imp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(imp)
     expect(onImportMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it('Clear all sits in the QUOTE SCHEDULE header once the schedule has rows', () => {
+    const onClearAll = vi.fn()
+    render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow()]} onClearAll={onClearAll} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(onClearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no Clear all on an empty schedule', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[]} onClearAll={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
   })
 
   it('shows no empty state once the schedule has rows', () => {
@@ -129,13 +143,70 @@ describe('MessageSearchRail — quote schedule list kit (#90, #88, #86)', () => 
   it('renders the undo toast and fires onUndo (#86)', () => {
     const onUndo = vi.fn()
     render(<MessageSearchRail {...baseProps} undo={{ label: '¶2', onUndo }} />)
-    expect(screen.getByText(/Removed/)).toBeTruthy()
+    expect(screen.getByText(/Deleted/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(onUndo).toHaveBeenCalledTimes(1)
   })
 
   it('shows no undo toast when nothing is pending', () => {
     render(<MessageSearchRail {...baseProps} />)
-    expect(screen.queryByText(/Removed/)).toBeNull()
+    expect(screen.queryByText(/Deleted/)).toBeNull()
+  })
+})
+
+describe('MessageSearchRail: + Add files the cued paragraph', () => {
+  it('renders the add chip at the top of the rail and fires onAdd', () => {
+    const onAdd = vi.fn()
+    render(<MessageSearchRail {...baseProps} add={{ label: '+ Add ¶3', onAdd, planned: false }} />)
+    const chip = screen.getByRole('button', { name: '+ Add ¶3' })
+    // Above the list header: one add chip, top of every rail.
+    expect(chip.compareDocumentPosition(screen.getByTitle('Quote schedule')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(chip)
+    expect(onAdd).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays mounted while a search has the rail, so a found quote can be filed', () => {
+    render(<MessageSearchRail {...baseProps} q="faith" add={{ label: '+ Add ¶3', onAdd: vi.fn(), planned: false }} />)
+    expect(screen.getByRole('button', { name: '+ Add ¶3' })).toBeTruthy()
+  })
+
+  it('ghosts in place, rather than vanishing, when the cued paragraph is already planned', () => {
+    const onAdd = vi.fn()
+    render(<MessageSearchRail {...baseProps} add={{ label: '+ Add ¶3', onAdd, planned: true }} />)
+    const chip = screen.getByRole('button', { name: '+ Add ¶3' }) as HTMLButtonElement
+    expect(chip.disabled).toBe(true)
+    fireEvent.click(chip)
+    expect(onAdd).not.toHaveBeenCalled()
+  })
+})
+
+describe('MessageSearchRail: live and queued signals (rule 1, decision 7)', () => {
+  const T = themeFor('classic', 'dark')
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const row = (): HTMLButtonElement => screen.getByText('Faith').closest('button') as HTMLButtonElement
+
+  it('a current quote that is not on screen gets the message colour, never red', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isCurrent: true })]} />)
+    expect(row().style.boxShadow).not.toContain(T.live)
+    expect((row().querySelector('[data-cued-dot]') as HTMLElement).style.background).toBe(rgb(T.message))
+  })
+
+  it('the live quote rings red with LIVE; a queued one says QUEUED', () => {
+    const { rerender } = render(
+      <MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isCurrent: true, isLive: true })]} />
+    )
+    expect(row().style.boxShadow).toBe(`inset 0 0 0 2px ${T.live}`)
+    expect(within(row()).getByText('LIVE')).toBeTruthy()
+    rerender(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isCurrent: true, isQueued: true })]} />)
+    expect((within(row()).getByText('QUEUED') as HTMLElement).style.color).toBe(rgb(T.message))
+  })
+
+  it('the selection ring is the message colour, not gold', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isSelected: true })]} />)
+    expect(row().style.boxShadow).toContain(T.message)
+    expect(row().style.boxShadow).not.toContain(T.accent)
   })
 })

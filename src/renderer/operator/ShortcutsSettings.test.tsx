@@ -77,6 +77,18 @@ describe('ShortcutsSettings', () => {
     expect(screen.queryByRole('button', { name: /rebind Close \/ clear/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /rebind Jump to Verse/i })).toBeNull()
   })
+
+  it('uses the vocabulary: Go live, take back screens, tab names for pages', () => {
+    renderPane()
+    expect(screen.getByText('Go live')).toBeTruthy()
+    expect(screen.queryByText('Go live / take down')).toBeNull()
+    expect(screen.getByText('Release / take back screens')).toBeTruthy()
+    expect(screen.getByText('Delete selected')).toBeTruthy()
+    expect(screen.getByText('Songs page')).toBeTruthy()
+    // The Sermon page · Scripture track group has no keys of its own once digits are global (rule 9), so it is hidden.
+    expect(screen.queryByText('Scripture page')).toBeNull()
+  })
+
   it('lists the global digit block and says where a key does something else or nothing', () => {
     renderPane()
     expect(screen.getByText('Jump to schedule item 1\u20139')).toBeTruthy()

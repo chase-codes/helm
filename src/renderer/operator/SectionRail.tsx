@@ -9,7 +9,8 @@ import {
 } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SongSection } from '../../shared/types';
-import { railBadgeStyle, railFont, railLabelStyle } from './railTint';
+import { liveRing, railBadgeStyle, railFont, railLabelStyle } from './railTint';
+import { railHint } from './railHints';
 
 export interface SectionRailProps {
   theme: Theme;
@@ -124,7 +125,7 @@ export function SectionRail({
     cursor: 'pointer',
     background: isLive ? T.selBg : T.panel2,
     boxShadow: isLive
-      ? `inset 0 0 0 2px ${T.accent}`
+      ? liveRing(T)
       : isCued
         ? `inset 0 0 0 1.5px ${T.accent}66`
         : `inset 0 0 0 1px ${T.hairline}`,
@@ -159,11 +160,11 @@ export function SectionRail({
           letterSpacing: '0.1em',
           color: T.faint,
           fontWeight: 600,
-          marginBottom: '10px',
+          marginBottom: '6px',
           flexShrink: 0
         }}
       >
-        <span>SECTIONS — TAP TO SING</span>
+        <span>SECTIONS</span>
         {onCollapse && (
           <button
             title="Hide sections — bigger lyrics"
@@ -181,6 +182,9 @@ export function SectionRail({
             »
           </button>
         )}
+      </div>
+      <div style={{ fontSize: '11.5px', color: T.faint, lineHeight: 1.45, marginBottom: '10px', flexShrink: 0 }}>
+        {railHint('section')}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '2px' }}>
         {sections.map((sc, i) => {

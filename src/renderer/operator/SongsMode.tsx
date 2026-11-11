@@ -23,19 +23,29 @@ import { chorusJump, labelJump, verseJump } from '../../shared/songs/sectionJump
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import type { SearchField, Slide, Song, SongSearchResult, UpdateSongInput } from '../../shared/types';
 import { SongSearchRail, type SongRow } from './SongSearchRail';
-import type { ContextMenuItem } from './ContextMenu';
 import { pickNeighborId } from './pickNeighbor';
 import { SectionRail } from './SectionRail';
 import { QuickAdd } from './QuickAdd';
 import { SongImport } from './SongImport';
 import { useContextMenu } from './useContextMenu';
+import { useLibraryDelete } from './useLibraryDelete';
 import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { PanelDivider } from './PanelDivider';
 import { GoLiveIcon, ScreenBlackIcon } from '../shared/icons';
-import { primaryBtnStyle, statusChipStyle, statusDotStyle, transportGhostBtn, verbDividerStyle } from './transport';
+import {
+  primaryBtnStyle,
+  screenToneColor,
+  statusChipStyle,
+  statusDotStyle,
+  transportGhostBtn,
+  verbDividerStyle
+} from './transport';
+import { screenStatus } from '../../shared/presentation/screenOwner';
 import { MONO } from '../shared/fonts';
+import { liveRing } from './railTint';
+import { LiveBadge } from './StateBadge';
 import { runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
 export interface SongsModeProps {
@@ -71,15 +81,6 @@ const SECONDARY_LIMIT = 3;
 // which otherwise blocks presTake/presGoLive behind every intermediate search. The
 // import-completed re-search stays un-debounced — it is one deliberate call, not a
 // keystroke.
-// How long "Remove — sure?" stays armed before lapsing back. Same value Settings uses for
-// uninstalling a bible, because it is the same gesture — see onSongContextMenu.
-const REMOVE_CONFIRM_MS = 4000;
-// The confirm re-labels in place, so the second half of a double-click lands on "Remove —
-// sure?" at the very coordinates the first half armed it — arming and confirming in one
-// gesture, which is exactly what the two-step exists to prevent. Clicks this soon after
-// arming are the tail of that double-click, not a decision, so they are ignored.
-const CONFIRM_ARM_GUARD_MS = 350;
-
 // Shared by the cue effect, goLive, and jumpSection — all three build the identical
 // lyrics-slide literal for a song section, so a change to the shape only has one place to go.
 function slideFor(song: Song, section: { label: string; lines: string[] }): Slide {
@@ -93,7 +94,13 @@ function slideFor(song: Song, section: { label: string; lines: string[] }): Slid
   };
 }
 
-function toRow(song: Song, snippet: string, activeSongId: string | null, armedId: string | null = null): SongRow {
+function toRow(
+  song: Song,
+  snippet: string,
+  activeSongId: string | null,
+  armedId: string | null = null,
+  liveSongId: string | null = null
+): SongRow {
   return {
     id: song.id,
     title: song.title,
@@ -101,7 +108,8 @@ function toRow(song: Song, snippet: string, activeSongId: string | null, armedId
     snippet,
     hasSnippet: !!snippet,
     isActive: song.id === activeSongId,
-    isArmed: song.id === armedId
+    isArmed: song.id === armedId,
+    isLive: song.id === liveSongId
   };
 }
 
@@ -344,7 +352,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
         return;
       }
       // Toggle off on the armed row, arm on any other row. Arming is silent: no selection
-      // change, no cue, no screen traffic — Enter or the Switch button commits.
+      // change, no cue, no screen traffic — Enter or Go live commits.
       setArmedNextId((cur) => (cur === id ? null : id));
       return;
     }
@@ -395,13 +403,17 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     }
   };
 
+  // The song library is one of the two lists that CONFIRM rather than undo (#90); the media
+  // library is the other. useLibraryDelete says why, and is the one implementation of it.
+  const libraryDelete = useLibraryDelete(contextMenu);
+
   const onSectionContextMenu = (i: number, e: ReactMouseEvent): void => {
-    // Clear the song-remove confirm timer here too, not just in onSongContextMenu:
+    // Disarm the song-delete confirm here too, not just in onSongContextMenu:
     // `contextMenu.update` rewrites WHICHEVER menu is open, so a timer left running from a
     // song row would, four seconds later, silently turn this section menu into the song
     // menu — its Edit would open the song editor and a destructive item would appear
     // unprompted over a control the operator never right-clicked.
-    clearConfirmTimer();
+    libraryDelete.disarm();
     contextMenu.open(e, [
       { label: 'Edit', onSelect: () => { setEditError(false); setEditingSection(i); } }
     ]);
@@ -449,34 +461,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
 
   const onEditSong = (id: string): void => setEditModalSongId(id);
 
-  // The song library is the one list in the app that CONFIRMS rather than undoing (#90).
-  // The rule from #86 is "in-service surfaces never confirm, they undo" — but a schedule is
-  // this Sunday's plan and the library is every Sunday's, so removing from it is a
-  // Settings-shaped act of library management that happens to live on an in-service page.
-  // It therefore borrows Settings' two-step "Remove — sure?", and deliberately does NOT
-  // answer the Delete key or offer multi-select: no single keystroke may take a song out
-  // of the library.
-  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // False until the arm-guard elapses. A timer rather than comparing clock readings:
-  // reading the clock from a function the compiler cannot prove is event-only counts as an
-  // impure call during render.
-  const confirmArmedRef = useRef(false);
-  const armGuardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearConfirmTimer = (): void => {
-    if (confirmTimerRef.current !== null) {
-      clearTimeout(confirmTimerRef.current);
-      confirmTimerRef.current = null;
-    }
-    if (armGuardTimerRef.current !== null) {
-      clearTimeout(armGuardTimerRef.current);
-      armGuardTimerRef.current = null;
-    }
-    confirmArmedRef.current = false;
-  };
-  useEffect(() => clearConfirmTimer, []);
-
   const removeSong = (id: string): void => {
-    clearConfirmTimer();
     window.helm.songs
       .remove(id)
       .then((songs) => {
@@ -498,57 +483,15 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
       .catch(console.error);
   };
 
-  // Rebuilt rather than toggled through state: the menu captures its items when it opens,
-  // so re-labelling means handing it a fresh array via `update`.
-  const songMenuItems = (id: string, armed: boolean): ContextMenuItem[] => {
-    // Refuse to remove the song the congregation is currently reading. `sameFlow` would
-    // keep its lyrics on the projector with no library row behind them, and the center
-    // stays live-locked against a song that no longer exists — a state nothing else in
-    // this mode can produce. Taking the screen down first costs one click and clears both.
-    const isLiveSong = output === 'live' && liveParsed?.songId === id;
-    const removeItem: ContextMenuItem = isLiveSong
-      ? { label: 'On screen — take it down first', disabled: true, onSelect: () => {} }
-      : {
-          label: armed ? 'Remove — sure?' : 'Remove from library',
-          danger: true,
-          // Always keepOpen, closing by hand only once the removal actually commits. The
-          // arming click obviously has to leave the menu up — the confirmation belongs
-          // under the cursor already there. But so does a click the arm-guard swallows:
-          // closing on one would leave a double-clicking operator with a shut menu,
-          // nothing deleted, and no sign of why. A swallowed click leaves "Remove —
-          // sure?" there to be pressed deliberately.
-          keepOpen: true,
-          onSelect: () => {
-            if (!armed) {
-              armRemove(id);
-              return;
-            }
-            if (!confirmArmedRef.current) return;
-            contextMenu.close();
-            removeSong(id);
-          }
-        };
-    return [{ label: 'Edit', onSelect: () => onEditSong(id) }, removeItem];
-  };
-
-  const armRemove = (id: string): void => {
-    clearConfirmTimer();
-    contextMenu.update(songMenuItems(id, true));
-    armGuardTimerRef.current = setTimeout(() => {
-      armGuardTimerRef.current = null;
-      confirmArmedRef.current = true;
-    }, CONFIRM_ARM_GUARD_MS);
-    confirmTimerRef.current = setTimeout(() => {
-      confirmTimerRef.current = null;
-      contextMenu.update(songMenuItems(id, false));
-    }, REMOVE_CONFIRM_MS);
-  };
-
-  // Opening any menu disarms a confirm left armed on another row, so a lapsing timer can
-  // never re-label the menu the operator is looking at now.
   const onSongContextMenu = (id: string, e: ReactMouseEvent): void => {
-    clearConfirmTimer();
-    contextMenu.open(e, songMenuItems(id, false));
+    libraryDelete.open(e, {
+      before: [{ label: 'Edit', onSelect: () => onEditSong(id) }],
+      // Refuse to delete the song the congregation is currently reading. `sameFlow` would
+      // keep its lyrics on the projector with no library row behind them, and the center
+      // stays live-locked against a song that no longer exists.
+      isLive: output === 'live' && liveParsed?.songId === id,
+      onDelete: () => removeSong(id)
+    });
   };
 
   const onQuickAddSaved = (song: Song): void => {
@@ -557,13 +500,14 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
   };
 
   const hasQuery = !!q.trim();
+  const liveSongId = locked && liveParsed ? liveParsed.songId : null;
   const displayedRows: SongRow[] = hasQuery
-    ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId, armed?.id ?? null))
-    : library.map((s) => toRow(s, '', activeSongId, armed?.id ?? null));
+    ? results.slice(0, 9).map((r) => toRow(r.song, r.snippet, activeSongId, armed?.id ?? null, liveSongId))
+    : library.map((s) => toRow(s, '', activeSongId, armed?.id ?? null, liveSongId));
   const noResults = hasQuery && results.length === 0;
   const secondaryResults =
     field === 'title' && hasQuery ? secondaryLyricRows(results, lyricHint, SECONDARY_TITLE_MAX, SECONDARY_LIMIT) : [];
-  const secondaryRows: SongRow[] = secondaryResults.map((r) => toRow(r.song, r.snippet, activeSongId));
+  const secondaryRows: SongRow[] = secondaryResults.map((r) => toRow(r.song, r.snippet, activeSongId, null, liveSongId));
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
@@ -786,15 +730,16 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     };
   });
 
-  const outColor = output === 'black' ? T.dim : output === 'logo' ? T.accent : T.live;
-  const projText = output === 'black' ? 'NOTHING ON SCREEN' : output === 'logo' ? 'LOGO ON SCREEN' : 'LIVE ON SCREEN';
+  const status = screenStatus({ output, liveKey }, 'songs');
+  const outColor = screenToneColor(T, status.tone);
+  const projText = status.text;
 
   const emptyText = `No match for “${q}”. Try another word, or add it as a new song above.`;
 
   // ---------------- styles ----------------
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const projBarStyle: CSSProperties = statusChipStyle(outColor);
-  const projDotStyle: CSSProperties = statusDotStyle(outColor, output === 'live');
+  const projDotStyle: CSSProperties = statusDotStyle(outColor, status.tone === 'live');
   const bigVerseWrapStyle: CSSProperties = {
     flex: 1,
     minWidth: 0,
@@ -803,9 +748,10 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     // hidden, not auto: the fit below guarantees the section fits, and a scrollbar
     // appearing mid-measure would change the box being measured.
     overflow: 'hidden',
+    position: 'relative',
     borderRadius: '14px',
     background: T.panel,
-    boxShadow: cuedIsLive ? `inset 0 0 0 2px ${T.accent}66` : `inset 0 0 0 1px ${T.hairline}`
+    boxShadow: cuedIsLive ? liveRing(T) : `inset 0 0 0 1px ${T.hairline}`
   };
   const bigVerseLabelStyle: CSSProperties = {
     flexShrink: 0,
@@ -932,7 +878,11 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
         </div>
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '2px' }}>
-          <div style={bigVerseWrapStyle}>
+          <div style={bigVerseWrapStyle} data-hero-card>
+            {/* Absolutely positioned, so the fit box (heroFitRef) never re-measures for it. */}
+            {cuedIsLive && (
+              <LiveBadge theme={T} chip style={{ position: 'absolute', top: '14px', right: '16px', zIndex: 1 }} />
+            )}
             <div style={bigVerseLabelStyle}>{currentSectionObj?.label ? `NOW SINGING · ${currentSectionObj.label}` : ''}</div>
             <div ref={heroFitRef} style={heroFitStyle} data-testid="song-hero">
               <div
@@ -991,20 +941,20 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             arrive only once something is armed — and the primary slot never takes on its
             meaning. The armed song's title rides in the tooltip rather than the label,
             because a label that names a song makes the bar's width a function of the song
-            library; the rail's gold NEXT badge already says which song is queued. */}
+            library; the rail's QUEUED badge already says which song is queued. */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexShrink: 0 }} data-transport-bar>
-          <button style={ghostBtn} onClick={() => step(-1)}>
-            ‹ Prev
+          <button style={ghostBtn} onClick={() => step(-1)} title="Previous section">
+            ‹ Previous
           </button>
-          <button style={ghostBtn} onClick={() => step(1)}>
-            Cue next ›
+          <button style={ghostBtn} onClick={() => step(1)} title="Next section">
+            Next ›
           </button>
           <div style={{ flex: 1 }} />
           <button
             style={takeDownStyle}
             onClick={takeDown}
             disabled={!canTakeDown}
-            title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
+            title={canTakeDown ? 'Black the audience screen' : 'Nothing on screen'}
           >
             <ScreenBlackIcon size={14} /> Take down
           </button>
@@ -1013,13 +963,9 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             style={goLiveStyle}
             onClick={armed ? commitSwitch : goLive}
             disabled={!canGoLive}
-            title={armed ? `Switch to ${armed.title}` : cuedIsLive ? 'Already on screen' : undefined}
+            title={armed ? `Go live with ${armed.title}` : cuedIsLive ? 'Already on screen' : undefined}
           >
-            {armed ? '⇄ Switch' : (
-              <>
-                <GoLiveIcon size={14} /> Go live
-              </>
-            )}
+            <GoLiveIcon size={14} /> Go live
           </button>
         </div>
       </div>

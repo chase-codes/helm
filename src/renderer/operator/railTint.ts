@@ -56,7 +56,8 @@ export interface RailTier {
 }
 
 /** The rail card: background from the tint ladder, ring strength descending with the
- *  same tiers. selected and live share the full-strength 2px ring. */
+ *  same tiers. selected and live both take a 2px ring; live's is red (rule 1) and wins
+ *  inside a range. */
 export function railRowStyle(T: Theme, accent: string, dark: boolean, tier: RailTier): CSSProperties {
   const { live, cued, planned, selected = false } = tier;
   return {
@@ -76,8 +77,9 @@ export function railRowStyle(T: Theme, accent: string, dark: boolean, tier: Rail
           : planned
             ? railTint(accent, 'planned', dark)
             : T.panel2,
-    boxShadow:
-      selected || live
+    boxShadow: live
+      ? liveRing(T)
+      : selected
         ? `inset 0 0 0 2px ${accent}`
         : cued
           ? `inset 0 0 0 1.5px ${accent}66`
@@ -125,5 +127,60 @@ export function railTextStyle(T: Theme, opts: { cued: boolean; planned: boolean;
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden'
+  };
+}
+
+/** Rule 1: the one ring that means "the congregation sees this", on every rail row and
+ *  hero. The cued or selected item wears its track colour instead, never this. */
+export function liveRing(T: Theme): string {
+  return `inset 0 0 0 2px ${T.live}`;
+}
+
+/** The QUEUED badge (decision 7), lifted from SongSearchRail's old NEXT badge: track-colour
+ *  mono caps with a fixed footprint (rule 5). `ghost` is both the hover forecast and the
+ *  spent look on the row whose click would clear it. */
+export function queuedBadgeStyle(accent: string, ghost: boolean): CSSProperties {
+  return {
+    fontFamily: MONO,
+    fontSize: '9px',
+    letterSpacing: '0.08em',
+    fontWeight: 700,
+    color: accent,
+    opacity: ghost ? 0.45 : 1,
+    flexShrink: 0,
+    whiteSpace: 'nowrap'
+  };
+}
+
+export interface ScheduleRowTier {
+  live: boolean;
+  /** In the delete-selection (useListSelection). */
+  selected: boolean;
+  /** The cued item (the hero shows it). */
+  current: boolean;
+}
+
+/** One row look for the three schedule-shaped lists (Scripture schedule, quote schedule,
+ *  media library). Live outranks the selection so the item on screen always reads red, even
+ *  inside a picked range; the selection and the cue wear the track colour, at two strengths. */
+export function scheduleRowStyle(T: Theme, accent: string, tier: ScheduleRowTier): CSSProperties {
+  const { live, selected, current } = tier;
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '10px 11px',
+    borderRadius: '11px',
+    cursor: 'pointer',
+    userSelect: 'none',
+    background: live || current ? T.panel3 : selected ? T.panel2 : 'transparent',
+    boxShadow: live
+      ? liveRing(T)
+      : selected
+        ? `inset 0 0 0 1.5px ${accent}`
+        : current
+          ? `inset 0 0 0 1px ${accent}55`
+          : 'none'
   };
 }

@@ -30,7 +30,7 @@ import {
 import { matchPassages, type Passage } from '../../shared/scripture/passages';
 import { parseVerseQuery } from '../../shared/search/verseScore';
 import { railSelect, addTarget, type Cursor } from '../../shared/scripture/selection';
-import { buildScriptureSlide, keyForScripture, pickVersion, verseCols } from '../../shared/scripture/slides';
+import { buildScriptureSlide, keyForScripture, parseScriptureKey, pickVersion, verseCols } from '../../shared/scripture/slides';
 import { sameKind } from '../../shared/presentation/core';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import type {
@@ -140,6 +140,10 @@ export function SermonMode({
   const requestRailScroll = (v: number, align: 'start' | 'nearest'): void =>
     setRailScroll((p) => ({ v, align, nonce: (p?.nonce ?? 0) + 1 }));
   const [schedule, setSchedule] = useState<ScriptureReading[]>([]);
+  // Decision 3 (2026-10-11): while scripture holds the screen, a schedule click lines the
+  // reading up instead of jumping the projector to it. Go live, Enter or a double click
+  // takes it; Escape clears it; taking the screen down turns it into the cursor.
+  const [queuedReadingId, setQueuedReadingId] = useState<string | null>(null);
   const [manifest, setManifest] = useState<BibleManifestEntry[]>([]);
 
   const contextMenu = useContextMenu();
@@ -522,6 +526,16 @@ export function SermonMode({
   // equality here made the button flash green for the gap between our send and the
   // liveKey broadcast returning, then ghost again.
   const cuedIsLive = output === 'live' && sameKind(liveKey, curKey);
+  const readingHolds = (r: ScriptureReading, book: string, ch: number, v: number): boolean =>
+    r.book === book && r.ch === ch && v >= r.from && v <= r.to;
+  // What is on the projector, for the schedule's LIVE badge (rule 1).
+  const liveVerse = output === 'live' ? parseScriptureKey(liveKey) : null;
+  // Derived, so a deleted reading or a cursor that walks into the queued reading simply
+  // stops being queued; the queue only means something while scripture holds the screen.
+  const queuedReading =
+    cuedIsLive && queuedReadingId
+      ? (schedule.find((r) => r.id === queuedReadingId && !readingHolds(r, scrBook, scrCh, scrV)) ?? null)
+      : null;
   // 0 while the chapter is unresolved or absent — never a fake 1, which collapsed the cursor
   // to verse 1 on the first arrow press with no bible installed (#19a).
   const verseCount = liveChapter?.verseCount ?? 0;
@@ -544,6 +558,11 @@ export function SermonMode({
   };
 
   const goLive = (): void => {
+    // A queued reading (decision 3) is what the operator lined up for this button.
+    if (queuedReading) {
+      activateReading(queuedReading);
+      return;
+    }
     // Right after a cross-book/chapter jump, `chapter` still holds the previous
     // chapter's data for a render or two (see the `liveChapter` comment above) — so
     // the verse's columns resolve empty and would build the install-hint slide even
@@ -584,7 +603,7 @@ export function SermonMode({
     setScrV(v);
   };
 
-  // Immediate remove + a self-clearing "Removed — Undo" affordance (no blocking dialog):
+  // Immediate remove + a self-clearing "Deleted … Undo" affordance (no blocking dialog):
   // the in-service half of the destructive-action grammar (#86). The rows leave the rail on
   // the keystroke rather than after an IPC round trip — mid-service, a delete that visibly
   // lags is worse than one that optimistically leads, and `undo.commit` resyncs if the
@@ -600,7 +619,8 @@ export function SermonMode({
     undo.remove(readings);
   };
 
-  // The reading 1–9 hotkey and a schedule-row click are the same gesture: cursor to the
+  // The cursor half of a schedule-row click and the reading 1–9 hotkey (both route through
+  // `pickReading` below, which queues instead while scripture is live): cursor to the
   // reading's start, row selected, rail pinned to that verse. Resets the builder (like
   // goLiveFromBuilder already does) so a half-typed ref left over in the entry (e.g. "Rom")
   // doesn't keep previewing ITS book on the rail — without this, the fresh scroll request
@@ -622,9 +642,40 @@ export function SermonMode({
   // guard this callback has no way to reproduce). This resolves it only to build the slide,
   // the same convention `activateVerse` follows.
   const activateReading = (r: ScriptureReading): void => {
+    setQueuedReadingId(null);
     jumpToReading(r);
     resolveAndTake(r.book, r.ch, r.from, chapter);
   };
+
+  // A schedule click or reading hotkey. While scripture is live the cursor IS the screen
+  // (the show effect follows it), so moving it would jump the projector: queue instead,
+  // the Songs model. A click on the reading already on screen just clears the queue.
+  const pickReading = (r: ScriptureReading): void => {
+    if (!cuedIsLive) {
+      jumpToReading(r);
+      return;
+    }
+    sel.select(r.id);
+    if (readingHolds(r, scrBook, scrCh, scrV)) {
+      setQueuedReadingId(null);
+      return;
+    }
+    setQueuedReadingId((cur) => (cur === r.id ? null : r.id));
+  };
+
+  // Take-down converts the queue to the cursor, so the hero (and the leader, via the
+  // cue-on-move in the show effect) lands on what was lined up. Another kind taking the
+  // screen just drops it. Render-time adjustment, the same shape as SongsMode's armed song.
+  const [prevOutput, setPrevOutput] = useState(output);
+  if (output !== prevOutput) {
+    setPrevOutput(output);
+    if (prevOutput === 'live' && output !== 'live' && queuedReadingId) {
+      const r = schedule.find((x) => x.id === queuedReadingId);
+      setQueuedReadingId(null);
+      if (r) jumpToReading(r);
+    }
+  }
+  if (output === 'live' && !cuedIsLive && queuedReadingId !== null) setQueuedReadingId(null);
 
   // Builds the live slide for a single verse (the reading's `from`, matching where the
   // cue effect lands scrV) — not the whole reading range, so the on-screen ref/label
@@ -973,9 +1024,11 @@ export function SermonMode({
       meta: `${n} ${n === 1 ? 'verse' : 'verses'} · ${primary}`,
       isCurrent,
       isSelected: sel.isSelected(r.id),
+      isLive: liveVerse !== null && readingHolds(r, liveVerse.book, liveVerse.ch, liveVerse.v),
+      isQueued: queuedReading?.id === r.id,
       onClick: (e) => {
         if (e.shiftKey) sel.selectTo(r.id);
-        else jumpToReading(r);
+        else pickReading(r);
       },
       // Shift-double-click is two range-selection clicks landing fast, not a take:
       // without the guard, extending a selection could put a verse on screen.
@@ -1014,7 +1067,7 @@ export function SermonMode({
     ondeckPreview = previewOf(nv);
   } else {
     ondeckTitle = `End of ${scrBook} ${scrCh}`;
-    ondeckPreview = 'Pick the next verse on the left';
+    ondeckPreview = 'Type the next reference, or pick a reading on the left';
   }
 
   // Registers this mode's keyboard delegate only while active — App keeps both Songs
@@ -1046,9 +1099,19 @@ export function SermonMode({
             return true;
           },
           // Slides has no rung: its media list is a library with no multi-select (decision 2).
+          // A queue (decision 3 and the quote-row default) clears before a selection, the
+          // way Songs drops its armed song before the screen is touched.
           clearSelection: () => {
-            if (track === 'message') return messageKeyRef.current?.clearSelection() ?? false;
-            return track === 'scripture' && clearSelectionRung(sel)();
+            if (track === 'message') {
+              if (messageKeyRef.current?.onEscape()) return true;
+              return messageKeyRef.current?.clearSelection() ?? false;
+            }
+            if (track !== 'scripture') return false;
+            if (queuedReadingId !== null) {
+              setQueuedReadingId(null);
+              return true;
+            }
+            return clearSelectionRung(sel)();
           },
           takeDown: takeDownWhenLive(output, takeDown)
         }),
@@ -1066,13 +1129,12 @@ export function SermonMode({
       // blocking modal down here is the slides track's deck-fallback, reported through
       // its delegate so Enter/Delete can't fire behind it (same contract as QuickAdd).
       isModalOpen: () => (track === 'slides' && slidesKeyRef.current?.isModalOpen()) || false,
-      // Delete/Backspace reaches whichever track's list is on screen (#90/#8). Each track
-      // owns the guard for "is anything selected"; SermonMode only routes.
+      // Delete/Backspace reaches the schedule on screen (#90/#8): Scripture and Message.
+      // The Slides track is a library and ignores the key (grammar rule 4 carve-out).
       onDelete: () => {
         if (track === 'scripture') {
           if (sel.selectedIds.length > 0) removeReadings(sel.selectedIds);
         } else if (track === 'message') messageKeyRef.current?.onDelete();
-        else if (track === 'slides') slidesKeyRef.current?.onDelete();
       },
       // Registry actions follow the track on screen, like arrows, Enter and Delete above.
       onAction: (a: ResolvedHotkey) => {
@@ -1086,7 +1148,7 @@ export function SermonMode({
         }
         if (a.id === 'item.jump' && a.digit) {
           const r = schedule[a.digit - 1];
-          if (r) jumpToReading(r);
+          if (r) pickReading(r);
         } else if (a.id === 'focus.search') {
           entryRef.current?.focus();
         } else if (a.id === 'field.clear') {
@@ -1185,6 +1247,7 @@ export function SermonMode({
             variant="verse"
             accent={T.scripture}
             output={output}
+            liveKey={liveKey}
             cuedIsLive={cuedIsLive}
             heroLabel={formatRef({ book: scrBook, ch: scrCh, from: scrV, to: scrV })}
             cols={liveCols}
@@ -1192,11 +1255,12 @@ export function SermonMode({
             ondeckTagColor={ondeckTagColor}
             ondeckTitle={ondeckTitle}
             ondeckPreview={ondeckPreview}
-            nextLabel={'Next verse ›'}
+            unit="verse"
             versionPicker={versionPicker}
             onPrev={() => stepVerse(-1)}
             onNext={() => stepVerse(1)}
             onGoLive={goLive}
+            queuedTitle={queuedReading ? formatRef(queuedReading) : undefined}
             onTakeDown={takeDown}
           />
           <PanelDivider active={rightPanel.dragging} onMouseDown={rightPanel.startDrag} />

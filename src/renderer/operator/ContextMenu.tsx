@@ -18,8 +18,8 @@ export interface ContextMenuItem {
   disabled?: boolean;
   /** Leave the menu open after selecting. For two-step confirms, whose first click only
    * arms the second — closing there would put the confirmation somewhere the operator has
-   * to go looking for it (see SongsMode's "Remove from library"). The handler re-labels the
-   * item in place via `useContextMenu`'s `update`. */
+   * to go looking for it (see useLibraryDelete). The handler re-labels the item in place
+   * via `useContextMenu`'s `update`. */
   keepOpen?: boolean;
 }
 

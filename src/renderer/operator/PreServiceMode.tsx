@@ -8,14 +8,18 @@ import { PreCardEditor } from './PreCardEditor';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { useContextMenu } from './useContextMenu';
-import { useListSelection } from './useListSelection';
+import { deleteMenuItems, useListSelection } from './useListSelection';
+import type { ContextMenuItem } from './ContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import type { ModeKeyHandlerRef } from './App';
 import type { PreCard } from '../../shared/types';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
-import { statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
-import { tintChip } from './railTint';
+import { screenToneColor, statusChipStyle, statusDotStyle, transportGhostBtn } from './transport';
+import { screenStatus } from '../../shared/presentation/screenOwner';
+import { liveRing, tintChip } from './railTint';
+import { LiveBadge } from './StateBadge';
 import { MONO } from '../shared/fonts';
+import { railHint } from './railHints';
 import { RowNumber } from './RowNumber';
 import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
@@ -41,10 +45,10 @@ const isDeletable = (c: PreCard): boolean => c.type !== 'logo';
 
 const PRE_RAIL_W = 320;
 
-// Must keep the engine's promise exactly (BUG-018): a tap is navigation, so it switches the
+// Must keep the engine's promise exactly (BUG-018): a click is navigation, so it switches the
 // screen only while pre-service is already projecting, and never starts projecting.
 const PRE_HINT =
-  'The loop rotates through the cards on the left while people arrive. Tap a card to select and preview it — "Start loop" or "Show this card" puts it on the screen. Once pre-service is projecting, a tap switches cards straight away. Move to Songs when the music starts.';
+  'The loop rotates through the cards on the left while people arrive. Click a card to cue it; "Start loop" or "Show this card" puts it on the screen. Once pre-service is live, a click switches cards straight away. Move to Songs when the music starts.';
 
 /** Port of the prototype's per-row snippet logic (Lectern.dc.html ~L1023–1027). */
 function snippetFor(card: PreCard): string {
@@ -110,12 +114,11 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   const enabledCount = cards.filter((c) => c.enabled).length;
 
   const isCardLive = (c: PreCard): boolean => output === 'live' && liveKey === `pre:${c.id}`;
-  const preOwnsScreen = output === 'live' && (liveKey?.startsWith('pre:') ?? false);
-  // "Armed" = selected and in the preview, but NOT on the audience screen — whether that's
+  // "Cued" = selected and in the preview, but NOT on the audience screen — whether that's
   // because a song owns it or because nothing is up yet. Deliberately broader than "another
   // flow is live": the roadmap's pre-live selection marker asks for this state before
   // anything is live, so the operator can see which card Start loop would put up.
-  // Visually distinct from ● ON SCREEN, which means actually live.
+  // Visually distinct from ● LIVE, which means actually live.
   const selectedIsLive = current ? isCardLive(current) : false;
   const armed = current !== undefined && !selectedIsLive;
 
@@ -204,20 +207,25 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     flexShrink: 0,
     whiteSpace: 'nowrap'
   };
-  const pasteSongStyle: CSSProperties = {
+  // The add chip every rail carries at the top (Songs' addChip, Scripture's schedAddStyle).
+  // It used to be the last list item, so the control that fills the loop moved down the
+  // rail as the loop grew.
+  const addChipStyle: CSSProperties = {
     width: '100%',
-    height: '42px',
-    marginTop: '8px',
-    borderRadius: '11px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '13.5px',
+    height: '34px',
+    marginTop: '10px',
+    padding: '0 10px',
+    borderRadius: '9px',
+    background: `${T.accent}22`,
+    color: T.accent,
+    fontSize: '12.5px',
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'transparent'
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   };
 
   const ghostBtn: CSSProperties = transportGhostBtn(T);
@@ -245,7 +253,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // selection is armed, and falls back to a quiet ghost once that card is already live so
   // it never competes with Start loop for attention.
   // The label no longer reports state ("On screen") the way it used to: every toggle in
-  // the app now says what the click DOES, and the ● ON SCREEN badge on the card already
+  // the app now says what the click DOES, and the ● LIVE badge on the card already
   // says what is up (#92). That also makes the row's width constant across both states,
   // which the min-width below used to have to fake.
   const showBtn: CSSProperties = armed
@@ -270,15 +278,15 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     alignItems: 'center'
   };
 
-  // Red is the whole app's word for "the congregation sees this" (#87). This bar used to
-  // say it in a hard-coded green, so the operator's most important signal changed colour
-  // with the page they were on and ignored the theme families outright. The two not-ours
-  // states stay faint on purpose: the bar reports THIS page's claim on the screen, and the
-  // header already carries the global on-air state.
-  const projColor = preOwnsScreen ? T.live : T.faint;
+  // Red is the whole app's word for "the congregation sees this" (#87), and the words are
+  // the shared ones (docs/ux-vocabulary.md): this page's own card reads LIVE ON SCREEN in
+  // red; another page's content reads LIVE FROM <PAGE> in faint, because the header
+  // already carries the global on-air red.
+  const status = screenStatus({ output, liveKey }, 'pre');
+  const projColor = screenToneColor(T, status.tone);
   const projBarStyle: CSSProperties = statusChipStyle(projColor);
-  const projDotStyle: CSSProperties = statusDotStyle(projColor, preOwnsScreen);
-  const projText = preOwnsScreen ? 'PROJECTING' : output === 'live' ? 'ANOTHER FLOW LIVE' : 'OFF SCREEN';
+  const projDotStyle: CSSProperties = statusDotStyle(projColor, status.tone === 'live');
+  const projText = status.text;
 
   const dividerStyle: CSSProperties = { width: '1px', height: '28px', background: T.hairline, margin: '0 4px' };
   // The transport is a sibling of the preview rather than a child of it, so it can run wider
@@ -328,14 +336,16 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             <span style={loopCountTag}>{`${enabledCount} IN LOOP`}</span>
           </div>
           <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '5px', lineHeight: 1.4 }}>
-            Tap a card to select it — while pre-service is on the screen, that switches it. Toggle cards in or out of the rotation.
+            {`${railHint('card', { range: 'select a range' })} Toggle cards in or out of the rotation.`}
           </div>
+          <button style={addChipStyle} onClick={() => setEditing('new')}>
+            + Add a card — verse, announcements, prayer…
+          </button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {cards.length === 0 && (
             <ListEmpty>
-              The loop is empty — add a card below to put something on screen before the
-              service.
+              The loop is empty. Use <b>+ Add a card</b> above to put something on screen before the service.
             </ListEmpty>
           )}
           {cards.map((card, i) => {
@@ -352,15 +362,16 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               cursor: 'pointer',
               userSelect: 'none',
               opacity: card.enabled || isShowing || isArmed ? 1 : 0.55,
-              // Live gets the filled treatment; armed gets the ring only — the operator
-              // must be able to tell "this is on the screen" from "this is queued up".
-              // A delete-selection ring outranks both: while a range is picked out, what
-              // Delete would take has to be the unambiguous thing on the rail.
+              // Live gets the filled treatment and the red ring (rule 1); armed gets a
+              // track-colour ring only, so the operator can tell "this is on the screen"
+              // from "this is queued up". Live outranks a delete-selection ring, as on every
+              // other list, so the card on screen always reads red; the selection ring
+              // outranks armed, so what Delete would take stays unambiguous.
               background: isShowing ? T.selBg : T.panel2,
-              boxShadow: isSelected
-                ? `inset 0 0 0 1.5px ${T.accent}`
-                : isShowing
-                  ? `inset 0 0 0 1.5px ${T.accent}88`
+              boxShadow: isShowing
+                ? liveRing(T)
+                : isSelected
+                  ? `inset 0 0 0 1.5px ${T.accent}`
                   : isArmed
                     ? `inset 0 0 0 1.5px ${T.accent}44`
                     : `inset 0 0 0 1px ${T.hairline}`
@@ -405,16 +416,15 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               background: card.enabled ? `${T.accent}1c` : 'transparent',
               boxShadow: card.enabled ? 'none' : `inset 0 0 0 1px ${T.border}`
             };
-            const showingBadge: CSSProperties = {
+            const armedBadge: CSSProperties = {
               fontFamily: MONO,
               fontSize: '9px',
               letterSpacing: '0.06em',
               fontWeight: 600,
-              color: T.live,
+              color: T.accent,
               whiteSpace: 'nowrap',
               flexShrink: 0
             };
-            const armedBadge: CSSProperties = { ...showingBadge, color: T.accent };
             return (
               <button
                 key={card.id}
@@ -436,20 +446,19 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                   if (!e.shiftKey) window.helm.preservice.takeCard(i);
                 }}
                 onContextMenu={(e) => {
-                  const batchMenu = isSelected && sel.selectedIds.length > 1;
-                  if (!batchMenu) sel.select(card.id);
-                  const ids = batchMenu ? sel.selectedIds : [card.id];
-                  // The count names what will ACTUALLY go, so a range that happens to
-                  // include the undeletable logo card doesn't promise more than it does.
-                  const deletable = cards.filter((c) => ids.includes(c.id) && isDeletable(c));
+                  // Edit opens one card, so it is offered for the row under the pointer only,
+                  // never inside a range; the logo card has no editor at all.
+                  const inRange = isSelected && sel.selectedIds.length > 1;
+                  const edit: ContextMenuItem[] =
+                    canEdit && !inRange ? [{ label: 'Edit', onSelect: () => setEditing(card) }] : [];
                   contextMenu.open(e, [
-                    deletable.length === 0
-                      ? { label: 'The logo card can’t be deleted', disabled: true, onSelect: () => {} }
-                      : {
-                          label: deletable.length === 1 ? 'Delete' : `Delete ${deletable.length} cards`,
-                          danger: true,
-                          onSelect: () => removeCards(deletable.map((c) => c.id))
-                        }
+                    ...edit,
+                    ...deleteMenuItems(sel, card.id, 'cards', removeCards, {
+                      // The logo card has no creation path, so it never goes (see isDeletable);
+                      // the count names only the cards that actually will.
+                      canDelete: (id) => cards.some((c) => c.id === id && isDeletable(c)),
+                      blockedLabel: 'The logo card can’t be deleted'
+                    })
                   ]);
                 }}
               >
@@ -459,8 +468,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                     <div style={labelStyle}>{card.title}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {isShowing && <span style={showingBadge}>● ON SCREEN</span>}
-                    {isArmed && <span style={armedBadge}>● ARMED</span>}
+                    {isShowing && <LiveBadge theme={T} />}
+                    {isArmed && <span style={armedBadge}>● CUED</span>}
                     {canEdit && (
                       <span
                         style={editChipStyle}
@@ -489,9 +498,6 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               </button>
             );
           })}
-          <button style={pasteSongStyle} onClick={() => setEditing('new')}>
-            + Add a card — verse, announcements, prayer…
-          </button>
         </div>
         {undo.pending && (
           <UndoToast
@@ -510,7 +516,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               <span style={{ fontSize: '11px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600 }}>PREVIEW — CURRENT CARD</span>
               {armed && (
                 <span style={{ fontFamily: MONO, fontSize: '9.5px', letterSpacing: '0.06em', fontWeight: 600, color: T.accent }}>
-                  ● ARMED
+                  ● CUED
                 </span>
               )}
             </span>
@@ -520,13 +526,14 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             </div>
           </div>
           <div
+            data-pre-preview
             style={{
               width: '100%',
               aspectRatio: '16/9',
               borderRadius: '14px',
               overflow: 'hidden',
               position: 'relative',
-              boxShadow: '0 18px 50px rgba(0,0,0,.3)'
+              boxShadow: selectedIsLive ? `0 0 0 2px ${T.live}, 0 18px 50px rgba(0,0,0,.3)` : '0 18px 50px rgba(0,0,0,.3)'
             }}
           >
             <SlideCanvas slide={preSlideFor(cardForSlide)} fill />
@@ -568,7 +575,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             style={takeDownBtn}
             onClick={takeDown}
             disabled={!canTakeDown}
-            title={canTakeDown ? 'Clear the audience screen' : 'Nothing on screen'}
+            title={canTakeDown ? 'Black the audience screen' : 'Nothing on screen'}
           >
             <ScreenBlackIcon size={14} /> Take down
           </button>

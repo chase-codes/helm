@@ -2,7 +2,6 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
-  useRef,
   useState,
   type CSSProperties,
   type JSX,
@@ -12,7 +11,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { usePresentationState, useVideoState } from '../shared/useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
-import { logoSlide, sameFlow } from '../../shared/presentation/core';
+import { isQueuedBehind, logoSlide, sameFlow } from '../../shared/presentation/core';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
 import { PanelDivider } from './PanelDivider';
 import { type SermonTrack } from './SchedulePanel';
@@ -21,14 +20,15 @@ import { SlideCanvas } from '../shared/SlideCanvas';
 import { VideoCanvas } from '../shared/VideoCanvas';
 import { TrackTabs } from './TrackTabs';
 import { useContextMenu } from './useContextMenu';
-import { filterPending, useDeferredRemove } from './useDeferredRemove';
-import { deleteMenuItems, useListSelection } from './useListSelection';
-import { UndoToast } from './UndoToast';
+import { useLibraryDelete } from './useLibraryDelete';
 import { ListEmpty } from './ListEmpty';
 import { pickNeighborId } from './pickNeighbor';
 import type { PanelWidthControl } from './usePanelWidth';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
+import { railHint } from './railHints';
+import { scheduleRowStyle } from './railTint';
+import { LiveBadge, RowStateMark } from './StateBadge';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 
 /**
@@ -46,9 +46,6 @@ export interface SlidesKeyHandler {
   /** True while the deck-fallback modal is up — a blocking modal, so SermonMode reports
    * it and App suppresses Enter/Delete behind it (same contract as SongsMode's QuickAdd). */
   isModalOpen: () => boolean;
-  /** Delete/Backspace: remove the library selection, if any (#90). The media library is a
-   * schedule-shaped list like the scripture rail, so it answers the same key. */
-  onDelete: () => void;
   /** Registry actions SermonMode routes here while this track is on screen. */
   onAction: (a: ResolvedHotkey) => void;
 }
@@ -72,8 +69,17 @@ function iconFor(item: MediaItem): string {
   return '▣';
 }
 
+/** What kind of file a deck came from. Decks keep their source filename as the title
+ * (main/mediaImport.ts), so the extension says it; a PDF is not a PowerPoint. */
+function deckKind(title: string): string {
+  const ext = title.slice(title.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'pdf') return 'PDF';
+  if (ext === 'ppt' || ext === 'pptx') return 'PowerPoint';
+  return 'Presentation';
+}
+
 function metaFor(item: MediaItem): string {
-  if (item.type === 'deck') return `PowerPoint · ${item.slides.length} ${item.slides.length === 1 ? 'slide' : 'slides'}`;
+  if (item.type === 'deck') return `${deckKind(item.title)} · ${item.slides.length} ${item.slides.length === 1 ? 'slide' : 'slides'}`;
   if (item.type === 'video') return 'Video clip';
   return 'Image';
 }
@@ -114,39 +120,11 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   const [importing, setImporting] = useState<null | { label: string }>(null);
 
   const contextMenu = useContextMenu();
-  // Two independent notions of "picked", exactly as the scripture rail has: `selId` is the
-  // CUED item driving the hero, `sel` is the delete-selection a shift-click builds. They
-  // usually agree (a plain click sets both) and deliberately diverge on a shift-click,
-  // which extends the range without moving the cue off the slide on screen.
-  const sel = useListSelection(items.map((i) => i.id));
-  // Deferred commit — the row leaves the rail now, the file is deleted when the undo
-  // window closes, and undo re-reads the library so the order is exactly as it was (#86).
-  const undo = useDeferredRemove<MediaItem>({
-    commit: (batch) => {
-      for (const item of batch) void window.helm.media.remove(item.id).catch(console.error);
-    },
-    restore: () => {
-      // Re-fetch rather than splice the batch back in: the library's order is main's to
-      // know, and re-reading it is what makes the restore exact.
-      void window.helm.media
-        .list()
-        .then((l) => {
-          setItems(l);
-          const back = displacedCueRef.current;
-          displacedCueRef.current = null;
-          if (back) {
-            setSelId(back);
-            setSlideIdx(0);
-          }
-        })
-        .catch(console.error);
-    }
-  });
-
-  // The cued id the pending removal displaced, or null if the cue was untouched by it.
-  // Undo moves the hero back only when the delete is what moved it — deleting some other
-  // row and undoing must not yank the operator off the slide they are looking at.
-  const displacedCueRef = useRef<string | null>(null);
+  // The media library is a LIBRARY, not this Sunday's schedule: deleting from it removes
+  // the files from disk, so it speaks the song library's confirm (useLibraryDelete) rather
+  // than the schedules' undo, and like the song library it answers neither the Delete key
+  // nor multi-select (decision 2, grammar rule 4 carve-out).
+  const libraryDelete = useLibraryDelete(contextMenu);
 
   // Initial load: the media library, picking the first item as current.
   useEffect(() => {
@@ -233,29 +211,31 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   // nothing to do — not one broadcast round-trip later. Key equality here made the button
   // flash green for the gap between the cue send and the liveKey broadcast returning.
   const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
+  // Decision 7: another item lined up behind the deck/image/video on screen.
+  const queued = isQueuedBehind(output, liveKey, curKey);
+  const isItemLive = (item: MediaItem): boolean => output === 'live' && sameFlow(liveKey, keyForMedia(item.id, 0));
 
   const selectItem = (item: MediaItem): void => {
     setSelId(item.id);
     setSlideIdx(0);
   };
 
-  // One remove path for a row's context menu, a shift-click range, and the Delete key
-  // alike — the rows leave the rail immediately and the files go when the undo window
-  // closes (see `undo` above; the expiry/supersede/unmount commit paths live in
-  // useDeferredRemove now, which is where the scripture rail reads them from too).
-  const removeItems = (ids: string[]): void => {
-    const batch = items.filter((i) => ids.includes(i.id));
-    if (!batch.length) return;
-    const cueDisplaced = ids.includes(selId);
-    displacedCueRef.current = cueDisplaced ? selId : null;
-    const neighborId = pickNeighborId(items, ids);
-    setItems((l) => l.filter((i) => !ids.includes(i.id)));
-    if (cueDisplaced) {
-      setSelId(neighborId);
-      setSlideIdx(0);
-    }
-    sel.clear();
-    undo.remove(batch);
+  // Confirmed already (useLibraryDelete), so this is the real thing: main deletes the files
+  // and answers with the library, which is applied as-is. When the deleted item was the cue,
+  // the hero moves to its neighbour, computed from the list as it was before the delete.
+  const deleteItem = (id: string): void => {
+    const cueDisplaced = id === selId;
+    const neighborId = pickNeighborId(items, [id]);
+    window.helm.media
+      .remove(id)
+      .then((l) => {
+        setItems(l);
+        if (cueDisplaced) {
+          setSelId(neighborId);
+          setSlideIdx(0);
+        }
+      })
+      .catch(console.error);
   };
 
   const stepSlide = (dir: 1 | -1): void => {
@@ -312,9 +292,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   const applyImport = (res: MediaImportResult, prevIds: Set<string>): void => {
     if (res.canceled) return;
     const added = res.items.find((i) => !prevIds.has(i.id));
-    // An import reply carries the whole library, which during an undo window still holds
-    // the items the operator just deleted — see `filterPending`.
-    setItems(filterPending(undo, res.items));
+    setItems(res.items);
     if (added) {
       setSelId(added.id);
       setSlideIdx(0);
@@ -376,9 +354,6 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       onGoLive: goLive,
       onEscape: escapeOverlays,
       isModalOpen: () => deckFallback !== null,
-      onDelete: () => {
-        if (sel.selectedIds.length > 0) removeItems(sel.selectedIds);
-      },
       // A digit taps row N of the deck's own numbered slide rail: the cue moves, and while
       // this deck is live the screen follows, exactly as the rail's tap does. Single-slide
       // items have no rail, so there is nothing to jump to.
@@ -416,44 +391,25 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
-  // Same two-state treatment the scripture rail uses: the delete-selection ring wins over
-  // the cued tint, so a shift-click range reads as one block even where it crosses the
-  // cued row.
-  const rowStyle = (isCurrent: boolean, isSelected: boolean): CSSProperties => ({
+  const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
+  // The add chip every rail carries at the top (Scripture's schedAddStyle, Songs' addChip),
+  // in this track's colour. Import is the verb because the source is a file.
+  const importChipStyle: CSSProperties = {
+    width: '100%',
+    height: '34px',
+    borderRadius: '9px',
+    background: `${T.sermon}22`,
+    color: T.sermon,
+    fontSize: '12.5px',
+    fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    width: '100%',
-    padding: '8px 9px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    background: isCurrent ? T.panel3 : isSelected ? T.panel2 : 'transparent',
-    boxShadow: isSelected
-      ? `inset 0 0 0 1.5px ${T.accent}`
-      : isCurrent
-        ? `inset 0 0 0 1px ${T.sermon}55`
-        : 'none',
-    userSelect: 'none'
-  });
-  const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
-  const importHeaderBtnStyle: CSSProperties = {
-    height: '26px',
-    padding: '0 10px',
-    borderRadius: '8px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`,
-    border: 'none',
-    color: T.dim,
-    fontSize: '12px',
-    fontWeight: 600,
-    background: 'transparent',
-    // The verb must survive the rail's 200px minimum in one piece — the heading beside it
-    // may wrap, the button may not ("+" over "Import" reads as two controls).
-    whiteSpace: 'nowrap',
-    flexShrink: 0
+    justifyContent: 'center',
+    whiteSpace: 'nowrap'
   };
   const importPopStyle: CSSProperties = {
     position: 'absolute',
-    top: '30px',   // opens DOWNWARD from the header button (was bottom: 46px)
+    top: '38px', // opens DOWNWARD from the add chip (was bottom: 46px)
     right: 0,
     zIndex: Z_POPOVER,
     width: '180px',
@@ -495,7 +451,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     borderRadius: '8px',
     overflow: 'hidden',
     position: 'relative',
-    boxShadow: isLive ? `0 0 0 2px ${T.sermon}, 0 6px 18px rgba(0,0,0,.25)` : isCued ? `0 0 0 2px ${T.sermon}66` : `inset 0 0 0 1px ${T.border}`
+    // Outset, the thumb's own geometry, so the ring never covers the image; `liveRing` is the
+    // inset variant for cards.
+    boxShadow: isLive ? `0 0 0 2px ${T.live}, 0 6px 18px rgba(0,0,0,.25)` : isCued ? `0 0 0 2px ${T.sermon}66` : `inset 0 0 0 1px ${T.border}`
   });
   const deckRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', userSelect: 'none' };
   const transportBtnStyle: CSSProperties = {
@@ -541,17 +499,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         <div style={{ padding: '12px 12px 10px', flexShrink: 0 }}>
           <TrackTabs theme={T} track={track} setTrack={setTrack} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 9px', flexShrink: 0 }}>
-          <div
-            // One line that gives way to the button: at the rail's 200px minimum the
-            // heading truncates rather than wrapping into a two-line cram beside +Import.
-            style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-            title="Presentations & media"
-          >
-            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
-          </div>
+        <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
           <div style={{ position: 'relative' }}>
-            <button style={importHeaderBtnStyle} onClick={() => setImportOpen((o) => !o)}>
+            <button style={importChipStyle} onClick={() => setImportOpen((o) => !o)}>
               + Import
             </button>
             {importOpen && (
@@ -564,6 +514,16 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 </div>
               </>
             )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 9px', flexShrink: 0 }}>
+          <div
+            // One line: at the rail's 200px minimum the heading truncates rather than
+            // wrapping, so the Imported ✓ flash stays on the same line.
+            style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title="Presentations & media"
+          >
+            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.sermon, letterSpacing: 0 }}>· Imported ✓</span>}
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -581,26 +541,25 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
             <button
               key={item.id}
               data-media-id={item.id}
-              style={rowStyle(item.id === selId, sel.isSelected(item.id))}
-              data-selected={sel.isSelected(item.id) || undefined}
-              onClick={(e) => {
-                // Shift-click extends the delete-selection and deliberately leaves the cue
-                // where it is (#90) — same split the scripture rail makes.
-                if (e.shiftKey) sel.selectTo(item.id);
-                else {
-                  selectItem(item);
-                  sel.select(item.id);
-                }
+              style={{
+                ...scheduleRowStyle(T, T.sermon, {
+                  live: isItemLive(item),
+                  selected: false,
+                  current: item.id === selId
+                }),
+                padding: '8px 9px'
               }}
-              // Shift-double-click is two range-selection clicks landing fast, not a take:
-              // without the guard, extending a selection could put a slide on screen.
-              onDoubleClick={(e) => {
-                if (e.shiftKey) return;
+              onClick={() => selectItem(item)}
+              onDoubleClick={() => {
                 selectItem(item);
-                sel.select(item.id);
                 takeSlideLive(item, 0);
               }}
-              onContextMenu={(e) => contextMenu.open(e, deleteMenuItems(sel, item.id, 'items', removeItems))}
+              onContextMenu={(e) =>
+                libraryDelete.open(e, {
+                  isLive: output === 'live' && sameFlow(liveKey, keyForMedia(item.id, 0)),
+                  onDelete: () => deleteItem(item.id)
+                })
+              }
             >
               <div style={thumbBoxStyle}>
                 <SlideCanvas slide={slidesOf(item)[0]} fill />
@@ -611,17 +570,16 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 </div>
                 <div style={{ fontSize: '11px', color: T.faint, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{metaFor(item)}</div>
               </div>
-              {item.id === selId && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
+              <RowStateMark
+                theme={T}
+                accent={T.sermon}
+                live={isItemLive(item)}
+                queued={queued && item.id === selId}
+                current={item.id === selId}
+              />
             </button>
           ))}
         </div>
-        {undo.pending && (
-          <UndoToast
-            label={undo.pending.length === 1 ? undo.pending[0].title : `${undo.pending.length} items`}
-            onUndo={undo.undo}
-            accent={T.sermon}
-          />
-        )}
       </div>
 
       <PanelDivider active={leftPanel.dragging} onMouseDown={leftPanel.startDrag} />
@@ -631,6 +589,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         variant="slide"
         accent={T.sermon}
         output={output}
+        liveKey={liveKey}
         cuedIsLive={cuedIsLive}
         heroLabel=""
         slide={curSlide}
@@ -639,13 +598,14 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         ondeckTagColor={ondeckTagColor}
         ondeckTitle={ondeckTitle}
         ondeckPreview={ondeckPreview}
-        nextLabel={'Next slide ›'}
+        unit="slide"
         onPrev={() => stepSlide(-1)}
         onNext={() => stepSlide(1)}
         onGoLive={goLive}
         // An empty library renders the fallback logo in the hero; Go live would be a no-op,
         // so it must not sit there looking armed (#88).
         canGoLive={selected !== null && slides.length > 0}
+        queuedTitle={queued && selected ? selected.title : undefined}
         onTakeDown={takeDown}
       />
 
@@ -659,7 +619,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
               <div style={{ fontFamily: MONO, fontSize: '10px', color: T.sermon }}>{slides.length} slides</div>
             </div>
             <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45 }}>
-              Tap any slide to put it on screen — jump anywhere, not just next.
+              {railHint('slide')}
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -671,6 +631,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                   <div style={numStyle(isCued)}>{i + 1}</div>
                   <div style={thumbStyle(isCued, isLive)}>
                     <SlideCanvas slide={sl} fill />
+                    {isLive && <LiveBadge theme={T} chip style={{ position: 'absolute', top: '5px', left: '5px' }} />}
                   </div>
                 </button>
               );
@@ -728,12 +689,12 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
       {deckFallback && (
         <ModalShell onClose={() => setDeckFallback(null)} variant="card" width="100%" maxWidth="420px">
           <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>
-            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import PowerPoint"}
+            {deckFallback === 'no-libreoffice' ? 'PowerPoint import unavailable' : "Couldn't import that file"}
           </div>
           <div style={{ fontSize: '13px', color: T.dim, lineHeight: 1.5 }}>
             {deckFallback === 'no-libreoffice'
               ? 'Install LibreOffice to import PowerPoint decks, or export your slides as images and add them individually.'
-              : "Couldn't convert that PowerPoint file."}
+              : "Couldn't convert that presentation or PDF."}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
             <button style={deckFallbackCloseBtnStyle} onClick={() => setDeckFallback(null)}>
