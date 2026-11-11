@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { BOOKS } from '../shared/scripture/books'
 import { matchBook } from '../shared/scripture/refs'
 import type { NormalizedBible } from '../shared/types'
 
@@ -8,6 +9,10 @@ export interface ManifestEntryDef {
   name: string
   url: string
   bundled?: boolean
+  // Non-English book names can't go through matchBook (its prefix fallback would mis-file
+  // them), so these translations map each book by its getbible `nr` — the 1–66 canonical
+  // position — onto Helm's canonical (English) book names.
+  booksByNumber?: boolean
 }
 
 export const BIBLE_MANIFEST: ManifestEntryDef[] = [
@@ -35,6 +40,13 @@ export const BIBLE_MANIFEST: ManifestEntryDef[] = [
     abbr: 'DARBY',
     name: 'Darby Translation',
     url: 'https://api.getbible.net/v2/darby.json'
+  },
+  {
+    id: 'valera',
+    abbr: 'RV1909',
+    name: 'Reina-Valera 1909 (Español)',
+    url: 'https://api.getbible.net/v2/valera.json',
+    booksByNumber: true
   }
 ]
 
@@ -62,7 +74,10 @@ export function normalizeGetBible(raw: unknown, entry: ManifestEntryDef): Normal
     throw new Error(`normalizeGetBible: invalid getbible payload for "${entry.id}"`)
   }
 
-  const unmapped = data.books.map((b) => b.name).filter((name) => !matchBook(name))
+  const canonicalName = (b: GetBibleBook): string | null =>
+    entry.booksByNumber ? (BOOKS[b.nr - 1]?.name ?? null) : matchBook(b.name)
+
+  const unmapped = data.books.filter((b) => !canonicalName(b)).map((b) => b.name)
   if (unmapped.length > 0) {
     throw new Error(
       `normalizeGetBible: unmapped book name(s) for "${entry.id}": ${unmapped.join(', ')}`
@@ -75,7 +90,7 @@ export function normalizeGetBible(raw: unknown, entry: ManifestEntryDef): Normal
     name: entry.name,
     language: data.lang ?? 'en',
     books: data.books.map((b) => ({
-      name: matchBook(b.name) as string,
+      name: canonicalName(b) as string,
       chapters: b.chapters.map((c) => ({
         n: c.chapter,
         verses: c.verses.map((v) => ({ n: v.verse, text: v.text.trimEnd() }))
