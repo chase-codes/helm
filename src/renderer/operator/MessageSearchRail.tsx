@@ -8,6 +8,7 @@ import { MONO } from '../shared/fonts';
 import { scheduleRowStyle } from './railTint';
 import { QueuedBadge, RowStateMark } from './StateBadge';
 import { RowNumber } from './RowNumber';
+import { focusRing } from './interactionVars';
 
 export interface MsgScheduleRow {
   id: string;
@@ -216,7 +217,7 @@ export function MessageSearchRail({
   return (
     <>
       <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
-        <div style={schedInputStyle}>
+        <div data-field style={{ ...schedInputStyle, ...focusRing(T.message) }}>
           {scopeLabel ? (
             <button style={msgChipStyle} onClick={onClearScope} title="Searching within this tape — click to search everything">
               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{scopeLabel}</span>

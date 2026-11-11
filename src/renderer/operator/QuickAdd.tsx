@@ -240,14 +240,14 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px 20px', borderRight: `1px solid ${T.hairline}` }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <input
-                style={{ ...titleStyle, flex: 2, minWidth: 0 }}
+                style={{ ...titleStyle, flex: 3, minWidth: 0 }}
                 autoFocus={!prefilled}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Song title"
               />
               <input
-                style={{ ...titleStyle, flex: 1, minWidth: 0, fontWeight: 500 }}
+                style={{ ...titleStyle, flex: 2, minWidth: 0, fontWeight: 500 }}
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
                 placeholder="Author (optional)"

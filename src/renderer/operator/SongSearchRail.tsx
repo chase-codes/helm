@@ -292,7 +292,7 @@ export function SongSearchRail({
           />
           <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>SONG LIBRARY</span>
         </div>
-        <div style={opSearchBoxStyle}>
+        <div data-field style={opSearchBoxStyle}>
           <span style={{ display: 'inline-flex', opacity: 0.5 }}>
             <SearchIcon size={15} />
           </span>

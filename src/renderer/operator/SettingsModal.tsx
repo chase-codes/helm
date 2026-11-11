@@ -417,7 +417,10 @@ export function SettingsModal({
 
   return (
     <>
-      <ModalShell onClose={onClose} width="640px" maxWidth="96vw" maxHeight="88vh">
+      {/* A fixed frame (grammar rule 5): the sections differ a lot in length, and a modal
+          sized to its content moves the section list and Done under the cursor on every
+          switch. The content pane scrolls instead. */}
+      <ModalShell onClose={onClose} width="640px" maxWidth="96vw" height="560px" maxHeight="88vh">
         <div
           style={{
             padding: '16px 22px',

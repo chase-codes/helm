@@ -129,7 +129,7 @@ export function VersionPicker({ theme: T, manifest, versions, onPick, onOpenSett
                   : 'Click to show; two at once appear side by side'
                 : 'Downloadable in a full install';
               return (
-                <button key={entry.id} style={rowStyle(entry.installed, sel)} onClick={() => handleRowClick(entry)} title={title}>
+                <button key={entry.id} style={rowStyle(entry.installed, sel)} data-inert={entry.installed ? undefined : ''} onClick={() => handleRowClick(entry)} title={title}>
                   <span style={abbrStyle(sel)}>{entry.abbr}</span>
                   <span style={nameStyle(sel)}>{entry.name}</span>
                   <span style={markStyle(sel)}>{mark}</span>

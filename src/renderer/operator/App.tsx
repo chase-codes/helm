@@ -11,6 +11,7 @@ import { SettingsModal } from './SettingsModal';
 import { SongsMode } from './SongsMode';
 import { ThemeCtx } from './ThemeCtx';
 import { useAppearance } from './useAppearance';
+import { interactionVars } from './interactionVars';
 import { sanitizeOverrides, type AppActionId, type HotkeyOverrides } from '../../shared/hotkeys/actions';
 import type { ResolvedHotkey } from '../../shared/hotkeys/match';
 import { SANS } from '../shared/fonts';
@@ -156,7 +157,9 @@ function App(): JSX.Element {
     color: theme.text,
     fontFamily: SANS,
     fontSize: '14px',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    // Hover, press and focus colours for the stylesheet's interaction layer (global.css).
+    ...interactionVars(theme)
   };
   const mainStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' };
 

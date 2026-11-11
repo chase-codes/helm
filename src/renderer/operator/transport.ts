@@ -61,7 +61,10 @@ export function transportGhostBtn(T: Theme): CSSProperties {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '7px'
+    gap: '7px',
+    // A step button that wraps to two lines doubles the bar's height at the minimum window.
+    whiteSpace: 'nowrap',
+    flexShrink: 0
   };
 }
 
@@ -69,7 +72,7 @@ export function transportGhostBtn(T: Theme): CSSProperties {
  * Content-sized like Prev/Next, because nothing to its right depends on its width; an
  * accent outline when it would do something, the faint ghost when it would not. */
 export function secondaryVerbStyle(T: Theme, enabled: boolean): CSSProperties {
-  const base: CSSProperties = { ...transportGhostBtn(T), whiteSpace: 'nowrap' };
+  const base: CSSProperties = transportGhostBtn(T);
   return enabled
     ? { ...base, background: 'transparent', color: T.accent, boxShadow: `inset 0 0 0 1.5px ${T.accent}` }
     : { ...base, color: T.faint, cursor: 'default' };
