@@ -347,3 +347,24 @@ test('indexes verses norm()-tokenized so possessives hit the FTS gate', () => {
   const n = (db.prepare(`SELECT count(*) AS n FROM verse_fts WHERE verse_fts MATCH '"lords"'`).get() as { n: number }).n
   expect(n).toBe(1)
 })
+
+test('search: another era\'s wording finds the verse (your → thy, modern → KJV)', () => {
+  repo.install(lukeKjv)
+  expect(repo.search('abide at your house', 'kjv2').hits.map((h) => h.verse)).toEqual([5])
+  expect(repo.search('abide at your house', 'kjv2').hits[0].near).toBeUndefined()
+})
+
+test('search: no verse holds every word → the verses one word short, flagged near, total stays 0', () => {
+  repo.install(lukeKjv)
+  // "found" is not in Luke 19:10; everything else is
+  const r = repo.search('to seek and to save that which was found', 'kjv2')
+  expect(r.total).toBe(0)
+  expect(r.hits.map((h) => [h.verse, h.near])).toEqual([[10, true]])
+})
+
+test('search: close matches are withheld when a verse holds every word, for two-word and quoted queries', () => {
+  repo.install(lukeKjv)
+  expect(repo.search('zaccheus make haste', 'kjv2').hits.every((h) => !h.near)).toBe(true)
+  expect(repo.search('zaccheus elephant', 'kjv2').hits).toEqual([])
+  expect(repo.search('"zaccheus make speed"', 'kjv2').hits).toEqual([])
+})

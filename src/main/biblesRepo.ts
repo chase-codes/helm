@@ -1,9 +1,12 @@
 import type Database from 'better-sqlite3'
 import type { BookExtent, ChapterData, InstalledVersion, NormalizedBible, VerseSearchResult } from '../shared/types'
 import { VERSE_FTS_COLUMNS } from './schema'
-import { andGroupsMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery'
+import { andGroupsMatch, anyTwoOfMatch, FTS_CANDIDATE_LIMIT } from './ftsQuery'
 import { matchDist, matchTol, norm } from '../shared/search/fuzzy'
-import { foldCompoundNames, parseVerseQuery, rankVerses, type VerseHit } from '../shared/search/verseScore'
+import { wordingVariants } from '../shared/search/wording'
+import {
+  foldCompoundNames, hasNearTier, parseVerseQuery, rankNearVerses, rankVerses, type VerseHit
+} from '../shared/search/verseScore'
 
 export interface BiblesRepo {
   installed(): InstalledVersion[]
@@ -21,7 +24,9 @@ export interface BiblesRepo {
    * on the first keystroke mid-service. Idempotent. */
   ensureSearchIndex(): void
   /** Ranked verse-text search over one version. See the bible-quick-find spec: AND across
-   * words, typo expansion via the vocabulary, bm25 as a tie-break, canonical order last. */
+   * words, typo expansion via the vocabulary, bm25 as a tie-break, canonical order last.
+   * A query of 3+ words that no verse holds in full gets the verses one word short
+   * instead, flagged `near` — `total` counts exact hits only, so it stays 0. */
   search(q: string, versionId: string, limit?: number): VerseSearchResult
 }
 
@@ -30,6 +35,11 @@ interface VerseRow {
   verse: number
   text: string
 }
+
+/** How many close matches a query with no exact hit is given. They are a rescue for a
+ * misquote or another translation's wording, not a second result list: if the verse isn't
+ * among the first few, more rows of near-misses won't find it. */
+export const NEAR_ROWS = 5
 
 export function createBiblesRepo(db: Database.Database): BiblesRepo {
   const insertVersion = db.prepare(
@@ -80,7 +90,10 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
   // too and pollute both retrieval and (via a coincidental phrase/tf tie) ranking.
   // Words that DO have prefix matches are left alone — fuzzing "los" into "son"/"for"
   // would pollute a perfectly good prefix query.
-  const expandToken = (tok: string): string[] => {
+  // Either way the word's other-era spellings ride along as exact alternatives
+  // (wording.ts): "your" also gates on "thy"/"thine", "loves" on "loveth".
+  const expandToken = (tok: string): string[] => [...new Set([...expandTypos(tok), ...wordingVariants(tok)])]
+  const expandTypos = (tok: string): string[] => {
     const terms = getVocab()
     if (terms.some((t) => t.startsWith(tok))) return [tok]
     if (tok.length < 3) return [tok]
@@ -176,7 +189,19 @@ export function createBiblesRepo(db: Database.Database): BiblesRepo {
       // Score EVERY candidate (rankVerses' default limit is 50 — letting it apply here
       // would cap the count, not just the page) and page the hits ourselves.
       const ranked = rankVerses(q, rows, rows.length)
-      const hits = ranked.slice(0, limit)
+      let hits = ranked.slice(0, limit)
+      // Nothing holds every word: offer the verses one word short. One more FTS pass,
+      // gated on the three longest words (see anyTwoOfMatch) — and only on a query that
+      // found nothing, so a keystroke that finds its verse costs what it always did.
+      if (!ranked.length && hasNearTier(q)) {
+        const longest = [...new Set(tokens)].sort((a, b) => b.length - a.length).slice(0, 3)
+        // Two real words among them, or the gate is "and the of": tens of thousands of
+        // verses to rank for a query that was never going to mean anything.
+        if (longest.filter((t) => t.length >= 4).length >= 2) {
+          const nearRows = selectHits.all(anyTwoOfMatch(longest.map(expandToken)), versionId) as VerseHit[]
+          hits = rankNearVerses(q, nearRows, NEAR_ROWS)
+        }
+      }
       // FTS is a coarser gate than the scorer: prefix terms and typo expansion return
       // verses the scorer then rejects, so the FTS count over-reports. Trust the scored
       // count whenever every candidate was scored; only a query that hit the candidate

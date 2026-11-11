@@ -1,11 +1,16 @@
-import type { CSSProperties, JSX } from 'react';
+import { Fragment, type CSSProperties, type JSX } from 'react';
 import type { Theme } from '../../shared/theme';
 import { highlightTokens } from '../../shared/search/highlight';
 import { INSTALL_HINT } from '../../shared/scripture/labels';
 import { ListEmpty } from './ListEmpty';
 
 export interface PassageResultRow { key: string; title: string; meta: string }
-export interface VerseResultRow { key: string; ref: string; text: string }
+export interface VerseResultRow {
+  key: string; ref: string; text: string;
+  /** A close match — the verse holds all but one of the words typed. These come after the
+   * exact hits, under their own header, and are not in `total`. */
+  near?: boolean;
+}
 
 export interface ScriptureSearchState {
   query: string;
@@ -91,6 +96,9 @@ export function ScriptureSearchResults({ theme: T, search: s }: { theme: Theme; 
   // Only an ANSWERED query can be empty. While one is in flight the list area stays blank
   // rather than claiming "No verses match" for a query nothing has looked at yet.
   const nothing = s.settled && s.passages.length === 0 && verses.length === 0;
+  // Close matches trail the exact hits (main sends them last), so one header before the
+  // first of them splits the list. -1 when there are none.
+  const firstNear = verses.findIndex((v) => v.near);
   return (
     <>
       <div style={headerStyle(T)}>{count}</div>
@@ -102,12 +110,15 @@ export function ScriptureSearchResults({ theme: T, search: s }: { theme: Theme; 
           <Row key={p.key} index={i} title={p.title} body={p.meta} theme={T} highlighted={s.highlighted === i}
             onHover={s.onHover} onPick={s.onPick} onActivate={s.onActivate} />
         ))}
-        {s.passages.length > 0 && verses.length > 0 && <div style={{ ...headerStyle(T), padding: '8px 4px 2px' }}>VERSES</div>}
+        {s.passages.length > 0 && verses.length > 0 && firstNear !== 0 && <div style={{ ...headerStyle(T), padding: '8px 4px 2px' }}>VERSES</div>}
         {verses.map((v, j) => {
           const i = s.passages.length + j;
           return (
-            <Row key={v.key} index={i} title={v.ref} bodySegs={highlightTokens(v.text, s.tokens)} theme={T}
-              highlighted={s.highlighted === i} onHover={s.onHover} onPick={s.onPick} onActivate={s.onActivate} />
+            <Fragment key={v.key}>
+              {j === firstNear && <div style={{ ...headerStyle(T), padding: '8px 4px 2px' }}>CLOSE MATCHES</div>}
+              <Row index={i} title={v.ref} bodySegs={highlightTokens(v.text, s.tokens)} theme={T}
+                highlighted={s.highlighted === i} onHover={s.onHover} onPick={s.onPick} onActivate={s.onActivate} />
+            </Fragment>
           );
         })}
       </div>

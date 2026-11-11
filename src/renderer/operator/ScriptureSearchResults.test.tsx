@@ -81,4 +81,28 @@ describe('ScriptureSearchResults', () => {
     render(<ScriptureSearchResults theme={T} search={state({ total: 1, verses: state().verses.slice(0, 1) })} />)
     expect(screen.getByText('1 VERSE · KJV')).toBeTruthy()
   })
+
+  it('heads close matches with CLOSE MATCHES; the exact count stays what main reported', () => {
+    render(<ScriptureSearchResults theme={T} search={state({
+      query: 'for god so loved the earth', tokens: ['for', 'god', 'so', 'loved', 'the', 'earth'], total: 0, passages: [],
+      verses: [{ key: 'v:John:3:16', ref: 'John 3:16', text: 'For God so loved the world', near: true }]
+    })} />)
+    expect(screen.getByText('0 VERSES · KJV')).toBeTruthy()
+    expect(screen.getByText('CLOSE MATCHES')).toBeTruthy()
+    expect(screen.queryByText('VERSES')).toBeNull()
+    expect(screen.getByText('John 3:16')).toBeTruthy()
+    expect(screen.queryByText(/No verses match/)).toBeNull()
+  })
+
+  it('lists one row per account of a story, each with its own reference', () => {
+    render(<ScriptureSearchResults theme={T} search={state({
+      query: 'resurrection', tokens: ['resurrection'], verses: [], total: 0,
+      passages: [
+        { key: 'p:The Resurrection:Matthew:28:1', title: 'The Resurrection', meta: 'Matthew 28:1–10' },
+        { key: 'p:The Resurrection:Mark:16:1', title: 'The Resurrection', meta: 'Mark 16:1–8' }
+      ]
+    })} />)
+    expect(screen.getAllByText('The Resurrection')).toHaveLength(2)
+    expect(screen.getByText('Mark 16:1–8')).toBeTruthy()
+  })
 })

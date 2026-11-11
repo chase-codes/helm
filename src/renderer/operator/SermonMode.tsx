@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -407,7 +408,9 @@ export function SermonMode({
   // translation's hits under the new abbr in the header.
   const shown =
     query !== null && verseRes && verseRes.res.versionId === primaryVersion ? verseRes.res : null;
-  const passageHits: Passage[] = query !== null ? matchPassages(query) : [];
+  // Memoised on the query: this component re-renders on every hover and cursor move while
+  // the results are up, and the story table is several hundred entries to score.
+  const passageHits: Passage[] = useMemo(() => (query !== null ? matchPassages(query) : []), [query]);
   // Capped to the rows the rail actually RENDERS. Main returns up to 50; the keyboard
   // index, `+ Add` and the visible list have to be one list, or ArrowDown walks past the
   // last row on screen and `+ Add` names a hit nobody can see. The header's `total` is the
@@ -950,14 +953,17 @@ export function SermonMode({
           abbr: primaryVersion ? abbrOf(primaryVersion) : '',
           total: verseTotal,
           passages: passageHits.map((p) => ({
-            key: `p:${p.book}:${p.ch}:${p.from}`,
+            // Title AND reference: one story lists once per account (the resurrection is
+            // four rows), and two stories can open on the same verse.
+            key: `p:${p.title}:${p.book}:${p.ch}:${p.from}`,
             title: p.title,
             meta: formatRef({ book: p.book, ch: p.ch, from: p.from, to: p.to })
           })),
           verses: verseHits.map((v) => ({
             key: `v:${v.book}:${v.chapter}:${v.verse}`,
             ref: formatRef({ book: v.book, ch: v.chapter, from: v.verse, to: v.verse }),
-            text: v.text
+            text: v.text,
+            near: v.near
           })),
           highlighted: hi,
           onHover: (i) => {
@@ -975,8 +981,14 @@ export function SermonMode({
     if (query !== null) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        if (resultCount)
-          setHighlighted(Math.max(0, Math.min(resultCount - 1, hi + (e.key === 'ArrowDown' ? 1 : -1))));
+        if (resultCount) {
+          const next = Math.max(0, Math.min(resultCount - 1, hi + (e.key === 'ArrowDown' ? 1 : -1)));
+          setHighlighted(next);
+          // Keep the keyboard highlight on screen: a story with four accounts plus ten verses
+          // is taller than the rail. Only the arrows scroll — a hover moves the highlight
+          // too, and scrolling a row under the mouse would move it out from under a click.
+          document.querySelector(`[data-search-row="${next}"]`)?.scrollIntoView?.({ block: 'nearest' });
+        }
         return;
       }
       if (e.key === 'Enter') {
