@@ -1557,3 +1557,14 @@ describe('SongsMode: red means live (rule 1)', () => {
     expect(within(hero).queryByText('LIVE')).toBeNull();
   });
 });
+
+describe('SongsMode, the status chip sits top right', () => {
+  it('ends the title row with the chip', async () => {
+    installHelmStubWith([CHORUS_SONG], NOTHING_LIVE);
+    renderMode({ current: null });
+    await waitFor(() => expect(screen.getByText('NOW SINGING · Verse 1')).toBeTruthy());
+    const chip = document.querySelector('[data-status-chip]') as HTMLElement;
+    expect(chip).toBeTruthy();
+    expect(chip.parentElement?.lastElementChild).toBe(chip);
+  });
+});
