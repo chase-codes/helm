@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MessageSearchRail, type MsgScheduleRow } from './MessageSearchRail'
 import { themeFor } from '../../shared/theme'
@@ -26,6 +26,8 @@ const scheduleRow = (over: Partial<MsgScheduleRow> = {}): MsgScheduleRow => ({
   meta: '¶2 · Tape 47-0412',
   isCurrent: false,
   isSelected: false,
+  isLive: false,
+  isQueued: false,
   onClick: vi.fn(),
   onDoubleClick: vi.fn(),
   onContextMenu: vi.fn(),
@@ -175,5 +177,36 @@ describe('MessageSearchRail: + Add files the cued paragraph', () => {
     expect(chip.disabled).toBe(true)
     fireEvent.click(chip)
     expect(onAdd).not.toHaveBeenCalled()
+  })
+})
+
+describe('MessageSearchRail: live and queued signals (rule 1, decision 7)', () => {
+  const T = themeFor('classic', 'dark')
+  const rgb = (hex: string): string => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const row = (): HTMLButtonElement => screen.getByText('Faith').closest('button') as HTMLButtonElement
+
+  it('a current quote that is not on screen gets the message colour, never red', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isCurrent: true })]} />)
+    expect(row().style.boxShadow).not.toContain(T.live)
+    expect((row().querySelector('[data-cued-dot]') as HTMLElement).style.background).toBe(rgb(T.message))
+  })
+
+  it('the live quote rings red with LIVE; a queued one says QUEUED', () => {
+    const { rerender } = render(
+      <MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isCurrent: true, isLive: true })]} />
+    )
+    expect(row().style.boxShadow).toBe(`inset 0 0 0 2px ${T.live}`)
+    expect(within(row()).getByText('LIVE')).toBeTruthy()
+    rerender(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isCurrent: true, isQueued: true })]} />)
+    expect((within(row()).getByText('QUEUED') as HTMLElement).style.color).toBe(rgb(T.message))
+  })
+
+  it('the selection ring is the message colour, not gold', () => {
+    render(<MessageSearchRail {...baseProps} scheduleRows={[scheduleRow({ isSelected: true })]} />)
+    expect(row().style.boxShadow).toContain(T.message)
+    expect(row().style.boxShadow).not.toContain(T.accent)
   })
 })

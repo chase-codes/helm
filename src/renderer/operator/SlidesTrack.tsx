@@ -11,7 +11,7 @@ import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { usePresentationState, useVideoState } from '../shared/useHelm';
 import { keyForMedia, slidesOf } from '../../shared/media/slides';
-import { logoSlide, sameFlow } from '../../shared/presentation/core';
+import { isQueuedBehind, logoSlide, sameFlow } from '../../shared/presentation/core';
 import type { MediaItem, MediaImportResult, Slide } from '../../shared/types';
 import { PanelDivider } from './PanelDivider';
 import { type SermonTrack } from './SchedulePanel';
@@ -27,6 +27,8 @@ import type { PanelWidthControl } from './usePanelWidth';
 import { Z_POPOVER, Z_POPOVER_SCRIM } from './zLayers';
 import { MONO } from '../shared/fonts';
 import { railHint } from './railHints';
+import { scheduleRowStyle } from './railTint';
+import { LiveBadge, RowStateMark } from './StateBadge';
 
 /**
  * Delegate this mode populates on `slidesKeyRef` while active — mirrors MessageMode's
@@ -206,6 +208,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
   // nothing to do — not one broadcast round-trip later. Key equality here made the button
   // flash green for the gap between the cue send and the liveKey broadcast returning.
   const cuedIsLive = output === 'live' && sameFlow(liveKey, curKey);
+  // Decision 7: another item lined up behind the deck/image/video on screen.
+  const queued = isQueuedBehind(output, liveKey, curKey);
+  const isItemLive = (item: MediaItem): boolean => output === 'live' && sameFlow(liveKey, keyForMedia(item.id, 0));
 
   const selectItem = (item: MediaItem): void => {
     setSelId(item.id);
@@ -375,18 +380,6 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
 
   const rootStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', gap: '1px', background: T.hairline };
   const railStyle: CSSProperties = { width: `${leftPanel.width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
-  const rowStyle = (isCurrent: boolean): CSSProperties => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    width: '100%',
-    padding: '8px 9px',
-    borderRadius: '11px',
-    cursor: 'pointer',
-    background: isCurrent ? T.panel3 : 'transparent',
-    boxShadow: isCurrent ? `inset 0 0 0 1px ${T.sermon}55` : 'none',
-    userSelect: 'none'
-  });
   const thumbBoxStyle: CSSProperties = { width: '74px', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${T.border}` };
   // The add chip every rail carries at the top (Scripture's schedAddStyle, Songs' addChip),
   // in this track's colour. Import is the verb because the source is a file.
@@ -447,7 +440,9 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
     borderRadius: '8px',
     overflow: 'hidden',
     position: 'relative',
-    boxShadow: isLive ? `0 0 0 2px ${T.sermon}, 0 6px 18px rgba(0,0,0,.25)` : isCued ? `0 0 0 2px ${T.sermon}66` : `inset 0 0 0 1px ${T.border}`
+    // Outset, the thumb's own geometry, so the ring never covers the image; `liveRing` is the
+    // inset variant for cards.
+    boxShadow: isLive ? `0 0 0 2px ${T.live}, 0 6px 18px rgba(0,0,0,.25)` : isCued ? `0 0 0 2px ${T.sermon}66` : `inset 0 0 0 1px ${T.border}`
   });
   const deckRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '5px 6px', borderRadius: '9px', cursor: 'pointer', background: 'transparent', userSelect: 'none' };
   const transportBtnStyle: CSSProperties = {
@@ -517,7 +512,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
             style={{ fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
             title="Presentations & media"
           >
-            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.live, letterSpacing: 0 }}>· Imported ✓</span>}
+            PRESENTATIONS &amp; MEDIA {justImported && <span style={{ color: T.sermon, letterSpacing: 0 }}>· Imported ✓</span>}
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -535,7 +530,14 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
             <button
               key={item.id}
               data-media-id={item.id}
-              style={rowStyle(item.id === selId)}
+              style={{
+                ...scheduleRowStyle(T, T.sermon, {
+                  live: isItemLive(item),
+                  selected: false,
+                  current: item.id === selId
+                }),
+                padding: '8px 9px'
+              }}
               onClick={() => selectItem(item)}
               onDoubleClick={() => {
                 selectItem(item);
@@ -557,7 +559,13 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                 </div>
                 <div style={{ fontSize: '11px', color: T.faint, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{metaFor(item)}</div>
               </div>
-              {item.id === selId && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: T.live, flexShrink: 0 }} />}
+              <RowStateMark
+                theme={T}
+                accent={T.sermon}
+                live={isItemLive(item)}
+                queued={queued && item.id === selId}
+                current={item.id === selId}
+              />
             </button>
           ))}
         </div>
@@ -586,6 +594,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
         // An empty library renders the fallback logo in the hero; Go live would be a no-op,
         // so it must not sit there looking armed (#88).
         canGoLive={selected !== null && slides.length > 0}
+        queuedTitle={queued && selected ? selected.title : undefined}
         onTakeDown={takeDown}
       />
 
@@ -611,6 +620,7 @@ export function SlidesTrack({ slidesKeyRef, active, track, setTrack, leftPanel, 
                   <div style={numStyle(isCued)}>{i + 1}</div>
                   <div style={thumbStyle(isCued, isLive)}>
                     <SlideCanvas slide={sl} fill />
+                    {isLive && <LiveBadge theme={T} chip style={{ position: 'absolute', top: '5px', left: '5px' }} />}
                   </div>
                 </button>
               );

@@ -3,7 +3,8 @@ import type { Theme } from '../../shared/theme';
 import type { SearchField } from '../../shared/types';
 import { SearchIcon } from '../shared/icons';
 import { ListEmpty } from './ListEmpty';
-import { MONO } from '../shared/fonts';
+import { liveRing } from './railTint';
+import { LiveBadge, QueuedBadge } from './StateBadge';
 
 export interface SongRow {
   id: string;
@@ -13,6 +14,9 @@ export interface SongRow {
   hasSnippet: boolean;
   isActive: boolean;
   isArmed: boolean;
+  /** The song on the audience screen (rule 1: red ring + LIVE). Distinct from `isActive`,
+   * the song in the hero. */
+  isLive: boolean;
 }
 
 const FIELD_TABS: Array<{ id: SearchField; label: string }> = [
@@ -48,17 +52,6 @@ export interface SongSearchRailProps {
   onRowContextMenu?: (id: string, e: ReactMouseEvent) => void;
   inputRef?: RefObject<HTMLInputElement | null>;
 }
-
-const cueBadgeStyle = (T: Theme, ghost: boolean): CSSProperties => ({
-  fontFamily: MONO,
-  fontSize: '9px',
-  letterSpacing: '0.08em',
-  fontWeight: 700,
-  color: T.accent,
-  opacity: ghost ? 0.45 : 1,
-  flexShrink: 0,
-  marginTop: '4px'
-});
 
 interface RowProps {
   r: SongRow;
@@ -111,11 +104,11 @@ function Row({
       onMouseLeave={() => onHover(null)}
       title={
         r.isArmed
-          ? 'Clear this — nothing queued next'
+          ? 'Queued. Click to clear it'
           : isLiveRow
             ? 'Already on screen'
             : locked
-              ? 'Queue this up next'
+              ? 'Queue this to go live next'
               : undefined
       }
     >
@@ -137,12 +130,16 @@ function Row({
         </div>
         {r.hasSnippet && <div style={snippetStyle}>&ldquo;{r.snippet}&rdquo;</div>}
       </div>
-      {/* The armed badge dims under the cursor rather than swapping copy: the row it sits on
+      {/* The QUEUED badge dims under the cursor rather than swapping copy: the row it sits on
           is the one whose click REMOVES it, and a badge that reads the same but looks spent
           says that without a second word to read. */}
-      {r.isArmed && <div style={cueBadgeStyle(T, hovered)}>NEXT</div>}
-      {canArm && hovered && <div style={cueBadgeStyle(T, true)}>NEXT?</div>}
-      {r.isActive && <div style={activeBadgeStyle}>●</div>}
+      {r.isArmed && <QueuedBadge accent={T.accent} ghost={hovered} style={{ marginTop: '4px' }} />}
+      {canArm && hovered && <QueuedBadge accent={T.accent} ghost label="QUEUE?" style={{ marginTop: '4px' }} />}
+      {r.isLive ? (
+        <LiveBadge theme={T} style={{ marginTop: '3px' }} />
+      ) : (
+        r.isActive && <div style={activeBadgeStyle}>●</div>
+      )}
     </button>
   );
 }
@@ -207,7 +204,7 @@ export function SongSearchRail({
     alignItems: 'center',
     justifyContent: 'center'
   });
-  const rowStyle = (active: boolean): CSSProperties => ({
+  const rowStyle = (r: SongRow): CSSProperties => ({
     display: 'flex',
     alignItems: 'flex-start',
     gap: '8px',
@@ -216,8 +213,14 @@ export function SongSearchRail({
     borderRadius: '10px',
     cursor: 'pointer',
     marginBottom: '2px',
-    background: active ? T.selBg : 'transparent',
-    boxShadow: active ? `inset 0 0 0 1px ${T.accent}66` : 'none',
+    background: r.isActive || r.isLive ? T.selBg : 'transparent',
+    boxShadow: r.isLive
+      ? liveRing(T)
+      : r.isArmed
+        ? `inset 0 0 0 2px ${T.accent}`
+        : r.isActive
+          ? `inset 0 0 0 1px ${T.accent}66`
+          : 'none',
     userSelect: 'none'
   });
   const snippetStyle: CSSProperties = {
@@ -269,7 +272,7 @@ export function SongSearchRail({
       theme={T}
       locked={!!locked}
       hovered={hoveredId === r.id}
-      style={{ ...rowStyle(r.isActive), ...(r.isArmed ? { boxShadow: `inset 0 0 0 2px ${T.accent}` } : {}) }}
+      style={rowStyle(r)}
       snippetStyle={snippetStyle}
       activeBadgeStyle={activeBadgeStyle}
       onHover={setHoveredId}
@@ -283,7 +286,10 @@ export function SongSearchRail({
     <div style={opRailStyle}>
       <div style={{ padding: '13px 13px 9px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '9px' }}>
-          <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: T.scripture, display: 'inline-block' }} />
+          <span
+            data-rail-eyebrow-dot
+            style={{ width: '5px', height: '5px', borderRadius: '50%', background: T.accent, display: 'inline-block' }}
+          />
           <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>SONG LIBRARY</span>
         </div>
         <div style={opSearchBoxStyle}>

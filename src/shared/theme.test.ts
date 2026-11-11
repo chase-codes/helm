@@ -25,7 +25,7 @@ describe('themeFor', () => {
       text: '#e8e6e1', dim: '#9a9488', faint: '#736f66',
       hairline: 'rgba(255,255,255,.06)', border: 'rgba(255,255,255,.08)',
       inputBg: '#1c1f25', accent: '#e0a341', accentInk: '#1a1206', live: '#cf6a5e',
-      scripture: '#6f9cf0', sermon: '#6f9c7a', message: '#a88bc4',
+      scripture: '#6f9cf0', sermon: '#509da5', message: '#a88bc4',
       selBg: '#221d10', lineDim: '#b4b1aa', go: '#2f9e5b',
       floatShadow: '0 18px 50px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08)',
       modalShadow: '0 30px 80px rgba(0,0,0,.5)',
@@ -128,6 +128,26 @@ describe('contrast floors (#47)', () => {
         expect(contrast(t.accent, t.appBg), `${family}/${mode} accent on appBg`).toBeGreaterThanOrEqual(4.5)
         expect(contrast(t.accent, t.selBg), `${family}/${mode} accent on selBg`).toBeGreaterThanOrEqual(4.5)
         expect(contrast(t.accentInk, t.accent), `${family}/${mode} accentInk on accent`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+
+  it('the Slides track colour is not a second green: its hue stays 30 degrees or more from go', () => {
+    const hue = (hex: string): number => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      const max = Math.max(r, g, b),
+        min = Math.min(r, g, b),
+        d = max - min
+      if (d === 0) return 0
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+      return (h * 60 + 360) % 360
+    }
+    for (const family of FAMILY_KEYS) {
+      for (const mode of MODES) {
+        const t = themeFor(family, mode)
+        const gap = Math.abs(hue(t.sermon) - hue(t.go))
+        expect(Math.min(gap, 360 - gap), `${family}/${mode} sermon vs go`).toBeGreaterThanOrEqual(30)
+        expect(contrast(t.sermon, t.panel), `${family}/${mode} sermon on panel`).toBeGreaterThanOrEqual(4.5)
       }
     }
   })

@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { SongSection } from '../../shared/types';
-import { railBadgeStyle, railFont, railLabelStyle } from './railTint';
+import { liveRing, railBadgeStyle, railFont, railLabelStyle } from './railTint';
 import { railHint } from './railHints';
 
 export interface SectionRailProps {
@@ -125,7 +125,7 @@ export function SectionRail({
     cursor: 'pointer',
     background: isLive ? T.selBg : T.panel2,
     boxShadow: isLive
-      ? `inset 0 0 0 2px ${T.accent}`
+      ? liveRing(T)
       : isCued
         ? `inset 0 0 0 1.5px ${T.accent}66`
         : `inset 0 0 0 1px ${T.hairline}`,
