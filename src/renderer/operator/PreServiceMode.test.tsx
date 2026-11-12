@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react'
+import { render, screen, fireEvent, createEvent, cleanup, act, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import type { JSX } from 'react'
 import { PreServiceMode } from './PreServiceMode'
@@ -1006,11 +1006,11 @@ describe('PreServiceMode: reordering the loop', () => {
 
     fireEvent.contextMenu(rowFor('Psalm 122:1'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move up' }))
-    expect(moveCard).toHaveBeenCalledWith(baseState.cards[1].id, -1)
+    expect(moveCard).toHaveBeenCalledWith(baseState.cards[1].id, 0)
 
     fireEvent.contextMenu(rowFor('Psalm 122:1'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move down' }))
-    expect(moveCard).toHaveBeenCalledWith(baseState.cards[1].id, 1)
+    expect(moveCard).toHaveBeenCalledWith(baseState.cards[1].id, 2)
   })
 
   it('ghosts Move up on the first card and Move down on the last', async () => {
@@ -1024,6 +1024,84 @@ describe('PreServiceMode: reordering the loop', () => {
 
     fireEvent.contextMenu(rowFor(baseState.cards[baseState.cards.length - 1].title))
     expect(screen.getByRole('menuitem', { name: 'Move down' }).getAttribute('aria-disabled')).toBe('true')
+  })
+})
+
+describe('PreServiceMode: dragging a card to reorder', () => {
+  const FOUR: PreState = {
+    ...baseState,
+    cards: [
+      ...baseState.cards,
+      { id: 'c', type: 'message', title: 'Closing', headline: 'Goodbye', enabled: true },
+      { id: 'd', type: 'message', title: 'Giving', headline: 'Give', enabled: true }
+    ]
+  }
+  const row = (id: string): HTMLElement => document.querySelector(`[data-pre-card="${id}"]`) as HTMLElement
+  // jsdom lays nothing out, so every card's box is 0 by 0 at the origin: a pointer above
+  // zero reads as the upper half (before the card), at or below it as the lower half.
+  // jsdom has no DragEvent either, so the pointer position is set on the event by hand.
+  const BEFORE = -1
+  const AFTER = 1
+  const dragTo = (kind: 'dragOver' | 'drop', el: HTMLElement, clientY: number): void => {
+    const ev = createEvent[kind](el)
+    Object.defineProperty(ev, 'clientY', { value: clientY })
+    fireEvent(el, ev)
+  }
+
+  it('drops a card after the one it is released on, and shows where it will land', async () => {
+    const { moveCard, showCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+    await act(async () => {})
+
+    fireEvent.dragStart(row('a'))
+    dragTo('dragOver', row('c'), AFTER)
+    expect(document.querySelectorAll('[data-drop-line]').length).toBe(1)
+    dragTo('drop', row('c'), AFTER)
+    // 'a' leaves slot 0 first, so "after c" is index 2.
+    expect(moveCard).toHaveBeenCalledWith('a', 2)
+    expect(document.querySelector('[data-drop-line]')).toBeNull()
+    // Dragging is not a click: nothing is cued or switched.
+    expect(showCard).not.toHaveBeenCalled()
+  })
+
+  it('drops a card before the one it is released on', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+
+    fireEvent.dragStart(row('d'))
+    dragTo('dragOver', row('b'), BEFORE)
+    dragTo('drop', row('b'), BEFORE)
+    expect(moveCard).toHaveBeenCalledWith('d', 1)
+  })
+
+  it('a drop back on its own place moves nothing and shows no line', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+    await act(async () => {})
+
+    fireEvent.dragStart(row('b'))
+    dragTo('dragOver', row('b'), AFTER)
+    expect(document.querySelector('[data-drop-line]')).toBeNull()
+    dragTo('dragOver', row('a'), AFTER) // the gap just above 'b': also its own place
+    expect(document.querySelector('[data-drop-line]')).toBeNull()
+    dragTo('drop', row('a'), AFTER)
+    expect(moveCard).not.toHaveBeenCalled()
+  })
+
+  it('letting go outside the rail cancels the drag', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+    await act(async () => {})
+
+    fireEvent.dragStart(row('a'))
+    dragTo('dragOver', row('c'), AFTER)
+    fireEvent.dragEnd(row('a'))
+    expect(document.querySelector('[data-drop-line]')).toBeNull()
+    expect(moveCard).not.toHaveBeenCalled()
   })
 })
 

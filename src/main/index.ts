@@ -169,6 +169,11 @@ app.whenReady().then(() => {
     show: (k, s) => presentation.show(k, s),
     isLive: (k) => { const s = presentation.get(); return s.output === 'live' && s.liveKey === k },
     invalidate: (k) => presentation.invalidate(k)
+  }, {
+    // Seconds per card is the operator's choice, so it is kept: set to 30s once, the loop
+    // opens at 30s every time until it is changed again.
+    dwellS: settingsRepo.get<number>('preDwellS', 12),
+    onDwellChange: (s) => settingsRepo.set('preDwellS', s)
   })
   preserviceEngine.onChange(broadcastAll(CH.preserviceState))
 

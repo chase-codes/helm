@@ -130,6 +130,23 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     setEditorHidden(false);
   };
 
+  // Dragging a card to a new place in the loop. `gap` is the slot the pointer is over:
+  // gap N sits before card N, and gap `cards.length` is after the last card.
+  const [drag, setDrag] = useState<{ id: string; gap: number | null } | null>(null);
+  const dragFrom = drag ? cards.findIndex((c) => c.id === drag.id) : -1;
+  // The two gaps either side of the dragged card put it back where it is: no line there.
+  const dropGap = drag && drag.gap !== null && drag.gap !== dragFrom && drag.gap !== dragFrom + 1 ? drag.gap : null;
+  const overGap = (gap: number): void => {
+    setDrag((d) => (d && d.gap !== gap ? { ...d, gap } : d));
+  };
+  const finishDrag = (): void => {
+    if (drag && dropGap !== null && dragFrom >= 0) {
+      // The card leaves its slot before it lands, so every gap after it is one lower.
+      window.helm.preservice.moveCard(drag.id, dropGap > dragFrom ? dropGap - 1 : dropGap);
+    }
+    setDrag(null);
+  };
+
   // Typing one more item onto a list card without opening the editor: the card id whose
   // inline field is open, and what is in it.
   const [quickAdd, setQuickAdd] = useState<{ id: string; text: string } | null>(null);
@@ -313,6 +330,17 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     textOverflow: 'ellipsis'
   };
 
+  // Where a dragged card will land: a track-colour line in the gap between two cards.
+  const dropLineStyle = (edge: 'top' | 'bottom'): CSSProperties => ({
+    position: 'absolute',
+    left: '4px',
+    right: '4px',
+    [edge]: '-5px',
+    height: '2px',
+    borderRadius: '1px',
+    background: T.accent,
+    pointerEvents: 'none'
+  });
   const quickAddStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -413,13 +441,26 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             <span style={loopCountTag}>{`${enabledCount} IN LOOP`}</span>
           </div>
           <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '5px', lineHeight: 1.4 }}>
-            {`${railHint('card', { range: 'select a range' })} Toggle cards in or out of the rotation.`}
+            {`${railHint('card', { range: 'select a range' })} Drag a card to move it. Toggle cards in or out of the rotation.`}
           </div>
           <button style={addChipStyle} onClick={() => openEditor('new')}>
             + Add a card — verse, announcements, prayer…
           </button>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+          // The empty rail below the last card is a drop target too: it means "to the end".
+          onDragOver={(e) => {
+            if (!drag) return;
+            e.preventDefault();
+            if (e.target === e.currentTarget) overGap(cards.length);
+          }}
+          onDrop={(e) => {
+            if (!drag) return;
+            e.preventDefault();
+            finishDrag();
+          }}
+        >
           {cards.length === 0 && (
             <ListEmpty>
               The loop is empty. Use <b>+ Add a card</b> above to put something on screen before the service.
@@ -438,7 +479,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               borderRadius: '11px',
               cursor: 'pointer',
               userSelect: 'none',
-              opacity: card.enabled || isShowing || isArmed ? 1 : 0.55,
+              opacity: drag?.id === card.id ? 0.4 : card.enabled || isShowing || isArmed ? 1 : 0.55,
               // Live gets the filled treatment and the red ring (rule 1); armed gets a
               // track-colour ring only, so the operator can tell "this is on the screen"
               // from "this is queued up". Live outranks a delete-selection ring, as on every
@@ -509,9 +550,31 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               flexShrink: 0
             };
             return (
-              <div key={card.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+              <div
+                key={card.id}
+                style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}
+                onDragOver={(e) => {
+                  if (!drag) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Upper half of a card means before it, lower half after it.
+                  const box = e.currentTarget.getBoundingClientRect();
+                  overGap(e.clientY < box.top + box.height / 2 ? i : i + 1);
+                }}
+              >
+              {dropGap === i && <div data-drop-line style={dropLineStyle('top')} />}
+              {dropGap === cards.length && i === cards.length - 1 && <div data-drop-line style={dropLineStyle('bottom')} />}
               <button
                 data-pre-card={card.id}
+                // Drag to reorder. A drag never fires a click, so it cannot cue or switch a
+                // card; Move up / Move down in the menu do the same job from the keyboard.
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer?.setData('text/plain', card.id);
+                  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+                  setDrag({ id: card.id, gap: null });
+                }}
+                onDragEnd={() => setDrag(null)}
                 data-selected={isSelected || undefined}
                 style={rowStyle}
                 onClick={(e) => {
@@ -542,8 +605,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                   const move: ContextMenuItem[] = inRange
                     ? []
                     : [
-                        { label: 'Move up', disabled: i === 0, onSelect: () => window.helm.preservice.moveCard(card.id, -1) },
-                        { label: 'Move down', disabled: i === cards.length - 1, onSelect: () => window.helm.preservice.moveCard(card.id, 1) }
+                        { label: 'Move up', disabled: i === 0, onSelect: () => window.helm.preservice.moveCard(card.id, i - 1) },
+                        { label: 'Move down', disabled: i === cards.length - 1, onSelect: () => window.helm.preservice.moveCard(card.id, i + 1) }
                       ];
                   contextMenu.open(e, [
                     ...edit,

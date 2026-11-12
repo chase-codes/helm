@@ -89,7 +89,7 @@ const api: HelmApi = {
     saveCard: (c) => ipcRenderer.send(CH.preserviceSaveCard, c),
     removeCard: (id) => ipcRenderer.send(CH.preserviceRemoveCard, id),
     restoreCard: (card, index) => ipcRenderer.send(CH.preserviceRestoreCard, card, index),
-    moveCard: (id, delta) => ipcRenderer.send(CH.preserviceMoveCard, id, delta),
+    moveCard: (id, index) => ipcRenderer.send(CH.preserviceMoveCard, id, index),
   },
   media: {
     list: () => ipcRenderer.invoke(CH.mediaList),

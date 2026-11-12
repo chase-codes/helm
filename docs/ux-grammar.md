@@ -210,7 +210,9 @@ will file (`+ Add John 3:16`, `+ Add ¶3`), or says Import when the source is a 
 (Slides). Importing from outside sits as a secondary row beneath it (Songs, Message).
 Right-click Edit is offered wherever a row has an editor (Songs, Pre-service), for a single
 row only. Pre-service adds two more single-row entries: Move up / Move down, which reorder
-the loop without touching what is cued or on screen, and Add an item on a list card, which
+the loop without touching what is cued or on screen (dragging a card does the same over any
+distance, with a track-colour line showing where it will land; a drag never fires a click,
+so it cannot cue or switch a card), and Add an item on a list card, which
 opens a one-line field on the rail (Enter adds and keeps the field open, Escape closes it
 and is consumed there).
 
@@ -226,7 +228,7 @@ still there on return. Every side rail resizes through `usePanelWidth` + `PanelD
 - Deliberate non-adopters: `SongsMode.tsx` and `SlidesTrack.tsx`, the two libraries (rule 4 carve-out).
 - Add chips: `SongSearchRail.tsx:235` `addChipStyle`, `SchedulePanel.tsx:100` `schedAddStyle`, `MessageSearchRail.tsx:169` `addChipStyle` and `:155` import row, `SlidesTrack.tsx:383` `importChipStyle`, `PreServiceMode.tsx:200` `addChipStyle`.
 - `src/renderer/operator/App.tsx:168-179` — Pre-service joins the keep-alive wrapper; `PreServiceMode.tsx:89` `railPanel` and `:91-96` the menu-close guard while hidden. Pinned by "kept alive across page switches" and "the card rail resizes like every other side rail" in `PreServiceMode.test.tsx`.
-- `src/renderer/operator/PreServiceMode.tsx` (`move`, `addItem` in the row's context menu; `commitQuickAdd`), `src/main/preserviceEngine.ts` `moveCard`, `src/main/preCardsRepo.ts` `move`; "reordering the loop" and "adding an item from the rail" in `PreServiceMode.test.tsx`.
+- `src/renderer/operator/PreServiceMode.tsx` (`move`, `addItem` in the row's context menu; `commitQuickAdd`), `src/main/preserviceEngine.ts` `moveCard`, `src/main/preCardsRepo.ts` `move`; `finishDrag` and the `draggable` row for drag and drop; "reordering the loop", "dragging a card to reorder" and "adding an item from the rail" in `PreServiceMode.test.tsx`.
 - `src/shared/scripture/selection.test.ts:148` — "the same semantics `useListSelection.selectTo` gives the schedule."
 - `docs/superpowers/specs/2026-07-06-interaction-primitives-design.md`, `2026-08-15-scripture-schedule-multiselect-design.md`.
 

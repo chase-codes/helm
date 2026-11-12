@@ -364,8 +364,15 @@ describe('preserviceEngine', () => {
       const { engine } = harness();
       const before = engine.getState().cards.map((c) => c.id);
       engine.moveCard(before[0], -1);
-      engine.moveCard(before[before.length - 1], 1);
+      engine.moveCard(before[before.length - 1], 99);
       expect(engine.getState().cards.map((c) => c.id)).toEqual(before);
+    });
+
+    it('a card can be moved several places at once', () => {
+      const { engine } = harness();
+      const ids = engine.getState().cards.map((c) => c.id);
+      engine.moveCard(ids[0], 3);
+      expect(engine.getState().cards.map((c) => c.id)).toEqual([ids[1], ids[2], ids[3], ids[0], ids[4]]);
     });
 
     it('deleting the card that is on screen replaces it', () => {
@@ -560,6 +567,40 @@ describe('preserviceEngine', () => {
       const dwell = engine.getState().dwellS;
       for (let t = 1; t <= dwell + 1; t++) engine.tick();
       expect(presentation().liveKey).toBe(held);
+    });
+  });
+
+  describe('seconds per card is remembered', () => {
+    const sink: PresentationSink = { cue: () => {}, goLive: () => {}, show: () => {}, isLive: () => false, invalidate: () => {} };
+    const repo = (): ReturnType<typeof createPreCardsRepo> => createPreCardsRepo(openTestDb());
+
+    it('opens on the saved value', () => {
+      expect(createPreserviceEngine(repo(), sink, { dwellS: 30 }).getState().dwellS).toBe(30);
+    });
+
+    it('falls back to 12s with nothing saved, and clamps a value out of range', () => {
+      expect(createPreserviceEngine(repo(), sink).getState().dwellS).toBe(12);
+      expect(createPreserviceEngine(repo(), sink, { dwellS: 500 }).getState().dwellS).toBe(60);
+      expect(createPreserviceEngine(repo(), sink, { dwellS: Number.NaN }).getState().dwellS).toBe(12);
+    });
+
+    it('reports each change, and nothing when the value did not move', () => {
+      const saved: number[] = [];
+      const engine = createPreserviceEngine(repo(), sink, { dwellS: 59, onDwellChange: (s) => saved.push(s) });
+      engine.setDwell(1);
+      engine.setDwell(1); // already at the 60s ceiling
+      engine.setDwell(-5);
+      expect(saved).toEqual([60, 55]);
+    });
+
+    it('a second engine on the same settings opens where the first left off', () => {
+      const store = new Map<string, number>();
+      const open = (): ReturnType<typeof createPreserviceEngine> =>
+        createPreserviceEngine(repo(), sink, { dwellS: store.get('preDwellS'), onDwellChange: (s) => store.set('preDwellS', s) });
+      const first = open();
+      for (let i = 0; i < 18; i++) first.setDwell(1);
+      expect(first.getState().dwellS).toBe(30);
+      expect(open().getState().dwellS).toBe(30);
     });
   });
 });

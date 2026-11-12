@@ -44,7 +44,8 @@ the live cursor, and Pre-service still steps with bare `‹` / `›`.
   delete, and reopens a card editor that was closed with something typed in it (the toast
   reads `Closed without saving`).
 - **Move up** and **Move down** shift a pre-service card one place in the loop
-  (right-click). They change the order only, never what is cued or on screen.
+  (right-click); dragging a card moves it any distance. Both change the order only, never
+  what is cued or on screen. The rail hint says "Drag a card to move it."
 - **Add an item** puts one more line on a pre-service list card from the rail (the `+`
   chip on the card, or right-click).
 - **Clear** empties a field or a list (`Clear field`, `Clear all`). It never means the
