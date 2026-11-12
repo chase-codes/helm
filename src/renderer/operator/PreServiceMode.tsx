@@ -8,7 +8,8 @@ import { PreCardEditor } from './PreCardEditor';
 import { ListEmpty } from './ListEmpty';
 import { UndoToast } from './UndoToast';
 import { useContextMenu } from './useContextMenu';
-import { deleteMenuItems, useListSelection } from './useListSelection';
+import { useListSelection } from './useListSelection';
+import { useLibraryDelete } from './useLibraryDelete';
 import type { ContextMenuItem } from './ContextMenu';
 import { useTimedUndo } from './useTimedUndo';
 import { usePanelWidth } from './usePanelWidth';
@@ -166,15 +167,23 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   // from the engine's `idx` — that is the card the loop is ON, and selecting rows to
   // delete must never move what the congregation is looking at.
   const contextMenu = useContextMenu();
+  // A card is something the operator wrote, so deleting one takes a confirming click, as
+  // deleting a song or a media item does (rule 4): right-click, `Delete card`, then
+  // `Really delete?`. The Undo bar still follows, as a second net.
+  const cardDelete = useLibraryDelete(contextMenu);
   const sel = useListSelection(cards.map((c) => c.id));
   const railPanel = usePanelWidth('helmPreRailW', PRE_RAIL);
 
   // Kept alive while hidden (App.tsx), so a menu opened here must not outlive the page
   // being on screen: a page hotkey would otherwise leave it open behind Songs or Sermon.
   const { close: closeMenu } = contextMenu;
+  const { disarm: disarmDelete } = cardDelete;
   useEffect(() => {
-    if (!active) closeMenu();
-  }, [active, closeMenu]);
+    if (!active) {
+      disarmDelete();
+      closeMenu();
+    }
+  }, [active, closeMenu, disarmDelete]);
   const undo = useTimedUndo<RemovedCard[]>();
 
   // Unlike the schedule rails, this delete is NOT deferred: the rotation lives in main,
@@ -273,9 +282,9 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
         if (verbs.primary.enabled) runPreVerb(verbs.primary.id);
       },
       isModalOpen: () => editorShown,
-      onDelete: () => {
-        if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
-      },
+      // No `onDelete`: Backspace and Delete do nothing on this page. A click selects a
+      // card, so a bare key that deleted the selection turned "erase a letter" into
+      // "delete the whole card" the moment focus was not in a text field.
       // A digit is a tap on card N: it selects the row and calls showCard, which switches the
       // screen only while pre-service already owns it (BUG-018), never starts it. No search
       // on this page, so `/` is a deliberate no-op (Shortcuts says so).
@@ -619,17 +628,25 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                         { label: 'Move up', disabled: i === 0, onSelect: () => window.helm.preservice.moveCard(card.id, i - 1) },
                         { label: 'Move down', disabled: i === cards.length - 1, onSelect: () => window.helm.preservice.moveCard(card.id, i + 1) }
                       ];
-                  contextMenu.open(e, [
-                    ...edit,
-                    ...addItem,
-                    ...move,
-                    ...deleteMenuItems(sel, card.id, 'cards', removeCards, {
-                      // The logo card has no creation path, so it never goes (see isDeletable);
-                      // the count names only the cards that actually will.
-                      canDelete: (id) => cards.some((c) => c.id === id && isDeletable(c)),
-                      blockedLabel: 'The logo card can’t be deleted'
-                    })
-                  ]);
+                  // The list-kit rule (#90): inside a range the menu acts on the whole range;
+                  // anywhere else it selects the row under the pointer and acts on that.
+                  if (!inRange) sel.select(card.id);
+                  // The logo card has no creation path, so it never goes (see isDeletable);
+                  // the count names only the cards that actually will.
+                  const ids = (inRange ? sel.selectedIds : [card.id]).filter((id) =>
+                    cards.some((c) => c.id === id && isDeletable(c))
+                  );
+                  cardDelete.open(e, {
+                    before: [...edit, ...addItem, ...move],
+                    // Deleting the card on screen is the engine's to handle (it moves the
+                    // screen to a neighbour), so it is not refused here.
+                    isLive: false,
+                    // Named for what goes: beside "Add an item", a bare "Delete" read as
+                    // deleting an item.
+                    label: ids.length === 1 ? 'Delete card' : `Delete ${ids.length} cards`,
+                    blockedLabel: ids.length === 0 ? 'The logo card can’t be deleted' : undefined,
+                    onDelete: () => removeCards(ids)
+                  });
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px' }}>

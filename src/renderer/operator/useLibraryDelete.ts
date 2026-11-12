@@ -22,6 +22,12 @@ export interface LibraryRow {
   isLive: boolean;
   /** The irreversible delete. Runs once, on the confirming click. */
   onDelete: () => void;
+  /** What the first click says. Defaults to `Delete from library`; pre-service cards say
+   * `Delete card` (or `Delete 3 cards`), since their rail is a loop, not a library. */
+  label?: string;
+  /** Nothing here can be deleted at all (the pre-service logo card): a disabled item
+   * carrying this reason replaces the delete. */
+  blockedLabel?: string;
 }
 
 export interface LibraryDelete {
@@ -34,10 +40,11 @@ export interface LibraryDelete {
 }
 
 /**
- * The library half of grammar rule 4: a library (every Sunday's store) confirms instead of
- * undoing, because deleting from it is library management that happens to live on an
- * in-service page. Two clicks in the same menu, no dialog, no undo, no Delete key, no
- * multi-select: no single keystroke and no range may empty a library (#90, decision 2).
+ * The confirming half of grammar rule 4: anything the operator wrote or imported (a song,
+ * a media item, a pre-service card) confirms before it goes, because it cannot be put back
+ * by re-adding a reference. Two clicks in the same menu, no dialog, no Delete key: no
+ * single keystroke may delete it (#90, decision 2). The libraries add no undo and no
+ * multi-select; pre-service cards keep both, as their caller passes them in.
  */
 export function useLibraryDelete(menu: UseContextMenu): LibraryDelete {
   const lapseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,10 +70,12 @@ export function useLibraryDelete(menu: UseContextMenu): LibraryDelete {
   // Rebuilt rather than toggled through state: the menu captures its items when it opens,
   // so re-labelling means handing it a fresh array via `update`.
   const build = (row: LibraryRow, armed: boolean): ContextMenuItem[] => {
-    const del: ContextMenuItem = row.isLive
+    const del: ContextMenuItem = row.blockedLabel
+      ? { label: row.blockedLabel, disabled: true, onSelect: () => {} }
+      : row.isLive
       ? { label: LIBRARY_DELETE_LIVE, disabled: true, onSelect: () => {} }
       : {
-          label: armed ? LIBRARY_DELETE_ARMED : LIBRARY_DELETE,
+          label: armed ? LIBRARY_DELETE_ARMED : row.label ?? LIBRARY_DELETE,
           danger: true,
           // Always keepOpen, closing by hand only once the delete commits. A click the arm
           // guard swallows must leave the armed label there to be pressed deliberately.

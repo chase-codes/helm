@@ -137,6 +137,13 @@ shift-range and Clear all. Clear all is a `DangerGhostButton` in the list header
 schedule (Scripture, Message); libraries and the pre-service loop have none. Dialogs and
 two-step confirms belong to Settings and to libraries.
 
+**The line between the two: what was written confirms, what only points undoes.** A
+Scripture reading or a Message quote is a pointer: delete it by mistake and it is back in
+seconds, so it goes at once with Undo. A song, a media item and a pre-service card are
+things the operator wrote or imported, and re-adding a reference does not bring them back,
+so they confirm first. (Decided 2026-11-12, after a prayer list was deleted by a Backspace
+meant for a typo.)
+
 **Carve-out: libraries confirm.** The song library and the media library confirm instead
 of undoing. A schedule is this Sunday's plan; a library is every Sunday's store, so
 deleting from it is library management that happens to live on an in-service page, and
@@ -145,12 +152,15 @@ deleting media also removes its files from disk. Both use one two-step confirm,
 the same menu; the item on screen is refused with the reason. Neither answers the Delete
 key or multi-select: no single keystroke and no range may empty a library.
 
-**Exception: pre-service commits now.** Pre-service cards are deleted at once and undone
-by re-inserting each card at its original index (`useTimedUndo` plus
-`preservice.restoreCard`), not through `useDeferredRemove`'s deferred commit. The rotation
-lives in main, and a card left pending there for five seconds could rotate onto the
-audience screen after the operator deleted it. Same toast, same 5 s, same exact restore;
-only the moment of commit differs.
+**Pre-service cards confirm, then undo.** A card takes the same two-step: right-click
+"Delete card" (or "Delete 3 cards" inside a range), then "Really delete?"; the editor's
+Delete card button re-labels in place the same way. Backspace and Delete do nothing on the
+page, because a click selects a card and a bare key that deleted the selection could not be
+told from erasing a letter. Once confirmed the card goes at once and the usual
+`Deleted <card>` Undo follows, restoring each card at its original index (`useTimedUndo`
+plus `preservice.restoreCard`), not through `useDeferredRemove`'s deferred commit: the
+rotation lives in main, and a card left pending there for five seconds could rotate onto
+the audience screen after the operator deleted it.
 
 **Closing an editor is the same rule.** Cancel, Escape or a click beside the pre-service
 card editor closes it at once; if anything had been typed, the rail shows `Closed without
@@ -166,7 +176,7 @@ was. The page hides the editor instead of unmounting it, so there is no draft to
 - Adopters: `SermonMode.tsx:149` (scripture) and `MessageMode.tsx:115` (quotes); main half of pre-service in `src/main/preCardsRepo.ts:32`.
 - Settings side: `src/renderer/operator/SettingsModal.tsx:59`, `:83-87`, `:170-193`, `:404-407` — the 4 s two-click Bible uninstall; `ModalShell.tsx:27-35` the one modal shell.
 - Library carve-out: `src/renderer/operator/useLibraryDelete.ts:42` (labels `:13-15`, arm guard, lapse, live refusal); adopters `SongsMode.tsx:468` `onSongContextMenu` and `SlidesTrack.tsx:208` `deleteItem`; `ContextMenu.tsx:19-23` `keepOpen`; `useLibraryDelete.test.tsx`, `SongsMode.test.tsx:1039` and `SlidesTrack.test.tsx:329` ("Delete from library confirms rather than undoing").
-- `src/renderer/operator/PreServiceMode.test.tsx:208` — "card removal speaks the in-service grammar (#86, #90)".
+- `src/renderer/operator/PreServiceMode.tsx` `cardDelete` (the page's `useLibraryDelete`, with `label` and `blockedLabel`), no `onDelete` in its key handler; `PreCardEditor.tsx` `confirm` on the Delete card button. `PreServiceMode.test.tsx` — "deleting a card takes a confirming click, then offers Undo (#86, #90)".
 
 **Why:** mid-service, a blocking dialog is worse than a recoverable mistake, and an undo that re-appends silently reorders the schedule.
 
@@ -224,7 +234,7 @@ still there on return. Every side rail resizes through `usePanelWidth` + `PanelD
 - `src/renderer/operator/useListSelection.ts:4-17` — the `ListSelection` API; `:19-26` the kit stated; `:41-55` `selectTo` pivot; `:68-104` `DeleteMenuOptions` and `deleteMenuItems`.
 - `src/shared/scripture/selection.ts:16-22`, `:24-45`, `:68-89` — `RailSelection.anchor`, the anchor precedence ladder, the carried/typed anchor rules (#22, #58).
 - `src/renderer/operator/App.tsx:42-47` — `onDelete` contract; `keyDispatch.ts:77-83` — `item.delete` guarded behind Settings/modals; `src/shared/hotkeys/actions.ts:48`.
-- Adopters: `SermonMode.tsx:145`/`:984` (`'verses'`), `MessageMode.tsx:114`/`:535` (`'quotes'`), `PreServiceMode.tsx:78`/`:443` (`'cards'`, with `canDelete`).
+- Adopters: `SermonMode.tsx:145`/`:984` (`'verses'`), `MessageMode.tsx:114`/`:535` (`'quotes'`). `PreServiceMode.tsx` keeps `useListSelection` for its ranges but neither the Delete key nor `deleteMenuItems`: its cards confirm (rule 4).
 - Deliberate non-adopters: `SongsMode.tsx` and `SlidesTrack.tsx`, the two libraries (rule 4 carve-out).
 - Add chips: `SongSearchRail.tsx:235` `addChipStyle`, `SchedulePanel.tsx:100` `schedAddStyle`, `MessageSearchRail.tsx:169` `addChipStyle` and `:155` import row, `SlidesTrack.tsx:383` `importChipStyle`, `PreServiceMode.tsx:200` `addChipStyle`.
 - `src/renderer/operator/App.tsx:168-179` — Pre-service joins the keep-alive wrapper; `PreServiceMode.tsx:89` `railPanel` and `:91-96` the menu-close guard while hidden. Pinned by "kept alive across page switches" and "the card rail resizes like every other side rail" in `PreServiceMode.test.tsx`.

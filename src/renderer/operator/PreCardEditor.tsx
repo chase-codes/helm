@@ -10,6 +10,7 @@ import { ListEmpty } from './ListEmpty';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { PreVersePicker } from './PreVersePicker';
 import { usePreVerse } from './usePreVerse';
+import { CONFIRM_ARM_GUARD_MS, LIBRARY_CONFIRM_MS, LIBRARY_DELETE_ARMED } from './useLibraryDelete';
 
 export interface PreCardEditorProps {
   card: PreCard | null;
@@ -222,8 +223,27 @@ export function PreCardEditor({ card, onClose, onRemove, onCancel, hidden = fals
     onClose();
   };
 
+  // Delete card takes a second, deliberate click, the same two-step the right-click menu
+  // and the libraries use (rule 4): the button re-labels in place to "Really delete?" and
+  // lapses back after four seconds. 'arming' is the short guard that swallows the tail of
+  // a double-click, so two fast clicks cannot be both the question and the answer.
+  const [confirm, setConfirm] = useState<'idle' | 'arming' | 'armed'>('idle');
+  useEffect(() => {
+    if (confirm === 'idle') return;
+    const arming = confirm === 'arming';
+    const t = setTimeout(
+      () => setConfirm(arming ? 'armed' : 'idle'),
+      arming ? CONFIRM_ARM_GUARD_MS : LIBRARY_CONFIRM_MS - CONFIRM_ARM_GUARD_MS
+    );
+    return () => clearTimeout(t);
+  }, [confirm]);
+
   const remove = (): void => {
-    if (!card) return;
+    if (!card || confirm === 'arming') return;
+    if (confirm === 'idle') {
+      setConfirm('arming');
+      return;
+    }
     onRemove(card);
     onClose();
   };
@@ -290,9 +310,13 @@ export function PreCardEditor({ card, onClose, onRemove, onCancel, hidden = fals
     padding: '0 14px',
     borderRadius: '9px',
     color: T.live,
-    background: `${T.live}1a`,
+    background: confirm === 'idle' ? `${T.live}1a` : `${T.live}33`,
     fontSize: '12.5px',
-    fontWeight: 600
+    fontWeight: 600,
+    // Wide enough for either label, so arming it never moves the footer (rule 5).
+    minWidth: '132px',
+    textAlign: 'center',
+    whiteSpace: 'nowrap'
   };
   const smallGhost: CSSProperties = {
     height: '46px',
@@ -630,8 +654,8 @@ export function PreCardEditor({ card, onClose, onRemove, onCancel, hidden = fals
           }}
         >
           {!isNew && (
-            <button style={removeStyle} onClick={remove}>
-              Delete card
+            <button style={removeStyle} onClick={remove} data-delete-card={confirm}>
+              {confirm === 'idle' ? 'Delete card' : LIBRARY_DELETE_ARMED}
             </button>
           )}
           <div style={{ flex: 1 }} />

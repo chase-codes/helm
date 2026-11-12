@@ -22,7 +22,7 @@ the "Status" line under the table says which change delivers it.
 | **Nothing on screen** | Output is black. | Page status chip, Header chip, leader view, the ghosted Take down tooltip | SCREEN BLACK, OFF SCREEN, BLACK |
 | **Add** | File one thing the operator typed or picked into this page's list or library. | `+ Add ...` buttons; the save button of a create modal (`Add to library`, `Add to loop`) | "Save to library" on create |
 | **Import** | Bring things in from a file or another program. Always with `+`. | `+ Import`, `+ Import a song library` | Import without the `+` |
-| **Delete** | Take something out of a list. In-service lists delete at once and show `Deleted <thing>` with Undo for five seconds. Libraries (songs, media) ask for a confirm click instead and have no undo. | Context menu (`Delete`, `Delete 3 verses`), toast, card editor (`Delete card`), song library (`Delete from library`, then `Really delete?`), Shortcuts (`Delete selected`), Clear all tooltip | Remove, Removed |
+| **Delete** | Take something out of a list. Scripture readings and Message quotes delete at once and show `Deleted <thing>` with Undo for five seconds. Anything written or imported asks for a confirm click first: songs and media (no undo), and pre-service cards (the Undo still follows). | Context menu (`Delete`, `Delete 3 verses`), toast, pre-service card (`Delete card` or `Delete 3 cards`, then `Really delete?`, in the menu and in the editor), song library (`Delete from library`, then `Really delete?`), Shortcuts (`Delete selected`), Clear all tooltip | Remove, Removed; a bare `Delete` on a pre-service card |
 
 The status chip words come from `screenStatus()`; the step labels from SermonCenter,
 SongsMode and PreServiceMode; the toast from `UndoToast.tsx`.

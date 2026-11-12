@@ -271,7 +271,28 @@ describe('PreServiceMode', () => {
   })
 })
 
-describe('PreServiceMode — card removal speaks the in-service grammar (#86, #90)', () => {
+/** Right-click a row and press its delete, then step past the arm guard (which swallows the
+ * tail of a double-click) so the next click is a real decision. Fake timers have to be in
+ * place before arming, since that is when the guard's timer starts. */
+const armDelete = (row: HTMLElement, label = 'Delete card'): void => {
+  vi.useFakeTimers()
+  try {
+    fireEvent.contextMenu(row)
+    fireEvent.click(screen.getByText(label))
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+  } finally {
+    vi.useRealTimers()
+  }
+}
+/** The whole two-step: right-click, the delete, then the confirming click. */
+const deleteByMenu = (row: HTMLElement, label = 'Delete card'): void => {
+  armDelete(row, label)
+  fireEvent.click(screen.getByText('Really delete?'))
+}
+
+describe('PreServiceMode — deleting a card takes a confirming click, then offers Undo (#86, #90)', () => {
   const THREE: PreState = {
     ...baseState,
     cards: [
@@ -286,18 +307,64 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     vi.restoreAllMocks()
   })
 
-  it('right-click Delete removes the card immediately and offers an undo', async () => {
+  it('one click on Delete card deletes nothing: it asks', async () => {
+    const { removeCard } = installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Announcements')
+    await act(async () => {})
+
+    armDelete(rowFor('Announcements'))
+    expect(screen.getByRole('menuitem', { name: 'Really delete?' })).toBeTruthy()
+    expect(removeCard).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Deleted/)).toBeNull()
+  })
+
+  it('the confirming click removes the card at once and offers an undo', async () => {
     const { removeCard } = installHelmStub(THREE)
     renderMode()
     await screen.findByText('Announcements')
 
-    fireEvent.contextMenu(rowFor('Announcements'))
-    fireEvent.click(await screen.findByText('Delete'))
+    deleteByMenu(rowFor('Announcements'))
 
-    // Immediate, NOT deferred: the loop lives in main, and a card left there could still
-    // rotate onto the audience screen after the operator removed it.
+    // Once confirmed it is immediate, NOT deferred: the loop lives in main, and a card
+    // left there could still rotate onto the audience screen after the operator removed it.
     expect(removeCard).toHaveBeenCalledWith('c')
     expect(await screen.findByText(/Deleted/)).toBeTruthy()
+  })
+
+  it('a double-click cannot be both the question and the answer', async () => {
+    const { removeCard } = installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Announcements')
+    await act(async () => {})
+
+    fireEvent.contextMenu(rowFor('Announcements'))
+    fireEvent.click(screen.getByText('Delete card'))
+    // No time has passed: this is the tail of the same double-click, landing on the
+    // re-labelled item at the same spot.
+    fireEvent.click(screen.getByText('Really delete?'))
+    expect(removeCard).not.toHaveBeenCalled()
+  })
+
+  it('the question lapses back to Delete card after four seconds', async () => {
+    const { removeCard } = installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Announcements')
+    await act(async () => {})
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.contextMenu(rowFor('Announcements'))
+      fireEvent.click(screen.getByText('Delete card'))
+      act(() => {
+        vi.advanceTimersByTime(4000)
+      })
+      expect(screen.queryByText('Really delete?')).toBeNull()
+      expect(screen.getByRole('menuitem', { name: 'Delete card' })).toBeTruthy()
+      expect(removeCard).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('undo restores the card at its original index', async () => {
@@ -305,8 +372,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     renderMode()
     await screen.findByText('Psalm 122:1')
 
-    fireEvent.contextMenu(rowFor('Psalm 122:1'))
-    fireEvent.click(await screen.findByText('Delete'))
+    deleteByMenu(rowFor('Psalm 122:1'))
     fireEvent.click(await screen.findByText('Undo'))
 
     expect(restoreCard).toHaveBeenCalledTimes(1)
@@ -324,7 +390,11 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     vi.useFakeTimers()
     try {
       fireEvent.contextMenu(rowFor('Announcements'))
-      fireEvent.click(screen.getByText('Delete'))
+      fireEvent.click(screen.getByText('Delete card'))
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      fireEvent.click(screen.getByText('Really delete?'))
       expect(screen.getByText(/Deleted/)).toBeTruthy()
 
       act(() => {
@@ -362,8 +432,7 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
 
     fireEvent.click(rowFor('Greeting'))
     fireEvent.click(rowFor('Psalm 122:1'), { shiftKey: true })
-    fireEvent.contextMenu(rowFor('Psalm 122:1'))
-    fireEvent.click(await screen.findByText('Delete 2 cards'))
+    deleteByMenu(rowFor('Psalm 122:1'), 'Delete 2 cards')
 
     expect(removeCard.mock.calls.map((c) => c[0])).toEqual(['a', 'b'])
     expect(await screen.findByText(/2 cards/)).toBeTruthy()
@@ -373,25 +442,22 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     expect(restoreCard.mock.calls.map((c) => c[1])).toEqual([0, 1])
   })
 
-  it('the Delete key removes the selection', async () => {
+  it('Backspace and Delete do nothing: no key deletes a card', async () => {
+    // A click selects a card, so a bare key that deleted the selection turned "erase a
+    // letter" into "delete the whole card" whenever focus was not in a text field. The
+    // page now offers the key dispatcher no delete at all, as the libraries do.
     const keyHandlerRef: ModeKeyHandlerRef = { current: null }
     const { removeCard } = installHelmStub(THREE)
     renderMode(keyHandlerRef)
     await screen.findByText('Announcements')
+    await act(async () => {})
 
     fireEvent.click(rowFor('Announcements'))
-    act(() => keyHandlerRef.current?.onDelete?.())
-    expect(removeCard).toHaveBeenCalledWith('c')
-  })
-
-  it('Delete with nothing selected does nothing', async () => {
-    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
-    const { removeCard } = installHelmStub(THREE)
-    renderMode(keyHandlerRef)
-    await screen.findByText('Announcements')
-
-    act(() => keyHandlerRef.current?.onDelete?.())
+    expect(keyHandlerRef.current).not.toBeNull()
+    expect(keyHandlerRef.current?.onDelete).toBeUndefined()
+    for (const key of ['Backspace', 'Delete']) fireEvent.keyDown(document.body, { key })
     expect(removeCard).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Deleted/)).toBeNull()
   })
 
   it('reports the card editor as a modal so Delete cannot fire behind it', async () => {
@@ -421,10 +487,47 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
     await screen.findByText('Announcements')
 
     fireEvent.click(within(rowFor('Announcements')).getByTitle('Edit card'))
-    fireEvent.click(await screen.findByText('Delete card'))
+    const button = (): HTMLElement => document.querySelector('[data-delete-card]') as HTMLElement
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(button())
+      // The first click only asks, and an immediate second one is still the same gesture.
+      expect(button().textContent).toBe('Really delete?')
+      fireEvent.click(button())
+      expect(removeCard).not.toHaveBeenCalled()
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      fireEvent.click(button())
+    } finally {
+      vi.useRealTimers()
+    }
 
     expect(removeCard).toHaveBeenCalledWith('c')
     expect(await screen.findByText(/Deleted/)).toBeTruthy()
+  })
+
+  it('Delete card in the editor lapses back if it is not confirmed', async () => {
+    const { removeCard } = installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Announcements')
+
+    fireEvent.click(within(rowFor('Announcements')).getByTitle('Edit card'))
+    const button = (): HTMLElement => document.querySelector('[data-delete-card]') as HTMLElement
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(button())
+      act(() => {
+        vi.advanceTimersByTime(400)
+      })
+      act(() => {
+        vi.advanceTimersByTime(4000)
+      })
+      expect(button().textContent).toBe('Delete card')
+      expect(removeCard).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('+ Add a card sits at the top of the rail, above the cards', async () => {
@@ -478,27 +581,10 @@ describe('PreServiceMode — card removal speaks the in-service grammar (#86, #9
 
     fireEvent.click(rowFor('Greeting'))
     fireEvent.click(rowFor('Logo'), { shiftKey: true })
-    fireEvent.contextMenu(rowFor('Logo'))
     // Three rows are selected, but only two can go — the label must not over-promise.
-    fireEvent.click(await screen.findByText('Delete 2 cards'))
+    deleteByMenu(rowFor('Logo'), 'Delete 2 cards')
 
     expect(removeCard.mock.calls.map((c) => c[0])).toEqual(['a', 'b'])
-  })
-
-  it('the Delete key leaves the logo card alone', async () => {
-    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
-    const WITH_LOGO: PreState = {
-      ...baseState,
-      cards: [...cards, { id: 'logo', type: 'logo', title: 'Logo', enabled: false }]
-    }
-    const { removeCard } = installHelmStub(WITH_LOGO)
-    renderMode(keyHandlerRef)
-    await screen.findByText('Logo')
-
-    fireEvent.click(rowFor('Logo'))
-    act(() => keyHandlerRef.current?.onDelete?.())
-    expect(removeCard).not.toHaveBeenCalled()
-    expect(screen.queryByText(/Deleted/)).toBeNull()
   })
 })
 
@@ -521,7 +607,7 @@ describe('PreServiceMode: right-click Edit, as on Songs', () => {
     await screen.findByText('Psalm 122:1')
 
     fireEvent.contextMenu(rowFor('Psalm 122:1'))
-    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Edit', 'Move up', 'Move down', 'Delete'])
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Edit', 'Move up', 'Move down', 'Delete card'])
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
     expect(keyHandlerRef.current?.isModalOpen()).toBe(true)
@@ -922,8 +1008,7 @@ describe('PreServiceMode, kept alive across page switches', () => {
     const { rerender } = render(page(true, keyHandlerRef))
     await screen.findByText('Announcements')
 
-    fireEvent.contextMenu(screen.getByText('Announcements').closest('button') as HTMLElement)
-    fireEvent.click(await screen.findByText('Delete'))
+    deleteByMenu(screen.getByText('Announcements').closest('button') as HTMLElement)
     expect(removeCard).toHaveBeenCalledWith('c')
     fireEvent.click(screen.getByText('Greeting').closest('button') as HTMLElement)
 
