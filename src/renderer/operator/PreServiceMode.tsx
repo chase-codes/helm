@@ -330,15 +330,19 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     textOverflow: 'ellipsis'
   };
 
-  // Where a dragged card will land: a track-colour line in the gap between two cards.
+  // Where a dragged card will land: a track-colour bar across the full width of the rail,
+  // centred in the 8px gap between two cards, with a soft glow of the same colour so it
+  // reads against both the panel and a neighbouring card's ring.
   const dropLineStyle = (edge: 'top' | 'bottom'): CSSProperties => ({
     position: 'absolute',
-    left: '4px',
-    right: '4px',
-    [edge]: '-5px',
-    height: '2px',
-    borderRadius: '1px',
+    left: 0,
+    right: 0,
+    [edge]: '-6px',
+    height: '4px',
+    borderRadius: '2px',
     background: T.accent,
+    boxShadow: `0 0 0 3px ${T.accent}33`,
+    zIndex: 1,
     pointerEvents: 'none'
   });
   const quickAddStyle: CSSProperties = {
@@ -435,7 +439,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   return (
     <div style={rootStyle}>
       <div style={preRailStyle} data-pre-rail>
-        <div style={{ padding: '13px 13px 9px', flexShrink: 0 }}>
+        <div style={{ padding: '13px 13px 3px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '10px', letterSpacing: '0.12em', color: T.faint, fontWeight: 600 }}>PRE-SERVICE LOOP</span>
             <span style={loopCountTag}>{`${enabledCount} IN LOOP`}</span>
@@ -448,12 +452,27 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
           </button>
         </div>
         <div
-          style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}
-          // The empty rail below the last card is a drop target too: it means "to the end".
+          // 6px of top padding (taken from the header above, so nothing moves) gives the
+          // drop line somewhere to show above the FIRST card: with none, a line drawn
+          // there sat outside the scroll box and was clipped away.
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+          // One handler for the whole list, reading the pointer against every card: the
+          // slot is the first card whose middle is below the pointer, or the end. Deciding
+          // per card instead left the gaps between cards and the space under the last one
+          // with no card to ask, so the line vanished (or jumped to the end) there.
           onDragOver={(e) => {
             if (!drag) return;
             e.preventDefault();
-            if (e.target === e.currentTarget) overGap(cards.length);
+            const rows = e.currentTarget.querySelectorAll<HTMLElement>('[data-pre-card]');
+            let gap = rows.length;
+            for (let k = 0; k < rows.length; k++) {
+              const box = rows[k].getBoundingClientRect();
+              if (e.clientY < box.top + box.height / 2) {
+                gap = k;
+                break;
+              }
+            }
+            overGap(gap);
           }}
           onDrop={(e) => {
             if (!drag) return;
@@ -553,14 +572,6 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               <div
                 key={card.id}
                 style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}
-                onDragOver={(e) => {
-                  if (!drag) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  // Upper half of a card means before it, lower half after it.
-                  const box = e.currentTarget.getBoundingClientRect();
-                  overGap(e.clientY < box.top + box.height / 2 ? i : i + 1);
-                }}
               >
               {dropGap === i && <div data-drop-line style={dropLineStyle('top')} />}
               {dropGap === cards.length && i === cards.length - 1 && <div data-drop-line style={dropLineStyle('bottom')} />}
