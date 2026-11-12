@@ -152,7 +152,13 @@ lives in main, and a card left pending there for five seconds could rotate onto 
 audience screen after the operator deleted it. Same toast, same 5 s, same exact restore;
 only the moment of commit differs.
 
+**Closing an editor is the same rule.** Cancel, Escape or a click beside the pre-service
+card editor closes it at once; if anything had been typed, the rail shows `Closed without
+saving` with Undo for the same five seconds, and Undo brings the draft back exactly as it
+was. The page hides the editor instead of unmounting it, so there is no draft to copy.
+
 **Enforced by**
+- `src/renderer/operator/PreServiceMode.tsx` `cancelEditor` / `reopenDraft` (the hidden editor and its `useTimedUndo`), `PreCardEditor.tsx` `hidden`, `onCancel`, `onDirtyChange`; `PreServiceMode.test.tsx` "a closed draft can be undone (rule 4)".
 - `src/renderer/operator/useDeferredRemove.ts:39-58` — the rule-bearer: deferred commit, position-restoring undo; `:12-27` the `pendingNow()` contract; `:115-125` `filterPending`.
 - `src/renderer/operator/useTimedUndo.ts:13-18` (the 5000 ms primitive) and `PreServiceMode.tsx:79`, `:85-104` `removeCards`/`undoRemove`, with `src/main/preserviceEngine.ts:176` `restoreCard`: the pre-service commit-now exception.
 - `src/renderer/operator/UndoToast.tsx:14` — track-agnostic `Deleted <label>` toast, accent follows the host track (#92); `UndoToast.test.tsx`.
@@ -203,7 +209,10 @@ Pre-service), never in a list header and never at the foot of the list. It names
 will file (`+ Add John 3:16`, `+ Add ¶3`), or says Import when the source is a file
 (Slides). Importing from outside sits as a secondary row beneath it (Songs, Message).
 Right-click Edit is offered wherever a row has an editor (Songs, Pre-service), for a single
-row only.
+row only. Pre-service adds two more single-row entries: Move up / Move down, which reorder
+the loop without touching what is cued or on screen, and Add an item on a list card, which
+opens a one-line field on the rail (Enter adds and keeps the field open, Escape closes it
+and is consumed there).
 
 The powers survive a page switch: all three pages stay mounted (`App.tsx` keep-alive) and
 register their keyboard delegate only while `active`, so a selection or a pending undo is
@@ -217,6 +226,7 @@ still there on return. Every side rail resizes through `usePanelWidth` + `PanelD
 - Deliberate non-adopters: `SongsMode.tsx` and `SlidesTrack.tsx`, the two libraries (rule 4 carve-out).
 - Add chips: `SongSearchRail.tsx:235` `addChipStyle`, `SchedulePanel.tsx:100` `schedAddStyle`, `MessageSearchRail.tsx:169` `addChipStyle` and `:155` import row, `SlidesTrack.tsx:383` `importChipStyle`, `PreServiceMode.tsx:200` `addChipStyle`.
 - `src/renderer/operator/App.tsx:168-179` — Pre-service joins the keep-alive wrapper; `PreServiceMode.tsx:89` `railPanel` and `:91-96` the menu-close guard while hidden. Pinned by "kept alive across page switches" and "the card rail resizes like every other side rail" in `PreServiceMode.test.tsx`.
+- `src/renderer/operator/PreServiceMode.tsx` (`move`, `addItem` in the row's context menu; `commitQuickAdd`), `src/main/preserviceEngine.ts` `moveCard`, `src/main/preCardsRepo.ts` `move`; "reordering the loop" and "adding an item from the rail" in `PreServiceMode.test.tsx`.
 - `src/shared/scripture/selection.test.ts:148` — "the same semantics `useListSelection.selectTo` gives the schedule."
 - `docs/superpowers/specs/2026-07-06-interaction-primitives-design.md`, `2026-08-15-scripture-schedule-multiselect-design.md`.
 

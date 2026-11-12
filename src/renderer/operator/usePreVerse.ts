@@ -17,7 +17,7 @@ import {
 } from '../../shared/scripture/refBuilder';
 import { railSelect, type Cursor } from '../../shared/scripture/selection';
 import { parseVerseQuery } from '../../shared/search/verseScore';
-import { passageText, pickCardBible } from '../../shared/scripture/preVerse';
+import { passageText, pickCardBible, verseText } from '../../shared/scripture/preVerse';
 import type { ScriptureSearchState } from './ScriptureSearchResults';
 import { useVerseSearch } from './useVerseSearch';
 
@@ -53,6 +53,12 @@ export interface PreVerse {
   touched: boolean;
   /** The installed Bible verses are filled from; null when none is. Undefined while loading. */
   bible: BibleManifestEntry | null | undefined;
+  /** Every installed Bible, for the translation chips. */
+  bibles: BibleManifestEntry[];
+  /** Read from another installed translation; the card's words follow at once. */
+  chooseBible: (id: string) => void;
+  /** The picked range one verse at a time, for "a card per verse". Empty for a single verse. */
+  parts: { ref: string; text: string }[];
   entry: {
     value: string;
     ghost: RefGhost | null;
@@ -92,6 +98,7 @@ export function usePreVerse(card: PreCard | null): PreVerse {
   // which is how clicking a verse again restores its text after a hand edit.
   const [applied, setApplied] = useState<string | null>(initial ? formatRef(initial) : null);
   const [bible, setBible] = useState<BibleManifestEntry | null | undefined>(undefined);
+  const [bibles, setBibles] = useState<BibleManifestEntry[]>([]);
   const [extents, setExtents] = useState<Record<string, BookExtent>>({});
   const [loaded, setLoaded] = useState<{ key: string; data: ChapterData | null } | null>(null);
   const [anchor, setAnchor] = useState<Cursor | null>(null);
@@ -106,7 +113,9 @@ export function usePreVerse(card: PreCard | null): PreVerse {
       window.helm.settings.get<string[]>('scriptureVersions', ['kjv'])
     ])
       .then(([manifest, versions]) => {
-        if (live) setBible(pickCardBible(manifest, versions));
+        if (!live) return;
+        setBibles(manifest.filter((m) => m.installed));
+        setBible(pickCardBible(manifest, versions));
       })
       .catch((err: unknown) => {
         console.error(err);
@@ -186,6 +195,23 @@ export function usePreVerse(card: PreCard | null): PreVerse {
       setVersion(bible.abbr);
     }
   }
+
+  const parts: { ref: string; text: string }[] = [];
+  if (target && chapter && bible && target.to > target.from) {
+    for (let v = target.from; v <= target.to; v++) {
+      const t = verseText(chapter, v, bible.id);
+      if (t) parts.push({ ref: formatRef({ ...target, from: v, to: v }), text: t.trim() });
+    }
+  }
+
+  const chooseBible = (id: string): void => {
+    const next = bibles.find((b) => b.id === id);
+    if (!next || next.id === bible?.id) return;
+    setBible(next);
+    // The reference has not changed, only where its words come from: clear the fill so
+    // the card is re-read in the new translation.
+    setApplied(null);
+  };
 
   let problem: string | null = null;
   if (failed) problem = 'Couldn’t reach the Bible. Try again.';
@@ -337,6 +363,9 @@ export function usePreVerse(card: PreCard | null): PreVerse {
     },
     touched,
     bible,
+    bibles,
+    chooseBible,
+    parts,
     entry: { value: renderBuilder(builder), ghost: refGhost(builder), onChange, onKeyDown },
     view,
     problem,

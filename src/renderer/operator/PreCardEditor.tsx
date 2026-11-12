@@ -1,10 +1,12 @@
-import { useContext, useLayoutEffect, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
-import type { PreCard, PreCardType } from '../../shared/types';
+import type { MediaItem, PreCard, PreCardType } from '../../shared/types';
 import { cleanListPoints } from '../../shared/preservice/listPoints';
 import { preSlideFor } from '../../shared/preservice/cards';
 import { IS_MAC } from '../../shared/hotkeys/match';
+import { mediaSrc } from '../../shared/media/slides';
+import { ListEmpty } from './ListEmpty';
 import { SlideCanvas } from '../shared/SlideCanvas';
 import { PreVersePicker } from './PreVersePicker';
 import { usePreVerse } from './usePreVerse';
@@ -16,16 +18,24 @@ export interface PreCardEditorProps {
    * affordance, and a card removed from here must land in the same 5-second "Deleted …
    * Undo" bar as one removed by right-click or the Delete key (#86). */
   onRemove: (card: PreCard) => void;
+  /** Cancel, Escape and a click beside the editor. Separate from `onClose` (which follows
+   * a save or a delete) so the page can keep an unsaved draft alive behind its five-second
+   * Undo instead of dropping it. Defaults to `onClose`. */
+  onCancel?: () => void;
+  /** Mounted but not shown: the page hides a cancelled draft rather than unmounting it,
+   * which is what lets Undo bring it back exactly as it was. */
+  hidden?: boolean;
+  /** Tells the page whether there is anything to lose. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-// Sub-slice C (media) hasn't landed yet, so the 'image' card type has no creation path
-// here — only the three types the design's type tabs offer natively. See task B6 brief.
-type EditableType = 'verse' | 'list' | 'message';
+type EditableType = 'verse' | 'list' | 'message' | 'image';
 
 const TYPE_TABS: { id: EditableType; label: string }[] = [
   { id: 'verse', label: 'Bible verse' },
   { id: 'list', label: 'List of items' },
-  { id: 'message', label: 'Big message' }
+  { id: 'message', label: 'Big message' },
+  { id: 'image', label: 'Picture' }
 ];
 
 /** The two lists nearly every loop carries. The add chip on the rail promises
@@ -41,10 +51,10 @@ const VERSE_COMFORTABLE = 420;
 const SAVE_KEYS = IS_MAC ? '⌘↵' : 'Ctrl+Enter';
 
 function asEditableType(t: PreCardType | undefined): EditableType {
-  return t === 'list' || t === 'message' ? t : 'verse';
+  return t === 'list' || t === 'message' || t === 'image' ? t : 'verse';
 }
 
-export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): JSX.Element {
+export function PreCardEditor({ card, onClose, onRemove, onCancel, hidden = false, onDirtyChange }: PreCardEditorProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
   const isNew = card === null;
 
@@ -67,8 +77,56 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   const [peHeadline, setPeHeadline] = useState(card?.headline ?? '');
   const [peSubtitle, setPeSubtitle] = useState(card?.subtitle ?? '');
   const [edited, setEdited] = useState(false);
+  // A new range can go up as one card or as a card per verse.
+  const [split, setSplit] = useState(false);
+  const [peSrc, setPeSrc] = useState(card?.src ?? '');
+  // The media library's pictures; null until the Picture tab has asked for them.
+  const [pictures, setPictures] = useState<MediaItem[] | null>(null);
   const verse = usePreVerse(card);
   const dirty = edited || verse.touched;
+  const cancel = onCancel ?? onClose;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  const onlyPictures = (items: MediaItem[]): MediaItem[] => items.filter((m) => m.type === 'image' && m.filePath);
+  useEffect(() => {
+    if (peType !== 'image') return;
+    let live = true;
+    void window.helm.media
+      .list()
+      .then((items) => {
+        if (live) setPictures(onlyPictures(items));
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        if (live) setPictures([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [peType]);
+
+  // Same picker and the same library as the Slides track's "+ Import": a picture brought
+  // in here is in the media library afterwards, and the newest one is picked.
+  const importPictures = (): void => {
+    const known = new Set((pictures ?? []).map((m) => m.id));
+    void window.helm.media
+      .importImages()
+      .then((res) => {
+        if (res.canceled) return;
+        const next = onlyPictures(res.items);
+        setPictures(next);
+        const added = next.find((m) => !known.has(m.id));
+        if (added?.filePath) {
+          setPeSrc(mediaSrc(added.filePath));
+          setEdited(true);
+        }
+      })
+      .catch(console.error);
+  };
+  const picked = (pictures ?? []).find((m) => m.filePath && mediaSrc(m.filePath) === peSrc);
 
   const entryRef = useRef<HTMLInputElement | null>(null);
   const headingRef = useRef<HTMLInputElement | null>(null);
@@ -78,8 +136,11 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   // The editor opens with the caret in the field the operator came for, and moves it
   // when they switch card type: no click needed before typing.
   useLayoutEffect(() => {
+    if (hidden) return;
     if (peType === 'verse') entryRef.current?.focus();
     else if (peType === 'message') headlineRef.current?.focus();
+    // A picture has no field to type in.
+    else if (peType === 'image') return;
     else if (isNew && peTitle.trim() === '') headingRef.current?.focus();
     else {
       const el = itemsRef.current;
@@ -88,14 +149,22 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
       el.setSelectionRange(el.value.length, el.value.length);
       el.scrollTop = el.scrollHeight;
     }
-    // Runs on open and on a type switch only: re-running as the heading is typed would
-    // pull the caret out of it mid-word.
+    // Runs on open, on a type switch and when an undone draft comes back: re-running as
+    // the heading is typed would pull the caret out of it mid-word.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peType]);
+  }, [peType, hidden]);
 
   const points = cleanListPoints(peLines.split('\n'));
   const headline = peHeadline.trim() || 'Welcome';
-  const autoTitle = peType === 'verse' ? verse.ref.trim() || 'Verse' : peType === 'list' ? 'List' : peHeadline.trim() || 'Message';
+  const autoTitle =
+    peType === 'verse'
+      ? verse.ref.trim() || 'Verse'
+      : peType === 'list'
+        ? 'List'
+        : peType === 'image'
+          ? picked?.title || 'Picture'
+          : peHeadline.trim() || 'Message';
+  const splitting = isNew && split && verse.parts.length > 1;
 
   // An empty card is not offered to the loop (rule 7): the button ghosts and says why.
   const blocked =
@@ -103,14 +172,30 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
       ? 'Pick a verse first'
       : peType === 'list' && points.length === 0
         ? 'Add at least one item first'
-        : null;
+        : peType === 'image' && peSrc === ''
+          ? 'Pick a picture first'
+          : null;
 
   // Port of the prototype's savePreEdit field-mapping (Lectern.dc.html ~L856-866).
   const save = (): void => {
     if (blocked) return;
     const enabled = card?.enabled ?? true;
     const title = peTitle.trim() || autoTitle;
-    if (peType === 'verse') {
+    if (peType === 'verse' && splitting) {
+      // A card per verse, each named for its own reference, in reading order.
+      for (const part of verse.parts) {
+        window.helm.preservice.saveCard({
+          type: 'verse',
+          enabled,
+          title: part.ref,
+          ref: part.ref,
+          text: part.text,
+          version: verse.version
+        });
+      }
+    } else if (peType === 'image') {
+      window.helm.preservice.saveCard({ id: card?.id, type: 'image', enabled, title, src: peSrc });
+    } else if (peType === 'verse') {
       window.helm.preservice.saveCard({
         id: card?.id,
         type: 'verse',
@@ -148,19 +233,31 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
   // and auto-fit (#49) doing their work while the operator types, not after they save.
   // Notably NOT the saved card: the preview must track keystrokes.
   const draft: PreCard =
-    peType === 'verse'
+    peType === 'image'
+      ? { id: card?.id ?? '', type: 'image', enabled: true, title: peTitle, src: peSrc }
+      : peType === 'verse' && splitting
+        ? { id: '', type: 'verse', enabled: true, title: '', ref: verse.parts[0].ref, text: verse.parts[0].text, version: verse.version }
+        : peType === 'verse'
       ? { id: card?.id ?? '', type: 'verse', enabled: true, title: peTitle, ref: verse.ref.trim(), text: verse.text.trim(), version: verse.version }
       : peType === 'list'
         ? { id: card?.id ?? '', type: 'list', enabled: true, title: peTitle.trim() || 'List', points: peLines.split('\n') }
         : { id: card?.id ?? '', type: 'message', enabled: true, title: peTitle, headline, subtitle: peSubtitle.trim() };
 
-  // Mod+Enter saves from any field. Plain Enter cannot: it is a new line in the items and
-  // the verse text, and the reference entry's own commit.
-  const onEditorKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
-    e.preventDefault();
-    save();
-  };
+  // Mod+Enter saves. Plain Enter cannot: it is a new line in the items and the verse
+  // text, and the reference entry's own commit. Heard on the document rather than on the
+  // editor's frame, because a pointer click on any of its buttons drops focus to BODY
+  // (blurOnPointerClick) and the shortcut has to work from there too. Re-attached each
+  // render so it always runs the current draft's save.
+  useEffect(() => {
+    if (hidden) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      save();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
 
   const fieldLabelStyle: CSSProperties = { fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, marginBottom: '6px', flexShrink: 0 };
   const noteStyle: CSSProperties = { fontSize: '11.5px', color: T.faint, marginTop: '6px', lineHeight: 1.45, flexShrink: 0 };
@@ -246,6 +343,19 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
     background: `${T.accent}1c`,
     whiteSpace: 'nowrap'
   };
+  const segStyle = (on: boolean): CSSProperties => ({
+    flex: 1,
+    height: '28px',
+    borderRadius: '7px',
+    fontSize: '12px',
+    fontWeight: on ? 700 : 600,
+    color: on ? T.accentInk : T.dim,
+    background: on ? T.accent : T.panel2,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    whiteSpace: 'nowrap'
+  });
   const columnStyle: CSSProperties = { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' };
 
   const cardNameField = (placeholder: string): JSX.Element => (
@@ -271,7 +381,14 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
         data-testid="pre-card-preview"
         style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '10px', overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${T.border}` }}
       >
-        {peType === 'verse' && blocked ? (
+        {peType === 'image' && blocked ? (
+          <div
+            data-preview-empty
+            style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 28px', textAlign: 'center', fontSize: '12.5px', lineHeight: 1.5, color: T.faint, background: T.panel2 }}
+          >
+            The card shows here as soon as a picture is picked.
+          </div>
+        ) : peType === 'verse' && blocked ? (
           // A verse card with no verse would render as a bare translation tag on a dark
           // slide. Say what fills it instead (rule 7).
           <div
@@ -299,14 +416,16 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
     </div>
   );
 
+  if (hidden) return null;
+
   return (
     // A fixed frame (rule 5): the three card types differ in how much they hold, and the
     // editor used to change height and jump on screen as the operator switched between
     // them. Find or write on the left, the card as the room will see it on the right.
-    // The backdrop stops dismissing once something has been typed: a stray click beside
-    // the editor used to throw away a half-written prayer list.
-    <ModalShell onClose={dirty ? undefined : onClose} width="100%" maxWidth="940px" height="680px" maxHeight="90vh">
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }} onKeyDown={onEditorKeyDown}>
+    // A click beside the editor cancels like the Cancel button; the page keeps a draft
+    // with something in it behind a five-second Undo, so a stray click costs nothing.
+    <ModalShell onClose={cancel} width="100%" maxWidth="940px" height="680px" maxHeight="90vh">
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
           <div style={{ fontWeight: 700, fontSize: '18px' }}>{isNew ? 'Add a card to the loop' : 'Edit card'}</div>
           {isNew && (
@@ -327,8 +446,23 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
               </div>
               <div style={{ ...columnStyle, gap: '12px' }}>
                 {preview}
-                {cardNameField(autoTitle)}
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                {isNew && verse.parts.length > 1 && (
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }} data-split>
+                    <button style={segStyle(!split)} onClick={() => setSplit(false)}>
+                      One card
+                    </button>
+                    <button style={segStyle(split)} onClick={() => setSplit(true)}>
+                      A card per verse
+                    </button>
+                  </div>
+                )}
+                {splitting && (
+                  <div style={noteStyle} data-split-note>
+                    {`Adds ${verse.parts.length} cards, ${verse.parts[0].ref} to ${verse.parts[verse.parts.length - 1].ref}, each named for its verse. The preview shows the first.`}
+                  </div>
+                )}
+                {!splitting && cardNameField(autoTitle)}
+                <div style={{ flex: 1, minHeight: 0, display: splitting ? 'none' : 'flex', flexDirection: 'column' }}>
                   <div style={fieldLabelStyle}>VERSE TEXT</div>
                   <textarea
                     style={areaStyle}
@@ -338,7 +472,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
                   />
                   {verse.text.length > VERSE_COMFORTABLE && (
                     <div style={noteStyle} data-verse-long>
-                      A long passage for one card: the words shrink to fit. Shift-click a shorter range to keep it readable from the back.
+                      A long passage for one card: the words shrink to fit. Shift-click a shorter range, or give each verse its own card, to keep it readable from the back.
                     </div>
                   )}
                 </div>
@@ -402,6 +536,55 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
               <div style={columnStyle}>{preview}</div>
             </>
           )}
+          {peType === 'image' && (
+            <>
+              <div style={columnStyle}>
+                <div style={fieldLabelStyle}>PICTURE</div>
+                <button
+                  style={{ ...suggestStyle, width: '100%', height: '34px', borderRadius: '9px', fontSize: '12.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  onClick={importPictures}
+                >
+                  + Import
+                </button>
+                <div style={{ ...noteStyle, marginBottom: '8px' }}>Pictures come from the media library the Slides track uses.</div>
+                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  {pictures !== null && pictures.length === 0 && (
+                    <ListEmpty>
+                      No pictures in the media library yet. Bring some in with <b>+ Import</b>.
+                    </ListEmpty>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px' }}>
+                    {(pictures ?? []).map((m) => {
+                      const src = mediaSrc(m.filePath as string);
+                      const on = src === peSrc;
+                      return (
+                        <button
+                          key={m.id}
+                          data-picture={m.id}
+                          data-selected={on || undefined}
+                          title={m.title}
+                          onClick={() => {
+                            setPeSrc(src);
+                            setEdited(true);
+                          }}
+                          style={{ display: 'block', padding: '4px', borderRadius: '9px', background: on ? `${T.accent}22` : T.panel2, boxShadow: on ? `inset 0 0 0 1.5px ${T.accent}` : `inset 0 0 0 1px ${T.hairline}` }}
+                        >
+                          <img src={src} alt="" draggable={false} style={{ display: 'block', width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: '6px' }} />
+                          <div style={{ fontSize: '11px', color: on ? T.text : T.dim, marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {m.title}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div style={{ ...columnStyle, gap: '12px' }}>
+                {preview}
+                {cardNameField(autoTitle)}
+              </div>
+            </>
+          )}
           {peType === 'message' && (
             <>
               <div style={{ ...columnStyle, gap: '12px' }}>
@@ -452,7 +635,7 @@ export function PreCardEditor({ card, onClose, onRemove }: PreCardEditorProps): 
             </button>
           )}
           <div style={{ flex: 1 }} />
-          <button style={smallGhost} onClick={onClose}>
+          <button style={smallGhost} onClick={cancel}>
             Cancel
           </button>
           <button

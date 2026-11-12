@@ -9,9 +9,10 @@ describe('preSlideFor', () => {
     expect(preSlideFor({ ...base, type: 'message', headline: 'Welcome', subtitle: 'Glad you are here' } as PreCard))
       .toEqual({ kind: 'title', accent: '#e0a341', title: 'Welcome', subtitle: 'Glad you are here' });
   });
-  it('verse → scripture slide (KJV single column)', () => {
+  it('verse → scripture slide, with no translation tag when the card names none', () => {
+    // Hand-typed words used to go up labelled KJV whatever they were.
     expect(preSlideFor({ ...base, type: 'verse', ref: 'Psalm 122:1', text: 'I was glad…' } as PreCard))
-      .toEqual({ kind: 'scripture', accent: '#f0b24a', ref: 'Psalm 122:1', label: 'Psalm 122:1', columns: [{ version: 'KJV', text: 'I was glad…' }] });
+      .toEqual({ kind: 'scripture', accent: '#f0b24a', ref: 'Psalm 122:1', label: 'Psalm 122:1', columns: [{ version: '', text: 'I was glad…' }] });
   });
   it('verse card with a version uses it as the column label', () => {
     expect(preSlideFor({ ...base, type: 'verse', ref: 'John 3:16', text: 'For God…', version: 'WEB' } as PreCard))

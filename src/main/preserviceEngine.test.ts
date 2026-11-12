@@ -346,6 +346,28 @@ describe('preserviceEngine', () => {
       expect(presentation().liveKey).toBe(held);
     });
 
+    it('moving a card reorders the loop and leaves the screen and the selection on the same card', () => {
+      const { engine, presentation } = harness();
+      engine.engage();
+      const held = presentation().liveKey;
+      const [first, second] = engine.getState().cards;
+      engine.moveCard(first.id, 1);
+      const s = engine.getState();
+      expect(s.cards.slice(0, 2).map((c) => c.id)).toEqual([second.id, first.id]);
+      expect(s.cards[s.idx].id).toBe(first.id); // still the card on screen
+      expect(presentation().liveKey).toBe(held);
+      engine.tick();
+      expect(engine.getState().engaged).toBe(true);
+    });
+
+    it('moving past either end of the loop does nothing', () => {
+      const { engine } = harness();
+      const before = engine.getState().cards.map((c) => c.id);
+      engine.moveCard(before[0], -1);
+      engine.moveCard(before[before.length - 1], 1);
+      expect(engine.getState().cards.map((c) => c.id)).toEqual(before);
+    });
+
     it('deleting the card that is on screen replaces it', () => {
       const { engine, presentation, repo } = harness();
       engine.showNow();

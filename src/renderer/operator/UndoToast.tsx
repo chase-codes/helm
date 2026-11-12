@@ -9,10 +9,13 @@ export interface UndoToastProps {
    *  Slides track wore the Bible track's colour (#92). Defaults to T.accent for surfaces
    *  that aren't a track, like pre-service. */
   accent?: string;
+  /** The whole sentence, for an undo that is not a delete (a card editor closed without
+   *  saving). When set, `label` is ignored. */
+  message?: string;
 }
 
 /** Transient "Deleted <label>" bar with Undo. Track-agnostic: drop it into any list panel. */
-export function UndoToast({ label, onUndo, accent }: UndoToastProps): JSX.Element {
+export function UndoToast({ label, onUndo, accent, message }: UndoToastProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const barStyle: CSSProperties = {
     display: 'flex',
@@ -28,7 +31,7 @@ export function UndoToast({ label, onUndo, accent }: UndoToastProps): JSX.Elemen
   return (
     <div style={barStyle}>
       <span style={{ flex: 1, fontSize: '12px', color: T.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        Deleted {label}
+        {message ?? `Deleted ${label}`}
       </span>
       <button style={{ fontSize: '12px', fontWeight: 700, color: accent ?? T.accent, padding: '2px 4px' }} onClick={onUndo}>
         Undo

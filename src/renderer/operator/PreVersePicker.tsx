@@ -186,7 +186,42 @@ export function PreVersePicker({ theme: T, verse, entryRef }: PreVersePickerProp
       style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       onClick={() => entryRef.current?.focus()}
     >
-      <div style={{ ...labelStyle, marginBottom: '6px', flexShrink: 0 }}>FIND A VERSE</div>
+      {/* A fixed 12px row, the height of the label alone, so FIND A VERSE lines up with
+          PREVIEW beside it whether or not the taller chips are there. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexShrink: 0, height: '12px' }}>
+        <span style={{ ...labelStyle, flex: 1 }}>FIND A VERSE</span>
+        {/* One chip per installed translation, only when there is a choice to make. The
+            card opens on the Sermon page's primary; a click here reads this card from
+            another without changing that. */}
+        {verse.bibles.length > 1 &&
+          verse.bibles.map((b) => {
+            const on = b.id === verse.bible?.id;
+            return (
+              <button
+                key={b.id}
+                data-bible={b.id}
+                data-selected={on || undefined}
+                title={on ? `Reading from ${b.name}` : `Read this card from ${b.name}`}
+                onClick={() => verse.chooseBible(b.id)}
+                style={{
+                  height: '22px',
+                  padding: '0 8px',
+                  borderRadius: '6px',
+                  fontFamily: MONO,
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  flexShrink: 0,
+                  color: on ? T.accent : T.faint,
+                  background: on ? `${T.accent}1c` : 'transparent',
+                  boxShadow: on ? 'none' : `inset 0 0 0 1px ${T.border}`
+                }}
+              >
+                {b.abbr}
+              </button>
+            );
+          })}
+      </div>
       <div style={{ flexShrink: 0 }}>
         <ScriptureEntry
           theme={T}

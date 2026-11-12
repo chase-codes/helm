@@ -9,7 +9,9 @@ export function preSlideFor(card: PreCard): Slide {
       return { kind: 'title', accent: CANVAS_AMBER, title: card.headline || 'Welcome', subtitle: card.subtitle ?? '' };
     case 'verse':
       // Canvas gold, same as buildScriptureSlide — not the operator-UI scripture blue (#48).
-      return { kind: 'scripture', accent: CANVAS_GOLD, ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version || 'KJV', text: card.text || '' }] };
+      // No translation tag unless the card names one: words the operator typed by hand
+      // used to go up labelled KJV whatever they were.
+      return { kind: 'scripture', accent: CANVAS_GOLD, ref: card.ref || '', label: card.ref || '', columns: [{ version: card.version ?? '', text: card.text || '' }] };
     case 'list':
       // cleanListPoints here as well as in the editor: cards saved before the editor
       // stripped markers have "- " baked into their stored text (#50).

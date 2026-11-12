@@ -41,7 +41,12 @@ the live cursor, and Pre-service still steps with bare `‹` / `›`.
 - **Schedule**: this Sunday's list on a page. **Library**: every Sunday's store
   (`SONG LIBRARY`).
 - **Edit** opens an item's editor; **Save changes** commits an edit; **Undo** reverses a
-  delete.
+  delete, and reopens a card editor that was closed with something typed in it (the toast
+  reads `Closed without saving`).
+- **Move up** and **Move down** shift a pre-service card one place in the loop
+  (right-click). They change the order only, never what is cued or on screen.
+- **Add an item** puts one more line on a pre-service list card from the rail (the `+`
+  chip on the card, or right-click).
 - **Clear** empties a field or a list (`Clear field`, `Clear all`). It never means the
   screen; that is Take down.
 - **Release / take back screens**: hand every output to other apps and back

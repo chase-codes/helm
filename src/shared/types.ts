@@ -218,6 +218,7 @@ export const CH = {
   preserviceToggleEnabled: 'preservice:toggleEnabled', preserviceSaveCard: 'preservice:saveCard',
   preserviceRemoveCard: 'preservice:removeCard',
   preserviceRestoreCard: 'preservice:restoreCard',
+  preserviceMoveCard: 'preservice:moveCard',
   mediaList: 'media:list', mediaImportImages: 'media:importImages',
   mediaImportVideo: 'media:importVideo', mediaImportDeck: 'media:importDeck',
   mediaRemove: 'media:remove', mediaImportProgress: 'media:importProgress',
@@ -390,6 +391,9 @@ export interface HelmApi {
     /** Undo for removeCard: re-inserts the card at `index` with its original id, so the
      * rotation comes back in the order the operator built (#86). */
     restoreCard(card: PreCard, index: number): void;
+    /** Move a card one place earlier (-1) or later (1) in the rotation. Changes the
+     * order only: whatever is cued or on screen stays where it is. */
+    moveCard(id: string, delta: 1 | -1): void;
   };
   media: {
     list(): Promise<MediaItem[]>;

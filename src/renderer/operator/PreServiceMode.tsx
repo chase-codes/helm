@@ -33,6 +33,7 @@ import { MONO } from '../shared/fonts';
 import { railHint } from './railHints';
 import { RowNumber } from './RowNumber';
 import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
+import { cleanListPoints } from '../../shared/preservice/listPoints';
 
 export interface PreServiceModeProps {
   active: boolean;
@@ -72,6 +73,8 @@ function snippetFor(card: PreCard): string {
       return card.text || '';
     case 'list':
       return (card.points || []).join('  ·  ');
+    case 'image':
+      return 'Picture';
     default:
       return 'Church logo on a dark screen';
   }
@@ -89,6 +92,58 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
 
   // null = closed, 'new' = add-card flow, a PreCard = editing that card.
   const [editing, setEditing] = useState<PreCard | 'new' | null>(null);
+  // Cancelling an editor with something typed in it hides it instead of unmounting it,
+  // and offers Undo for five seconds (rule 4: undo, not confirm). Keeping the component
+  // mounted is the whole mechanism: the draft is still there, untouched, if Undo is taken.
+  const [editorHidden, setEditorHidden] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
+  // Bumped on every open, so reopening the same card after a discarded draft starts clean.
+  const [editorSession, setEditorSession] = useState(0);
+  const draftUndo = useTimedUndo<true>();
+  const editorShown = editing !== null && !editorHidden;
+  const editorMounted = editing !== null && (!editorHidden || draftUndo.pending !== null);
+
+  const openEditor = (target: PreCard | 'new'): void => {
+    draftUndo.cancel();
+    setEditorHidden(false);
+    setEditorDirty(false);
+    setEditorSession((n) => n + 1);
+    setEditing(target);
+  };
+  /** After a save or a delete: nothing left to keep. */
+  const closeEditor = (): void => {
+    draftUndo.cancel();
+    setEditorHidden(false);
+    setEditing(null);
+  };
+  /** Cancel, Escape, or a click beside the editor. */
+  const cancelEditor = (): void => {
+    if (!editorDirty) {
+      closeEditor();
+      return;
+    }
+    setEditorHidden(true);
+    draftUndo.arm(true);
+  };
+  const reopenDraft = (): void => {
+    draftUndo.cancel();
+    setEditorHidden(false);
+  };
+
+  // Typing one more item onto a list card without opening the editor: the card id whose
+  // inline field is open, and what is in it.
+  const [quickAdd, setQuickAdd] = useState<{ id: string; text: string } | null>(null);
+  const commitQuickAdd = (): void => {
+    if (!quickAdd) return;
+    const card = cards.find((c) => c.id === quickAdd.id);
+    const [item] = cleanListPoints([quickAdd.text]);
+    if (!card || !item) return;
+    // saveCard refreshes the screen when this card is the one on it, so a request handed
+    // in mid-loop shows up the moment it is typed.
+    window.helm.preservice.saveCard({ ...card, points: [...(card.points ?? []), item] });
+    // The field stays open, emptied: requests tend to arrive several at a time.
+    setQuickAdd({ id: card.id, text: '' });
+  };
 
   // The standard list kit (#90). `sel` is the delete-selection, kept entirely separate
   // from the engine's `idx` — that is the card the loop is ON, and selecting rows to
@@ -171,8 +226,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
   //   Take down      → the last rung of the Escape ladder, as everywhere else.
   //   1-9            → a tap on card N (select + showCard), so it inherits the tap's guarantee.
   //
-  // The ladder has no blur rung: the only text entry on this page lives inside
-  // PreCardEditor, which the first rung closes outright.
+  // The ladder has no blur rung: the page's text entry lives inside PreCardEditor, which
+  // the first rung closes, and in the rail's quick-add field, which consumes its own Escape.
   //
   // While inactive, skip touching the ref entirely rather than nulling it: App keeps all
   // three pages mounted (keep-alive contract), so a mode switch re-runs every page's
@@ -185,13 +240,13 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
       onEscape: () =>
         runEscapeLadder({
           closeOverlay: () => {
-            if (editing === null) return false;
-            setEditing(null);
+            if (!editorShown) return false;
+            cancelEditor();
             return true;
           },
           // A stray Escape while a delete-range is picked out drops the range, not the screen.
           clearSelection: clearSelectionRung(sel),
-          // The only text entry on this page lives inside PreCardEditor, which rung 1 closes.
+          // PreCardEditor is closed by rung 1; the quick-add field closes on its own Escape.
           leaveField: false,
           // `takeDown` also disengages the loop (see its comment above).
           takeDown: takeDownWhenLive(output, takeDown)
@@ -200,7 +255,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
       onGoLive: () => {
         if (verbs.primary.enabled) runPreVerb(verbs.primary.id);
       },
-      isModalOpen: () => editing !== null,
+      isModalOpen: () => editorShown,
       onDelete: () => {
         if (sel.selectedIds.length > 0) removeCards(sel.selectedIds);
       },
@@ -256,6 +311,17 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
+  };
+
+  const quickAddStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    height: '34px',
+    padding: '0 11px',
+    background: T.inputBg,
+    borderRadius: '9px',
+    boxShadow: `inset 0 0 0 1px ${T.border}`
   };
 
   const ghostBtn: CSSProperties = transportGhostBtn(T);
@@ -349,7 +415,7 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
           <div style={{ fontSize: '11.5px', color: T.faint, marginTop: '5px', lineHeight: 1.4 }}>
             {`${railHint('card', { range: 'select a range' })} Toggle cards in or out of the rotation.`}
           </div>
-          <button style={addChipStyle} onClick={() => setEditing('new')}>
+          <button style={addChipStyle} onClick={() => openEditor('new')}>
             + Add a card — verse, announcements, prayer…
           </button>
         </div>
@@ -393,7 +459,13 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               fontWeight: 500,
-              color: isShowing || isArmed ? T.accent : T.faint
+              color: isShowing || isArmed ? T.accent : T.faint,
+              // The name gives way to the badges and chips beside it, never wraps (rule 5):
+              // a second line made the row taller the moment a card was cued.
+              minWidth: 0,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
             };
             const snippetStyle: CSSProperties = {
               fontSize: '12.5px',
@@ -437,8 +509,8 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
               flexShrink: 0
             };
             return (
+              <div key={card.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
               <button
-                key={card.id}
                 data-pre-card={card.id}
                 data-selected={isSelected || undefined}
                 style={rowStyle}
@@ -461,9 +533,22 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                   // never inside a range; the logo card has no editor at all.
                   const inRange = isSelected && sel.selectedIds.length > 1;
                   const edit: ContextMenuItem[] =
-                    canEdit && !inRange ? [{ label: 'Edit', onSelect: () => setEditing(card) }] : [];
+                    canEdit && !inRange ? [{ label: 'Edit', onSelect: () => openEditor(card) }] : [];
+                  const addItem: ContextMenuItem[] =
+                    card.type === 'list' && !inRange
+                      ? [{ label: 'Add an item', onSelect: () => setQuickAdd({ id: card.id, text: '' }) }]
+                      : [];
+                  // One card at a time: a range has no single place to move to.
+                  const move: ContextMenuItem[] = inRange
+                    ? []
+                    : [
+                        { label: 'Move up', disabled: i === 0, onSelect: () => window.helm.preservice.moveCard(card.id, -1) },
+                        { label: 'Move down', disabled: i === cards.length - 1, onSelect: () => window.helm.preservice.moveCard(card.id, 1) }
+                      ];
                   contextMenu.open(e, [
                     ...edit,
+                    ...addItem,
+                    ...move,
                     ...deleteMenuItems(sel, card.id, 'cards', removeCards, {
                       // The logo card has no creation path, so it never goes (see isDeletable);
                       // the count names only the cards that actually will.
@@ -478,15 +563,28 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                     <RowNumber n={i + 1} color={T.faint} />
                     <div style={labelStyle}>{card.title}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                     {isShowing && <LiveBadge theme={T} />}
                     {isArmed && <span style={armedBadge}>● CUED</span>}
+                    {card.type === 'list' && (
+                      <span
+                        style={editChipStyle}
+                        data-quick-add={card.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuickAdd((q) => (q?.id === card.id ? null : { id: card.id, text: '' }));
+                        }}
+                        title="Add an item"
+                      >
+                        +
+                      </span>
+                    )}
                     {canEdit && (
                       <span
                         style={editChipStyle}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditing(card);
+                          openEditor(card);
                         }}
                         title="Edit card"
                       >
@@ -507,6 +605,34 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
                 </div>
                 <div style={snippetStyle}>{snippetFor(card)}</div>
               </button>
+              {quickAdd?.id === card.id && (
+                // One more item for this list, typed on the rail. Enter adds it and keeps
+                // the field open for the next; Escape closes it and is consumed here, so
+                // it never reaches the page ladder's take-down rung.
+                <div data-field style={quickAddStyle}>
+                  <span style={{ fontFamily: MONO, fontSize: '13px', color: T.accent }}>+</span>
+                  <input
+                    autoFocus
+                    data-quick-add-input={card.id}
+                    style={{ flex: 1, minWidth: 0, fontSize: '12.5px' }}
+                    value={quickAdd.text}
+                    placeholder="Add an item, then press Enter"
+                    onChange={(e) => setQuickAdd({ id: card.id, text: e.target.value })}
+                    onBlur={() => setQuickAdd((q) => (q && q.id === card.id && q.text.trim() === '' ? null : q))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitQuickAdd();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setQuickAdd(null);
+                      }
+                    }}
+                  />
+                </div>
+              )}
+              </div>
             );
           })}
         </div>
@@ -517,6 +643,9 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
             }
             onUndo={undoRemove}
           />
+        )}
+        {editorHidden && draftUndo.pending && (
+          <UndoToast label="" message="Closed without saving" onUndo={reopenDraft} />
         )}
       </div>
       <PanelDivider active={railPanel.dragging} onMouseDown={railPanel.startDrag} background={T.appBg} />
@@ -601,10 +730,14 @@ export function PreServiceMode({ active, keyHandlerRef }: PreServiceModeProps): 
         </div>
       </div>
 
-      {editing !== null && (
+      {editorMounted && editing !== null && (
         <PreCardEditor
+          key={editorSession}
           card={editing === 'new' ? null : editing}
-          onClose={() => setEditing(null)}
+          hidden={editorHidden}
+          onClose={closeEditor}
+          onCancel={cancelEditor}
+          onDirtyChange={setEditorDirty}
           onRemove={(card) => removeCards([card.id])}
         />
       )}

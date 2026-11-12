@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { JSX } from 'react'
 import { PreCardEditor } from './PreCardEditor'
 import { ThemeCtx } from './ThemeCtx'
 import { themeFor } from '../../shared/theme'
@@ -8,6 +9,7 @@ import type {
   BibleManifestEntry,
   BookExtent,
   ChapterData,
+  MediaItem,
   PreCard,
   VerseSearchResult
 } from '../../shared/types'
@@ -40,6 +42,8 @@ interface HelmOver {
   versions?: string[]
   getChapter?: (book: string, ch: number) => Promise<ChapterData>
   search?: (q: string, versionId: string) => Promise<VerseSearchResult>
+  media?: MediaItem[]
+  imported?: MediaItem[]
 }
 
 function installHelm(over: HelmOver = {}): {
@@ -61,6 +65,10 @@ function installHelm(over: HelmOver = {}): {
     settings: {
       get: (_key: string, fallback: unknown) => Promise.resolve(over.versions ?? fallback),
       set: vi.fn()
+    },
+    media: {
+      list: () => Promise.resolve(over.media ?? []),
+      importImages: () => Promise.resolve({ items: [...(over.media ?? []), ...(over.imported ?? [])] })
     }
   }
   return { saveCard, search }
@@ -428,18 +436,55 @@ describe('PreCardEditor frame', () => {
     expect(screen.getByTestId('pre-card-preview').textContent).toContain('Happy Easter')
   })
 
-  it('a click beside the editor closes it only while nothing has been typed', async () => {
+  it('Cancel and a click beside the editor both go to onCancel, never onClose', async () => {
+    // onClose means "saved or deleted". The page keeps a cancelled draft behind Undo, so
+    // it has to be able to tell the two apart.
     installHelm()
     const onClose = vi.fn()
-    renderEditor(null, onClose)
+    const onCancel = vi.fn()
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <PreCardEditor card={null} onClose={onClose} onCancel={onCancel} onRemove={() => {}} />
+      </ThemeCtx.Provider>
+    )
     await opened()
-    fireEvent.click(screen.getByText('List of items'))
-    fireEvent.change(items(), { target: { value: 'Half a prayer list' } })
     const backdrop = screen.getByText('Add a card to the loop').closest('[style*="position: fixed"]') as HTMLElement
     fireEvent.click(backdrop)
-    expect(onClose).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText('Cancel'))
-    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onCancel).toHaveBeenCalledTimes(2)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('reports whether there is anything to lose', async () => {
+    installHelm()
+    const onDirtyChange = vi.fn()
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <PreCardEditor card={null} onClose={() => {}} onRemove={() => {}} onDirtyChange={onDirtyChange} />
+      </ThemeCtx.Provider>
+    )
+    await opened()
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    fireEvent.click(screen.getByText('Big message'))
+    fireEvent.change(screen.getByPlaceholderText('Welcome'), { target: { value: 'Hi' } })
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+  })
+
+  it('draws nothing while hidden, and keeps its draft for when it comes back', async () => {
+    installHelm()
+    const ui = (hidden: boolean): JSX.Element => (
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <PreCardEditor card={null} onClose={() => {}} onRemove={() => {}} hidden={hidden} />
+      </ThemeCtx.Provider>
+    )
+    const { rerender } = render(ui(false))
+    await opened()
+    fireEvent.click(screen.getByText('Big message'))
+    fireEvent.change(screen.getByPlaceholderText('Welcome'), { target: { value: 'Happy Easter' } })
+    rerender(ui(true))
+    expect(screen.queryByText('Add a card to the loop')).toBeNull()
+    rerender(ui(false))
+    expect((screen.getByPlaceholderText('Welcome') as HTMLInputElement).value).toBe('Happy Easter')
   })
 
   it('an untouched editor still closes on a click beside it', async () => {
@@ -450,5 +495,115 @@ describe('PreCardEditor frame', () => {
     const backdrop = screen.getByText('Add a card to the loop').closest('[style*="position: fixed"]') as HTMLElement
     fireEvent.click(backdrop)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PreCardEditor translations', () => {
+  it('offers no chips with one Bible installed', async () => {
+    installHelm()
+    renderEditor()
+    await opened()
+    expect(document.querySelectorAll('[data-bible]').length).toBe(0)
+  })
+
+  it('a chip re-reads the card from that translation', async () => {
+    installHelm({ manifest: [KJV, WEB] })
+    renderEditor()
+    await opened()
+    type('joh 3:2')
+    await waitFor(() => expect(verseText().value).toBe('John 3:2 kjv'))
+    fireEvent.click(document.querySelector('[data-bible="web"]') as HTMLElement)
+    await waitFor(() => expect(verseText().value).toBe('John 3:2 web'))
+    expect(document.querySelector('[data-bible="web"]')?.getAttribute('data-selected')).toBe('true')
+  })
+})
+
+describe('PreCardEditor a card per verse', () => {
+  const pickRange = async (): Promise<void> => {
+    type('joh 3')
+    await waitFor(() => expect(document.querySelectorAll('[data-pick-verse]').length).toBe(3))
+    fireEvent.click(document.querySelector('[data-pick-verse="1"]') as HTMLElement)
+    fireEvent.click(document.querySelector('[data-pick-verse="3"]') as HTMLElement, { shiftKey: true })
+    await waitFor(() => expect(document.querySelector('[data-split]')).toBeTruthy())
+  }
+
+  it('is offered only for a range', async () => {
+    installHelm()
+    renderEditor()
+    await opened()
+    type('joh 3:2')
+    await waitFor(() => expect(verseText().value).toBe('John 3:2 kjv'))
+    expect(document.querySelector('[data-split]')).toBeNull()
+  })
+
+  it('adds one card for each verse, in order, each named for its reference', async () => {
+    const { saveCard } = installHelm()
+    renderEditor()
+    await opened()
+    await pickRange()
+    fireEvent.click(screen.getByRole('button', { name: 'A card per verse' }))
+    expect(document.querySelector('[data-split-note]')?.textContent).toContain('Adds 3 cards')
+    // The preview is the first of them, not the joined passage.
+    expect(screen.getByTestId('pre-card-preview').textContent).not.toContain('John 3:2 kjv')
+    fireEvent.click(saveButton())
+    expect(saveCard.mock.calls.map((c) => [c[0].ref, c[0].title, c[0].text, c[0].id])).toEqual([
+      ['John 3:1', 'John 3:1', 'John 3:1 kjv', undefined],
+      ['John 3:2', 'John 3:2', 'John 3:2 kjv', undefined],
+      ['John 3:3', 'John 3:3', 'John 3:3 kjv', undefined]
+    ])
+  })
+
+  it('still saves the range as one card by default', async () => {
+    const { saveCard } = installHelm()
+    renderEditor()
+    await opened()
+    await pickRange()
+    fireEvent.click(saveButton())
+    expect(saveCard).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PreCardEditor picture cards', () => {
+  const pic = (id: string, title: string): MediaItem => ({
+    id,
+    type: 'image',
+    title,
+    filePath: `images/${id}.jpg`,
+    slides: [],
+    createdAt: 0
+  })
+  const VIDEO: MediaItem = { id: 'v', type: 'video', title: 'Clip', filePath: 'video/v.mp4', slides: [], createdAt: 0 }
+
+  it('lists the pictures in the media library, and a click puts one on the card', async () => {
+    const { saveCard } = installHelm({ media: [pic('a', 'Baptism Sunday'), VIDEO] })
+    renderEditor()
+    await opened()
+    fireEvent.click(screen.getByText('Picture'))
+    await waitFor(() => expect(document.querySelectorAll('[data-picture]').length).toBe(1))
+    expect(saveButton().disabled).toBe(true)
+    expect(saveButton().title).toBe('Pick a picture first')
+    fireEvent.click(document.querySelector('[data-picture="a"]') as HTMLElement)
+    fireEvent.click(saveButton())
+    expect(saveCard).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'image', title: 'Baptism Sunday', src: 'helm-media://images/a.jpg' })
+    )
+  })
+
+  it('invites an import when the library has no pictures, and picks what was imported', async () => {
+    installHelm({ imported: [pic('n', 'New flyer')] })
+    renderEditor()
+    await opened()
+    fireEvent.click(screen.getByText('Picture'))
+    const empty = await screen.findByText(/No pictures in the media library yet/)
+    expect(empty.querySelector('b')?.textContent).toBe('+ Import')
+    fireEvent.click(screen.getByRole('button', { name: '+ Import' }))
+    await waitFor(() => expect(document.querySelector('[data-picture="n"]')?.getAttribute('data-selected')).toBe('true'))
+    expect(saveButton().disabled).toBe(false)
+  })
+
+  it('opens a saved picture card on the Picture editor', async () => {
+    installHelm({ media: [pic('a', 'Baptism Sunday')] })
+    renderEditor({ id: 'i1', type: 'image', title: 'Baptism Sunday', src: 'helm-media://images/a.jpg', enabled: true })
+    await waitFor(() => expect(document.querySelector('[data-picture="a"]')?.getAttribute('data-selected')).toBe('true'))
   })
 })

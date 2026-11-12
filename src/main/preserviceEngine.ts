@@ -22,6 +22,7 @@ export interface PreserviceEngine {
   toggleEnabled(cardId: string): void;
   saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void; removeCard(id: string): void;
   restoreCard(card: PreCard, index: number): void;
+  moveCard(id: string, delta: 1 | -1): void;
   tick(): void; dispose(): void;
 }
 const DWELL_MIN = 5, DWELL_MAX = 60;
@@ -189,6 +190,19 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
       const i = selectedId === undefined ? -1 : cards.findIndex((c) => c.id === selectedId);
       idx = i >= 0 ? i : 0;
       clampIdx();
+      emit();
+    },
+    // Reordering the rotation. Like restoreCard it touches no screen call, and re-pins the
+    // selection by card id: the card on screen (or cued) is the same card after the move,
+    // only its place in the order changes, so the loop carries on from it.
+    moveCard(id, delta) {
+      const from = cards.findIndex((c) => c.id === id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= cards.length) return;
+      const selectedId = cards[idx]?.id;
+      cards = repo.move(id, to);
+      const i = cards.findIndex((c) => c.id === selectedId);
+      if (i >= 0) idx = i;
       emit();
     },
     tick, dispose() { stopTimer(); subs.clear(); }

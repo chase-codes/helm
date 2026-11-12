@@ -7,7 +7,7 @@ const PAYLOAD_KEYS = ['headline', 'subtitle', 'ref', 'text', 'version', 'points'
 
 const SEED: Omit<PreCard, 'id'>[] = [
   { type: 'message', title: 'Welcome', headline: 'Welcome', subtitle: 'We\'re glad you\'re here this morning', enabled: true },
-  { type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'I was glad when they said unto me, Let us go into the house of the LORD.', enabled: true },
+  { type: 'verse', title: 'Psalm 122:1', ref: 'Psalm 122:1', text: 'I was glad when they said unto me, Let us go into the house of the LORD.', version: 'KJV', enabled: true },
   { type: 'list', title: 'Announcements', points: ['Fellowship dinner — next Sunday after service', 'Youth night — Wednesday 7:00 PM', 'Fall campout sign-up sheet in the foyer'], enabled: true },
   { type: 'list', title: 'Prayer Requests', points: ['The Hollis family', 'Sis. Ruth — recovering from surgery', 'Traveling ministers this week'], enabled: true },
   { type: 'logo', title: 'Logo', enabled: false }
@@ -35,6 +35,8 @@ export interface PreCardsRepo {
    */
   restore(card: PreCard, index: number): PreCard[];
   setEnabled(id: string, enabled: boolean): PreCard[];
+  /** Move a card to `index` in the rotation, shifting the cards between. */
+  move(id: string, index: number): PreCard[];
 }
 
 export function createPreCardsRepo(db: Database.Database): PreCardsRepo {
@@ -99,6 +101,18 @@ export function createPreCardsRepo(db: Database.Database): PreCardsRepo {
       restoreTx();
       return list();
     },
-    setEnabled(id, enabled) { setEn.run(enabled ? 1 : 0, id); return list(); }
+    setEnabled(id, enabled) { setEn.run(enabled ? 1 : 0, id); return list(); },
+    // Same splice-and-renumber as `restore`, for the same reason: positions are only ever
+    // read through ORDER BY, so rewriting them densely is the one move that cannot collide.
+    move(id, index) {
+      const ids = list().map((c) => c.id);
+      const from = ids.indexOf(id);
+      if (from < 0) return list();
+      ids.splice(from, 1);
+      ids.splice(Math.max(0, Math.min(index, ids.length)), 0, id);
+      const moveTx = db.transaction(() => ids.forEach((cardId, i) => setPos.run(i, cardId)));
+      moveTx();
+      return list();
+    }
   };
 }
