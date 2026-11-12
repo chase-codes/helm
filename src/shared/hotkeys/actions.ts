@@ -54,7 +54,13 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'go.live', label: 'Go live', scope: 'global', defaults: ['Enter'] },
   { id: 'nav.next', label: 'Next', scope: 'global', defaults: ['ArrowRight', 'ArrowDown'] },
   { id: 'nav.prev', label: 'Previous', scope: 'global', defaults: ['ArrowLeft', 'ArrowUp'] },
-  { id: 'item.delete', label: 'Delete selected', scope: 'global', defaults: ['Delete', 'Backspace'] },
+  {
+    id: 'item.delete',
+    label: 'Delete selected',
+    scope: 'global',
+    defaults: ['Delete', 'Backspace'],
+    note: 'Scripture readings and Message quotes. Pre-service cards, songs and media ask for a confirming click instead, so the key does nothing there.'
+  },
   // One digit block for every page (grammar rule 9). Songs shadows it by scope with Verse
   // 1-9; Slides reads it as slide N of the cued deck (see SlidesTrack's onAction).
   {
