@@ -320,6 +320,32 @@ describe('preserviceEngine', () => {
       expect(presentation().liveSnap?.title).toBe('Welcome'); // still the live card
     });
 
+    it('a new card is cued, without touching a dark screen', () => {
+      const { engine, presentation } = harness();
+      engine.saveCard({ type: 'message', title: 'Easter', headline: 'Happy Easter', enabled: true });
+      const s = engine.getState();
+      expect(s.cards[s.idx].title).toBe('Easter');
+      expect(presentation().output).not.toBe('live');
+    });
+
+    it('an edited card is cued when pre-service is not on screen', () => {
+      const { engine, repo } = harness();
+      const other = repo.list()[2];
+      engine.saveCard({ ...other, title: 'CHANGED' });
+      expect(engine.getState().idx).toBe(2);
+    });
+
+    it('adding a card while the loop is running leaves the rotation alone', () => {
+      const { engine, presentation } = harness();
+      engine.engage();
+      const held = presentation().liveKey;
+      engine.saveCard({ type: 'message', title: 'Easter', headline: 'Happy Easter', enabled: true });
+      expect(engine.getState().idx).toBe(0);
+      engine.tick();
+      expect(engine.getState().engaged).toBe(true);
+      expect(presentation().liveKey).toBe(held);
+    });
+
     it('deleting the card that is on screen replaces it', () => {
       const { engine, presentation, repo } = harness();
       engine.showNow();

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import { type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 import type { Theme } from '../../shared/theme';
 import type { RefGhost } from '../../shared/scripture/refBuilder';
 import { TrackTabs } from './TrackTabs';
@@ -6,16 +6,11 @@ import { UndoToast } from './UndoToast';
 import { DangerGhostButton } from './DangerGhostButton';
 import { ListEmpty } from './ListEmpty';
 import { ScriptureSearchResults, type ScriptureSearchState } from './ScriptureSearchResults';
-import { MONO } from '../shared/fonts';
 import { scheduleRowStyle } from './railTint';
 import { RowStateMark } from './StateBadge';
 import { railHint } from './railHints';
 import { RowNumber } from './RowNumber';
-import { focusRing } from './interactionVars';
-
-/** Shared by the input and its ghost overlay — they must render at the exact same size or
- * the transparent spacer copy drifts out from under the typed text (see Finding 3). */
-const entryFont: CSSProperties = { fontSize: '13.5px', fontFamily: MONO };
+import { ScriptureEntry } from './ScriptureEntry';
 
 export type SermonTrack = 'scripture' | 'message' | 'slides';
 
@@ -45,12 +40,7 @@ export interface SchedulePanelProps {
   value: string;
   onEntryChange: (v: string) => void;
   onEntryKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
-  /** Book-name completion preview for the entry field. Non-null exactly when space (or Tab)
-   * would commit a book while the entry has focus — see `bookCompletion` in refBuilder.
-   * Rendered as a dim overlay, never as part of `value`, and only while the input is
-   * focused: away from focus, space does nothing to the entry (it is not a go-live key
-   * either, #52), so a stale ghost must not imply it would still be accepted (see
-   * Finding 1). */
+  /** Book-name completion preview for the entry field (see ScriptureEntry). */
   ghost?: RefGhost | null;
   canAdd: boolean;
   addLabel: string;
@@ -91,21 +81,7 @@ export function SchedulePanel({
   entryRef,
   search
 }: SchedulePanelProps): JSX.Element {
-  // The ghost is derived from builder state alone and knows nothing about focus, but "space
-  // commits the book" is only true while this input has focus — when it doesn't, space
-  // reaches no handler at all (see Finding 1). Track focus locally and gate the overlay on it.
-  const [focused, setFocused] = useState(false);
   const panelStyle: CSSProperties = { width: `${width}px`, flexShrink: 0, background: T.panel, display: 'flex', flexDirection: 'column', minHeight: 0 };
-  const schedInputStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '9px',
-    height: '42px',
-    padding: '0 12px',
-    background: T.inputBg,
-    borderRadius: '10px',
-    boxShadow: `inset 0 0 0 1px ${T.border}`
-  };
   const schedAddStyle: CSSProperties = {
     width: '100%',
     height: '34px',
@@ -148,47 +124,16 @@ export function SchedulePanel({
       {track === 'scripture' && (
         <>
           <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
-            <div data-field style={{ ...schedInputStyle, ...focusRing(T.scripture) }}>
-              <span style={{ fontFamily: MONO, fontSize: '14px', color: T.scripture }}>&rsaquo;</span>
-              <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex' }}>
-                <input
-                  ref={entryRef}
-                  style={{ ...entryFont, flex: 1, minWidth: 0 }}
-                  value={value}
-                  onChange={(e) => onEntryChange(e.target.value)}
-                  onKeyDown={onEntryKeyDown}
-                  onFocus={() => setFocused(true)}
-                  onBlur={() => setFocused(false)}
-                  placeholder="Add verse — John 3:16, or search a word"
-                />
-                {ghost && focused && (
-                  // A transparent copy of the typed text advances the dim completion to
-                  // exactly the caret's offset — no text measuring, no scroll syncing (a
-                  // book name plus a reference never gets long enough to scroll this field).
-                  // Font must match the input exactly or the ghost drifts.
-                  <span
-                    data-ghost
-                    aria-hidden="true"
-                    style={{
-                      ...entryFont,
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      pointerEvents: 'none',
-                      whiteSpace: 'pre'
-                    }}
-                  >
-                    <span style={{ color: 'transparent' }}>{value}</span>
-                    <span data-ghost-text style={{ color: T.faint }}>
-                      {ghost.kind === 'tail' ? ghost.text : ` → ${ghost.book}`}
-                    </span>
-                  </span>
-                )}
-              </div>
-            </div>
+            <ScriptureEntry
+              theme={T}
+              accent={T.scripture}
+              value={value}
+              onChange={onEntryChange}
+              onKeyDown={onEntryKeyDown}
+              ghost={ghost}
+              inputRef={entryRef}
+              placeholder="Add verse — John 3:16, or search a word"
+            />
             {canAdd && (
               <button style={schedAddStyle} onClick={onAdd}>
                 {addLabel}

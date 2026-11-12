@@ -3,7 +3,6 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -28,7 +27,6 @@ import {
   searchQuery,
   type RefBuilderState
 } from '../../shared/scripture/refBuilder';
-import { matchPassages, type Passage } from '../../shared/scripture/passages';
 import { parseVerseQuery } from '../../shared/search/verseScore';
 import { railSelect, addTarget, type Cursor } from '../../shared/scripture/selection';
 import { buildScriptureSlide, keyForScripture, parseScriptureKey, pickVersion, verseCols } from '../../shared/scripture/slides';
@@ -39,12 +37,10 @@ import type {
   BookExtent,
   ChapterData,
   ScriptureReading,
-  Slide,
-  VerseHit,
-  VerseSearchResult
+  Slide
 } from '../../shared/types';
 import { SchedulePanel, type ScheduleRow, type SermonTrack } from './SchedulePanel';
-import { SEARCH_VERSE_ROWS, type ScriptureSearchState } from './ScriptureSearchResults';
+import type { ScriptureSearchState } from './ScriptureSearchResults';
 import { SermonCenter } from './SermonCenter';
 import { VersionPicker } from './VersionPicker';
 import { ChapterRail } from './ChapterRail';
@@ -55,7 +51,7 @@ import { deleteMenuItems, useListSelection } from './useListSelection';
 import { filterPending, useDeferredRemove } from './useDeferredRemove';
 import { usePanelWidth } from './usePanelWidth';
 import { useTakeGuard } from './useTakeGuard';
-import { useDebouncedSearch } from './useDebouncedSearch';
+import { useVerseSearch } from './useVerseSearch';
 import { PanelDivider } from './PanelDivider';
 import { clearSelectionRung, runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 
@@ -367,70 +363,13 @@ export function SermonMode({
     };
   }, [builder.book, scrBook, bookExtents]);
 
-  // --- Verse text search (refBuilder `search` stage). Results carry the query they were
-  // fetched for so a slow round-trip can't label stale hits under a newer query.
+  // --- Verse text search (refBuilder `search` stage). The search itself lives in
+  // `useVerseSearch`, shared with the pre-service card editor so both entries find the
+  // same verses.
   const query = isSearch(builder) ? searchQuery(builder) : null;
-  const [verseRes, setVerseRes] = useState<{ q: string; res: VerseSearchResult } | null>(null);
-  // Highlight is keyed by the query it was set for, so a new query reads as 0 without a
-  // reset effect (the repo's lint rejects set-state-in-effect) and a shrinking list is
-  // clamped below on the same render.
-  const [hiState, setHiState] = useState<{ q: string | null; i: number }>({ q: null, i: 0 });
   const primaryVersion = versions[0] ?? null;
-
-  // Keystrokes are debounced (#15); a translation change re-searches at once.
-  useDebouncedSearch(primaryVersion ? query : null, primaryVersion, (q, stillWanted) => {
-    const versionId = primaryVersion as string;
-    void window.helm.bibles
-      .search(q, versionId)
-      .then((res) => {
-        if (stillWanted()) setVerseRes({ q, res });
-      })
-      .catch((err: unknown) => {
-        console.error(err);
-        if (stillWanted()) setVerseRes({ q, res: { hits: [], total: 0, versionId } });
-      });
-  });
-
-  // `settled` = the reply on screen answers THIS query in THIS translation. Until it does,
-  // the rail is still waiting: the empty state must not render (see ScriptureSearchResults),
-  // because between a keystroke and the IPC reply there is nothing to be empty ABOUT.
-  const settled =
-    query !== null &&
-    // Nothing to wait for: with no primary version the search effect never runs, so the
-    // INSTALL_HINT empty state is the settled answer and should show at once.
-    (!primaryVersion ||
-      (verseRes !== null && verseRes.q === query && verseRes.res.versionId === primaryVersion));
-  // What the rail SHOWS: the last reply for this translation, even when a newer query is
-  // already in flight. Holding the previous query's hits for a frame reads as a list
-  // catching up; blanking to "0 VERSES · No verses match" and refilling on every keystroke
-  // reads as the search breaking (SongsMode holds its rows the same way). Still gated on
-  // the translation: switching the primary version would otherwise sit the old
-  // translation's hits under the new abbr in the header.
-  const shown =
-    query !== null && verseRes && verseRes.res.versionId === primaryVersion ? verseRes.res : null;
-  // Memoised on the query: this component re-renders on every hover and cursor move while
-  // the results are up, and the story table is several hundred entries to score.
-  const passageHits: Passage[] = useMemo(() => (query !== null ? matchPassages(query) : []), [query]);
-  // Capped to the rows the rail actually RENDERS. Main returns up to 50; the keyboard
-  // index, `+ Add` and the visible list have to be one list, or ArrowDown walks past the
-  // last row on screen and `+ Add` names a hit nobody can see. The header's `total` is the
-  // full match count and is deliberately not capped.
-  const verseHits: VerseHit[] = shown ? shown.hits.slice(0, SEARCH_VERSE_ROWS) : [];
-  const verseTotal = shown ? shown.total : 0;
-  const resultCount = passageHits.length + verseHits.length;
-  const highlighted = hiState.q === query ? hiState.i : 0;
-  const hi = resultCount ? Math.min(highlighted, resultCount - 1) : 0;
-  const setHighlighted = (i: number): void => setHiState({ q: query, i });
-
-  // The reference a picked result stands for (passages first, then verses).
-  const resultRef = (i: number): ParsedRef | null => {
-    if (i < passageHits.length) {
-      const p = passageHits[i];
-      return { book: p.book, ch: p.ch, from: p.from, to: p.to };
-    }
-    const v = verseHits[i - passageHits.length];
-    return v ? { book: v.book, ch: v.chapter, from: v.verse, to: v.verse } : null;
-  };
+  const { settled, verseTotal, resultCount, hi, setHighlighted, resultRef, rows: searchRows } =
+    useVerseSearch(query, primaryVersion);
 
   const curExtent = builder.book ? bookExtents[builder.book] ?? EMPTY_EXTENT : EMPTY_EXTENT;
 
@@ -952,19 +891,8 @@ export function SermonMode({
           tokens: parseVerseQuery(query).tokens,
           abbr: primaryVersion ? abbrOf(primaryVersion) : '',
           total: verseTotal,
-          passages: passageHits.map((p) => ({
-            // Title AND reference: one story lists once per account (the resurrection is
-            // four rows), and two stories can open on the same verse.
-            key: `p:${p.title}:${p.book}:${p.ch}:${p.from}`,
-            title: p.title,
-            meta: formatRef({ book: p.book, ch: p.ch, from: p.from, to: p.to })
-          })),
-          verses: verseHits.map((v) => ({
-            key: `v:${v.book}:${v.chapter}:${v.verse}`,
-            ref: formatRef({ book: v.book, ch: v.chapter, from: v.verse, to: v.verse }),
-            text: v.text,
-            near: v.near
-          })),
+          passages: searchRows.passages,
+          verses: searchRows.verses,
           highlighted: hi,
           onHover: (i) => {
             if (i !== null) setHighlighted(i);
@@ -976,6 +904,10 @@ export function SermonMode({
         };
 
   const onEntryKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
+    // Mod and Alt chords are the browser's (paste, select-all) and the hotkey registry's,
+    // never the reference builder's: without this, Cmd+V reached `applyKey` as a printable
+    // "v" and was swallowed, so a pasted reference typed one letter instead of loading.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     // While searching, the arrows move a HIGHLIGHT, never the cursor: the cursor commits to
     // the projector as it moves (see the show effect), so browsing results must not.
     if (query !== null) {

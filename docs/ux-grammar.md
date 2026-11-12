@@ -179,7 +179,7 @@ with variable steps get a fixed frame.
 - `src/renderer/operator/transport.ts:51` `transportGhostBtn` — ‹ Previous / Next › are nowrap and unshrinkable, so the bar never grows a second line.
 - `src/renderer/operator/railTint.ts:115-130` — two-line clamp for rail bodies.
 - `src/renderer/operator/PreServiceMode.tsx:236-239` — labels say what the click does (#92), which is what makes the row width constant.
-- `src/renderer/operator/ModalShell.tsx:16-17` — fixed `height` so a wizard does not resize under the operator; `SettingsModal.tsx:423` takes one (560px) so switching sections never moves the section list or Done. `PreCardEditor.tsx:225` pins its title and its buttons and scrolls only the fields.
+- `src/renderer/operator/ModalShell.tsx:16-17` — fixed `height` so a wizard does not resize under the operator; `SettingsModal.tsx:423` takes one (560px) so switching sections never moves the section list or Done. `PreCardEditor.tsx` takes one too (680px), so switching card type never moves the tabs, the preview or the save button; each of its two columns scrolls its own list.
 - `src/renderer/operator/SlidesTrack.tsx:448-450`, `Header.tsx:245` — tabular numerals so counters do not jitter.
 
 **Why:** a control whose position depends on the song library cannot be hit by muscle memory.
@@ -236,6 +236,7 @@ tooltips say why.
 - `src/renderer/operator/SermonCenter.tsx:30-34` — `canGoLive` contract; `:172-174`, `:267-274` ghost + "Nothing to take" tooltip; `:259` "Nothing on screen".
 - `src/renderer/operator/SongsMode.tsx:882-885`, `:1002`, `:1010`; `preTransport.ts:57-73` (Show this card ghosts with "add a card first" on an empty loop, pinned in `preTransport.test.ts`).
 - `src/renderer/operator/transport.ts:36-42` — the ghost look, "the slot holds its ground, disabled".
+- `src/renderer/operator/PreCardEditor.tsx` `blocked`: Add to loop ghosts on a card with nothing on it (no verse, no items) and its tooltip says what is missing; the verse finder's empty pane (`PreVersePicker.tsx`) names the entry that fills it. `PreCardEditor.test.tsx` "ghosts Add to loop".
 - `src/shared/presentation/core.ts:99-107` — kernel counterpart: `'live'` with no key is refused.
 
 **Why:** a green, armed button over an empty hero promises something that cannot happen.
@@ -285,6 +286,13 @@ Songs reads digits as Verse N and Slides as slide N of the cued deck, whose rail
 numbered. Shift+Enter is an entry-field gesture (the Scripture entry's "take this reference
 live") and has no page-level binding.
 
+A verse is looked up through one entry wherever it is looked up. The Scripture track and
+the pre-service card editor render the same field (`ScriptureEntry`), run the same state
+machine (`refBuilder`: book ghost, space or Tab commits, digits clamp to the book) and the
+same search (`useVerseSearch`: stories first, then verses). Only the commit differs: the
+track files a reading or takes the screen, the editor fills a card. Mod and Alt chords
+pass through the entry untouched, so paste and the registry's shortcuts work in both.
+
 **Enforced by**
 - `src/renderer/operator/escapeLadder.ts:21-36`: `EscapeLadder` and `runEscapeLadder`, the rung order; `:40` `blurFocusedField`, `:49` `takeDownWhenLive`, `:59` `clearSelectionRung`; `escapeLadder.test.ts`.
 - Adopters: `SongsMode.tsx:745` (`onEscape`), `SermonMode.tsx:1040` (`onEscape`; `:1049` routes `clearSelection` and `:1078` routes `onAction` to `MessageKeyHandler` / `SlidesKeyHandler`), `MessageMode.tsx:409-421`, `SlidesTrack.tsx:385`, `PreServiceMode.tsx:152` (`onEscape`), `:177` (`onAction`).
@@ -292,6 +300,7 @@ live") and has no page-level binding.
 - `src/shared/hotkeys/actions.ts:60-68`: the global `item.jump` digit block, shadowed on Songs by `song.verse` (`:73`); `:24` `note`, rendered by `ShortcutsSettings.tsx:152-159`.
 - `src/renderer/operator/keyDispatch.ts:34`: Escape first; `:85` registry actions behind the typing and modal guards; `keyDispatch.test.ts:160` pins digits on every scope.
 - `src/renderer/operator/RowNumber.tsx:8`: `SchedulePanel.tsx:238`, `MessageSearchRail.tsx:286`, `PreServiceMode.tsx:458`.
+- `src/renderer/operator/ScriptureEntry.tsx`, `useVerseSearch.ts`: the shared entry and search; adopters `SchedulePanel.tsx` + `SermonMode.tsx` (`onEntryKeyDown`) and `PreVersePicker.tsx` + `usePreVerse.ts` (`onKeyDown`, which also clears the entry on the first Escape before the page ladder closes the editor). `PreCardEditor.test.tsx` "completes a book name the way the Scripture track does" and "Escape clears the entry first"; `SermonMode.test.tsx` "leaves the paste chord to the browser".
 - Mode tests: "Escape backs out progressively" (`SermonMode.test.tsx:1274`) and the quote schedule list kit (`:2284`), "SongsMode escape chain" (`SongsMode.test.tsx:680`), "the Escape ladder" (`PreServiceMode.test.tsx:570`).
 
 **Why:** an operator moving between pages must not have to remember which page blacks the screen on the first Escape, or which page ignores the number keys.

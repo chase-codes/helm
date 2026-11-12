@@ -66,6 +66,11 @@ Used by `SectionRail.tsx` (sections), `ChapterRail.tsx:38` (verses), `ParagraphR
 (paragraphs), the `SlidesTrack.tsx` deck rail (slides) and the `PreServiceMode.tsx` rail
 hint (cards). The Scripture schedule's hint lands with decision 3.
 
+The pre-service card editor's verse list has nothing to cue and nothing live, so it keeps
+the words and changes the verb: "Click a verse to put it on the card. Shift-click to build
+a range." (`PreVersePicker.tsx`). Its save button is `Add to loop` on a new card and
+`Save changes` on an existing one; Mod+Enter is its key.
+
 ## Fixed messages
 
 - No Bible installed: "Install a Bible in Settings → Bibles" (`INSTALL_HINT`,

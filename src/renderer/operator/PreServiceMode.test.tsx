@@ -90,7 +90,15 @@ function installHelmStub(
       get: () => Promise.resolve(pres),
       onState: () => () => {},
       setOutput
-    }
+    },
+    // The card editor loads the Bible its verse finder reads from as it opens.
+    bibles: {
+      manifest: () => Promise.resolve([]),
+      getChapter: () => Promise.resolve({ book: '', chapter: 0, verseCount: 0, verses: {} }),
+      bookExtent: () => Promise.resolve({ chapters: 0, verseCounts: [] }),
+      search: () => Promise.resolve({ hits: [], total: 0, versionId: '' })
+    },
+    settings: { get: (_key: string, fallback: unknown) => Promise.resolve(fallback), set: vi.fn() }
   }
   return { showCard, showNow, takeCard, removeCard, restoreCard, step, engage, disengage, setOutput }
 }

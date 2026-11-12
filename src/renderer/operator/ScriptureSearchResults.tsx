@@ -39,11 +39,11 @@ const headerStyle = (T: Theme): CSSProperties => ({
   fontSize: '10px', letterSpacing: '0.1em', color: T.faint, fontWeight: 600, padding: '0 14px 6px', flexShrink: 0
 });
 
-const rowStyle = (T: Theme, highlighted: boolean): CSSProperties => ({
+const rowStyle = (T: Theme, accent: string, highlighted: boolean): CSSProperties => ({
   display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: '100%', textAlign: 'left',
   padding: '8px 11px', borderRadius: '11px', cursor: 'pointer', userSelect: 'none', gap: '2px',
   background: highlighted ? T.panel2 : 'transparent',
-  boxShadow: highlighted ? `inset 0 0 0 1.5px ${T.scripture}` : 'none'
+  boxShadow: highlighted ? `inset 0 0 0 1.5px ${accent}` : 'none'
 });
 
 interface RowProps {
@@ -52,6 +52,7 @@ interface RowProps {
   body?: string;
   bodySegs?: { text: string; hit: boolean }[];
   theme: Theme;
+  accent: string;
   highlighted: boolean;
   onHover: (i: number | null) => void;
   onPick: (i: number) => void;
@@ -61,10 +62,10 @@ interface RowProps {
 /** Declared at module scope, NOT inside ScriptureSearchResults — an inline component is a
  * new type every render, so React would remount the list on each keystroke/hover and the
  * second half of a double-click would land on a detached node (see SongSearchRail's Row). */
-function Row({ index, title, body, bodySegs, theme: T, highlighted, onHover, onPick, onActivate }: RowProps): JSX.Element {
+function Row({ index, title, body, bodySegs, theme: T, accent, highlighted, onHover, onPick, onActivate }: RowProps): JSX.Element {
   return (
     <button
-      style={rowStyle(T, highlighted)}
+      style={rowStyle(T, accent, highlighted)}
       // Marks this as a RESULT row (the schedule's rows carry `data-schedule-row`): the ref
       // a hit shows also appears in the hero once the cursor lands on it, so a test looking
       // for "Luke 19:5" needs a way to mean this list and not the whole mode.
@@ -90,7 +91,16 @@ function Row({ index, title, body, bodySegs, theme: T, highlighted, onHover, onP
 
 export const SEARCH_VERSE_ROWS = 10;
 
-export function ScriptureSearchResults({ theme: T, search: s }: { theme: Theme; search: ScriptureSearchState }): JSX.Element {
+export interface ScriptureSearchResultsProps {
+  theme: Theme;
+  search: ScriptureSearchState;
+  /** The highlight ring follows the host track, as UndoToast's accent does (#92):
+   * `T.scripture` on the Scripture track (the default), `T.accent` in the pre-service
+   * card editor. */
+  accent?: string;
+}
+
+export function ScriptureSearchResults({ theme: T, search: s, accent = T.scripture }: ScriptureSearchResultsProps): JSX.Element {
   const count = `${s.total} ${s.total === 1 ? 'VERSE' : 'VERSES'}${s.abbr ? ` · ${s.abbr}` : ''}`;
   const verses = s.verses.slice(0, SEARCH_VERSE_ROWS);
   // Only an ANSWERED query can be empty. While one is in flight the list area stays blank
@@ -107,7 +117,7 @@ export function ScriptureSearchResults({ theme: T, search: s }: { theme: Theme; 
         {!s.noVersion && nothing && <ListEmpty>No verses match “{s.query.trim()}”.</ListEmpty>}
         {s.passages.length > 0 && <div style={{ ...headerStyle(T), padding: '4px 4px 2px' }}>PASSAGES</div>}
         {s.passages.map((p, i) => (
-          <Row key={p.key} index={i} title={p.title} body={p.meta} theme={T} highlighted={s.highlighted === i}
+          <Row key={p.key} index={i} title={p.title} body={p.meta} theme={T} accent={accent} highlighted={s.highlighted === i}
             onHover={s.onHover} onPick={s.onPick} onActivate={s.onActivate} />
         ))}
         {s.passages.length > 0 && verses.length > 0 && firstNear !== 0 && <div style={{ ...headerStyle(T), padding: '8px 4px 2px' }}>VERSES</div>}
@@ -116,7 +126,7 @@ export function ScriptureSearchResults({ theme: T, search: s }: { theme: Theme; 
           return (
             <Fragment key={v.key}>
               {j === firstNear && <div style={{ ...headerStyle(T), padding: '8px 4px 2px' }}>CLOSE MATCHES</div>}
-              <Row index={i} title={v.ref} bodySegs={highlightTokens(v.text, s.tokens)} theme={T}
+              <Row index={i} title={v.ref} bodySegs={highlightTokens(v.text, s.tokens)} theme={T} accent={accent}
                 highlighted={s.highlighted === i} onHover={s.onHover} onPick={s.onPick} onActivate={s.onActivate} />
             </Fragment>
           );

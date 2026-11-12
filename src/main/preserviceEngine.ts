@@ -123,12 +123,22 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     setDwell(delta) { dwellS = Math.max(DWELL_MIN, Math.min(DWELL_MAX, dwellS + delta)); loopT = 0; emit(); },
     toggleEnabled(cardId) { const c = cards.find((x) => x.id === cardId); if (c) cards = repo.setEnabled(cardId, !c.enabled); clampIdx(); emit(); },
     saveCard(c) {
+      const before = cards[idx];
+      const known = new Set(cards.map((x) => x.id));
       cards = repo.save(c);
+      // The card just written: by id when it was an edit, else the one row that is new.
+      const i = c.id === undefined ? cards.findIndex((x) => !known.has(x.id)) : cards.findIndex((x) => x.id === c.id);
+      if (i < 0) { emit(); return; }
       // A card can now be live with no rotation behind it (showNow, or disengage while
       // still projecting), so nothing else would ever re-push it: editing the card the
       // congregation is reading has to refresh the screen itself.
-      const i = c.id === undefined ? -1 : cards.findIndex((x) => x.id === c.id);
-      if (i >= 0 && sink.isLive(preKey(cards[i].id))) { idx = i; pushLive(); }
+      if (sink.isLive(preKey(cards[i].id))) { idx = i; pushLive(); }
+      // Otherwise cue what was just written, so the preview shows the card the operator
+      // has just finished instead of whichever one happened to be selected. Cue only: no
+      // screen call, and not while the selected card is the one on screen. Moving `idx`
+      // off a live card would make the next tick read the loop as having lost the screen
+      // and stop it, and adding a card must never interrupt the rotation.
+      else if (!before || !sink.isLive(preKey(before.id))) idx = i;
       emit();
     },
     // Routed through pushShow, not `engaged`: a delete during the engaged-but-yielded window

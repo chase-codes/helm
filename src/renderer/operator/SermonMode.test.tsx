@@ -1161,6 +1161,20 @@ describe('SermonMode — the entry keeps up with the operator (#17, #18, #19)', 
     expect(sent.every((c) => JSON.stringify(c[1]).indexOf(INSTALL_HINT) === -1)).toBe(true)
   })
 
+  it('leaves the paste chord to the browser instead of typing a "v"', async () => {
+    // Cmd/Ctrl+V used to reach the builder as the printable "v" and be swallowed, so the
+    // paste never happened and the entry showed one stray letter.
+    installHelmStub()
+    render(<Harness />)
+    await waitFor(() => expect(screen.getByText('Verse 1')).toBeTruthy())
+
+    for (const chord of [{ metaKey: true }, { ctrlKey: true }]) {
+      const notPrevented = fireEvent.keyDown(entry(), { key: 'v', ...chord })
+      expect(notPrevented).toBe(true)
+      expect(entryValue()).toBe('')
+    }
+  })
+
   it('an absent chapter in an installed bible shows nothing rather than the install hint (#19)', async () => {
     const { show, goLive, take, getChapter, resolveChapter, resolveSecondChapter } = installHelmStub(NOTHING_LIVE, [], {}, {
       book: 'Genesis',
