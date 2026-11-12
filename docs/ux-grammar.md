@@ -152,7 +152,13 @@ lives in main, and a card left pending there for five seconds could rotate onto 
 audience screen after the operator deleted it. Same toast, same 5 s, same exact restore;
 only the moment of commit differs.
 
+**Closing an editor is the same rule.** Cancel, Escape or a click beside the pre-service
+card editor closes it at once; if anything had been typed, the rail shows `Closed without
+saving` with Undo for the same five seconds, and Undo brings the draft back exactly as it
+was. The page hides the editor instead of unmounting it, so there is no draft to copy.
+
 **Enforced by**
+- `src/renderer/operator/PreServiceMode.tsx` `cancelEditor` / `reopenDraft` (the hidden editor and its `useTimedUndo`), `PreCardEditor.tsx` `hidden`, `onCancel`, `onDirtyChange`; `PreServiceMode.test.tsx` "a closed draft can be undone (rule 4)".
 - `src/renderer/operator/useDeferredRemove.ts:39-58` — the rule-bearer: deferred commit, position-restoring undo; `:12-27` the `pendingNow()` contract; `:115-125` `filterPending`.
 - `src/renderer/operator/useTimedUndo.ts:13-18` (the 5000 ms primitive) and `PreServiceMode.tsx:79`, `:85-104` `removeCards`/`undoRemove`, with `src/main/preserviceEngine.ts:176` `restoreCard`: the pre-service commit-now exception.
 - `src/renderer/operator/UndoToast.tsx:14` — track-agnostic `Deleted <label>` toast, accent follows the host track (#92); `UndoToast.test.tsx`.
@@ -179,7 +185,7 @@ with variable steps get a fixed frame.
 - `src/renderer/operator/transport.ts:51` `transportGhostBtn` — ‹ Previous / Next › are nowrap and unshrinkable, so the bar never grows a second line.
 - `src/renderer/operator/railTint.ts:115-130` — two-line clamp for rail bodies.
 - `src/renderer/operator/PreServiceMode.tsx:236-239` — labels say what the click does (#92), which is what makes the row width constant.
-- `src/renderer/operator/ModalShell.tsx:16-17` — fixed `height` so a wizard does not resize under the operator; `SettingsModal.tsx:423` takes one (560px) so switching sections never moves the section list or Done. `PreCardEditor.tsx:225` pins its title and its buttons and scrolls only the fields.
+- `src/renderer/operator/ModalShell.tsx:16-17` — fixed `height` so a wizard does not resize under the operator; `SettingsModal.tsx:423` takes one (560px) so switching sections never moves the section list or Done. `PreCardEditor.tsx` takes one too (680px), so switching card type never moves the tabs, the preview or the save button; each of its two columns scrolls its own list.
 - `src/renderer/operator/SlidesTrack.tsx:448-450`, `Header.tsx:245` — tabular numerals so counters do not jitter.
 
 **Why:** a control whose position depends on the song library cannot be hit by muscle memory.
@@ -203,7 +209,12 @@ Pre-service), never in a list header and never at the foot of the list. It names
 will file (`+ Add John 3:16`, `+ Add ¶3`), or says Import when the source is a file
 (Slides). Importing from outside sits as a secondary row beneath it (Songs, Message).
 Right-click Edit is offered wherever a row has an editor (Songs, Pre-service), for a single
-row only.
+row only. Pre-service adds two more single-row entries: Move up / Move down, which reorder
+the loop without touching what is cued or on screen (dragging a card does the same over any
+distance, with a track-colour line showing where it will land; a drag never fires a click,
+so it cannot cue or switch a card), and Add an item on a list card, which
+opens a one-line field on the rail (Enter adds and keeps the field open, Escape closes it
+and is consumed there).
 
 The powers survive a page switch: all three pages stay mounted (`App.tsx` keep-alive) and
 register their keyboard delegate only while `active`, so a selection or a pending undo is
@@ -217,6 +228,7 @@ still there on return. Every side rail resizes through `usePanelWidth` + `PanelD
 - Deliberate non-adopters: `SongsMode.tsx` and `SlidesTrack.tsx`, the two libraries (rule 4 carve-out).
 - Add chips: `SongSearchRail.tsx:235` `addChipStyle`, `SchedulePanel.tsx:100` `schedAddStyle`, `MessageSearchRail.tsx:169` `addChipStyle` and `:155` import row, `SlidesTrack.tsx:383` `importChipStyle`, `PreServiceMode.tsx:200` `addChipStyle`.
 - `src/renderer/operator/App.tsx:168-179` — Pre-service joins the keep-alive wrapper; `PreServiceMode.tsx:89` `railPanel` and `:91-96` the menu-close guard while hidden. Pinned by "kept alive across page switches" and "the card rail resizes like every other side rail" in `PreServiceMode.test.tsx`.
+- `src/renderer/operator/PreServiceMode.tsx` (`move`, `addItem` in the row's context menu; `commitQuickAdd`), `src/main/preserviceEngine.ts` `moveCard`, `src/main/preCardsRepo.ts` `move`; `finishDrag` and the `draggable` row for drag and drop; "reordering the loop", "dragging a card to reorder" and "adding an item from the rail" in `PreServiceMode.test.tsx`.
 - `src/shared/scripture/selection.test.ts:148` — "the same semantics `useListSelection.selectTo` gives the schedule."
 - `docs/superpowers/specs/2026-07-06-interaction-primitives-design.md`, `2026-08-15-scripture-schedule-multiselect-design.md`.
 
@@ -236,6 +248,7 @@ tooltips say why.
 - `src/renderer/operator/SermonCenter.tsx:30-34` — `canGoLive` contract; `:172-174`, `:267-274` ghost + "Nothing to take" tooltip; `:259` "Nothing on screen".
 - `src/renderer/operator/SongsMode.tsx:882-885`, `:1002`, `:1010`; `preTransport.ts:57-73` (Show this card ghosts with "add a card first" on an empty loop, pinned in `preTransport.test.ts`).
 - `src/renderer/operator/transport.ts:36-42` — the ghost look, "the slot holds its ground, disabled".
+- `src/renderer/operator/PreCardEditor.tsx` `blocked`: Add to loop ghosts on a card with nothing on it (no verse, no items) and its tooltip says what is missing; the verse finder's empty pane (`PreVersePicker.tsx`) names the entry that fills it. `PreCardEditor.test.tsx` "ghosts Add to loop".
 - `src/shared/presentation/core.ts:99-107` — kernel counterpart: `'live'` with no key is refused.
 
 **Why:** a green, armed button over an empty hero promises something that cannot happen.
@@ -285,6 +298,13 @@ Songs reads digits as Verse N and Slides as slide N of the cued deck, whose rail
 numbered. Shift+Enter is an entry-field gesture (the Scripture entry's "take this reference
 live") and has no page-level binding.
 
+A verse is looked up through one entry wherever it is looked up. The Scripture track and
+the pre-service card editor render the same field (`ScriptureEntry`), run the same state
+machine (`refBuilder`: book ghost, space or Tab commits, digits clamp to the book) and the
+same search (`useVerseSearch`: stories first, then verses). Only the commit differs: the
+track files a reading or takes the screen, the editor fills a card. Mod and Alt chords
+pass through the entry untouched, so paste and the registry's shortcuts work in both.
+
 **Enforced by**
 - `src/renderer/operator/escapeLadder.ts:21-36`: `EscapeLadder` and `runEscapeLadder`, the rung order; `:40` `blurFocusedField`, `:49` `takeDownWhenLive`, `:59` `clearSelectionRung`; `escapeLadder.test.ts`.
 - Adopters: `SongsMode.tsx:745` (`onEscape`), `SermonMode.tsx:1040` (`onEscape`; `:1049` routes `clearSelection` and `:1078` routes `onAction` to `MessageKeyHandler` / `SlidesKeyHandler`), `MessageMode.tsx:409-421`, `SlidesTrack.tsx:385`, `PreServiceMode.tsx:152` (`onEscape`), `:177` (`onAction`).
@@ -292,6 +312,7 @@ live") and has no page-level binding.
 - `src/shared/hotkeys/actions.ts:60-68`: the global `item.jump` digit block, shadowed on Songs by `song.verse` (`:73`); `:24` `note`, rendered by `ShortcutsSettings.tsx:152-159`.
 - `src/renderer/operator/keyDispatch.ts:34`: Escape first; `:85` registry actions behind the typing and modal guards; `keyDispatch.test.ts:160` pins digits on every scope.
 - `src/renderer/operator/RowNumber.tsx:8`: `SchedulePanel.tsx:238`, `MessageSearchRail.tsx:286`, `PreServiceMode.tsx:458`.
+- `src/renderer/operator/ScriptureEntry.tsx`, `useVerseSearch.ts`: the shared entry and search; adopters `SchedulePanel.tsx` + `SermonMode.tsx` (`onEntryKeyDown`) and `PreVersePicker.tsx` + `usePreVerse.ts` (`onKeyDown`, which also clears the entry on the first Escape before the page ladder closes the editor). `PreCardEditor.test.tsx` "completes a book name the way the Scripture track does" and "Escape clears the entry first"; `SermonMode.test.tsx` "leaves the paste chord to the browser".
 - Mode tests: "Escape backs out progressively" (`SermonMode.test.tsx:1274`) and the quote schedule list kit (`:2284`), "SongsMode escape chain" (`SongsMode.test.tsx:680`), "the Escape ladder" (`PreServiceMode.test.tsx:570`).
 
 **Why:** an operator moving between pages must not have to remember which page blacks the screen on the first Escape, or which page ignores the number keys.

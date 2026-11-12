@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react'
+import { render, screen, fireEvent, createEvent, cleanup, act, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import type { JSX } from 'react'
 import { PreServiceMode } from './PreServiceMode'
@@ -59,6 +59,8 @@ function installHelmStub(
   engage: ReturnType<typeof vi.fn>
   disengage: ReturnType<typeof vi.fn>
   setOutput: ReturnType<typeof vi.fn>
+  saveCard: ReturnType<typeof vi.fn>
+  moveCard: ReturnType<typeof vi.fn>
 } {
   const showCard = vi.fn()
   const showNow = vi.fn()
@@ -69,6 +71,8 @@ function installHelmStub(
   const engage = vi.fn()
   const disengage = vi.fn()
   const setOutput = vi.fn()
+  const saveCard = vi.fn()
+  const moveCard = vi.fn()
   ;(window as unknown as { helm: unknown }).helm = {
     preservice: {
       getState: () => Promise.resolve(state),
@@ -82,7 +86,8 @@ function installHelmStub(
       toggleLoop: vi.fn(),
       setDwell: vi.fn(),
       toggleEnabled: vi.fn(),
-      saveCard: vi.fn(),
+      saveCard,
+      moveCard,
       removeCard,
       restoreCard
     },
@@ -90,9 +95,17 @@ function installHelmStub(
       get: () => Promise.resolve(pres),
       onState: () => () => {},
       setOutput
-    }
+    },
+    // The card editor loads the Bible its verse finder reads from as it opens.
+    bibles: {
+      manifest: () => Promise.resolve([]),
+      getChapter: () => Promise.resolve({ book: '', chapter: 0, verseCount: 0, verses: {} }),
+      bookExtent: () => Promise.resolve({ chapters: 0, verseCounts: [] }),
+      search: () => Promise.resolve({ hits: [], total: 0, versionId: '' })
+    },
+    settings: { get: (_key: string, fallback: unknown) => Promise.resolve(fallback), set: vi.fn() }
   }
-  return { showCard, showNow, takeCard, removeCard, restoreCard, step, engage, disengage, setOutput }
+  return { showCard, showNow, takeCard, removeCard, restoreCard, step, engage, disengage, setOutput, saveCard, moveCard }
 }
 
 const renderMode = (
@@ -508,7 +521,7 @@ describe('PreServiceMode: right-click Edit, as on Songs', () => {
     await screen.findByText('Psalm 122:1')
 
     fireEvent.contextMenu(rowFor('Psalm 122:1'))
-    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Edit', 'Delete'])
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Edit', 'Move up', 'Move down', 'Delete'])
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
     expect(keyHandlerRef.current?.isModalOpen()).toBe(true)
@@ -975,5 +988,297 @@ describe('PreServiceMode, the card rail resizes like every other side rail', () 
     renderMode()
     await screen.findByText('Greeting')
     expect(rail().style.width).toBe('280px')
+  })
+})
+
+describe('PreServiceMode: reordering the loop', () => {
+  const rowFor = (title: string): HTMLElement => screen.getByText(title).closest('button') as HTMLElement
+
+  const THREE: PreState = {
+    ...baseState,
+    cards: [...baseState.cards, { id: 'c', type: 'message', title: 'Closing', headline: 'Goodbye', enabled: true }]
+  }
+
+  it('Move up and Move down shift the card under the pointer by one', async () => {
+    const { moveCard } = installHelmStub(THREE)
+    renderMode()
+    await screen.findByText('Psalm 122:1')
+
+    fireEvent.contextMenu(rowFor('Psalm 122:1'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move up' }))
+    expect(moveCard).toHaveBeenCalledWith(baseState.cards[1].id, 0)
+
+    fireEvent.contextMenu(rowFor('Psalm 122:1'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move down' }))
+    expect(moveCard).toHaveBeenCalledWith(baseState.cards[1].id, 2)
+  })
+
+  it('ghosts Move up on the first card and Move down on the last', async () => {
+    installHelmStub(baseState)
+    renderMode()
+    await screen.findByText('Psalm 122:1')
+
+    fireEvent.contextMenu(rowFor(baseState.cards[0].title))
+    expect(screen.getByRole('menuitem', { name: 'Move up' }).getAttribute('aria-disabled')).toBe('true')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+    fireEvent.contextMenu(rowFor(baseState.cards[baseState.cards.length - 1].title))
+    expect(screen.getByRole('menuitem', { name: 'Move down' }).getAttribute('aria-disabled')).toBe('true')
+  })
+})
+
+describe('PreServiceMode: dragging a card to reorder', () => {
+  const FOUR: PreState = {
+    ...baseState,
+    cards: [
+      ...baseState.cards,
+      { id: 'c', type: 'message', title: 'Closing', headline: 'Goodbye', enabled: true },
+      { id: 'd', type: 'message', title: 'Giving', headline: 'Give', enabled: true }
+    ]
+  }
+  const ORDER = ['a', 'b', 'c', 'd']
+  const row = (id: string): HTMLElement => document.querySelector(`[data-pre-card="${id}"]`) as HTMLElement
+  const list = (): HTMLElement => row('a').parentElement?.parentElement as HTMLElement
+
+  // jsdom lays nothing out, so the cards are given boxes: 80px tall, one every 100px, which
+  // leaves a 20px gap between them like the real rail's.
+  const TOP = (id: string): number => ORDER.indexOf(id) * 100
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const id = this.getAttribute('data-pre-card')
+      const top = id ? TOP(id) : 0
+      return { top, bottom: top + 80, height: 80, left: 0, right: 300, width: 300, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+    })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  // jsdom has no DragEvent, so the pointer position is set on the event by hand. The events
+  // are fired on the LIST: where in it the pointer is decides the slot, not which card.
+  const dragTo = (kind: 'dragOver' | 'drop', clientY: number): void => {
+    const el = list()
+    const ev = createEvent[kind](el)
+    Object.defineProperty(ev, 'clientY', { value: clientY })
+    fireEvent(el, ev)
+  }
+  /** The card the drop line sits against, and which edge: where the dragged card will land. */
+  const lineAt = (): string | null => {
+    const line = document.querySelector('[data-drop-line]') as HTMLElement | null
+    if (!line) return null
+    const id = line.parentElement?.querySelector('[data-pre-card]')?.getAttribute('data-pre-card')
+    return `${line.style.top ? 'above' : 'below'} ${id}`
+  }
+
+  it('shows a line where the card will land, and drops it there', async () => {
+    const { moveCard, showCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+    await act(async () => {})
+
+    fireEvent.dragStart(row('a'))
+    dragTo('dragOver', TOP('c') + 70) // lower half of 'c': after it
+    expect(lineAt()).toBe('above d')
+    dragTo('drop', TOP('c') + 70)
+    // 'a' leaves slot 0 first, so "after c" is index 2.
+    expect(moveCard).toHaveBeenCalledWith('a', 2)
+    expect(lineAt()).toBeNull()
+    // Dragging is not a click: nothing is cued or switched.
+    expect(showCard).not.toHaveBeenCalled()
+  })
+
+  it('the upper half of a card means before it', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+
+    fireEvent.dragStart(row('d'))
+    dragTo('dragOver', TOP('b') + 10)
+    expect(lineAt()).toBe('above b')
+    dragTo('drop', TOP('b') + 10)
+    expect(moveCard).toHaveBeenCalledWith('d', 1)
+  })
+
+  it('keeps the line in the gap between two cards instead of losing it', async () => {
+    // The pointer is over no card at all here. Asking each card separately left this
+    // space unanswered, so the line vanished or jumped to the end of the list.
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+
+    fireEvent.dragStart(row('d'))
+    dragTo('dragOver', TOP('a') + 90) // between 'a' and 'b'
+    expect(lineAt()).toBe('above b')
+    dragTo('drop', TOP('a') + 90)
+    expect(moveCard).toHaveBeenCalledWith('d', 1)
+  })
+
+  it('shows the line above the first card and below the last', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+
+    fireEvent.dragStart(row('c'))
+    dragTo('dragOver', TOP('a') + 5)
+    expect(lineAt()).toBe('above a')
+    dragTo('dragOver', TOP('d') + 300) // the empty rail under the last card
+    expect(lineAt()).toBe('below d')
+    dragTo('drop', TOP('d') + 300)
+    expect(moveCard).toHaveBeenCalledWith('c', 3)
+  })
+
+  it('a drop back on its own place moves nothing and shows no line', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+    await act(async () => {})
+
+    fireEvent.dragStart(row('b'))
+    dragTo('dragOver', TOP('b') + 70) // just below itself
+    expect(lineAt()).toBeNull()
+    dragTo('dragOver', TOP('b') + 10) // just above itself
+    expect(lineAt()).toBeNull()
+    dragTo('drop', TOP('b') + 10)
+    expect(moveCard).not.toHaveBeenCalled()
+  })
+
+  it('letting go outside the rail cancels the drag', async () => {
+    const { moveCard } = installHelmStub(FOUR)
+    renderMode()
+    await screen.findByText('Closing')
+    await act(async () => {})
+
+    fireEvent.dragStart(row('a'))
+    dragTo('dragOver', TOP('c') + 70)
+    fireEvent.dragEnd(row('a'))
+    expect(lineAt()).toBeNull()
+    expect(moveCard).not.toHaveBeenCalled()
+  })
+
+  it('the line is a bar in the accent colour', async () => {
+    const theme = themeFor('classic', 'dark')
+    installHelmStub(FOUR)
+    renderMode({ current: null }, theme)
+    await screen.findByText('Closing')
+
+    fireEvent.dragStart(row('d'))
+    dragTo('dragOver', TOP('b') + 10)
+    const line = document.querySelector('[data-drop-line]') as HTMLElement
+    expect(line.style.background).toBe(rgb(theme.accent))
+    expect(line.style.height).toBe('4px')
+  })
+})
+
+describe('PreServiceMode: adding an item from the rail', () => {
+  const LIST: PreCard = { id: 'pr', type: 'list', title: 'Prayer Requests', points: ['The Hollis family'], enabled: true }
+  const WITH_LIST: PreState = { ...baseState, cards: [...baseState.cards, LIST] }
+  const field = (): HTMLInputElement => document.querySelector('[data-quick-add-input]') as HTMLInputElement
+
+  it('Enter adds the typed item to that list and keeps the field open for the next', async () => {
+    const { saveCard, showCard } = installHelmStub(WITH_LIST)
+    renderMode()
+    await screen.findByText('Prayer Requests')
+
+    await act(async () => {})
+    fireEvent.click(document.querySelector('[data-quick-add="pr"]') as HTMLElement)
+    // The chip is not a click on the card: it must not cue or switch anything.
+    expect(showCard).not.toHaveBeenCalled()
+    fireEvent.change(field(), { target: { value: '- Bro. Allen' } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+
+    expect(saveCard).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'pr', type: 'list', points: ['The Hollis family', 'Bro. Allen'] })
+    )
+    expect(field().value).toBe('')
+  })
+
+  it('an empty Enter adds nothing, and Escape closes the field without reaching the page', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    const { saveCard, setOutput } = installHelmStub(WITH_LIST)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Prayer Requests')
+
+    await act(async () => {})
+    fireEvent.click(document.querySelector('[data-quick-add="pr"]') as HTMLElement)
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    expect(saveCard).not.toHaveBeenCalled()
+
+    const reached = vi.fn()
+    const onDocKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') reached()
+    }
+    document.addEventListener('keydown', onDocKey)
+    fireEvent.keyDown(field(), { key: 'Escape' })
+    document.removeEventListener('keydown', onDocKey)
+    expect(reached).not.toHaveBeenCalled()
+    expect(field()).toBeNull()
+    expect(setOutput).not.toHaveBeenCalled()
+  })
+
+  it('only list cards offer it', async () => {
+    installHelmStub(WITH_LIST)
+    renderMode()
+    await screen.findByText('Prayer Requests')
+    expect(document.querySelectorAll('[data-quick-add]').length).toBe(1)
+  })
+})
+
+describe('PreServiceMode: a closed draft can be undone (rule 4)', () => {
+  const openNew = (): void => {
+    fireEvent.click(screen.getByRole('button', { name: /^\+ Add a card/ }))
+  }
+
+  it('Escape on an untouched editor just closes it', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    installHelmStub(baseState)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Psalm 122:1')
+
+    openNew()
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(true)
+    act(() => keyHandlerRef.current?.onEscape())
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(false)
+    expect(screen.queryByText('Closed without saving')).toBeNull()
+  })
+
+  it('Escape with something typed offers Undo, and Undo brings the draft back as it was', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    installHelmStub(baseState)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Psalm 122:1')
+
+    openNew()
+    fireEvent.click(screen.getByText('Big message'))
+    fireEvent.change(screen.getByPlaceholderText('Welcome'), { target: { value: 'Happy Easter' } })
+    // Let the editor's dirty report (a passive effect) land before the Escape.
+    await act(async () => {})
+    act(() => keyHandlerRef.current?.onEscape())
+
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(false)
+    expect(screen.queryByPlaceholderText('Welcome')).toBeNull()
+    expect(screen.getByText('Closed without saving')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(keyHandlerRef.current?.isModalOpen()).toBe(true)
+    expect((screen.getByPlaceholderText('Welcome') as HTMLInputElement).value).toBe('Happy Easter')
+    expect(screen.queryByText('Closed without saving')).toBeNull()
+  })
+
+  it('opening the editor again after a discarded draft starts clean', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null }
+    installHelmStub(baseState)
+    renderMode(keyHandlerRef)
+    await screen.findByText('Psalm 122:1')
+
+    openNew()
+    fireEvent.click(screen.getByText('Big message'))
+    fireEvent.change(screen.getByPlaceholderText('Welcome'), { target: { value: 'Happy Easter' } })
+    await act(async () => {})
+    act(() => keyHandlerRef.current?.onEscape())
+
+    openNew()
+    fireEvent.click(screen.getByText('Big message'))
+    expect((screen.getByPlaceholderText('Welcome') as HTMLInputElement).value).toBe('')
+    expect(screen.queryByText('Closed without saving')).toBeNull()
   })
 })

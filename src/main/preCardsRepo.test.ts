@@ -84,6 +84,23 @@ describe('preCardsRepo', () => {
     expect(after).toHaveLength(5);
     expect(after[4].id).toBe(last.id);
   });
+  it('move shifts a card to the asked index and keeps every other card in order', () => {
+    const repo = freshRepo();
+    const ids = repo.list().map((c) => c.id);
+    expect(repo.move(ids[3], 1).map((c) => c.id)).toEqual([ids[0], ids[3], ids[1], ids[2], ids[4]]);
+    // Positions stay dense, so a later add still lands last.
+    const added = repo.save({ type: 'message', title: 'New', headline: 'New', enabled: true });
+    expect(added[added.length - 1].title).toBe('New');
+  });
+  it('move ignores an unknown card and clamps past the ends', () => {
+    const repo = freshRepo();
+    const ids = repo.list().map((c) => c.id);
+    expect(repo.move('nope', 0).map((c) => c.id)).toEqual(ids);
+    expect(repo.move(ids[0], 99).map((c) => c.id)).toEqual([...ids.slice(1), ids[0]]);
+  });
+  it('the seeded verse names its translation', () => {
+    expect(freshRepo().list().find((c) => c.type === 'verse')?.version).toBe('KJV');
+  });
   it('restore clamps an out-of-range index to the end', () => {
     const repo = freshRepo();
     const target = repo.list()[1];

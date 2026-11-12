@@ -22,14 +22,30 @@ export interface PreserviceEngine {
   toggleEnabled(cardId: string): void;
   saveCard(c: Omit<PreCard, 'id'> & { id?: string }): void; removeCard(id: string): void;
   restoreCard(card: PreCard, index: number): void;
+  moveCard(id: string, index: number): void;
   tick(): void; dispose(): void;
 }
-const DWELL_MIN = 5, DWELL_MAX = 60;
+const DWELL_MIN = 5, DWELL_MAX = 60, DWELL_DEFAULT = 12;
+const clampDwell = (s: number): number => Math.max(DWELL_MIN, Math.min(DWELL_MAX, s));
+
+export interface PreserviceEngineOptions {
+  /** The seconds-per-card the operator last chose, read back from settings. Anything
+   * that is not a number (a first run, a damaged row) falls back to the default. */
+  dwellS?: number;
+  /** Called whenever the operator changes it, so the choice outlives the app closing. */
+  onDwellChange?: (dwellS: number) => void;
+}
 const preKey = (id: string): string => 'pre:' + id;
 
-export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSink): PreserviceEngine {
+export function createPreserviceEngine(
+  repo: PreCardsRepo,
+  sink: PresentationSink,
+  opts: PreserviceEngineOptions = {}
+): PreserviceEngine {
   let cards = repo.list();
-  let engaged = false, loopOn = true, idx = 0, dwellS = 12, loopT = 0;
+  const savedDwell = opts.dwellS;
+  let dwellS = typeof savedDwell === 'number' && Number.isFinite(savedDwell) ? clampDwell(Math.round(savedDwell)) : DWELL_DEFAULT;
+  let engaged = false, loopOn = true, idx = 0, loopT = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   const subs = new Set<(s: PreState) => void>();
 
@@ -120,15 +136,29 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
     // operator asked to hold would rotate away at the next dwell boundary.
     showNow() { engaged = false; loopT = 0; stopTimer(); pushLive(); emit(); },
     toggleLoop() { loopOn = !loopOn; loopT = 0; emit(); },
-    setDwell(delta) { dwellS = Math.max(DWELL_MIN, Math.min(DWELL_MAX, dwellS + delta)); loopT = 0; emit(); },
+    setDwell(delta) {
+      const next = clampDwell(dwellS + delta);
+      if (next !== dwellS) { dwellS = next; opts.onDwellChange?.(dwellS); }
+      loopT = 0; emit();
+    },
     toggleEnabled(cardId) { const c = cards.find((x) => x.id === cardId); if (c) cards = repo.setEnabled(cardId, !c.enabled); clampIdx(); emit(); },
     saveCard(c) {
+      const before = cards[idx];
+      const known = new Set(cards.map((x) => x.id));
       cards = repo.save(c);
+      // The card just written: by id when it was an edit, else the one row that is new.
+      const i = c.id === undefined ? cards.findIndex((x) => !known.has(x.id)) : cards.findIndex((x) => x.id === c.id);
+      if (i < 0) { emit(); return; }
       // A card can now be live with no rotation behind it (showNow, or disengage while
       // still projecting), so nothing else would ever re-push it: editing the card the
       // congregation is reading has to refresh the screen itself.
-      const i = c.id === undefined ? -1 : cards.findIndex((x) => x.id === c.id);
-      if (i >= 0 && sink.isLive(preKey(cards[i].id))) { idx = i; pushLive(); }
+      if (sink.isLive(preKey(cards[i].id))) { idx = i; pushLive(); }
+      // Otherwise cue what was just written, so the preview shows the card the operator
+      // has just finished instead of whichever one happened to be selected. Cue only: no
+      // screen call, and not while the selected card is the one on screen. Moving `idx`
+      // off a live card would make the next tick read the loop as having lost the screen
+      // and stop it, and adding a card must never interrupt the rotation.
+      else if (!before || !sink.isLive(preKey(before.id))) idx = i;
       emit();
     },
     // Routed through pushShow, not `engaged`: a delete during the engaged-but-yielded window
@@ -179,6 +209,19 @@ export function createPreserviceEngine(repo: PreCardsRepo, sink: PresentationSin
       const i = selectedId === undefined ? -1 : cards.findIndex((c) => c.id === selectedId);
       idx = i >= 0 ? i : 0;
       clampIdx();
+      emit();
+    },
+    // Reordering the rotation. Like restoreCard it touches no screen call, and re-pins the
+    // selection by card id: the card on screen (or cued) is the same card after the move,
+    // only its place in the order changes, so the loop carries on from it.
+    moveCard(id, index) {
+      const from = cards.findIndex((c) => c.id === id);
+      const to = Math.max(0, Math.min(Math.round(index), cards.length - 1));
+      if (from < 0 || to === from) return;
+      const selectedId = cards[idx]?.id;
+      cards = repo.move(id, to);
+      const i = cards.findIndex((c) => c.id === selectedId);
+      if (i >= 0) idx = i;
       emit();
     },
     tick, dispose() { stopTimer(); subs.clear(); }

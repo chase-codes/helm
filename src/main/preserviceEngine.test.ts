@@ -320,6 +320,61 @@ describe('preserviceEngine', () => {
       expect(presentation().liveSnap?.title).toBe('Welcome'); // still the live card
     });
 
+    it('a new card is cued, without touching a dark screen', () => {
+      const { engine, presentation } = harness();
+      engine.saveCard({ type: 'message', title: 'Easter', headline: 'Happy Easter', enabled: true });
+      const s = engine.getState();
+      expect(s.cards[s.idx].title).toBe('Easter');
+      expect(presentation().output).not.toBe('live');
+    });
+
+    it('an edited card is cued when pre-service is not on screen', () => {
+      const { engine, repo } = harness();
+      const other = repo.list()[2];
+      engine.saveCard({ ...other, title: 'CHANGED' });
+      expect(engine.getState().idx).toBe(2);
+    });
+
+    it('adding a card while the loop is running leaves the rotation alone', () => {
+      const { engine, presentation } = harness();
+      engine.engage();
+      const held = presentation().liveKey;
+      engine.saveCard({ type: 'message', title: 'Easter', headline: 'Happy Easter', enabled: true });
+      expect(engine.getState().idx).toBe(0);
+      engine.tick();
+      expect(engine.getState().engaged).toBe(true);
+      expect(presentation().liveKey).toBe(held);
+    });
+
+    it('moving a card reorders the loop and leaves the screen and the selection on the same card', () => {
+      const { engine, presentation } = harness();
+      engine.engage();
+      const held = presentation().liveKey;
+      const [first, second] = engine.getState().cards;
+      engine.moveCard(first.id, 1);
+      const s = engine.getState();
+      expect(s.cards.slice(0, 2).map((c) => c.id)).toEqual([second.id, first.id]);
+      expect(s.cards[s.idx].id).toBe(first.id); // still the card on screen
+      expect(presentation().liveKey).toBe(held);
+      engine.tick();
+      expect(engine.getState().engaged).toBe(true);
+    });
+
+    it('moving past either end of the loop does nothing', () => {
+      const { engine } = harness();
+      const before = engine.getState().cards.map((c) => c.id);
+      engine.moveCard(before[0], -1);
+      engine.moveCard(before[before.length - 1], 99);
+      expect(engine.getState().cards.map((c) => c.id)).toEqual(before);
+    });
+
+    it('a card can be moved several places at once', () => {
+      const { engine } = harness();
+      const ids = engine.getState().cards.map((c) => c.id);
+      engine.moveCard(ids[0], 3);
+      expect(engine.getState().cards.map((c) => c.id)).toEqual([ids[1], ids[2], ids[3], ids[0], ids[4]]);
+    });
+
     it('deleting the card that is on screen replaces it', () => {
       const { engine, presentation, repo } = harness();
       engine.showNow();
@@ -512,6 +567,40 @@ describe('preserviceEngine', () => {
       const dwell = engine.getState().dwellS;
       for (let t = 1; t <= dwell + 1; t++) engine.tick();
       expect(presentation().liveKey).toBe(held);
+    });
+  });
+
+  describe('seconds per card is remembered', () => {
+    const sink: PresentationSink = { cue: () => {}, goLive: () => {}, show: () => {}, isLive: () => false, invalidate: () => {} };
+    const repo = (): ReturnType<typeof createPreCardsRepo> => createPreCardsRepo(openTestDb());
+
+    it('opens on the saved value', () => {
+      expect(createPreserviceEngine(repo(), sink, { dwellS: 30 }).getState().dwellS).toBe(30);
+    });
+
+    it('falls back to 12s with nothing saved, and clamps a value out of range', () => {
+      expect(createPreserviceEngine(repo(), sink).getState().dwellS).toBe(12);
+      expect(createPreserviceEngine(repo(), sink, { dwellS: 500 }).getState().dwellS).toBe(60);
+      expect(createPreserviceEngine(repo(), sink, { dwellS: Number.NaN }).getState().dwellS).toBe(12);
+    });
+
+    it('reports each change, and nothing when the value did not move', () => {
+      const saved: number[] = [];
+      const engine = createPreserviceEngine(repo(), sink, { dwellS: 59, onDwellChange: (s) => saved.push(s) });
+      engine.setDwell(1);
+      engine.setDwell(1); // already at the 60s ceiling
+      engine.setDwell(-5);
+      expect(saved).toEqual([60, 55]);
+    });
+
+    it('a second engine on the same settings opens where the first left off', () => {
+      const store = new Map<string, number>();
+      const open = (): ReturnType<typeof createPreserviceEngine> =>
+        createPreserviceEngine(repo(), sink, { dwellS: store.get('preDwellS'), onDwellChange: (s) => store.set('preDwellS', s) });
+      const first = open();
+      for (let i = 0; i < 18; i++) first.setDwell(1);
+      expect(first.getState().dwellS).toBe(30);
+      expect(open().getState().dwellS).toBe(30);
     });
   });
 });

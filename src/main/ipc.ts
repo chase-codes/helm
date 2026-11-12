@@ -167,6 +167,7 @@ export function registerIpc(deps: IpcDeps): void {
   onApi<HelmApi['preservice']['restoreCard']>(CH.preserviceRestoreCard, (card, index) =>
     preserviceEngine.restoreCard(card, index),
   );
+  onApi<HelmApi['preservice']['moveCard']>(CH.preserviceMoveCard, (id, index) => preserviceEngine.moveCard(id, index));
 
   handleApi<HelmApi['media']['list']>(CH.mediaList, () => mediaRepo.list());
   handleApi<HelmApi['media']['importImages']>(CH.mediaImportImages, () => mediaImport.importImages());
