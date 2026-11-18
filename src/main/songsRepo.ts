@@ -1,6 +1,9 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
-import type { NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput } from '../shared/types';
+import type {
+  MusicKeyChange, MusicKeyListQuery, MusicKeyRow, MusicKeyTab, NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput,
+} from '../shared/types';
+import { isMusicKey, type MusicKey, type MusicKeySource } from '../shared/songs/musicKey';
 import { SONG_FTS_COLUMNS } from './schema';
 import { norm, matchDist, matchTol } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
@@ -24,8 +27,26 @@ export interface SongsRepo {
   remove(id: string): Song[];
   search(q: string, field: SearchField): SongSearchResult[];
   count(): number;
+  /** Writes only music_key / music_key_source (setting a key also clears key_skipped_at);
+   * null clears key and source. No FTS work: the key is not indexed. */
+  setMusicKey(id: string, musicKey: MusicKey | null, source: MusicKeySource): Song;
+  /** One transaction. A change with a `title` renames the song and its song_fts row too.
+   * Every entry is validated before anything is written, so a bad one fails the batch. */
+  setMusicKeys(batch: MusicKeyChange[]): Song[];
+  skipMusicKey(id: string): void;
+  keyList(query: MusicKeyListQuery): MusicKeyRow[];
 }
-interface Row { id: string; title: string; author: string; sections_json: string; source: string; created_at: number; music_key: string; rowid: number }
+interface Row {
+  id: string; title: string; author: string; sections_json: string; source: string; created_at: number;
+  music_key: string; music_key_source: string; ccli_no: string; rowid: number;
+}
+// Exhaustive by construction: adding a MusicKeySource without listing it here fails typecheck.
+const MUSIC_KEY_SOURCES: Record<MusicKeySource, true> = {
+  typed: true, title: true, import: true, csv: true, pco: true, chart: true, detected: true, legacy: true,
+};
+const MUSIC_KEY_TABS: Record<MusicKeyTab, true> = { none: true, lately: true, all: true };
+/** Sung lately = went live within the last 8 weeks (spec Phase 1c). */
+const LATELY_MS = 8 * 7 * 24 * 60 * 60 * 1000;
 // bm25() weights per search field, keyed by song_fts column name and rendered in
 // SONG_FTS_COLUMNS order so the positional bm25() args can never drift from the DDL.
 // Literal constants in the SQL, not bound parameters — FTS5 auxiliary-function args
@@ -40,7 +61,10 @@ const BM25: Record<SearchField, string> = {
 };
 const toSong = (r: Row): Song => ({
   id: r.id, title: r.title, author: r.author, sections: JSON.parse(r.sections_json),
-  source: r.source, createdAt: r.created_at, ...(r.music_key ? { key: r.music_key } : {})
+  source: r.source, createdAt: r.created_at, ...(r.music_key ? { key: r.music_key } : {}),
+  // A source without a key (songs:update cleared it) describes nothing, so it is not read back.
+  ...(r.music_key && r.music_key_source ? { keySource: r.music_key_source as MusicKeySource } : {}),
+  ...(r.ccli_no ? { ccli: r.ccli_no } : {}),
 });
 
 export function createSongsRepo(db: Database.Database): SongsRepo {
@@ -93,7 +117,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   const searchStmt = Object.fromEntries(
     (Object.keys(BM25) as SearchField[]).map((f) => [
       f,
-      db.prepare(`SELECT s.rowid AS rowid, s.id AS id, s.title AS title, s.author AS author, s.sections_json AS sections_json, s.source AS source, s.created_at AS created_at, s.music_key AS music_key, -${BM25[f]} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}`),
+      db.prepare(`SELECT s.rowid AS rowid, s.id AS id, s.title AS title, s.author AS author, s.sections_json AS sections_json, s.source AS source, s.created_at AS created_at, s.music_key AS music_key, s.music_key_source AS music_key_source, s.ccli_no AS ccli_no, -${BM25[f]} AS rel FROM song_fts JOIN songs s ON s.rowid = song_fts.rowid WHERE song_fts MATCH ? ORDER BY rel DESC LIMIT ${FTS_CANDIDATE_LIMIT}`),
     ])
   ) as Record<SearchField, ReturnType<typeof db.prepare>>;
   // Vocabulary of every indexed song term, loaded on first use and dropped whenever
@@ -129,10 +153,115 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     const r = db.prepare('SELECT rowid, * FROM songs WHERE id = ?').get(id) as Row | undefined;
     return r ? toSongCached(r) : null;
   };
+  // --- Song keys ---
+  const songExists = db.prepare('SELECT 1 FROM songs WHERE id = ?');
+  const setKeyStmt = db.prepare('UPDATE songs SET music_key = ?, music_key_source = ?, key_skipped_at = NULL WHERE id = ?');
+  // Clearing leaves key_skipped_at alone: a skipped song that loses its key stays skipped.
+  const clearKeyStmt = db.prepare(`UPDATE songs SET music_key = '', music_key_source = '' WHERE id = ?`);
+  const setTitleStmt = db.prepare('UPDATE songs SET title = ? WHERE id = ?');
+  const setFtsTitleStmt = db.prepare('UPDATE song_fts SET title = ? WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
+  const skipStmt = db.prepare('UPDATE songs SET key_skipped_at = ? WHERE id = ?');
+  // First lyric line straight out of the JSON, so the list never parses 3,000 songs' sections.
+  const keyListStmt = db.prepare(`SELECT id, title, author, music_key, music_key_source, live_days, last_live_at, key_skipped_at,
+    COALESCE(json_extract(sections_json, '$[0].lines[0]'), '') AS first_line FROM songs`);
+  // Arguments come straight off IPC, so every check is a runtime one, not just a type.
+  const assertSong = (id: unknown): string => {
+    if (typeof id !== 'string' || songExists.get(id) === undefined) throw new Error('Song not found');
+    return id;
+  };
+  const assertKeyArgs = (musicKey: unknown, source: unknown): void => {
+    if (musicKey !== null && (typeof musicKey !== 'string' || !isMusicKey(musicKey))) throw new Error(`Not a key: ${String(musicKey)}`);
+    if (typeof source !== 'string' || !Object.hasOwn(MUSIC_KEY_SOURCES, source)) throw new Error(`Unknown key source: ${String(source)}`);
+    // 'legacy' means "the stored text did not parse"; only the startup cleanup sets it.
+    if (musicKey !== null && source === 'legacy') throw new Error('A canonical key cannot have source legacy');
+  };
+  const writeKey = (id: string, musicKey: MusicKey | null, source: MusicKeySource): void => {
+    if (musicKey === null) clearKeyStmt.run(id);
+    else setKeyStmt.run(musicKey, source, id);
+  };
   return {
     list,
     get,
     count: () => (db.prepare('SELECT COUNT(*) AS n FROM songs').get() as { n: number }).n,
+    setMusicKey(id, musicKey, source) {
+      assertSong(id);
+      assertKeyArgs(musicKey, source);
+      writeKey(id, musicKey, source);
+      songCache.delete(id);
+      return get(id)!;
+    },
+    setMusicKeys(batch) {
+      if (!Array.isArray(batch)) throw new Error('Expected a list of key changes');
+      const titles = batch.map((c) => {
+        if (typeof c !== 'object' || c === null) throw new Error('Expected a key change');
+        assertSong(c.id);
+        assertKeyArgs(c.key, c.source);
+        if (c.title === undefined) return undefined;
+        const title = typeof c.title === 'string' ? c.title.trim() : '';
+        if (!title) throw new Error('A song needs a title');
+        return title;
+      });
+      db.transaction(() => {
+        batch.forEach((c, i) => {
+          writeKey(c.id, c.key, c.source);
+          const title = titles[i];
+          if (title !== undefined) {
+            setTitleStmt.run(title, c.id);
+            setFtsTitleStmt.run(norm(title), c.id);
+          }
+        });
+      })();
+      for (const c of batch) songCache.delete(c.id);
+      if (titles.some((t) => t !== undefined)) invalidateVocab();
+      return batch.map((c) => get(c.id)!);
+    },
+    skipMusicKey(id) {
+      assertSong(id);
+      skipStmt.run(Date.now(), id);
+      songCache.delete(id);
+    },
+    keyList(query) {
+      const tab = query?.tab;
+      if (typeof tab !== 'string' || !Object.hasOwn(MUSIC_KEY_TABS, tab)) throw new Error(`Unknown tab: ${String(tab)}`);
+      type KeyRow = {
+        id: string; title: string; author: string; music_key: string; music_key_source: string;
+        live_days: number; last_live_at: number | null; key_skipped_at: number | null; first_line: string;
+      };
+      let rows = (keyListStmt.all() as KeyRow[]).map((r): MusicKeyRow => ({
+        id: r.id, title: r.title, author: r.author, firstLine: r.first_line,
+        key: r.music_key, keySource: r.music_key ? (r.music_key_source as MusicKeySource | '') : '',
+        liveDays: r.live_days, lastLiveAt: r.last_live_at, skippedAt: r.key_skipped_at,
+      }));
+      // Search: every norm()'d query token must appear somewhere in the norm()'d title or
+      // author (substring, so "corner" finds "Cornerstone"). In JS over the light rows,
+      // not FTS: it has no typo tier to explain and stays well under a millisecond-per-
+      // thousand-rows, and FTS would also match lyrics, which this field does not search.
+      const tokens = typeof query.q === 'string' ? norm(query.q).split(' ').filter(Boolean) : [];
+      if (tokens.length) {
+        rows = rows.filter((r) => {
+          const hay = norm(`${r.title} ${r.author}`);
+          return tokens.every((t) => hay.includes(t));
+        });
+      }
+      const byTitle = (a: MusicKeyRow, b: MusicKeyRow): number =>
+        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+      if (tab === 'all') return rows.sort(byTitle);
+      if (tab === 'lately') {
+        const since = Date.now() - LATELY_MS;
+        return rows
+          .filter((r) => r.lastLiveAt !== null && r.lastLiveAt >= since)
+          .sort((a, b) => b.lastLiveAt! - a.lastLiveAt! || byTitle(a, b));
+      }
+      // No key: no key at all, or a legacy value a person still has to decide on. Ranked by
+      // use (live_days, then last_live_at), then title, with skipped songs at the end.
+      return rows
+        .filter((r) => r.key === '' || r.keySource === 'legacy')
+        .sort((a, b) =>
+          Number(a.skippedAt !== null) - Number(b.skippedAt !== null)
+          || b.liveDays - a.liveDays
+          || (b.lastLiveAt ?? -1) - (a.lastLiveAt ?? -1)
+          || byTitle(a, b));
+    },
     add(input) {
       return db.transaction(() => insertOne(input))();
     },
@@ -169,7 +298,11 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       const song: Song = {
         id, title, author, sections,
         source: existing.source, createdAt: existing.createdAt,
-        ...(key ? { key } : {})
+        ...(key ? { key } : {}),
+        // songs:update leaves the key-source column as it was, so this mirrors what get()
+        // reads back. The startup cleanup reconciles a key edited here (legacy ↔ typed).
+        ...(key && existing.keySource ? { keySource: existing.keySource } : {}),
+        ...(existing.ccli ? { ccli: existing.ccli } : {}),
       };
       db.transaction(() => {
         updateSong.run(title, author, JSON.stringify(sections), key, id);
