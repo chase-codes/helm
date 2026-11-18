@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import type {
-  MusicKeyChange, MusicKeyListQuery, MusicKeyRow, MusicKeyTab, NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput,
+  MusicKeyChange, MusicKeyCounts, MusicKeyListQuery, MusicKeyRow, MusicKeyTab, NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput,
 } from '../shared/types';
 import { isMusicKey, normalizeKey, type MusicKey, type MusicKeySource } from '../shared/songs/musicKey';
 import { SONG_FTS_COLUMNS } from './schema';
@@ -10,6 +10,7 @@ import { rankSongs } from '../shared/search/songScore';
 import { splitToSlides } from '../shared/songs/splitToSlides';
 import { lyricsOf, lyricsOfSections } from '../shared/songs/lyrics';
 import { orPrefixMatch, ftsTerm, FTS_CANDIDATE_LIMIT } from './ftsQuery';
+import { nextUsage } from './songUsage';
 
 export interface SongsRepo {
   list(): Song[];
@@ -35,6 +36,15 @@ export interface SongsRepo {
   setMusicKeys(batch: MusicKeyChange[]): Song[];
   skipMusicKey(id: string): void;
   keyList(query: MusicKeyListQuery): MusicKeyRow[];
+  /** Undo for a key save: writes the previous key and source back exactly as they were,
+   * a legacy value included. A source other than 'legacy' still needs a canonical key, so
+   * this cannot be used to sneak free text in as 'typed'. `skippedAt` is restored when
+   * given (a save clears it), left alone when omitted. */
+  restoreMusicKey(id: string, raw: string, source: MusicKeySource | '', skippedAt?: number | null): Song;
+  keyCounts(): MusicKeyCounts;
+  /** One go-live of the song at `now` (songUsage.ts). An unknown id is ignored: the song
+   * may have been deleted while it was on screen. */
+  recordLive(id: string, now: number): void;
 }
 interface Row {
   id: string; title: string; author: string; sections_json: string; source: string; created_at: number;
@@ -195,6 +205,17 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     // 'legacy' means "the stored text did not parse"; only the startup cleanup sets it.
     if (musicKey !== null && source === 'legacy') throw new Error('A canonical key cannot have source legacy');
   };
+  const restoreKeyStmt = db.prepare('UPDATE songs SET music_key = ?, music_key_source = ? WHERE id = ?');
+  const restoreSkipStmt = db.prepare('UPDATE songs SET key_skipped_at = ? WHERE id = ?');
+  const usageStmt = db.prepare('SELECT last_live_at, live_days FROM songs WHERE id = ?');
+  const setUsageStmt = db.prepare('UPDATE songs SET last_live_at = ?, live_days = ? WHERE id = ?');
+  // "Has a key" = a canonical key: a legacy value is still waiting for a person (No key).
+  const keyCountsStmt = db.prepare(`SELECT COUNT(*) AS total,
+    COALESCE(SUM(music_key = '' OR music_key_source = 'legacy'), 0) AS no_key,
+    COALESCE(SUM(last_live_at >= ?), 0) AS lately,
+    COALESCE(SUM(last_live_at >= ? AND music_key <> '' AND music_key_source <> 'legacy'), 0) AS lately_with_key,
+    COALESCE(MAX(last_live_at IS NOT NULL), 0) AS any_live
+    FROM songs`);
   const writeKey = (id: string, musicKey: MusicKey | null, source: MusicKeySource): void => {
     if (musicKey === null) clearKeyStmt.run(id);
     else setKeyStmt.run(musicKey, source, id);
@@ -239,6 +260,37 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       assertSong(id);
       skipStmt.run(Date.now(), id);
       songCache.delete(id);
+    },
+    restoreMusicKey(id, raw, source, skippedAt) {
+      assertSong(id);
+      if (typeof raw !== 'string') throw new Error('Expected the previous key as text');
+      if (typeof source !== 'string' || (source !== '' && !Object.hasOwn(MUSIC_KEY_SOURCES, source))) {
+        throw new Error(`Unknown key source: ${String(source)}`);
+      }
+      if (raw === '' && source !== '') throw new Error('No key has no source');
+      if (raw !== '' && source !== 'legacy' && !isMusicKey(raw)) throw new Error(`Not a key: ${raw}`);
+      if (skippedAt !== undefined && skippedAt !== null && !(typeof skippedAt === 'number' && Number.isFinite(skippedAt))) {
+        throw new Error('Expected a skip time');
+      }
+      db.transaction(() => {
+        restoreKeyStmt.run(raw, source, id);
+        if (skippedAt !== undefined) restoreSkipStmt.run(skippedAt, id);
+      })();
+      songCache.delete(id);
+      return get(id)!;
+    },
+    keyCounts() {
+      const since = Date.now() - LATELY_MS;
+      const r = keyCountsStmt.get(since, since) as {
+        total: number; no_key: number; lately: number; lately_with_key: number; any_live: number;
+      };
+      return { total: r.total, noKey: r.no_key, lately: r.lately, latelyWithKey: r.lately_with_key, anyLive: r.any_live === 1 };
+    },
+    recordLive(id, now) {
+      const prev = usageStmt.get(id) as { last_live_at: number | null; live_days: number } | undefined;
+      if (!prev) return;
+      const next = nextUsage({ lastLiveAt: prev.last_live_at, liveDays: prev.live_days }, now);
+      setUsageStmt.run(next.lastLiveAt, next.liveDays, id);
     },
     keyList(query) {
       const tab = query?.tab;

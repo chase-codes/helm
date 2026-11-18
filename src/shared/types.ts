@@ -31,6 +31,19 @@ export interface MusicKeyRow {
 /** One entry of a setMusicKeys batch. `title`, when given, renames the song too
  * (the title sweep moves "(Eb)" out of the title and into the key). */
 export interface MusicKeyChange { id: string; key: MusicKey | null; source: MusicKeySource; title?: string }
+/** The Song keys window's tab count and its one scoped progress line. "Has a key" means a
+ * canonical key: a legacy value still waits for a person, so it counts as none. */
+export interface MusicKeyCounts {
+  /** Songs in the library. */
+  total: number;
+  /** Songs on the No key tab (no key, or a legacy value). */
+  noKey: number;
+  /** Songs on the Sung lately tab, and how many of those have a key. */
+  lately: number;
+  latelyWithKey: number;
+  /** False until any song has ever gone live: the progress line then says so. */
+  anyLive: boolean;
+}
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
 export interface NewSongInput { title: string; author?: string; text: string; source?: string; key?: string }
@@ -204,6 +217,7 @@ export const CH = {
   songsRemove: 'songs:remove',
   songsSetMusicKey: 'songs:setMusicKey', songsSetMusicKeys: 'songs:setMusicKeys',
   songsSkipMusicKey: 'songs:skipMusicKey', songsKeyList: 'songs:keyList',
+  songsRestoreMusicKey: 'songs:restoreMusicKey', songsKeyCounts: 'songs:keyCounts',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presTake: 'presentation:take',
@@ -348,6 +362,10 @@ export interface HelmApi {
     /** Marks a song as skipped in the Song keys window, so No key lists it last. */
     skipMusicKey(id: string): Promise<void>;
     keyList(query: MusicKeyListQuery): Promise<MusicKeyRow[]>;
+    /** Undo for a key save: writes a song's previous key and source back verbatim, a legacy
+     * value included (which setMusicKey refuses). `skippedAt`, when given, is restored too. */
+    restoreMusicKey(id: string, raw: string, source: MusicKeySource | '', skippedAt?: number | null): Promise<Song>;
+    keyCounts(): Promise<MusicKeyCounts>;
   };
   presentation: {
     get(): Promise<PresentationState>;

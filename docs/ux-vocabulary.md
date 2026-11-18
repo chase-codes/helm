@@ -59,7 +59,8 @@ the live cursor, and Pre-service still steps with bare `‹` / `›`.
 
 Added with song keys, Phase 1b (`docs/superpowers/specs/2026-11-17-song-keys-design.md`).
 The picker is `KeyPicker.tsx`; it opens from QuickAdd's key button, right-click on a song
-row and the hero's meta line.
+row and the hero's meta line, and sits in the Song keys window (Phase 1c,
+`SongKeysWindow.tsx`).
 
 | Word | Means | Where it appears |
 |---|---|---|
@@ -68,6 +69,15 @@ row and the hero's meta line.
 | **Clear key** | Leave the song with no key. | Picker |
 | **Major / Minor** | The picker's mode toggle. It relabels the twelve keys; it never resizes them. | Picker |
 | **Capo…** | Work out the key from a capo position and chord shapes: "Capo 2 playing G shapes → Key A". Saves the sounding key; the capo is not stored. | Picker |
+| **Song keys** | The window for filling in and checking keys, one song at a time. | The window's title |
+| **Fill in song keys** | Open the Song keys window. | The Songs rail, the row under `+ Import a song library` |
+| **Skip** | Leave this song's key blank for now. It moves to the end of No key. | Picker, in the Song keys window only |
+| **No key / Sung lately / All** | The Song keys tabs. No key lists songs with no key (or an old value that was not one key, shown as "Was: capo 2 G"), most-sung first; Sung lately lists songs that went live in the last eight weeks, keyed or not; All is the library by title. | Song keys window |
+
+The Song keys window says where a key came from in plain words: "Typed in Helm", "From
+the title in EasyWorship", "From the EasyWorship import", "From a spreadsheet", "From
+Planning Center", "From a chord chart", "Detected from chords" (`songKeysText.ts`). Its
+one progress line is scoped, never the whole library: "Sung lately: 9 of 14 have a key."
 
 Keys are spelled as stored: flats for the majors (Db, Eb, Ab, Bb), the fewer-accidentals
 spelling for the minors (C#m, G#m), F# and Ebm on the ties. The picker shows the other

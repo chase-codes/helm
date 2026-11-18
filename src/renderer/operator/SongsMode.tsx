@@ -48,6 +48,7 @@ import { liveRing } from './railTint';
 import { LiveBadge } from './StateBadge';
 import { runEscapeLadder, takeDownWhenLive } from './escapeLadder';
 import { KeyPickerPopover } from './KeyPicker';
+import { SongKeysWindow } from './SongKeysWindow';
 import type { MusicKey } from '../../shared/songs/musicKey';
 
 export interface SongsModeProps {
@@ -135,6 +136,8 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importInFlight, setImportInFlight] = useState(false);
+  // The Song keys window (rail row `Fill in song keys`). Its saves patch `library` per save.
+  const [keysOpen, setKeysOpen] = useState(false);
   const [editingSection, setEditingSection] = useState<number | null>(null);
   const [editError, setEditError] = useState(false);
   // The key picker, open for one song and hung from the control that opened it (a rail row
@@ -425,6 +428,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     window.helm.songs.setMusicKey(songId, musicKey, 'typed').then(applySavedKey, console.error);
   };
   const closeKeyPicker = useCallback((): void => setKeyPicker(null), []);
+  const closeKeysWindow = useCallback((): void => setKeysOpen(false), []);
   const toggleHeroKeyPicker = (songId: string, anchor: HTMLElement): void =>
     setKeyPicker((cur) => (cur?.anchor === anchor ? null : { songId, anchor, toggles: true }));
 
@@ -740,6 +744,12 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
               setEditModalSongId(null);
               return true;
             }
+            // The window steps back through its own layers (picker, search field) and stops
+            // those presses itself; one that gets past them closes it, never blacks.
+            if (keysOpen) {
+              setKeysOpen(false);
+              return true;
+            }
             return false;
           },
           cancelEdit: () => {
@@ -756,10 +766,12 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
           },
           takeDown: takeDownWhenLive(output, takeDown)
         }),
-      onArrow: step,
+      // The Song keys window owns ↑/↓; no navigation binding may step (and so cue) under it.
+      onArrow: keysOpen ? () => {} : step,
       onGoLive: armed ? commitSwitch : goLive,
-      // The key picker counts: Enter must save a key there, never reach Go live.
-      isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null || keyPicker !== null,
+      // The key picker and the Song keys window count: Enter must save a key there, never
+      // reach Go live.
+      isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null || keyPicker !== null || keysOpen,
       onAction
     };
     return () => {
@@ -918,6 +930,10 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
           setQuickAddOpen(true);
         }}
         onImportSongs={() => setImportOpen(true)}
+        onFillKeys={() => {
+          setKeyPicker(null);
+          setKeysOpen(true);
+        }}
         libraryEmpty={library.length === 0}
         locked={locked}
         onRowContextMenu={onSongContextMenu}
@@ -1075,6 +1091,7 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
           }}
         />
       )}
+      {keysOpen && <SongKeysWindow onClose={closeKeysWindow} onKeySaved={applySavedKey} />}
       {importOpen && (
         <SongImport
           open={importOpen}

@@ -11,7 +11,7 @@ afterEach(cleanup)
 const T = themeFor('classic', 'dark')
 
 type Spy = ReturnType<typeof vi.fn>
-const renderPicker = (value = '', extra: { onSkip?: () => void } = {}): ReturnType<typeof render> & { onPick: Spy; onClose: Spy } => {
+const renderPicker = (value = '', extra: { onSkip?: () => void; hostKeys?: (e: KeyboardEvent) => boolean; autoFocus?: boolean } = {}): ReturnType<typeof render> & { onPick: Spy; onClose: Spy } => {
   const onPick = vi.fn()
   const onClose = vi.fn()
   const utils = render(
@@ -32,6 +32,25 @@ const press = (...keys: string[]): void => {
 }
 
 describe('KeyPicker', () => {
+  it('leaves the host its own keys (hostKeys) and can mount without taking focus (autoFocus false)', () => {
+    const before = document.createElement('button')
+    document.body.appendChild(before)
+    before.focus()
+    const seen: string[] = []
+    const bubble = (e: KeyboardEvent): void => { seen.push(e.key) }
+    window.addEventListener('keydown', bubble)
+    try {
+      renderPicker('', { hostKeys: (e) => e.key === 'ArrowDown' || e.key === '/', autoFocus: false })
+      expect(document.activeElement).toBe(before)
+      press('ArrowDown', '/', 'ArrowRight')
+      expect(seen).toEqual(['ArrowDown', '/']) // ArrowRight walked the grid and stopped there
+      expect(lit()).toBe('C') // ArrowRight with nothing lit starts the grid at C
+    } finally {
+      window.removeEventListener('keydown', bubble)
+      before.remove()
+    }
+  })
+
   it('shows twelve keys in chromatic order, with the other spelling under the ambiguous ones', () => {
     renderPicker()
     expect(labels()).toEqual(['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'])

@@ -157,3 +157,30 @@ describe('stateStore.invalidate (#40)', () => {
     expect(presentation.get().liveKey).toBe('pres:a:0');
   });
 });
+
+// Song usage capture hangs off this seam (songUsage.ts): a watcher sees every new state,
+// after the screens were sent it, and a watcher that throws never reaches the live path.
+describe('stateStore.watch', () => {
+  it('hands each new state to a watcher after the broadcast, and a throwing watcher changes nothing', () => {
+    const win = new BrowserWindow();
+    presentation.registerOutput(win, 'audience');
+    presentation.setOutput('black');
+    const send = win.webContents.send as ReturnType<typeof vi.fn>;
+    const seen: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const offBad = presentation.watch(() => { throw new Error('boom'); });
+    const off = presentation.watch((st) => { seen.push(`${st.output}:${st.liveKey}`); expect(send).toHaveBeenCalled(); });
+    send.mockClear();
+
+    expect(() => presentation.goLive('song:a:0', slideA)).not.toThrow();
+    expect(presentation.get()).toMatchObject({ output: 'live', liveKey: 'song:a:0' });
+    expect(seen).toEqual(['live:song:a:0']);
+    expect(errSpy).toHaveBeenCalled();
+
+    off();
+    offBad();
+    presentation.goLive('song:b:0', slideB);
+    expect(seen).toEqual(['live:song:a:0']);
+    errSpy.mockRestore();
+  });
+});

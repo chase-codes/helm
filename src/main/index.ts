@@ -7,6 +7,7 @@ import { CH } from '../shared/types'
 import { broadcastAll } from './broadcast'
 import { openDb } from './db'
 import { createSongsRepo } from './songsRepo'
+import { createSongUsageRecorder } from './songUsage'
 import { createBiblesRepo } from './biblesRepo'
 import { createScheduleRepo } from './scheduleRepo'
 import { createSettingsRepo } from './settingsRepo'
@@ -147,6 +148,9 @@ app.whenReady().then(() => {
   registerMediaProtocol(libRoot)
   const repo = createSongsRepo(db)
   seedIfEmpty(repo)
+  // Song usage (song keys, Phase 1c): every go-live of a new song is recorded for the Song
+  // keys window's ranking. The recorder swallows its own errors; it never blocks the screen.
+  presentation.watch(createSongUsageRecorder({ recordLive: (id, now) => repo.recordLive(id, now) }))
   const biblesRepo = createBiblesRepo(db)
   const scheduleRepo = createScheduleRepo(db)
   const settingsRepo = createSettingsRepo(db)
