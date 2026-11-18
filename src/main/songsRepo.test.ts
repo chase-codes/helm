@@ -353,6 +353,49 @@ describe('song keys', () => {
     expect(() => keys.keyList({ tab: 'keyed' as 'all' })).toThrow('Unknown tab');
   });
 
+  test('update stamps typed when the key changes, clears the source with the key, and leaves an unchanged key alone', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    keys.setMusicKey(s.id, 'G', 'import');
+    // Unchanged key (a lyric fix): the import source survives.
+    expect(keys.update(s.id, { title: 'T', key: 'G', sections: s.sections }).keySource).toBe('import');
+    expect(raw(s.id)).toMatchObject({ music_key: 'G', music_key_source: 'import' });
+    // A different spelling of the same key is not a change either.
+    keys.update(s.id, { title: 'T', key: 'g major', sections: s.sections });
+    expect(raw(s.id)).toMatchObject({ music_key: 'G', music_key_source: 'import' });
+    // Changed: a person typed it.
+    const changed = keys.update(s.id, { title: 'T', key: 'A', sections: s.sections });
+    expect(changed).toMatchObject({ key: 'A', keySource: 'typed' });
+    expect(changed).toEqual(keys.get(s.id));
+    expect(raw(s.id)).toMatchObject({ music_key: 'A', music_key_source: 'typed' });
+    // Cleared: no key, no source.
+    const cleared = keys.update(s.id, { title: 'T', sections: s.sections });
+    expect(cleared.key).toBeUndefined();
+    expect(cleared.keySource).toBeUndefined();
+    expect(raw(s.id)).toMatchObject({ music_key: '', music_key_source: '' });
+  });
+
+  test('update and add canonicalise a key that parses, and keep one that does not as typed (legacy)', () => {
+    const a = keys.add({ title: 'A', text: 'Verse 1\nx', key: ' bb ' });
+    expect(a).toMatchObject({ key: 'Bb', keySource: 'typed' });
+    expect(raw(a.id)).toMatchObject({ music_key: 'Bb', music_key_source: 'typed' });
+    expect(keys.add({ title: 'B', text: 'Verse 1\nx', key: 'N/A' }).key).toBeUndefined();
+    const odd = keys.add({ title: 'C', text: 'Verse 1\nx', key: 'G or A' });
+    expect(raw(odd.id)).toMatchObject({ music_key: 'G or A', music_key_source: 'legacy' });
+    expect(keys.update(a.id, { title: 'A', key: 'C#', sections: a.sections }).key).toBe('Db');
+    // A stored legacy value handed straight back (QuickAdd's Save changes) still saves, untouched.
+    const kept = keys.update(odd.id, { title: 'C2', key: 'G or A', sections: odd.sections });
+    expect(kept).toMatchObject({ title: 'C2', key: 'G or A', keySource: 'legacy' });
+    // A modulation is not one key: kept as typed.
+    expect(keys.update(a.id, { title: 'A', key: 'D - E', sections: a.sections })).toMatchObject({ key: 'D - E', keySource: 'legacy' });
+  });
+
+  test('a section quick-edit that passes the key back keeps key and source', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    keys.setMusicKey(s.id, 'Eb', 'title');
+    keys.update(s.id, { title: 'T', key: 'Eb', sections: [{ label: 'Verse 1', lines: ['y'] }] });
+    expect(raw(s.id)).toMatchObject({ music_key: 'Eb', music_key_source: 'title' });
+  });
+
   test('update keeps working and reads back the stored key source and CCLI', () => {
     const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
     db.prepare(`UPDATE songs SET ccli_no = '12345' WHERE id = ?`).run(s.id); // before the write that drops the cache

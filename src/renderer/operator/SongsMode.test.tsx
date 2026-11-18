@@ -6,6 +6,7 @@ import { LIBRARY_DELETE, LIBRARY_DELETE_ARMED } from './useLibraryDelete';
 import { ThemeCtx } from './ThemeCtx';
 import { themeFor } from '../../shared/theme';
 import { dispatchModeKey } from './keyDispatch';
+import { settleAndClear } from '../../test/mocks';
 import type { ModeKeyHandlerRef } from './App';
 import type {
   ImportReviewRow,
@@ -1566,5 +1567,186 @@ describe('SongsMode, the status chip sits top right', () => {
     const chip = document.querySelector('[data-status-chip]') as HTMLElement;
     expect(chip).toBeTruthy();
     expect(chip.parentElement?.lastElementChild).toBe(chip);
+  });
+});
+
+// Song keys, Phase 1b: the picker from a rail row (right-click Set key) and from the hero.
+describe('SongsMode — song keys', () => {
+  const KEYED: Song = { id: 'k1', title: 'Cornerstone', author: 'Hillsong', sections: [{ label: 'Verse 1', lines: ['My hope'] }], source: 'manual', createdAt: 0, key: 'Eb', keySource: 'typed' };
+  const BARE: Song = { id: 'k2', title: 'Goodness Of God', author: 'Bethel', sections: [{ label: 'Verse 1', lines: ['I love you Lord'] }], source: 'manual', createdAt: 1 };
+
+  const install = (
+    songs: Song[],
+    state: PresentationState = NOTHING_LIVE
+  ): ReturnType<typeof installHelmStubWith> & { list: ReturnType<typeof vi.fn>; setMusicKey: ReturnType<typeof vi.fn> } => {
+    const stub = installHelmStubWith(songs, state);
+    const helm = (window as unknown as { helm: { songs: Record<string, unknown> } }).helm;
+    const list = vi.fn(() => Promise.resolve(songs));
+    const setMusicKey = vi.fn((id: string, key: string | null, source: string) => {
+      const s = songs.find((x) => x.id === id)!;
+      const { key: _k, keySource: _s, ...rest } = s;
+      void _k; void _s;
+      return Promise.resolve(key ? { ...rest, key, keySource: source } : rest);
+    });
+    helm.songs.list = list;
+    helm.songs.setMusicKey = setMusicKey;
+    return { ...stub, list, setMusicKey };
+  };
+  const rowFor = (title: string): HTMLElement => {
+    const match = screen.getAllByText(title).find((el) => el.closest('button')?.querySelector('[data-key-slot]'));
+    if (!match) throw new Error(`no song row found for "${title}"`);
+    return match.closest('button') as HTMLElement;
+  };
+  const slotOf = (title: string): string => rowFor(title).querySelector('[data-key-slot]')!.textContent!;
+  const heroKey = (): HTMLButtonElement => document.querySelector('[data-hero-key]') as HTMLButtonElement;
+  const picker = (): HTMLElement | null => document.querySelector('[data-key-picker]');
+
+  it('shows each song key in its row slot, and nothing for a song without one', async () => {
+    install([KEYED, BARE]);
+    renderMode({ current: null });
+    await waitFor(() => rowFor('Goodness Of God'));
+    expect(slotOf('Cornerstone')).toBe('Eb');
+    expect(slotOf('Goodness Of God')).toBe('');
+  });
+
+  it('right-click Set key opens the picker on that row; a click saves via setMusicKey and the row updates without a refetch', async () => {
+    const { setMusicKey, list, cue, goLive, take } = install([KEYED, BARE]);
+    renderMode({ current: null });
+    await waitFor(() => rowFor('Goodness Of God'));
+    await settleAndClear(cue, 'song:k1:0', expect.anything());
+
+    fireEvent.contextMenu(rowFor('Goodness Of God'));
+    const items = screen.getAllByRole('menuitem').map((b) => b.textContent);
+    expect(items).toEqual(['Edit', 'Set key', LIBRARY_DELETE]);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set key' }));
+    expect(picker()).toBeTruthy();
+    expect(picker()!.textContent).toContain('Goodness Of God'); // says which song
+
+    fireEvent.click(screen.getByRole('button', { name: 'Key A' }));
+    expect(setMusicKey).toHaveBeenCalledWith('k2', 'A', 'typed');
+    await waitFor(() => expect(slotOf('Goodness Of God')).toBe('A'));
+    expect(picker()).toBeNull();
+    expect(list).toHaveBeenCalledTimes(1); // the mount's load only
+    expect(cue).not.toHaveBeenCalled();
+    expect(goLive).not.toHaveBeenCalled();
+    expect(take).not.toHaveBeenCalled();
+  });
+
+  it('the hero meta line reads Key Eb, or a faint Set key, and keeps its height either way', async () => {
+    install([KEYED, BARE]);
+    renderMode({ current: null });
+    await waitFor(() => expect(heroKey()).toBeTruthy());
+    const meta = document.querySelector('[data-hero-meta]') as HTMLElement;
+    expect(heroKey().textContent).toBe('Key Eb');
+    const T = themeFor('classic', 'dark');
+    const tone = (c: string): string => { const p = document.createElement('span'); p.style.color = c; return p.style.color; };
+    expect(heroKey().style.color).toBe(tone(T.dim));
+    const height = meta.style.height;
+    expect(height).toBe('22px');
+
+    fireEvent.click(rowFor('Goodness Of God'));
+    await waitFor(() => expect(heroKey().textContent).toBe('Set key'));
+    expect(heroKey().style.color).toBe(tone(T.faint));
+    expect(meta.style.height).toBe(height);
+  });
+
+  it('hero Set key opens the picker; typing then Enter saves the key and never goes live', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const { setMusicKey, cue, goLive, take } = install([BARE]);
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(heroKey()?.textContent).toBe('Set key'));
+    await settleAndClear(cue, 'song:k2:0', expect.anything());
+
+    // The real document dispatcher, wired the way App.tsx wires it.
+    const onKeyDown = (e: KeyboardEvent): void =>
+      dispatchModeKey(e, {
+        settingsOpen: false,
+        closeSettings: () => {},
+        handler: keyHandlerRef.current,
+        scope: 'songs',
+        overrides: {},
+        onAppAction: () => {}
+      });
+    document.addEventListener('keydown', onKeyDown);
+    try {
+      fireEvent.click(heroKey());
+      expect(picker()).toBeTruthy();
+      expect(keyHandlerRef.current?.isModalOpen()).toBe(true);
+      // b and c are the bridge and chorus jumps on this page: here they spell a key.
+      for (const key of ['b', 'b', 'Enter']) fireEvent.keyDown(document.activeElement!, { key });
+      expect(setMusicKey).toHaveBeenCalledWith('k2', 'Bb', 'typed');
+      await waitFor(() => expect(heroKey().textContent).toBe('Key Bb'));
+      expect(picker()).toBeNull();
+      expect(keyHandlerRef.current?.isModalOpen()).toBe(false);
+      expect(goLive).not.toHaveBeenCalled();
+      expect(take).not.toHaveBeenCalled();
+      expect(cue).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', onKeyDown);
+    }
+  });
+
+  it('the modal guard holds Enter even if a press slips past the picker', async () => {
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const { goLive } = install([BARE]);
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(heroKey()?.textContent).toBe('Set key'));
+    fireEvent.click(heroKey());
+    const onGoLive = vi.spyOn(keyHandlerRef.current!, 'onGoLive');
+    // Straight to the dispatcher, as if the picker's own listener were not there.
+    dispatchModeKey(new KeyboardEvent('keydown', { key: 'Enter' }), {
+      settingsOpen: false,
+      closeSettings: () => {},
+      handler: keyHandlerRef.current,
+      scope: 'songs',
+      overrides: {},
+      onAppAction: () => {}
+    });
+    expect(onGoLive).not.toHaveBeenCalled();
+    expect(goLive).not.toHaveBeenCalled();
+  });
+
+  it('Escape closes the hero picker without touching the screen, and a second click on Key toggles it', async () => {
+    const LIVE_K1: PresentationState = { output: 'live', liveKey: 'song:k1:0', liveSnap: null, cuedKey: null, cuedSnap: null };
+    const keyHandlerRef: ModeKeyHandlerRef = { current: null };
+    const { setOutput, setMusicKey } = install([KEYED], LIVE_K1);
+    renderMode(keyHandlerRef);
+    await waitFor(() => expect(heroKey()?.textContent).toBe('Key Eb'));
+    const onKeyDown = (e: KeyboardEvent): void =>
+      dispatchModeKey(e, {
+        settingsOpen: false,
+        closeSettings: () => {},
+        handler: keyHandlerRef.current,
+        scope: 'songs',
+        overrides: {},
+        onAppAction: () => {}
+      });
+    document.addEventListener('keydown', onKeyDown);
+    try {
+      fireEvent.click(heroKey());
+      fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+      expect(picker()).toBeNull();
+      expect(setOutput).not.toHaveBeenCalled();
+
+      fireEvent.click(heroKey());
+      expect(picker()).toBeTruthy();
+      fireEvent.mouseDown(heroKey());
+      fireEvent.click(heroKey());
+      expect(picker()).toBeNull();
+      expect(setMusicKey).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', onKeyDown);
+    }
+  });
+
+  it('Clear key from the hero clears it everywhere on the page', async () => {
+    const { setMusicKey } = install([KEYED]);
+    renderMode({ current: null });
+    await waitFor(() => expect(heroKey()?.textContent).toBe('Key Eb'));
+    fireEvent.click(heroKey());
+    fireEvent.click(screen.getByRole('button', { name: 'Clear key' }));
+    expect(setMusicKey).toHaveBeenCalledWith('k1', null, 'typed');
+    await waitFor(() => expect(heroKey().textContent).toBe('Set key'));
+    expect(slotOf('Cornerstone')).toBe('');
   });
 });

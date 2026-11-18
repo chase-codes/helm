@@ -47,6 +47,8 @@ import { MONO } from '../shared/fonts';
 import { liveRing } from './railTint';
 import { LiveBadge } from './StateBadge';
 import { runEscapeLadder, takeDownWhenLive } from './escapeLadder';
+import { KeyPickerPopover } from './KeyPicker';
+import type { MusicKey } from '../../shared/songs/musicKey';
 
 export interface SongsModeProps {
   keyHandlerRef: ModeKeyHandlerRef;
@@ -109,7 +111,8 @@ function toRow(
     hasSnippet: !!snippet,
     isActive: song.id === activeSongId,
     isArmed: song.id === armedId,
-    isLive: song.id === liveSongId
+    isLive: song.id === liveSongId,
+    musicKey: song.key ?? ''
   };
 }
 
@@ -134,6 +137,10 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
   const [importInFlight, setImportInFlight] = useState(false);
   const [editingSection, setEditingSection] = useState<number | null>(null);
   const [editError, setEditError] = useState(false);
+  // The key picker, open for one song and hung from the control that opened it (a rail row
+  // via right-click Set key, or the hero's meta line). `toggles`: the anchor is a button that
+  // opens and closes it.
+  const [keyPicker, setKeyPicker] = useState<{ songId: string; anchor: HTMLElement; toggles: boolean } | null>(null);
   const listPanel = usePanelWidth('helmSongListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
   const sectionPanel = usePanelWidth('helmSectionPanelW', { def: SECTION_W_DEFAULT, min: SECTION_W_MIN, max: SECTION_W_MAX, anchor: 'right' });
   // Collapsing the rail hands its width to the hero — and since the fitted lyric size is
@@ -403,6 +410,24 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     }
   };
 
+  // A key save touches only the key columns and hands back the Song, so every copy of it on
+  // this page (library, search results, the lyric hint) takes the new key with no refetch.
+  // Deliberately no cue: nothing the key picker does may call a screen verb (applyCue
+  // included), so the new key reaches the leader view with the next cue, not this one.
+  const applySavedKey = (song: Song): void => {
+    if (!mountedRef.current) return;
+    setLibrary((prev) => prev.map((s) => (s.id === song.id ? song : s)));
+    const swap = (rs: SongSearchResult[]): SongSearchResult[] => rs.map((r) => (r.song.id === song.id ? { ...r, song } : r));
+    setResults(swap);
+    setLyricHint(swap);
+  };
+  const saveMusicKey = (songId: string, musicKey: MusicKey | null): void => {
+    window.helm.songs.setMusicKey(songId, musicKey, 'typed').then(applySavedKey, console.error);
+  };
+  const closeKeyPicker = useCallback((): void => setKeyPicker(null), []);
+  const toggleHeroKeyPicker = (songId: string, anchor: HTMLElement): void =>
+    setKeyPicker((cur) => (cur?.anchor === anchor ? null : { songId, anchor, toggles: true }));
+
   // The song library is one of the two lists that CONFIRM rather than undo (#90); the media
   // library is the other. useLibraryDelete says why, and is the one implementation of it.
   const libraryDelete = useLibraryDelete(contextMenu);
@@ -484,8 +509,13 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
   };
 
   const onSongContextMenu = (id: string, e: ReactMouseEvent): void => {
+    // The row itself, read now: a synthetic event's currentTarget is gone once it returns.
+    const row = e.currentTarget as HTMLElement;
     libraryDelete.open(e, {
-      before: [{ label: 'Edit', onSelect: () => onEditSong(id) }],
+      before: [
+        { label: 'Edit', onSelect: () => onEditSong(id) },
+        { label: 'Set key', onSelect: () => setKeyPicker({ songId: id, anchor: row, toggles: false }) }
+      ],
       // Refuse to delete the song the congregation is currently reading. `sameFlow` would
       // keep its lyrics on the projector with no library row behind them, and the center
       // stays live-locked against a song that no longer exists.
@@ -690,6 +720,12 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
         runEscapeLadder({
           // QuickAdd wins if somehow both are open; only one can be opened from the UI.
           closeOverlay: () => {
+            // The picker steps back through its own layers and stops the press itself; this
+            // rung only matters if a press ever got past it, and then it closes, never blacks.
+            if (keyPicker) {
+              setKeyPicker(null);
+              return true;
+            }
             if (quickAddOpen) {
               setQuickAddOpen(false);
               return true;
@@ -722,7 +758,8 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
         }),
       onArrow: step,
       onGoLive: armed ? commitSwitch : goLive,
-      isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null,
+      // The key picker counts: Enter must save a key there, never reach Go live.
+      isModalOpen: () => quickAddOpen || importOpen || editModalSongId !== null || keyPicker !== null,
       onAction
     };
     return () => {
@@ -827,6 +864,32 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     letterSpacing: '0.14em',
     fontWeight: 600
   };
+  const heroMetaStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    height: '22px',
+    marginTop: '2px',
+    fontSize: '13px',
+    color: T.dim,
+    minWidth: 0,
+    whiteSpace: 'nowrap'
+  };
+  const heroAuthorStyle: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' };
+  const heroKeyBtnStyle = (hasKey: boolean): CSSProperties => ({
+    height: '22px',
+    // Padding cancelled by margin: the text sits where plain text would, the wash has room.
+    padding: '0 5px',
+    margin: '0 -5px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: hasKey ? 600 : 500,
+    color: hasKey ? T.dim : T.faint,
+    flexShrink: 0,
+    maxWidth: '180px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  });
   const ghostBtn = transportGhostBtn(T);
   // A switch is always something to put on screen, so an arm re-arms the primary slot even
   // when the cued section is the live one.
@@ -869,7 +932,24 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
             <div style={{ fontWeight: 800, fontSize: '25px', letterSpacing: '-0.015em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {activeSong?.title ?? ''}
             </div>
-            <div style={{ fontSize: '13px', color: T.dim, marginTop: '2px' }}>{activeSong?.author ?? ''}</div>
+            {/* The meta line: author, then `Key Eb` or a faint `Set key`. A fixed height, so
+                the title row (and the transport under it) never moves with the key (rules 2, 5). */}
+            <div style={heroMetaStyle} data-hero-meta>
+              {!!activeSong?.author && <span style={heroAuthorStyle}>{activeSong.author}</span>}
+              {!!activeSong?.author && <span aria-hidden style={{ color: T.faint, flexShrink: 0 }}>·</span>}
+              {activeSong && (
+                <button
+                  style={heroKeyBtnStyle(!!activeSong.key)}
+                  data-hero-key
+                  aria-haspopup="dialog"
+                  aria-expanded={keyPicker?.songId === activeSong.id && keyPicker.toggles}
+                  onClick={(e) => toggleHeroKeyPicker(activeSong.id, e.currentTarget)}
+                  title={activeSong.key ? 'Change the key' : "Set this song's key"}
+                >
+                  {activeSong.key ? `Key ${activeSong.key}` : 'Set key'}
+                </button>
+              )}
+            </div>
           </div>
           <div style={projBarStyle} data-status-chip>
             <span style={projDotStyle} />
@@ -971,6 +1051,16 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
       </div>
 
       {contextMenu.menu}
+      {keyPicker && (
+        <KeyPickerPopover
+          anchor={keyPicker.anchor}
+          anchorToggles={keyPicker.toggles}
+          value={library.find((s) => s.id === keyPicker.songId)?.key ?? ''}
+          songTitle={library.find((s) => s.id === keyPicker.songId)?.title}
+          onPick={(k) => saveMusicKey(keyPicker.songId, k)}
+          onClose={closeKeyPicker}
+        />
+      )}
       {quickAddOpen && (
         <QuickAdd open={quickAddOpen} initialTitle={quickAddTitle} onClose={() => setQuickAddOpen(false)} onSaved={onQuickAddSaved} />
       )}

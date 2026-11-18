@@ -7,7 +7,7 @@ import { themeFor } from '../../shared/theme'
 afterEach(cleanup)
 
 const rows: SongRow[] = [
-  { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: false, isArmed: false, isLive: false }
+  { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: false, isArmed: false, isLive: false, musicKey: '' }
 ]
 
 const baseProps = {
@@ -30,6 +30,31 @@ const baseProps = {
 }
 
 describe('SongSearchRail', () => {
+  it('gives every row a fixed-width key slot at the right: the key in dim, or nothing', () => {
+    const T = baseProps.theme
+    render(
+      <SongSearchRail
+        {...baseProps}
+        rows={[
+          { ...rows[0], musicKey: 'C#m' },
+          { ...rows[0], id: 's2', title: 'Blessed Assurance', musicKey: '' }
+        ]}
+      />
+    )
+    const slots = [...document.querySelectorAll<HTMLElement>('[data-key-slot]')]
+    expect(slots.map((s) => s.textContent)).toEqual(['C#m', ''])
+    for (const s of slots) {
+      expect(s.style.width).toBe('30px')
+      expect(s.style.flexShrink).toBe('0')
+      // Last in its row, so the keys line up down the rail.
+      expect(s.parentElement!.lastElementChild).toBe(s)
+    }
+    expect(slots[0].style.color).toBe(slots[1].style.color) // no colour for a missing key
+    const probe = document.createElement('span')
+    probe.style.color = T.dim
+    expect(slots[0].style.color).toBe(probe.style.color)
+  })
+
   it('fires onRowContextMenu with the row id on right-click', () => {
     const onRowContextMenu = vi.fn()
     render(<SongSearchRail {...baseProps} onRowContextMenu={onRowContextMenu} />)
@@ -118,8 +143,8 @@ describe('SongSearchRail', () => {
 // click. Hover now says which one you are about to get.
 describe('SongSearchRail — hover forecasts what a click will do while locked (#89)', () => {
   const LOCKED = [
-    { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false, isLive: true },
-    { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: false, isLive: false }
+    { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false, isLive: true, musicKey: '' },
+    { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: false, isLive: false, musicKey: '' }
   ]
   const row = (title: string): HTMLButtonElement =>
     screen.getByText(title).closest('button') as HTMLButtonElement
@@ -176,8 +201,8 @@ describe('SongSearchRail: live and queued signals (rule 1, decision 7)', () => {
     return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
   }
   const row = (title: string): HTMLButtonElement => screen.getByText(title).closest('button') as HTMLButtonElement
-  const LIVE_ROW: SongRow = { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false, isLive: true }
-  const QUEUED_ROW: SongRow = { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: true, isLive: false }
+  const LIVE_ROW: SongRow = { id: 's1', title: 'Amazing Grace', author: 'Newton', snippet: '', hasSnippet: false, isActive: true, isArmed: false, isLive: true, musicKey: '' }
+  const QUEUED_ROW: SongRow = { id: 's2', title: 'Blessed Assurance', author: 'Crosby', snippet: '', hasSnippet: false, isActive: false, isArmed: true, isLive: false, musicKey: '' }
 
   it('the live song wears the red ring and a LIVE badge', () => {
     render(<SongSearchRail {...baseProps} rows={[LIVE_ROW, QUEUED_ROW]} locked />)
