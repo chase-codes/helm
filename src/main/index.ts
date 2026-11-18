@@ -21,6 +21,7 @@ import { createPreserviceEngine } from './preserviceEngine'
 import { createMediaRepo } from './mediaRepo'
 import { createMediaImport, findSoffice } from './mediaImport'
 import { createSongImport } from './songImport'
+import { createKeySheetFiles } from './keySheetFiles'
 import { createSongSources } from './songSources'
 import { createEasyWorshipSource } from './importSources/easyworship'
 import { seedIfEmpty } from './seed'
@@ -196,6 +197,7 @@ app.whenReady().then(() => {
     }
   )
   const songSources = createSongSources()
+  const keySheetFiles = createKeySheetFiles(repo, { getParentWindow: () => operatorWindow })
 
   // electron-updater throws on unpacked builds — dev gets the no-op null driver.
   const updater = createUpdater(app.isPackaged ? autoUpdater : null, {
@@ -219,6 +221,7 @@ app.whenReady().then(() => {
     mediaRepo,
     mediaImport,
     songImport,
+    keySheetFiles,
     songSources,
     updater
   })

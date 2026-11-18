@@ -252,9 +252,10 @@ This is the path for Dana at home, since Helm lives on the booth machine (open q
   Applying is one batch with a `Set 128 keys` Undo.
 - Source recorded as `'csv'`.
 
-### Phase 3 — Chart files and chord detection
+### Phase 3 — Chart files and chord detection (dropped)
 
-Only worth it if the church keeps chord charts (open question 8).
+Dropped: Chase confirmed on 2026-11-18 that the church keeps no chord charts (open
+question 8). Kept here only for a future church that does.
 
 - Import ChordPro (`{key:}`), OpenLyrics (`<key>`), OpenSong (`<key>`) and SongSelect
   `.usr` (`Keys=`) as key sources. They match an existing song by appendix C and set its
@@ -419,8 +420,8 @@ spec.
    key, behind the review list and Undo.
 7. **Spellings:** F# or Gb for the major key on that pitch? Ebm or D#m for the minor? The
    appendix recommends F# and Ebm. A library-wide preference is possible, but is it worth it?
-8. **Does anyone keep chord charts** (ChordPro, OnSong, SongSelect downloads, PDFs)? If
-   not, Phase 3 drops.
+8. ~~**Does anyone keep chord charts?**~~ **Answered 2026-11-18: no.** Phase 3 is
+   dropped.
 9. **Capo:** store only the sounding key (recommended), or also "capo 2" for the
    guitarist?
 10. **Should the key keep showing on the audience-variant label** (`SlideCanvas.tsx:411`)?

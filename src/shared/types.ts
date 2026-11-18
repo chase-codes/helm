@@ -2,6 +2,7 @@ import type { MessageImportResult } from './message/parseImport';
 import type { TapeRow, QuoteRow } from './search/messageScore';
 import type { FeedbackContext, FeedbackPayload, FeedbackSendResult } from './feedbackIssue';
 import type { MusicKey, MusicKeySource, TitleKeyFlag } from './songs/musicKey';
+import type { KeyImportReview } from './songs/keySheet';
 
 export interface SongSection { label: string; lines: string[] }
 export interface Song {
@@ -25,6 +26,8 @@ export interface MusicKeyRow {
   id: string; title: string; author: string;
   /** The first lyric line, so two songs called "Cornerstone" can be told apart. */
   firstLine: string;
+  /** CCLI song number, digits only; '' when not known. */
+  ccli: string;
   key: string; keySource: MusicKeySource | '';
   liveDays: number; lastLiveAt: number | null; skippedAt: number | null;
 }
@@ -64,6 +67,11 @@ export interface MusicKeyCounts {
   /** False until any song has ever gone live: the progress line then says so. */
   anyLive: boolean;
 }
+/** `Export songs without a key…`: how many songs went into which file, or why not. */
+export type KeysExportResult = { saved: number; fileName: string } | { canceled: true } | { error: string };
+/** `+ Import keys from a spreadsheet`: the review of the chosen file, or one plain sentence
+ * saying what is wrong with it (an Excel workbook, no Title column). */
+export type KeysImportResult = (KeyImportReview & { fileName: string }) | { canceled: true } | { error: string };
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
 export interface NewSongInput {
@@ -275,6 +283,7 @@ export const CH = {
   songsSkipMusicKey: 'songs:skipMusicKey', songsKeyList: 'songs:keyList',
   songsRestoreMusicKey: 'songs:restoreMusicKey', songsKeyCounts: 'songs:keyCounts',
   songsTitleKeyCandidates: 'songs:titleKeyCandidates', songsRestoreMusicKeys: 'songs:restoreMusicKeys',
+  songsExportKeys: 'songs:exportKeys', songsImportKeys: 'songs:importKeys',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presTake: 'presentation:take',
@@ -428,6 +437,11 @@ export interface HelmApi {
     /** Undo for a title sweep: one transaction putting back every title (song_fts too),
      * key, source and skip time exactly. Returns the songs in batch order. */
     restoreMusicKeys(batch: MusicKeyRestore[]): Promise<Song[]>;
+    /** Save dialog, then the No key tab's songs as a CSV with a blank Key column. */
+    exportKeys(): Promise<KeysExportResult>;
+    /** Open dialog, then the chosen spreadsheet read and matched for review. Writes nothing:
+     * the review applies through setMusicKeys. */
+    importKeys(): Promise<KeysImportResult>;
   };
   presentation: {
     get(): Promise<PresentationState>;
