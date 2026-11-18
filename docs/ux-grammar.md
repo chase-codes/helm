@@ -219,7 +219,10 @@ Every rail has its add control in one place: a full-width chip that is the first
 under the rail's input (Songs, Scripture, Message) or under its header (Slides,
 Pre-service), never in a list header and never at the foot of the list. It names what it
 will file (`+ Add John 3:16`, `+ Add ¶3`), or says Import when the source is a file
-(Slides). Importing from outside sits as a secondary row beneath it (Songs, Message).
+(Slides). Importing from outside sits as a secondary row beneath it (Message). Songs keeps
+import off the rail: bringing a library over from another program is a migration, not an
+every-Sunday control, so it lives in Settings → Songs, and an empty song library offers it
+from the list's own invitation instead (rule 7, #5).
 Right-click Edit is offered wherever a row has an editor (Songs, Pre-service), for a single
 row only; a song row adds Set key beside it, single-row too. Pre-service adds two more single-row entries: Move up / Move down, which reorder
 the loop without touching what is cued or on screen (dragging a card does the same over any
@@ -238,7 +241,7 @@ still there on return. Every side rail resizes through `usePanelWidth` + `PanelD
 - `src/renderer/operator/App.tsx:42-47` — `onDelete` contract; `keyDispatch.ts:77-83` — `item.delete` guarded behind Settings/modals; `src/shared/hotkeys/actions.ts:48`.
 - Adopters: `SermonMode.tsx:145`/`:984` (`'verses'`), `MessageMode.tsx:114`/`:535` (`'quotes'`). `PreServiceMode.tsx` keeps `useListSelection` for its ranges but neither the Delete key nor `deleteMenuItems`: its cards confirm (rule 4).
 - Deliberate non-adopters: `SongsMode.tsx` and `SlidesTrack.tsx`, the two libraries (rule 4 carve-out).
-- Add chips: `SongSearchRail.tsx:235` `addChipStyle`, `SchedulePanel.tsx:100` `schedAddStyle`, `MessageSearchRail.tsx:169` `addChipStyle` and `:155` import row, `SlidesTrack.tsx:383` `importChipStyle`, `PreServiceMode.tsx:200` `addChipStyle`.
+- Add chips: `SongSearchRail.tsx:268` `addChipStyle`, `SchedulePanel.tsx:100` `schedAddStyle`, `MessageSearchRail.tsx:169` `addChipStyle` and `:155` import row, `SlidesTrack.tsx:383` `importChipStyle`, `PreServiceMode.tsx:200` `addChipStyle`.
 - `src/renderer/operator/App.tsx:168-179` — Pre-service joins the keep-alive wrapper; `PreServiceMode.tsx:89` `railPanel` and `:91-96` the menu-close guard while hidden. Pinned by "kept alive across page switches" and "the card rail resizes like every other side rail" in `PreServiceMode.test.tsx`.
 - `src/renderer/operator/PreServiceMode.tsx` (`move`, `addItem` in the row's context menu; `commitQuickAdd`), `src/main/preserviceEngine.ts` `moveCard`, `src/main/preCardsRepo.ts` `move`; `finishDrag` and the `draggable` row for drag and drop; "reordering the loop", "dragging a card to reorder" and "adding an item from the rail" in `PreServiceMode.test.tsx`.
 - `src/shared/scripture/selection.test.ts:148` — "the same semantics `useListSelection.selectTo` gives the schedule."
@@ -256,7 +259,7 @@ tooltips say why.
 **Enforced by**
 - `src/renderer/operator/ListEmpty.tsx:4-18` — the shared empty state and its prop contract (#88).
 - Every status chip says `NOTHING ON SCREEN` when black (`screenStatus`), as do the Header and leader view.
-- First-run lines: `SongSearchRail.tsx:327-330`, `SchedulePanel.tsx:222-224`, `SlidesTrack.tsx:520-522`, `MessageSearchRail.tsx:298-306`, `PreServiceMode.tsx:335-337` (names `+ Add a card` in bold; `PreServiceMode.test.tsx:382`), `ScriptureSearchResults.tsx:106-107`.
+- First-run lines: `SongSearchRail.tsx:367-378` (the empty song library's line carries the `+ Import a song library` button itself, the rail's only import control; `SongSearchRail.test.tsx` "puts the import button inside the empty-library invitation"), `SchedulePanel.tsx:222-224`, `SlidesTrack.tsx:520-522`, `MessageSearchRail.tsx:298-306`, `PreServiceMode.tsx:335-337` (names `+ Add a card` in bold; `PreServiceMode.test.tsx:382`), `ScriptureSearchResults.tsx:106-107`.
 - `src/renderer/operator/SermonCenter.tsx:30-34` — `canGoLive` contract; `:172-174`, `:267-274` ghost + "Nothing to take" tooltip; `:259` "Nothing on screen".
 - `src/renderer/operator/SongsMode.tsx:882-885`, `:1002`, `:1010`; `preTransport.ts:57-73` (Show this card ghosts with "add a card first" on an empty loop, pinned in `preTransport.test.ts`).
 - `src/renderer/operator/transport.ts:36-42` — the ghost look, "the slot holds its ground, disabled".
@@ -320,7 +323,7 @@ pass through the entry untouched, so paste and the registry's shortcuts work in 
 **Enforced by**
 - `src/renderer/operator/escapeLadder.ts:21-36`: `EscapeLadder` and `runEscapeLadder`, the rung order; `:40` `blurFocusedField`, `:49` `takeDownWhenLive`, `:59` `clearSelectionRung`; `escapeLadder.test.ts`.
 - Adopters: `SongsMode.tsx:745` (`onEscape`), `SermonMode.tsx:1040` (`onEscape`; `:1049` routes `clearSelection` and `:1078` routes `onAction` to `MessageKeyHandler` / `SlidesKeyHandler`), `MessageMode.tsx:409-421`, `SlidesTrack.tsx:385`, `PreServiceMode.tsx:152` (`onEscape`), `:177` (`onAction`).
-- `src/renderer/operator/useEscapeToClose.ts:11`: capture-phase close for `VersionPicker.tsx:23` and `OutputViewPopover.tsx:31`; `ContextMenu.tsx:165` keeps the same contract for its own keys. `KeyPicker.tsx` (the song key picker) takes every plain key in the capture phase while open, steps Escape back through its own layers (Capo… line, typed highlight, close), and counts as a modal in `SongsMode`'s `isModalOpen`, so Enter there saves a key and never reaches Go live; `KeyPicker.test.tsx`, `SongsMode.test.tsx` "song keys".
+- `src/renderer/operator/useEscapeToClose.ts:11`: capture-phase close for `VersionPicker.tsx:23` and `OutputViewPopover.tsx:31`, and for the song import wizard stacked over Settings (`SettingsModal.tsx:117`: Escape closes the wizard and leaves Settings open, and is swallowed while a commit runs, the same guard `SongsMode.tsx:750` gives the page's own copy; `SettingsModal.test.tsx` "SettingsModal: Songs"); `ContextMenu.tsx:165` keeps the same contract for its own keys. `KeyPicker.tsx` (the song key picker) takes every plain key in the capture phase while open, steps Escape back through its own layers (Capo… line, typed highlight, close), and counts as a modal in `SongsMode`'s `isModalOpen`, so Enter there saves a key and never reaches Go live; `KeyPicker.test.tsx`, `SongsMode.test.tsx` "song keys".
 - `src/renderer/operator/SongKeysWindow.tsx`: the Song keys window owns `/`, Mod+Backspace and ↑/↓ (the picker leaves them to it through `hostKeys`), turns Enter and Escape in its search field into leaving the field, and counts as a modal in `SongsMode` (whose `onArrow` is a no-op while it is open), so Escape steps Capo… → typed highlight → search field → close (the `Move keys out of titles` and spreadsheet reviews are one more layer, back to the list, after a Not found search field) and never reaches Take down, and neither Enter nor an arrow can reach the screen; `SongKeysWindow.test.tsx`.
 - `src/shared/hotkeys/actions.ts:60-68`: the global `item.jump` digit block, shadowed on Songs by `song.verse` (`:73`); `:24` `note`, rendered by `ShortcutsSettings.tsx:152-159`.
 - `src/renderer/operator/keyDispatch.ts:34`: Escape first; `:85` registry actions behind the typing and modal guards; `keyDispatch.test.ts:160` pins digits on every scope.
@@ -339,7 +342,8 @@ Facts as of 2026-10-12, not tasks:
 - There is no `goInk` token alongside `accentInk`; `'#fff'` is hard-coded on the green verb at `transport.ts:37` and `TrackTabs.tsx:37`.
 - `src/renderer/output/LeaderView.tsx:209` and `:225` hard-code `#221d10` and `#b4b1aa`, which are `CLASSIC_DARK.selBg` and `CLASSIC_DARK.lineDim`.
 - The status chip is page-level (decision 6): on the Sermon page a live slide from the Slides track reads `LIVE ON SCREEN` on the Scripture track too.
-- Message's `+ Import` opens Settings (`MessageMode.tsx:585` `onOpenSettings`) rather than the import modal itself; Slides and Songs import in place.
+- Message's `+ Import` opens Settings (`MessageMode.tsx:585` `onOpenSettings`) rather than the import modal itself; Slides imports in place. Songs imports from Settings → Songs, except on an empty library, where the rail's invitation opens the wizard in place (#5).
+- The Message import over Settings has no Escape guard of its own: Escape closes Settings, and the import with it. The song import wizard over Settings does have one (`SettingsModal.tsx:117`).
 - The `Header` live chip changes height with state (`Header.tsx:102`, 28 → 32 px), a documented exception (`transport.ts:64-67`).
 - The Message quote schedule has no add path (`MessageSearchRail.tsx` empty-state comment), so its digit jumps and row numbers have nothing to act on until one lands.
 - Escape's clear-selection rung fires on any non-empty selection, and a plain click selects a row on Scripture, Message and Pre-service, so after a click Escape takes two presses to reach the screen. `clearSelectionRung` is the one place to change if that should apply to ranges only.

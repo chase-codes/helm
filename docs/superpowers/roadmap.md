@@ -52,7 +52,8 @@ Roadmap items that shipped before the migration, kept for their design pointers.
   (fewer than 3).
 - **Song library import (EasyWorship 8).** ✅ shipped 2026-07-31, pending
   verification against a real library ([#6](https://github.com/chase-codes/helm/issues/6)).
-  An **Import songs** wizard in Songs mode: pick the source program, pick the folder,
+  An **Import songs** wizard, opened from Settings → Songs (or, on an empty library, from
+  the Songs rail's empty state; #5): pick the source program, pick the folder,
   review every song found (new / already in Helm / unreadable, each with a reason),
   import, then a summary that *names* what didn't come through. Songs land via
   `songsRepo.add()`, so they are sectioned, indexed and searchable exactly like

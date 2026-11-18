@@ -57,6 +57,9 @@ export interface SongsModeProps {
   /** Bumped by App's song-search hotkey (Mod+L, #52); each bump focuses the search box
    * once. Same App-mediated shape as SermonMode's `lookupNonce`. */
   searchNonce?: number;
+  /** Bumped by App when songs were imported from Settings → Songs; each bump refreshes the
+   * library (and re-runs the active search) exactly as this page's own import does. */
+  libraryRevision?: number;
 }
 
 // The hero doubles as the confidence monitor for rooms that mirror the operator screen
@@ -117,7 +120,7 @@ function toRow(
   };
 }
 
-export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeProps): JSX.Element {
+export function SongsMode({ keyHandlerRef, active, searchNonce = 0, libraryRevision = 0 }: SongsModeProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const { output, liveKey } = usePresentationState();
   // Staleness guard for the double-click take that resolves a song first (#58).
@@ -233,6 +236,16 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     if (!query) return;
     refreshSearch(query);
   }, [refreshLibrary, q, refreshSearch]);
+
+  // An import from Settings → Songs. Not gated on `active`: the page is kept alive, and the
+  // library should be current before the operator comes back to it. The ref (not the deps)
+  // decides, so a new `onImportCompleted` on every keystroke never re-runs the refresh.
+  const seenRevisionRef = useRef(libraryRevision);
+  useEffect(() => {
+    if (libraryRevision === seenRevisionRef.current) return;
+    seenRevisionRef.current = libraryRevision;
+    onImportCompleted();
+  }, [libraryRevision, onImportCompleted]);
 
   // Re-query on every keystroke (debounced, #15) and field switch (immediate). Empty query
   // shows the library instead (displayedRows only reads `results` when the query is

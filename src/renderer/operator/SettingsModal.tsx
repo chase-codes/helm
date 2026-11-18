@@ -9,6 +9,8 @@ import {
 import { ThemeCtx } from './ThemeCtx'
 import { ModalShell } from './ModalShell'
 import { MessageImport } from './MessageImport'
+import { SongImport } from './SongImport'
+import { useEscapeToClose } from './useEscapeToClose'
 import { DisplaysSettings } from './DisplaysSettings'
 import { ShortcutsSettings } from './ShortcutsSettings'
 import { AppearanceSettings } from './AppearanceSettings'
@@ -19,6 +21,7 @@ import {
   MessageIcon,
   SermonIcon,
   ShortcutsIcon,
+  SongsIcon,
   ThemesIcon
 } from '../shared/icons'
 import type {
@@ -39,6 +42,9 @@ export interface SettingsModalProps {
   // SermonMode so any mounted instance refetches the manifest, without this component
   // reaching into SermonMode directly.
   onBiblesChanged: () => void
+  // Same App-mediated shape for songs: an import run from Settings → Songs lands in a library
+  // SongsMode already holds in memory, so App bumps a revision SongsMode refreshes on.
+  onSongsImported: () => void
   hotkeyOverrides: HotkeyOverrides
   onHotkeyOverridesChange: (next: HotkeyOverrides) => void
   family: ThemeFamily
@@ -52,6 +58,7 @@ const SECTIONS = [
   { id: 'bibles', label: 'Bibles', Icon: SermonIcon },
   { id: 'displays', label: 'Displays', Icon: DisplayIcon },
   { id: 'shortcuts', label: 'Shortcuts', Icon: ShortcutsIcon },
+  { id: 'songs', label: 'Songs', Icon: SongsIcon },
   { id: 'message', label: 'Message', Icon: MessageIcon }
 ] as const
 type SettingsSection = (typeof SECTIONS)[number]['id']
@@ -62,6 +69,7 @@ export function SettingsModal({
   open,
   onClose,
   onBiblesChanged,
+  onSongsImported,
   hotkeyOverrides,
   onHotkeyOverridesChange,
   family,
@@ -97,6 +105,18 @@ export function SettingsModal({
   const [messageCount, setMessageCount] = useState<number | null>(null)
   const [messageProgress, setMessageProgress] = useState<MessageInstallProgress | null>(null)
   const [messageImportOpen, setMessageImportOpen] = useState(false)
+
+  // Songs section: the song import wizard's home once the library has songs (an empty
+  // library offers it from the Songs rail instead). It stacks over this modal, so it needs
+  // the two guards SongsMode gives its own copy: Escape closes the wizard and never reaches
+  // App's dispatcher (which would close Settings and unmount the wizard with it), and while
+  // a commit runs Escape is swallowed, because the wizard holds the only record of which
+  // songs failed to read. SongImport's `dismissible` covers the overlay and Cancel.
+  const [songImportOpen, setSongImportOpen] = useState(false)
+  const [songImportInFlight, setSongImportInFlight] = useState(false)
+  useEscapeToClose(songImportOpen, () => {
+    if (!songImportInFlight) setSongImportOpen(false)
+  })
 
   const clearConfirmTimer = (): void => {
     if (confirmTimerRef.current !== null) {
@@ -476,6 +496,21 @@ export function SettingsModal({
                 </div>
               </>
             )}
+            {section === 'songs' && (
+              <>
+                <div style={sectionTitleStyle}>Songs</div>
+                <div style={sectionHintStyle}>
+                  Bring your song library over from another program, such as EasyWorship. You
+                  review the songs before anything is added, and a song already in Helm is
+                  never added twice.
+                </div>
+                <div>
+                  <button style={ghostBtnStyle(false)} onClick={() => setSongImportOpen(true)}>
+                    + Import a song library
+                  </button>
+                </div>
+              </>
+            )}
             {section === 'message' && (
               <>
                 <div style={sectionTitleStyle}>Message</div>
@@ -513,6 +548,14 @@ export function SettingsModal({
           </button>
         </div>
       </ModalShell>
+      {songImportOpen && (
+        <SongImport
+          open={songImportOpen}
+          onClose={() => setSongImportOpen(false)}
+          onImported={onSongsImported}
+          onImportingChange={setSongImportInFlight}
+        />
+      )}
       {messageImportOpen && (
         <MessageImport
           open={messageImportOpen}

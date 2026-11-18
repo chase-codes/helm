@@ -51,6 +51,9 @@ export interface SongSearchRailProps {
    * which arms rather than takes while another song holds the screen. */
   onActivate: (id: string) => void;
   onAddSong: () => void;
+  /** Opens the import wizard. Offered only from the empty library's invitation: once the
+   * library has songs, import lives in Settings → Songs (a migration, not an every-Sunday
+   * control), so the rail header never carries it. */
   onImportSongs: () => void;
   /** Opens the Song keys window. The row is left out when not passed. */
   onFillKeys?: () => void;
@@ -276,7 +279,7 @@ export function SongSearchRail({
     alignItems: 'center',
     justifyContent: 'center'
   };
-  const importRowStyle: CSSProperties = {
+  const fillKeysRowStyle: CSSProperties = {
     width: '100%',
     height: '26px',
     marginTop: '5px',
@@ -289,6 +292,11 @@ export function SongSearchRail({
     justifyContent: 'center',
     background: 'transparent'
   };
+
+  // A typed query that matches nothing keeps its no-match line (which points at the add
+  // chip); clearing the field brings the invitation back.
+  const showInvite = libraryEmpty && rows.length === 0 && !noResults;
+  const inviteImportStyle: CSSProperties = { ...addChipStyle, marginTop: '12px' };
 
   const placeholder = field === 'title' ? 'Search titles…' : field === 'lyric' ? 'Search a lyric line…' : 'Title or a lyric line…';
 
@@ -349,22 +357,23 @@ export function SongSearchRail({
             {q.trim() ? `+ Add “${q.trim()}” as a new song` : '+ Add a song'}
           </span>
         </button>
-        <button style={{ ...importRowStyle, display: 'inline-flex', alignItems: 'center', gap: '7px' }} onClick={onImportSongs}>
-          + Import a song library
-        </button>
         {onFillKeys && (
-          <button style={{ ...importRowStyle, marginTop: '1px' }} onClick={onFillKeys} data-fill-keys>
+          <button style={fillKeysRowStyle} onClick={onFillKeys} data-fill-keys>
             Fill in song keys
           </button>
         )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>
-        {libraryEmpty && rows.length === 0 && !noResults && (
-          // Both affordances it names are already in the header above, so the line only
-          // has to point at them.
+        {showInvite && (
+          // An empty library is the one time import belongs on the rail: it is the first
+          // thing a church moving from another program does, so the list's own empty state
+          // carries the button. Once there are songs it lives in Settings → Songs.
           <ListEmpty>
-            No songs yet — add one with <b>+ Add a song</b>, or bring your existing set in
-            with <b>+ Import a song library</b>.
+            No songs yet. Add one with <b>+ Add a song</b>, or bring your library over from
+            another program.
+            <button style={inviteImportStyle} onClick={onImportSongs} data-invite-import>
+              + Import a song library
+            </button>
           </ListEmpty>
         )}
         {rows.map(row)}

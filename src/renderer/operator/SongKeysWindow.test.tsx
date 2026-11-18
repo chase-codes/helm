@@ -191,12 +191,13 @@ const C = song('c', 'Cornerstone', { key: 'Eb', keySource: 'title', liveDays: 2,
 const L = song('l', 'Lord I Need You', { key: 'G or A', keySource: 'legacy' });
 
 describe('Song keys window', () => {
-  it('opens from the rail row under + Import a song library, with the search focused and No key first', async () => {
+  it('opens from the rail row under + Add a song, with the search focused and No key first', async () => {
     const { keyList, keyCounts } = installFake([A, B, C]);
     const off = renderPage();
     try {
       const fill = await screen.findByText('Fill in song keys');
-      expect(fill.previousElementSibling?.textContent).toContain('+ Import a song library');
+      // Import moved to Settings → Songs (#5), so the row sits right under the add chip.
+      expect(fill.previousElementSibling?.textContent).toContain('+ Add a song');
       await openWindow();
       expect(document.activeElement).toBe(search());
       expect(keyList).toHaveBeenCalledWith({ tab: 'none', q: '' });

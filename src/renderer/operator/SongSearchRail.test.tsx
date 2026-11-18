@@ -89,15 +89,12 @@ describe('SongSearchRail', () => {
     expect(onAddSong).toHaveBeenCalledTimes(1)
   })
 
-  it('renders the import row above the song list and fires onImportSongs', () => {
-    const onImportSongs = vi.fn()
-    render(<SongSearchRail {...baseProps} onImportSongs={onImportSongs} />)
-    const imp = screen.getByText('+ Import a song library')
-    fireEvent.click(imp)
-    expect(onImportSongs).toHaveBeenCalledTimes(1)
-    // Import row must precede the first song row in DOM order (fixed header, not list bottom).
-    const firstRow = screen.getByText('Amazing Grace')
-    expect(imp.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  // #5: import is a migration, not an every-Sunday control. Once the library has songs it
+  // lives in Settings → Songs, and the rail carries no import control at all.
+  it('offers no import control once the library has songs', () => {
+    render(<SongSearchRail {...baseProps} />)
+    expect(screen.queryByText(/Import a song library/)).toBeNull()
+    expect(screen.getByText('+ Add a song')).toBeTruthy()
   })
 
   it('fires onActivate on double-click and leaves onSelect for single-click', () => {
@@ -116,6 +113,18 @@ describe('SongSearchRail', () => {
     const empty = screen.getByText(/No songs yet/)
     expect(empty.textContent).toMatch(/\+ Add a song/)
     expect(empty.textContent).toMatch(/\+ Import a song library/)
+  })
+
+  // #5: on an empty library the invitation itself carries the import button, and it is the
+  // only one: the header never grows one, so the rail is the same height either way.
+  it('puts the import button inside the empty-library invitation, and nowhere else', () => {
+    const onImportSongs = vi.fn()
+    render(<SongSearchRail {...baseProps} rows={[]} libraryEmpty onImportSongs={onImportSongs} />)
+    const imports = screen.getAllByRole('button', { name: '+ Import a song library' })
+    expect(imports).toHaveLength(1)
+    expect(imports[0].closest('div')!.textContent).toMatch(/No songs yet/)
+    fireEvent.click(imports[0])
+    expect(onImportSongs).toHaveBeenCalledTimes(1)
   })
 
   it('shows no empty state while the library has rows', () => {
