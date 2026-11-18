@@ -216,7 +216,7 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   const setFtsTitleStmt = db.prepare('UPDATE song_fts SET title = ? WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
   const skipStmt = db.prepare('UPDATE songs SET key_skipped_at = ? WHERE id = ?');
   // First lyric line straight out of the JSON, so the list never parses 3,000 songs' sections.
-  const keyListStmt = db.prepare(`SELECT id, title, author, music_key, music_key_source, live_days, last_live_at, key_skipped_at,
+  const keyListStmt = db.prepare(`SELECT id, title, author, ccli_no, music_key, music_key_source, live_days, last_live_at, key_skipped_at,
     COALESCE(json_extract(sections_json, '$[0].lines[0]'), '') AS first_line FROM songs`);
   // Arguments come straight off IPC, so every check is a runtime one, not just a type.
   const assertSong = (id: unknown): string => {
@@ -390,11 +390,11 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       const tab = query?.tab;
       if (typeof tab !== 'string' || !Object.hasOwn(MUSIC_KEY_TABS, tab)) throw new Error(`Unknown tab: ${String(tab)}`);
       type KeyRow = {
-        id: string; title: string; author: string; music_key: string; music_key_source: string;
+        id: string; title: string; author: string; ccli_no: string; music_key: string; music_key_source: string;
         live_days: number; last_live_at: number | null; key_skipped_at: number | null; first_line: string;
       };
       let rows = (keyListStmt.all() as KeyRow[]).map((r): MusicKeyRow => ({
-        id: r.id, title: r.title, author: r.author, firstLine: r.first_line,
+        id: r.id, title: r.title, author: r.author, firstLine: r.first_line, ccli: r.ccli_no,
         key: r.music_key, keySource: r.music_key ? (r.music_key_source as MusicKeySource | '') : '',
         liveDays: r.live_days, lastLiveAt: r.last_live_at, skippedAt: r.key_skipped_at,
       }));

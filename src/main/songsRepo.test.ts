@@ -296,10 +296,10 @@ describe('song keys', () => {
   });
 
   test('keyList returns light rows with the first lyric line', () => {
-    const s = keys.add({ title: 'Cornerstone', author: 'Hillsong', text: 'Verse 1\nMy hope is built on nothing less\nThan Jesus blood\n\nChorus\nChrist alone' });
+    const s = keys.add({ title: 'Cornerstone', author: 'Hillsong', ccli: 'CCLI # 3006130', text: 'Verse 1\nMy hope is built on nothing less\nThan Jesus blood\n\nChorus\nChrist alone' });
     keys.setMusicKey(s.id, 'C', 'typed');
     expect(keys.keyList({ tab: 'all' })).toEqual([{
-      id: s.id, title: 'Cornerstone', author: 'Hillsong', firstLine: 'My hope is built on nothing less',
+      id: s.id, title: 'Cornerstone', author: 'Hillsong', firstLine: 'My hope is built on nothing less', ccli: '3006130',
       key: 'C', keySource: 'typed', liveDays: 0, lastLiveAt: null, skippedAt: null,
     }]);
   });

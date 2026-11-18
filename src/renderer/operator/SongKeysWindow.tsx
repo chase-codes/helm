@@ -24,8 +24,10 @@ import { useDebouncedSearch } from './useDebouncedSearch';
 import { useWindowedList } from '../shared/useWindowedList';
 import { SearchIcon } from '../shared/icons';
 import { MONO } from '../shared/fonts';
-import { SOURCE_WORDS, defaultChecked, keysCount, progressLine, titleKeyNote } from './songKeysText';
+import { SOURCE_WORDS, defaultChecked, keysCount, leftOutLine, progressLine, savedLine, titleKeyNote } from './songKeysText';
 import { TitleKeyReview, type TitleKeyReviewRow } from './TitleKeyReview';
+import { KeySheetReview } from './KeySheetReview';
+import { initiallyChecked, keyImportBatch, type KeyImportReview } from '../../shared/songs/keySheet';
 
 // The Song keys window (song keys spec, Phase 1c): a library-shaped list on the left, the
 // selected song and the key picker on the right, built for 15-minute sessions over a
@@ -54,8 +56,15 @@ const TABS: { id: MusicKeyTab; label: string }[] = [
 
 type PendingUndo =
   | { kind: 'one'; id: string; prevKey: string; prevSource: MusicKeySource | ''; prevSkippedAt: number | null; message: string }
-  /** The title sweep: every song's old title, key, source and skip time. */
-  | { kind: 'sweep'; restore: MusicKeyRestore[]; message: string };
+  /** A batch (the title sweep, a spreadsheet import): every song's old title, key, source
+   * and skip time. */
+  | { kind: 'batch'; restore: MusicKeyRestore[]; message: string };
+
+/** The spreadsheet review while it is open: the file's rows, and what is checked. */
+interface SheetReview extends KeyImportReview {
+  fileName: string;
+  checked: Map<number, MusicKeyRow>;
+}
 
 /** A candidate as a review row. `has-key` and the title's own flags hold a row back. */
 const reviewRow = (c: TitleKeyCandidate): TitleKeyReviewRow => ({
@@ -143,6 +152,11 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
   // The library sweep: titles that end in a key, and the review when it is open.
   const [candidates, setCandidates] = useState<TitleKeyCandidate[]>([]);
   const [sweep, setSweep] = useState<{ checked: Set<string> } | null>(null);
+  // The spreadsheet round-trip: the review when one is open, and the one line that reports
+  // a save or says what is wrong with a file (it stands in for the progress line).
+  const [sheet, setSheet] = useState<SheetReview | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const undo = useTimedUndo<PendingUndo>(5000);
   const panel = usePanelWidth('helmSongKeysListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -288,7 +302,7 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
     const p = undo.pending;
     if (!p) return;
     undo.cancel();
-    if (p.kind === 'sweep') {
+    if (p.kind === 'batch') {
       window.helm.songs.restoreMusicKeys(p.restore).then((songs) => {
         for (const song of songs) onKeySaved(song);
         if (!mountedRef.current) return;
@@ -331,13 +345,61 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
     setSweep(null);
     window.helm.songs.setMusicKeys(entries.map((e) => e.change)).then((songs) => {
       for (const song of songs) onKeySaved(song);
-      undo.arm({ kind: 'sweep', restore: entries.map((e) => e.restore), message: `Moved ${keysCount(songs.length)}` });
+      undo.arm({ kind: 'batch', restore: entries.map((e) => e.restore), message: `Moved ${keysCount(songs.length)}` });
       if (!mountedRef.current) return;
       refresh();
       loadCandidates();
     }, console.error);
   };
   const sweepCount = sweep ? movable.filter((c) => sweep.checked.has(c.id)).length : 0;
+
+  // ---------------- the spreadsheet round-trip ----------------
+  // Main owns both dialogs. Nothing is written until the review applies its one batch.
+  const exportKeys = (): void => {
+    setBusy(true);
+    setNotice(null);
+    window.helm.songs
+      .exportKeys()
+      .then((r) => {
+        if (!mountedRef.current) return;
+        if ('saved' in r) setNotice(savedLine(r.saved, r.fileName));
+        else if ('error' in r) setNotice(r.error);
+      }, console.error)
+      .finally(() => mountedRef.current && setBusy(false));
+  };
+  const importKeys = (): void => {
+    setBusy(true);
+    setNotice(null);
+    window.helm.songs
+      .importKeys()
+      .then((r) => {
+        if (!mountedRef.current) return;
+        if ('error' in r) setNotice(r.error);
+        else if ('rows' in r) setSheet({ ...r, checked: initiallyChecked(r.rows) });
+      }, console.error)
+      .finally(() => mountedRef.current && setBusy(false));
+  };
+  const checkSheet = (line: number, song: MusicKeyRow | null): void =>
+    setSheet((cur) => {
+      if (!cur) return cur;
+      const checked = new Map(cur.checked);
+      if (song) checked.set(line, song);
+      else checked.delete(line);
+      return { ...cur, checked };
+    });
+  const sheetBatch = sheet ? keyImportBatch(sheet.rows, sheet.checked) : null;
+  const applySheet = (): void => {
+    if (!sheetBatch?.changes.length) return;
+    const { changes, restores } = sheetBatch;
+    setSheet(null);
+    window.helm.songs.setMusicKeys(changes).then((songs) => {
+      for (const song of songs) onKeySaved(song);
+      undo.arm({ kind: 'batch', restore: restores, message: `Set ${keysCount(songs.length)}` });
+      if (!mountedRef.current) return;
+      refresh();
+      loadCandidates();
+    }, console.error);
+  };
 
   // The keys this window owns. Capture phase on window, like the picker, so they are handled
   // before the page dispatcher could see them; the picker leaves exactly these to us.
@@ -361,12 +423,15 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    // The review is one more layer: Escape steps back out of it to the list, never further.
-    // Its checkboxes take Space; the list's keys (arrows, `/`) have nothing to act on.
-    if (sweep) {
+    // A review is one more layer: Escape steps back out of it to the list, never further
+    // (out of a Not found search field first). Its checkboxes take Space; the list's keys
+    // (arrows, `/`) have nothing to act on.
+    if (sweep || sheet) {
       if (e.key === 'Escape') {
         own();
-        setSweep(null);
+        if (tag === 'input' && (target as HTMLInputElement).type === 'text') target!.blur();
+        else if (sweep) setSweep(null);
+        else setSheet(null);
       }
       return;
     }
@@ -500,17 +565,31 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
       <div style={headerStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ fontWeight: 700, fontSize: '18px', flex: 1 }}>Song keys</div>
+          {/* Hidden while a review is open, so a second file never lands on top of the first. */}
+          <div style={{ display: 'flex', gap: '8px', visibility: sweep || sheet ? 'hidden' : 'visible' }}>
+            <button
+              style={{ ...secondaryStyle, opacity: busy || counts?.noKey === 0 ? 0.5 : 1 }}
+              disabled={busy || counts?.noKey === 0}
+              title={counts?.noKey === 0 ? 'Every song has a key.' : 'Save the No key songs as a spreadsheet to fill in.'}
+              onClick={exportKeys}
+            >
+              Export songs without a key…
+            </button>
+            <button style={{ ...secondaryStyle, opacity: busy ? 0.5 : 1 }} disabled={busy} onClick={importKeys}>
+              + Import keys from a spreadsheet
+            </button>
+          </div>
           <button style={{ fontSize: '13px', color: T.faint, padding: '4px 6px' }} onClick={onClose} title="Close" aria-label="Close">
             ✕
           </button>
         </div>
-        <div style={progressStyle} data-progress-line title={progressLine(counts)}>
-          {progressLine(counts)}
+        <div style={progressStyle} data-progress-line title={notice ?? progressLine(counts)}>
+          {notice ?? progressLine(counts)}
         </div>
       </div>
 
       {/* The banner slot: one line, only while some title still ends in a key (spec 1d). */}
-      {!sweep && ready.length > 0 && (
+      {!sweep && !sheet && ready.length > 0 && (
         <div style={bannerStyle} data-title-key-banner>
           <span style={{ ...clip, flex: 1, minWidth: 0 }}>
             {ready.length.toLocaleString()} {ready.length === 1 ? 'title ends' : 'titles end'} in a key, like <i>{example}</i>.
@@ -533,6 +612,29 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
             </button>
             <button style={{ ...primaryStyle, opacity: sweepCount ? 1 : 0.5 }} disabled={!sweepCount} onClick={applySweep}>
               Move {keysCount(sweepCount)}
+            </button>
+          </div>
+        </div>
+      ) : sheet ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 0' }} data-key-sheet>
+          <div style={{ ...clip, height: '20px', flexShrink: 0, marginBottom: '8px', fontSize: '13px', color: T.dim }} data-key-sheet-line>
+            {sheet.fileName}
+            {leftOutLine(sheet.blank, sheet.same) ? ` · ${leftOutLine(sheet.blank, sheet.same)}` : ''}
+          </div>
+          <KeySheetReview rows={sheet.rows} checked={sheet.checked} onCheck={checkSheet} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 0 14px', flexShrink: 0 }}>
+            <span style={{ ...clip, flex: 1, fontSize: '12px', color: T.faint }}>
+              Only Ready starts checked. A key a person set changes only when you check its row.
+            </span>
+            <button style={secondaryStyle} onClick={() => setSheet(null)}>
+              Cancel
+            </button>
+            <button
+              style={{ ...primaryStyle, opacity: sheetBatch?.changes.length ? 1 : 0.5 }}
+              disabled={!sheetBatch?.changes.length}
+              onClick={applySheet}
+            >
+              Set {keysCount(sheetBatch?.changes.length ?? 0)}
             </button>
           </div>
         </div>

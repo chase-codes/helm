@@ -10,8 +10,10 @@ import { dispatchModeKey } from './keyDispatch';
 import { settleAndClear } from '../../test/mocks';
 import type { ModeKeyHandlerRef } from './App';
 import type {
-  MusicKeyChange, MusicKeyCounts, MusicKeyListQuery, MusicKeyRestore, MusicKeyRow, PresentationState, Song, TitleKeyCandidate
+  KeysImportResult, MusicKeyChange, MusicKeyCounts, MusicKeyListQuery, MusicKeyRestore, MusicKeyRow, PresentationState, Song,
+  TitleKeyCandidate
 } from '../../shared/types';
+import { buildKeyImportReview, readKeySheet } from '../../shared/songs/keySheet';
 import { extractKeyFromTitle, type MusicKey, type MusicKeySource } from '../../shared/songs/musicKey';
 
 afterEach(cleanup);
@@ -37,7 +39,7 @@ const song = (id: string, title: string, extra: Partial<FakeSong> = {}): FakeSon
 type Mock = ReturnType<typeof vi.fn>;
 type FakeHelm = Record<
   'keyList' | 'keyCounts' | 'setMusicKey' | 'skipMusicKey' | 'restoreMusicKey' | 'get' | 'cue' | 'goLive' | 'take' | 'setOutput'
-  | 'titleKeyCandidates' | 'setMusicKeys' | 'restoreMusicKeys',
+  | 'titleKeyCandidates' | 'setMusicKeys' | 'restoreMusicKeys' | 'exportKeys' | 'importKeys',
   Mock
 > & { db: Map<string, FakeSong> };
 /** An in-memory stand-in for main's song keys calls, with the repo's tab rules. */
@@ -49,7 +51,7 @@ function installFake(seed: FakeSong[], state: PresentationState = NOTHING_LIVE):
     return { ...rest };
   };
   const toRow = (s: FakeSong): MusicKeyRow => ({
-    id: s.id, title: s.title, author: s.author, firstLine: s.sections[0]?.lines[0] ?? '',
+    id: s.id, title: s.title, author: s.author, firstLine: s.sections[0]?.lines[0] ?? '', ccli: s.ccli ?? '',
     key: s.key ?? '', keySource: s.key ? (s.keySource ?? '') : '',
     liveDays: s.liveDays ?? 0, lastLiveAt: s.lastLiveAt ?? null, skippedAt: s.skippedAt ?? null
   });
@@ -125,6 +127,9 @@ function installFake(seed: FakeSong[], state: PresentationState = NOTHING_LIVE):
       if (r.title !== undefined) s.title = r.title;
       return out(s);
     })));
+  const exportKeys = vi.fn(() => Promise.resolve({ canceled: true }));
+  // Main's import, over the fake library: a test hands it the file's text with sheetText().
+  const importKeys = vi.fn((): Promise<KeysImportResult> => Promise.resolve({ canceled: true }));
   const cue = vi.fn();
   const goLive = vi.fn();
   const take = vi.fn();
@@ -134,14 +139,15 @@ function installFake(seed: FakeSong[], state: PresentationState = NOTHING_LIVE):
       list: () => Promise.resolve([...db.values()].map(out)),
       search: vi.fn(() => Promise.resolve([])),
       get, add: vi.fn(), update: vi.fn(), remove: vi.fn(),
-      keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey, titleKeyCandidates, setMusicKeys, restoreMusicKeys
+      keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey, titleKeyCandidates, setMusicKeys, restoreMusicKeys,
+      exportKeys, importKeys
     },
     presentation: { get: () => Promise.resolve(state), onState: () => () => {}, cue, goLive, take, setOutput },
     songImport: { sources: () => Promise.resolve([]), scan: vi.fn(), commit: vi.fn(), onProgress: () => () => {} }
   };
   return {
     keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey, get, cue, goLive, take, setOutput,
-    titleKeyCandidates, setMusicKeys, restoreMusicKeys, db
+    titleKeyCandidates, setMusicKeys, restoreMusicKeys, exportKeys, importKeys, db
   };
 }
 
@@ -571,5 +577,228 @@ describe('Song keys window — empty states and the progress line', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Move 1 key' }));
       await waitFor(() => expect(fake.setMusicKeys).toHaveBeenCalledWith([{ id: 's', key: 'Db', source: 'typed', title: 'Cornerstone' }]));
     });
+  });
+});
+
+describe('Song keys window — the spreadsheet round-trip', () => {
+  const renderWindow = (onKeySaved: (s: Song) => void = () => {}): void => {
+    render(
+      <ThemeCtx.Provider value={theme}>
+        <SongKeysWindow onClose={() => {}} onKeySaved={onKeySaved} />
+      </ThemeCtx.Provider>
+    );
+  };
+  /** What main's import would return for this file over the fake library. */
+  const importing = (fake: FakeHelm, text: string, fileName = 'Song keys to fill in.csv'): void => {
+    fake.importKeys.mockImplementation(async () => {
+      const read = readKeySheet(text);
+      if ('error' in read) return read;
+      const songs = (await (fake.keyList as (q: MusicKeyListQuery) => Promise<MusicKeyRow[]>)({ tab: 'all' }));
+      return { fileName, ...buildKeyImportReview(read.rows, songs) };
+    });
+  };
+  const sheetRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[data-sheet-row]')];
+  const groupTab = (g: string): HTMLElement => document.querySelector<HTMLElement>(`[data-sheet-group="${g}"]`)!;
+  const boxOf = (row: HTMLElement): HTMLInputElement => row.querySelector('input[type="checkbox"]')!;
+  const noteOf = (row: HTMLElement): string => row.querySelector('[data-sheet-note]')!.textContent!;
+
+  const WM = song('wm', 'Way Maker', { skippedAt: 5 });
+  const OC = song('oc', 'Oceans', { key: 'D', keySource: 'typed' });
+  const GG = song('gg', 'Goodness Of God', { key: 'capo 2 G', keySource: 'legacy' });
+  const CS1 = song('cs1', 'Cornerstone', { author: 'Edward Mote' });
+  const CS2 = song('cs2', 'Cornerstone', { author: 'Reuben Morgan' });
+  const IW = song('iw', 'It Is Well');
+  const GY = song('gy', 'Great Are You Lord', { key: 'Ab', keySource: 'typed' });
+  const HF = song('hf', 'Holy, Holy Forevermore');
+  const LIBRARY = [WM, OC, GG, CS1, CS2, IW, GY, HF];
+  const FILE = [
+    'Title,Author,Key',
+    'Way Maker,,Bb',
+    'Oceans,,E',
+    'Goodness of God,,A',
+    'Cornerstone,Hillsong,C',
+    'It Is Well With My Soul,,D',
+    'Holy Forever,,G',
+    'Way Maker,,G or A',
+    'Way Maker,,A (capo 2)',
+    'Way Maker,,D - E',
+    'Way Maker,,Live',
+    'Great Are You Lord,,G#',
+    'Oceans,,',
+    ''
+  ].join('\r\n');
+
+  it('shows both buttons; Export saves through main and says where', async () => {
+    const fake = installFake([WM, OC]);
+    fake.exportKeys.mockResolvedValue({ saved: 2814, fileName: 'Song keys to fill in.csv' });
+    renderWindow();
+    await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' });
+    await waitFor(() => expect(progress()).not.toBe(''));
+    fireEvent.click(screen.getByRole('button', { name: 'Export songs without a key…' }));
+    await waitFor(() => expect(progress()).toBe('Saved 2,814 songs to Song keys to fill in.csv'));
+    expect(fake.exportKeys).toHaveBeenCalledTimes(1);
+  });
+
+  it('Export is off when every song has a key', async () => {
+    installFake([OC]);
+    renderWindow();
+    const btn = await screen.findByRole('button', { name: 'Export songs without a key…' });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(true));
+  });
+
+  it('a file Helm cannot use gets its one plain sentence, and no review', async () => {
+    const fake = installFake(LIBRARY);
+    fake.importKeys.mockResolvedValue({ error: "Helm can't open Excel files. Save it as CSV first (File → Save As → CSV), then import that." });
+    renderWindow();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(progress()).toBe("Helm can't open Excel files. Save it as CSV first (File → Save As → CSV), then import that."));
+    expect(document.querySelector('[data-key-sheet]')).toBeNull();
+    importing(fake, 'Song,Notes\nWay Maker,x');
+    fireEvent.click(screen.getByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(progress()).toBe('This file has no Key column. The first row should name the columns, like Title and Key.'));
+  });
+
+  it('sorts the rows into the five groups; only Ready starts checked; reasons are plain words', async () => {
+    const fake = installFake(LIBRARY);
+    importing(fake, FILE);
+    renderWindow();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(document.querySelector('[data-key-sheet]')).toBeTruthy());
+    expect(document.querySelector('[data-key-sheet-line]')!.textContent).toBe(
+      'Song keys to fill in.csv · 1 row had no key and 1 already had that key; they were left out.'
+    );
+    expect([...document.querySelectorAll('[data-sheet-group]')].map((t) => t.textContent)).toEqual([
+      'Ready2', 'Pick one2', 'Already has a different key1', 'Not a key4', 'Not found1'
+    ]);
+    // Ready: checked, matched by title (a legacy value counts as no key).
+    expect(sheetRows().map((r) => [r.textContent, boxOf(r).checked])).toEqual([
+      ['Way MakerBbMatched by title', true],
+      ['Goodness of GodAMatched by title', true]
+    ]);
+    expect(screen.getByRole('button', { name: 'Set 2 keys' })).toBeTruthy();
+
+    fireEvent.click(groupTab('different'));
+    const diff = sheetRows()[0];
+    expect(diff.querySelector('[data-sheet-key]')!.textContent).toBe('Helm: D · Sheet: E');
+    expect(boxOf(diff).checked).toBe(false);
+    expect(noteOf(diff)).toBe('Keeps D');
+
+    fireEvent.click(groupTab('not-a-key'));
+    expect(sheetRows().map((r) => [r.querySelector('[data-sheet-key]')!.textContent, noteOf(r)])).toEqual([
+      ['“G or A”', 'two keys'], ['“A (capo 2)”', 'capo: which is it?'], ['“D - E”', 'a key change'], ['“Live”', 'not a key']
+    ]);
+    expect(sheetRows().every((r) => boxOf(r).disabled)).toBe(true);
+  });
+
+  it('checking a different key switches it; Pick one needs a song chosen, from up to three', async () => {
+    const fake = installFake(LIBRARY);
+    importing(fake, FILE);
+    renderWindow();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(document.querySelector('[data-key-sheet]')).toBeTruthy());
+    fireEvent.click(groupTab('different'));
+    fireEvent.click(boxOf(sheetRows()[0]));
+    expect(noteOf(sheetRows()[0])).toBe('Switches to E');
+    expect(screen.getByRole('button', { name: 'Set 3 keys' })).toBeTruthy();
+
+    fireEvent.click(groupTab('pick'));
+    const [corner, well] = sheetRows();
+    expect(boxOf(corner).disabled).toBe(true);
+    expect(noteOf(corner)).toBe('Pick the song');
+    expect(noteOf(well)).toBe('A close title: pick the song');
+    const choices = [...corner.querySelectorAll<HTMLElement>('[data-sheet-choice]')];
+    expect(choices.map((c) => c.textContent)).toEqual([
+      'CornerstoneEdward MoteNo keyCornerstone line one',
+      'CornerstoneReuben MorganNo keyCornerstone line one'
+    ]);
+    fireEvent.click(choices[1].querySelector('input')!);
+    expect(boxOf(sheetRows()[0]).checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Set 4 keys' })).toBeTruthy();
+    // Unchecking clears the choice.
+    fireEvent.click(boxOf(sheetRows()[0]));
+    expect(screen.getByRole('button', { name: 'Set 3 keys' })).toBeTruthy();
+  });
+
+  it('Not found: a type-ahead over the library matches a row by hand', async () => {
+    const fake = installFake(LIBRARY);
+    importing(fake, FILE);
+    renderWindow();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(document.querySelector('[data-key-sheet]')).toBeTruthy());
+    fireEvent.click(groupTab('not-found'));
+    const row = sheetRows()[0];
+    expect(row.textContent).toContain('Type a few words of the title to find it.');
+    fireEvent.change(row.querySelector('[data-sheet-find]')!, { target: { value: 'holy for' } });
+    await waitFor(() => expect(fake.keyList).toHaveBeenCalledWith({ tab: 'all', q: 'holy for' }));
+    const choice = await waitFor(() => {
+      const c = sheetRows()[0].querySelector<HTMLElement>('[data-sheet-choice="hf"]');
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    fireEvent.click(choice.querySelector('input')!);
+    expect(boxOf(sheetRows()[0]).checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Set 3 keys' })).toBeTruthy();
+  });
+
+  it('applies one batch with source csv, toasts Set N keys, and Undo restores each key, source and skip exactly', async () => {
+    const onKeySaved = vi.fn();
+    const fake = installFake(LIBRARY);
+    importing(fake, FILE);
+    renderWindow(onKeySaved);
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(document.querySelector('[data-key-sheet]')).toBeTruthy());
+    fireEvent.click(groupTab('different'));
+    fireEvent.click(boxOf(sheetRows()[0]));
+    fireEvent.click(screen.getByRole('button', { name: 'Set 3 keys' }));
+    await waitFor(() => expect(fake.setMusicKeys).toHaveBeenCalledTimes(1));
+    expect(fake.setMusicKeys).toHaveBeenCalledWith([
+      { id: 'wm', key: 'Bb', source: 'csv' },
+      { id: 'oc', key: 'E', source: 'csv' },
+      { id: 'gg', key: 'A', source: 'csv' }
+    ]);
+    expect(await screen.findByText('Set 3 keys')).toBeTruthy();
+    expect(document.querySelector('[data-key-sheet]')).toBeNull();
+    expect(onKeySaved).toHaveBeenCalledWith(expect.objectContaining({ id: 'oc', key: 'E', keySource: 'csv' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(fake.restoreMusicKeys).toHaveBeenCalledTimes(1));
+    expect(fake.restoreMusicKeys).toHaveBeenCalledWith([
+      { id: 'wm', key: '', source: '', skippedAt: 5 },
+      { id: 'oc', key: 'D', source: 'typed', skippedAt: null },
+      { id: 'gg', key: 'capo 2 G', source: 'legacy', skippedAt: null }
+    ]);
+    await waitFor(() => expect(fake.db.get('oc')).toMatchObject({ key: 'D', keySource: 'typed' }));
+    expect(fake.db.get('gg')).toMatchObject({ key: 'capo 2 G', keySource: 'legacy' });
+    expect(fake.db.get('wm')).toMatchObject({ skippedAt: 5 });
+    expect(fake.db.get('wm')!.key).toBeUndefined();
+  });
+
+  it('Escape leaves a search field first, then the review, writing nothing', async () => {
+    const fake = installFake(LIBRARY);
+    importing(fake, FILE);
+    renderWindow();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(document.querySelector('[data-key-sheet]')).toBeTruthy());
+    fireEvent.click(groupTab('not-found'));
+    const find = sheetRows()[0].querySelector<HTMLInputElement>('[data-sheet-find]')!;
+    find.focus();
+    press('Escape');
+    expect(document.activeElement).not.toBe(find);
+    expect(document.querySelector('[data-key-sheet]')).toBeTruthy();
+    press('Escape');
+    expect(document.querySelector('[data-key-sheet]')).toBeNull();
+    expect(windowTitle()).toBeTruthy();
+    expect(fake.setMusicKeys).not.toHaveBeenCalled();
+  });
+
+  it('windows the review: three thousand Ready rows mount a few dozen', async () => {
+    const many = Array.from({ length: 3000 }, (_, i) => song(`s${i}`, `Song number ${i}`));
+    const fake = installFake(many);
+    importing(fake, ['Title,Key', ...many.map((s) => `${s.title},G`)].join('\n'));
+    renderWindow();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Import keys from a spreadsheet' }));
+    await waitFor(() => expect(sheetRows().length).toBeGreaterThan(0));
+    expect(sheetRows().length).toBeLessThan(60);
+    expect(screen.getByRole('button', { name: 'Set 3,000 keys' })).toBeTruthy();
   });
 });

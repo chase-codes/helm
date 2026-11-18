@@ -14,6 +14,7 @@ import type { PreserviceEngine } from './preserviceEngine';
 import type { MediaRepo } from './mediaRepo';
 import type { MediaImport } from './mediaImport';
 import type { SongImport } from './songImport';
+import type { KeySheetFiles } from './keySheetFiles';
 import type { SongSources } from './songSources';
 import type { Updater } from './updater';
 import { parseMessageText } from '../shared/message/parseImport';
@@ -68,6 +69,7 @@ export interface IpcDeps {
   mediaRepo: MediaRepo;
   mediaImport: MediaImport;
   songImport: SongImport;
+  keySheetFiles: KeySheetFiles;
   songSources: SongSources;
   updater: Updater;
 }
@@ -86,6 +88,7 @@ export function registerIpc(deps: IpcDeps): void {
     mediaRepo,
     mediaImport,
     songImport,
+    keySheetFiles,
     songSources,
     updater,
   } = deps;
@@ -107,6 +110,8 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['songs']['keyCounts']>(CH.songsKeyCounts, () => repo.keyCounts());
   handleApi<HelmApi['songs']['titleKeyCandidates']>(CH.songsTitleKeyCandidates, () => repo.titleKeyCandidates());
   handleApi<HelmApi['songs']['restoreMusicKeys']>(CH.songsRestoreMusicKeys, (batch) => repo.restoreMusicKeys(batch));
+  handleApi<HelmApi['songs']['exportKeys']>(CH.songsExportKeys, () => keySheetFiles.exportNoKey());
+  handleApi<HelmApi['songs']['importKeys']>(CH.songsImportKeys, () => keySheetFiles.importSheet());
   handleApi<HelmApi['presentation']['get']>(CH.presGet, () => presentation.get());
   onApi<HelmApi['presentation']['cue']>(CH.presCue, (key, slide) => presentation.cue(key, slide));
   onApi<HelmApi['presentation']['goLive']>(CH.presGoLive, (key, slide) => presentation.goLive(key, slide));

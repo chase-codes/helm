@@ -1,6 +1,7 @@
 import type { MusicKeyCounts, TitleKeyRowFlag } from '../../shared/types';
 import type { MusicKeySource } from '../../shared/songs/musicKey';
 import type { TitleKeyReviewRow } from './TitleKeyReview';
+import type { KeyCellProblem, KeyImportGroup } from '../../shared/songs/keySheet';
 
 // The Song keys window's words (docs/ux-vocabulary.md, "Song keys"), apart from the
 // component so the window file exports components only.
@@ -43,3 +44,38 @@ export const keysCount = (n: number): string => `${n.toLocaleString()} ${n === 1
 /** The rows a title-key review starts with checked: every one with a key that is not flagged. */
 export const defaultChecked = (rows: TitleKeyReviewRow[]): Set<string> =>
   new Set(rows.filter((r) => r.key && !r.flagged).map((r) => r.id));
+
+// ---------------- the spreadsheet round-trip (Phase 2) ----------------
+
+/** The import review's groups (docs/ux-vocabulary.md, "Song keys"). */
+export const GROUP_WORDS: Record<KeyImportGroup, string> = {
+  ready: 'Ready',
+  pick: 'Pick one',
+  different: 'Already has a different key',
+  'not-a-key': 'Not a key',
+  'not-found': 'Not found'
+};
+
+/** Why a sheet's cell is not one key, in plain words (normalizeKey's reject reasons). */
+export const PROBLEM_WORDS: Record<KeyCellProblem, string> = {
+  'two-keys': 'two keys',
+  // "G/D": an alternative or a change; either way, two keys for one song.
+  'ambiguous-slash': 'two keys',
+  'capo-ambiguous': 'capo: which is it?',
+  'key-change': 'a key change',
+  'not-a-key': 'not a key'
+};
+
+const rowsCount = (n: number): string => `${n.toLocaleString()} ${n === 1 ? 'row' : 'rows'}`;
+
+/** The review's one line about the rows it left out without a look, or ''. */
+export function leftOutLine(blank: number, same: number): string {
+  if (blank && same) return `${rowsCount(blank)} had no key and ${same.toLocaleString()} already had that key; they were left out.`;
+  if (blank) return `${rowsCount(blank)} had no key and ${blank === 1 ? 'was' : 'were'} left out.`;
+  if (same) return `${rowsCount(same)} already had that key and ${same === 1 ? 'was' : 'were'} left out.`;
+  return '';
+}
+
+/** After `Export songs without a key…`: "Saved 2,814 songs to Song keys to fill in.csv". */
+export const savedLine = (n: number, fileName: string): string =>
+  `Saved ${n.toLocaleString()} ${n === 1 ? 'song' : 'songs'} to ${fileName}`;
