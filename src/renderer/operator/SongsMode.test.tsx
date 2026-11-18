@@ -35,17 +35,22 @@ const SONGS: Song[] = [
   }
 ];
 
-function installHelmStub(searchImpl?: (q: string, field: string) => Promise<SongSearchResult[]>): {
+function installHelmStub(
+  searchImpl?: (q: string, field: string) => Promise<SongSearchResult[]>,
+  songs: Song[] = SONGS
+): {
   scan: ReturnType<typeof vi.fn>;
   commit: ReturnType<typeof vi.fn>;
   search: ReturnType<typeof vi.fn>;
+  list: ReturnType<typeof vi.fn>;
 } {
   const search = vi.fn(searchImpl ?? (() => Promise.resolve([])));
   const scan = vi.fn();
   const commit = vi.fn();
+  const list = vi.fn(() => Promise.resolve(songs));
   (window as unknown as { helm: unknown }).helm = {
     songs: {
-      list: () => Promise.resolve(SONGS),
+      list,
       search,
       update: vi.fn(),
       remove: vi.fn(() => Promise.resolve([]))
@@ -65,13 +70,13 @@ function installHelmStub(searchImpl?: (q: string, field: string) => Promise<Song
       onProgress: () => () => {}
     }
   };
-  return { scan, commit, search };
+  return { scan, commit, search, list };
 }
 
-const renderMode = (keyHandlerRef: ModeKeyHandlerRef): ReturnType<typeof render> =>
+const renderMode = (keyHandlerRef: ModeKeyHandlerRef, libraryRevision?: number): ReturnType<typeof render> =>
   render(
     <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
-      <SongsMode keyHandlerRef={keyHandlerRef} active />
+      <SongsMode keyHandlerRef={keyHandlerRef} active libraryRevision={libraryRevision} />
     </ThemeCtx.Provider>
   );
 
@@ -144,14 +149,14 @@ describe('SongsMode', () => {
   // contract as QuickAdd. Without it, keyDispatch's typing guard never trips inside the
   // wizard (it has no <input>/<textarea>) so a focused button's Enter falls through
   // to onGoLive instead of being suppressed, and Escape does nothing.
+  // The page's own wizard opens only from the empty library's invitation (#5); with songs in
+  // the library, import lives in Settings → Songs (SettingsModal.test.tsx).
   it('reports isModalOpen true while the import wizard is open, and Escape closes it', async () => {
-    installHelmStub();
+    installHelmStub(undefined, []);
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
 
-    // The search-rail row is the unique match ("John Newton · 1 stanza"); the big preview
-    // header repeats the bare title/author, so waiting on "Amazing Grace" alone is ambiguous.
-    await screen.findByText(/John Newton ·/);
+    await screen.findByText(/No songs yet/);
     expect(keyHandlerRef.current?.isModalOpen()).toBe(false);
 
     fireEvent.click(screen.getByText('+ Import a song library'));
@@ -185,7 +190,7 @@ describe('SongsMode', () => {
   // dismissed, so losing the screen mid-import loses the operator's only view of the
   // done-step summary and the list naming which songs could not be read.
   it('does not close the import wizard on Escape while a commit is in flight', async () => {
-    const helm = installHelmStub();
+    const helm = installHelmStub(undefined, []);
     helm.scan.mockResolvedValue(SCAN_ONE_NEW);
     let resolveCommit: (r: SongImportResult) => void = () => {};
     helm.commit.mockImplementation(
@@ -196,7 +201,7 @@ describe('SongsMode', () => {
     );
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
     renderMode(keyHandlerRef);
-    await screen.findByText(/John Newton ·/);
+    await screen.findByText(/No songs yet/);
 
     fireEvent.click(screen.getByText('+ Import a song library'));
     fireEvent.click(await screen.findByText('EasyWorship'));
@@ -228,7 +233,31 @@ describe('SongsMode', () => {
     expect(screen.queryByText('Import songs')).toBeNull();
   });
 
-  it('re-runs the active search, not just the library refresh, once an import completes', async () => {
+  it('fills an empty library once the invitation\'s import completes', async () => {
+    const helm = installHelmStub(undefined, []);
+    helm.list.mockResolvedValueOnce([]).mockResolvedValue(SONGS); // mount, then after the import
+    helm.scan.mockResolvedValue(SCAN_ONE_NEW);
+    helm.commit.mockResolvedValue({ imported: 1, skipped: 0, unreadable: [] });
+    renderMode({ current: null });
+    await screen.findByText(/No songs yet/);
+
+    fireEvent.click(screen.getByText('+ Import a song library'));
+    fireEvent.click(await screen.findByText('EasyWorship'));
+    fireEvent.click(await screen.findByText(/Import 1 song/));
+    await screen.findByText(/Imported 1 song/);
+    fireEvent.click(screen.getByText('Close'));
+
+    await screen.findByText(/John Newton ·/);
+    expect(screen.queryByText(/No songs yet/)).toBeNull();
+    expect(screen.queryByText(/Import a song library/)).toBeNull();
+  });
+
+  // An import run from Settings → Songs reaches this page as a `libraryRevision` bump (App
+  // owns the counter). It must refresh exactly like the page's own import did: the library,
+  // AND the active search — displayedRows reads `results` whenever a query is typed, so a
+  // library refresh alone would leave the just-imported songs unfindable until the next
+  // keystroke.
+  it('re-runs the active search, not just the library refresh, when songs are imported from Settings', async () => {
     const NEW_RESULT: SongSearchResult = {
       song: { ...SONGS[0], id: 's2', title: 'Newly Imported Song' },
       score: 1,
@@ -238,28 +267,39 @@ describe('SongsMode', () => {
       .fn<(q: string, field: string) => Promise<SongSearchResult[]>>()
       .mockResolvedValueOnce([]) // the keystroke search, before the import
       .mockResolvedValueOnce([NEW_RESULT]); // the re-run search, after the import completes
-    const helm = installHelmStub();
-    (window as unknown as { helm: { songs: { search: typeof search } } }).helm.songs.search = search;
-    helm.scan.mockResolvedValue(SCAN_ONE_NEW);
-    helm.commit.mockResolvedValue({ imported: 1, skipped: 0, unreadable: [] });
+    const helm = installHelmStub(search);
 
     const keyHandlerRef: ModeKeyHandlerRef = { current: null };
-    renderMode(keyHandlerRef);
+    const { rerender } = renderMode(keyHandlerRef, 0);
     await screen.findByText(/John Newton ·/);
+    await settleAndClear(helm.list);
 
     const input = screen.getByPlaceholderText(/Title or a lyric line/);
     fireEvent.change(input, { target: { value: 'amazing' } });
     await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByText('+ Import a song library'));
-    fireEvent.click(await screen.findByText('EasyWorship'));
-    fireEvent.click(await screen.findByText(/Import 1 song/));
-    await screen.findByText(/Imported 1 song/);
+    rerender(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <SongsMode keyHandlerRef={keyHandlerRef} active libraryRevision={1} />
+      </ThemeCtx.Provider>
+    );
 
     await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
     expect(search).toHaveBeenNthCalledWith(2, 'amazing', 'all');
-    fireEvent.click(screen.getByText('Close'));
+    expect(helm.list).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByText('Newly Imported Song')).toBeTruthy());
+  });
+
+  it('does not refresh the library on mount from a non-zero revision, or on a keystroke', async () => {
+    const helm = installHelmStub();
+    renderMode({ current: null }, 3);
+    await screen.findByText(/John Newton ·/);
+    await settleAndClear(helm.list);
+
+    fireEvent.change(screen.getByPlaceholderText(/Title or a lyric line/), { target: { value: 'grace' } });
+    await waitFor(() => expect(helm.search).toHaveBeenCalled());
+    await act(async () => {});
+    expect(helm.list).not.toHaveBeenCalled();
   });
 
   it('rapid keystrokes coalesce into a single search for the final query', async () => {
@@ -1278,6 +1318,8 @@ describe('SongsMode — empty library invites the operator to fill it (#88)', ()
     const empty = await screen.findByText(/No songs yet/);
     expect(empty.textContent).toMatch(/\+ Add a song/);
     expect(empty.textContent).toMatch(/\+ Import a song library/);
+    // The invitation carries the one import button on the page (#5).
+    expect(screen.getAllByRole('button', { name: '+ Import a song library' })).toHaveLength(1);
   });
 
   it('shows no empty state once the library has songs', async () => {
@@ -1288,6 +1330,8 @@ describe('SongsMode — empty library invites the operator to fill it (#88)', ()
     renderMode({ current: null });
     await waitFor(() => expect(screen.getAllByText('Amazing Grace').length).toBeGreaterThan(0));
     expect(screen.queryByText(/No songs yet/)).toBeNull();
+    // And no import control on the page at all: its home is Settings → Songs now (#5).
+    expect(screen.queryByText(/Import a song library/)).toBeNull();
   });
 });
 

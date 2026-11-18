@@ -21,7 +21,7 @@ the "Status" line under the table says which change delivers it.
 | **Take down** | Black the audience screen. Fixed slot beside Go live. Tooltip on every page: "Black the audience screen". | Button, Header chip (`TAKE DOWN`), last Escape rung | "Clear the audience screen" |
 | **Nothing on screen** | Output is black. | Page status chip, Header chip, leader view, the ghosted Take down tooltip | SCREEN BLACK, OFF SCREEN, BLACK |
 | **Add** | File one thing the operator typed or picked into this page's list or library. | `+ Add ...` buttons; the save button of a create modal (`Add to library`, `Add to loop`) | "Save to library" on create |
-| **Import** | Bring things in from a file or another program. Always with `+`. | `+ Import`, `+ Import a song library` | Import without the `+` |
+| **Import** | Bring things in from a file or another program. Always with `+`. | `+ Import`, `+ Import a song library` (Settings → Songs, and the empty Songs rail's invitation) | Import without the `+` |
 | **Delete** | Take something out of a list. Scripture readings and Message quotes delete at once and show `Deleted <thing>` with Undo for five seconds. Anything written or imported asks for a confirm click first: songs and media (no undo), and pre-service cards (the Undo still follows). | Context menu (`Delete`, `Delete 3 verses`), toast, pre-service card (`Delete card` or `Delete 3 cards`, then `Really delete?`, in the menu and in the editor), song library (`Delete from library`, then `Really delete?`), Shortcuts (`Delete selected`), Clear all tooltip | Remove, Removed; a bare `Delete` on a pre-service card |
 
 The status chip words come from `screenStatus()`; the step labels from SermonCenter,
@@ -72,7 +72,7 @@ row and the hero's meta line, and sits in the Song keys window (Phase 1c,
 | **Major / Minor** | The picker's mode toggle. It relabels the twelve keys; it never resizes them. | Picker |
 | **Capo…** | Work out the key from a capo position and chord shapes: "Capo 2 playing G shapes → Key A". Saves the sounding key; the capo is not stored. | Picker |
 | **Song keys** | The window for filling in and checking keys, one song at a time. | The window's title |
-| **Fill in song keys** | Open the Song keys window. | The Songs rail, the row under `+ Import a song library` |
+| **Fill in song keys** | Open the Song keys window. | The Songs rail, the row under `+ Add a song` |
 | **Skip** | Leave this song's key blank for now. It moves to the end of No key. | Picker, in the Song keys window only |
 | **No key / Sung lately / All** | The Song keys tabs. No key lists songs with no key (or an old value that was not one key, shown as "Was: capo 2 G"), most-sung first; Sung lately lists songs that went live in the last eight weeks, keyed or not; All is the library by title. | Song keys window |
 | **Move keys out of titles** | Take "(Eb)" off the end of song titles and make it the song's key, after a look at the list. Flagged titles (a key change, two keys, one letter, a song that already has a different key) start unchecked. Followed by `Moved 412 keys` with Undo. | The Song keys window's one-line banner ("412 titles end in a key, like *A Child Of The King (Eb)*.") and its review button (`Move 412 keys`) |

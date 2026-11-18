@@ -75,6 +75,9 @@ function App(): JSX.Element {
   // has no IPC progress broadcast for SermonMode to piggyback on) so App can mediate the
   // refresh between the two sibling components instead of them reaching into each other.
   const [biblesRevision, setBiblesRevision] = useState(0);
+  // Its Songs twin: bumped when an import run from Settings → Songs lands, so SongsMode
+  // (kept alive on every page) refreshes the library it holds in memory.
+  const [songsRevision, setSongsRevision] = useState(0);
 
   // Delegated to whichever mode is active (see ModeKeyHandler above). Registered
   // once on `document` here so future modes plug in without App changing.
@@ -181,7 +184,7 @@ function App(): JSX.Element {
           </div>
           <div style={{ display: mode === 'songs' ? 'contents' : 'none' }}>
             <ModeErrorBoundary label="Songs">
-              <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} searchNonce={searchNonce} />
+              <SongsMode keyHandlerRef={keyHandlerRef} active={mode === 'songs'} searchNonce={searchNonce} libraryRevision={songsRevision} />
             </ModeErrorBoundary>
           </div>
           <div style={{ display: mode === 'sermon' ? 'contents' : 'none' }}>
@@ -202,6 +205,7 @@ function App(): JSX.Element {
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
             onBiblesChanged={() => setBiblesRevision((r) => r + 1)}
+            onSongsImported={() => setSongsRevision((r) => r + 1)}
             hotkeyOverrides={hotkeyOverrides}
             onHotkeyOverridesChange={saveHotkeyOverrides}
             family={family}
