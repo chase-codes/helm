@@ -5,6 +5,7 @@ import { SearchIcon } from '../shared/icons';
 import { ListEmpty } from './ListEmpty';
 import { liveRing } from './railTint';
 import { LiveBadge, QueuedBadge } from './StateBadge';
+import { MONO } from '../shared/fonts';
 
 export interface SongRow {
   id: string;
@@ -17,6 +18,8 @@ export interface SongRow {
   /** The song on the audience screen (rule 1: red ring + LIVE). Distinct from `isActive`,
    * the song in the hero. */
   isLive: boolean;
+  /** The song's key ('' for none), shown in the row's key slot. */
+  musicKey: string;
 }
 
 const FIELD_TABS: Array<{ id: SearchField; label: string }> = [
@@ -140,6 +143,27 @@ function Row({
       ) : (
         r.isActive && <div style={activeBadgeStyle}>●</div>
       )}
+      {/* The key slot (rule 5): a fixed width that fits C#m, the same when empty, at the very
+          right so keys line up down the rail. A missing key is not a warning: no colour, no nag. */}
+      <span
+        data-key-slot
+        title={r.musicKey ? `Key ${r.musicKey}` : undefined}
+        style={{
+          width: '30px',
+          flexShrink: 0,
+          marginTop: '2px',
+          fontFamily: MONO,
+          fontSize: '11px',
+          lineHeight: '14px',
+          color: T.dim,
+          textAlign: 'right',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}
+      >
+        {r.musicKey}
+      </span>
     </button>
   );
 }

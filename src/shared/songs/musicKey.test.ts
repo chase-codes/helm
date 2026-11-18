@@ -4,7 +4,9 @@ import {
   ccliFromCopyright,
   extractKeyFromTitle,
   isMusicKey,
+  keyOfPitch,
   normalizeCcli,
+  pitchOfKey,
   normalizeKey,
   type KeyRejectReason,
   type MusicKey,
@@ -29,6 +31,19 @@ describe('MUSIC_KEYS', () => {
     expect(isMusicKey('A#')).toBe(false)
     expect(isMusicKey('bb')).toBe(false)
     expect(isMusicKey('')).toBe(false)
+  })
+
+  it.each(MUSIC_KEYS)('pitchOfKey and keyOfPitch round-trip %s', (k) => {
+    const { pc, minor } = pitchOfKey(k)
+    expect(keyOfPitch(pc, minor)).toBe(k)
+  })
+
+  it('keyOfPitch wraps mod 12 and spells per appendix A', () => {
+    expect(keyOfPitch(7 + 2, false)).toBe('A') // capo 2, G shapes
+    expect(keyOfPitch(4 + 3, true)).toBe('Gm') // capo 3, Em shapes
+    expect(keyOfPitch(-1, false)).toBe('B')
+    expect(keyOfPitch(13, false)).toBe('Db')
+    expect(keyOfPitch(3, true)).toBe('Ebm')
   })
 
   it.each(MUSIC_KEYS)('normalizeKey leaves canonical %s unchanged in both modes', (k) => {

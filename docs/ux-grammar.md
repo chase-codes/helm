@@ -219,7 +219,7 @@ Pre-service), never in a list header and never at the foot of the list. It names
 will file (`+ Add John 3:16`, `+ Add ¶3`), or says Import when the source is a file
 (Slides). Importing from outside sits as a secondary row beneath it (Songs, Message).
 Right-click Edit is offered wherever a row has an editor (Songs, Pre-service), for a single
-row only. Pre-service adds two more single-row entries: Move up / Move down, which reorder
+row only; a song row adds Set key beside it, single-row too. Pre-service adds two more single-row entries: Move up / Move down, which reorder
 the loop without touching what is cued or on screen (dragging a card does the same over any
 distance, with a track-colour line showing where it will land; a drag never fires a click,
 so it cannot cue or switch a card), and Add an item on a list card, which
@@ -318,7 +318,7 @@ pass through the entry untouched, so paste and the registry's shortcuts work in 
 **Enforced by**
 - `src/renderer/operator/escapeLadder.ts:21-36`: `EscapeLadder` and `runEscapeLadder`, the rung order; `:40` `blurFocusedField`, `:49` `takeDownWhenLive`, `:59` `clearSelectionRung`; `escapeLadder.test.ts`.
 - Adopters: `SongsMode.tsx:745` (`onEscape`), `SermonMode.tsx:1040` (`onEscape`; `:1049` routes `clearSelection` and `:1078` routes `onAction` to `MessageKeyHandler` / `SlidesKeyHandler`), `MessageMode.tsx:409-421`, `SlidesTrack.tsx:385`, `PreServiceMode.tsx:152` (`onEscape`), `:177` (`onAction`).
-- `src/renderer/operator/useEscapeToClose.ts:11`: capture-phase close for `VersionPicker.tsx:23` and `OutputViewPopover.tsx:31`; `ContextMenu.tsx:165` keeps the same contract for its own keys.
+- `src/renderer/operator/useEscapeToClose.ts:11`: capture-phase close for `VersionPicker.tsx:23` and `OutputViewPopover.tsx:31`; `ContextMenu.tsx:165` keeps the same contract for its own keys. `KeyPicker.tsx` (the song key picker) takes every plain key in the capture phase while open, steps Escape back through its own layers (Capo… line, typed highlight, close), and counts as a modal in `SongsMode`'s `isModalOpen`, so Enter there saves a key and never reaches Go live; `KeyPicker.test.tsx`, `SongsMode.test.tsx` "song keys".
 - `src/shared/hotkeys/actions.ts:60-68`: the global `item.jump` digit block, shadowed on Songs by `song.verse` (`:73`); `:24` `note`, rendered by `ShortcutsSettings.tsx:152-159`.
 - `src/renderer/operator/keyDispatch.ts:34`: Escape first; `:85` registry actions behind the typing and modal guards; `keyDispatch.test.ts:160` pins digits on every scope.
 - `src/renderer/operator/RowNumber.tsx:8`: `SchedulePanel.tsx:238`, `MessageSearchRail.tsx:286`, `PreServiceMode.tsx:458`.

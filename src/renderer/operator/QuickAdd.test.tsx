@@ -56,24 +56,67 @@ describe('QuickAdd author field', () => {
 });
 
 describe('QuickAdd key field', () => {
-  it('passes a typed key through to songs.add and omits it when blank', async () => {
+  const keyButton = (): HTMLElement => document.querySelector('[data-key-button]') as HTMLElement
+
+  it('is a key button that opens the picker; a picked key goes through to songs.add', async () => {
+    const add = vi.fn().mockResolvedValue({
+      id: 's1', title: 'Way Maker', author: '', sections: [], source: 'local', createdAt: 1,
+    });
+    (window as unknown as { helm: unknown }).helm = { songs: { add } };
+    renderQuickAdd('Way Maker');
+    expect(screen.queryByPlaceholderText('Key')).toBeNull(); // no free-text box any more
+    expect(keyButton().textContent).toBe('Set key');
+    fireEvent.change(screen.getByPlaceholderText(/Paste lyrics here/), { target: { value: 'Some line\nAnother line' } });
+    fireEvent.click(keyButton());
+    fireEvent.click(screen.getByRole('button', { name: 'Key Bb' }));
+    // Picking fills the field and closes the picker; nothing is saved yet.
+    expect(document.querySelector('[data-key-picker]')).toBeNull();
+    expect(keyButton().textContent).toBe('Key Bb');
+    expect(add).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Add to library'));
+    await waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ key: 'Bb' })));
+  });
+
+  it('omits the key when none is picked', async () => {
     const add = vi.fn().mockResolvedValue({
       id: 's1', title: 'Way Maker', author: '', sections: [], source: 'local', createdAt: 1,
     });
     (window as unknown as { helm: unknown }).helm = { songs: { add } };
     renderQuickAdd('Way Maker');
     fireEvent.change(screen.getByPlaceholderText(/Paste lyrics here/), { target: { value: 'Some line\nAnother line' } });
-    fireEvent.change(screen.getByPlaceholderText('Key'), { target: { value: 'G' } });
-    fireEvent.click(screen.getByText('Add to library'));
-    await waitFor(() => expect(add).toHaveBeenCalledWith(expect.objectContaining({ key: 'G' })));
-
-    cleanup();
-    add.mockClear();
-    renderQuickAdd('Way Maker');
-    fireEvent.change(screen.getByPlaceholderText(/Paste lyrics here/), { target: { value: 'Some line\nAnother line' } });
     fireEvent.click(screen.getByText('Add to library'));
     await waitFor(() => expect(add).toHaveBeenCalled());
     expect(add.mock.calls[0][0].key).toBeUndefined();
+  });
+
+  it('typing and Enter in the picker fill the key without saving the song', () => {
+    const add = vi.fn();
+    (window as unknown as { helm: unknown }).helm = { songs: { add } };
+    renderQuickAdd('Way Maker');
+    fireEvent.click(keyButton());
+    for (const key of ['f', '#', 'm', 'Enter']) fireEvent.keyDown(document.activeElement!, { key });
+    expect(keyButton().textContent).toBe('Key F#m');
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('Escape closes the picker, and only the picker', () => {
+    const onClose = vi.fn();
+    render(
+      <ThemeCtx.Provider value={themeFor('classic', 'dark')}>
+        <QuickAdd open onClose={onClose} onSaved={vi.fn()} />
+      </ThemeCtx.Provider>
+    );
+    const doc = vi.fn();
+    document.addEventListener('keydown', doc);
+    try {
+      fireEvent.click(keyButton());
+      fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+      expect(document.querySelector('[data-key-picker]')).toBeNull();
+      expect(doc).not.toHaveBeenCalled(); // App's ladder never saw it, so QuickAdd stays open
+      expect(onClose).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', doc);
+    }
   });
 });
 
@@ -289,7 +332,7 @@ describe('QuickAdd edit mode', () => {
     expect(screen.getByText('Edit song')).toBeTruthy();
     expect((screen.getByPlaceholderText('Song title') as HTMLInputElement).value).toBe('Amazing Grace');
     expect((screen.getByPlaceholderText('Author (optional)') as HTMLInputElement).value).toBe('John Newton');
-    expect((screen.getByPlaceholderText('Key') as HTMLInputElement).value).toBe('G');
+    expect((document.querySelector('[data-key-button]') as HTMLElement).textContent).toBe('Key G');
     expect((screen.getByPlaceholderText(/Paste lyrics here/) as HTMLTextAreaElement).value).toBe(
       'Verse 1\nAmazing grace! how sweet the sound\n\nChorus\nPraise God'
     );
@@ -321,6 +364,17 @@ describe('QuickAdd edit mode', () => {
     );
     expect(add).not.toHaveBeenCalled();
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ ...EDIT_SONG, title: 'Amazing Grace (fixed)' }));
+  });
+
+  it('Clear key in the picker saves the song with no key', async () => {
+    const update = vi.fn().mockResolvedValue({ ...EDIT_SONG, key: undefined });
+    (window as unknown as { helm: unknown }).helm = { songs: { update } };
+    renderEdit();
+    fireEvent.click(document.querySelector('[data-key-button]') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear key' }));
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update.mock.calls[0][1].key).toBeUndefined();
   });
 
   it('a failed update keeps the modal open with the text intact', async () => {

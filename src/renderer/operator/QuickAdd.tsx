@@ -5,6 +5,7 @@ import { splitToSlides } from '../../shared/songs/splitToSlides';
 import { sectionsToText } from '../../shared/songs/sectionsToText';
 import type { NewSongInput, Song, SongWebCandidate, UpdateSongInput } from '../../shared/types';
 import { MONO } from '../shared/fonts';
+import { KeyPickerPopover } from './KeyPicker';
 
 export interface QuickAddProps {
   open: boolean;
@@ -47,6 +48,8 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
   const [searchState, setSearchState] = useState<'idle' | 'loading' | 'empty' | 'error' | 'url-error' | 'done'>('idle');
   const [fromWeb, setFromWeb] = useState(false);
   const searchSeq = useRef(0);
+  // The key button's element, held in state while its picker is open (null when closed).
+  const [keyAnchor, setKeyAnchor] = useState<HTMLElement | null>(null);
 
   // Escape is handled by App's global keydown delegate (Task 12), which asks the active
   // mode's ModeKeyHandler.onEscape() to close any open modal — SongsMode owns
@@ -252,13 +255,30 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
                 onChange={(e) => setAuthor(e.target.value)}
                 placeholder="Author (optional)"
               />
-              <input
-                style={{ ...titleStyle, width: '90px', flex: 'none', fontWeight: 500 }}
-                value={songKey}
-                onChange={(e) => setSongKey(e.target.value)}
-                placeholder="Key"
-                title="Musical key (optional), e.g. G or Bb"
-              />
+              {/* The key is picked, never typed free-form, so "capo 2 G" cannot reach the
+                  leader view. The picker only fills the field; Save changes saves the song. */}
+              <button
+                style={{
+                  ...titleStyle,
+                  width: '90px',
+                  flex: 'none',
+                  fontWeight: 500,
+                  color: songKey ? T.text : T.faint,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+                data-key-button
+                aria-haspopup="dialog"
+                aria-expanded={!!keyAnchor}
+                onClick={(e) => {
+                  const el = e.currentTarget;
+                  setKeyAnchor((a) => (a ? null : el));
+                }}
+                title={songKey ? `Key ${songKey}. Click to change it` : 'The key the church plays it in (optional)'}
+              >
+                {songKey ? `Key ${songKey}` : 'Set key'}
+              </button>
             </div>
             <textarea
               style={textStyle}
@@ -363,6 +383,16 @@ export function QuickAdd({ open, initialTitle, editSong, onClose, onSaved }: Qui
           {editing ? 'Save changes' : 'Add to library'}
         </button>
       </div>
+      {keyAnchor && (
+        <KeyPickerPopover
+          anchor={keyAnchor}
+          anchorToggles
+          value={songKey}
+          songTitle={title.trim()}
+          onPick={(k) => setSongKey(k ?? '')}
+          onClose={() => setKeyAnchor(null)}
+        />
+      )}
     </ModalShell>
   );
 }

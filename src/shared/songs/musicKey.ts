@@ -71,6 +71,15 @@ const mod12 = (n: number): number => ((n % 12) + 12) % 12
 /** MUSIC_KEYS lists the majors then the minors, each in pitch-class order 0–11. */
 const canonical = ({ pc, minor }: ParsedKey): MusicKey => MUSIC_KEYS[(minor ? 12 : 0) + mod12(pc)]
 
+/** The canonical key for a pitch class (any integer, taken mod 12) and mode. */
+export const keyOfPitch = (pc: number, minor: boolean): MusicKey => canonical({ pc, minor })
+
+/** A canonical key's pitch class (0–11) and mode. */
+export function pitchOfKey(k: MusicKey): { pc: number; minor: boolean } {
+  const i = MUSIC_KEYS.indexOf(k)
+  return { pc: i % 12, minor: i >= 12 }
+}
+
 // ---------------------------------------------------------------------------------------
 // Appendix B1: the core grammar.
 

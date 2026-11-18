@@ -55,6 +55,24 @@ the live cursor, and Pre-service still steps with bare `‹` / `›`.
 - **Page names** are the Header tab names: Pre-service, Songs, Sermon. Tracks are named
   after the page: "Sermon page · Scripture track". Status chips use them in capitals.
 
+## Song keys
+
+Added with song keys, Phase 1b (`docs/superpowers/specs/2026-11-17-song-keys-design.md`).
+The picker is `KeyPicker.tsx`; it opens from QuickAdd's key button, right-click on a song
+row and the hero's meta line.
+
+| Word | Means | Where it appears |
+|---|---|---|
+| **Key** | The key the church plays the song in: the sounding key, what the band hears. Never the recorded key or a capo shape. Written `Key Eb`. | Leader view, audience label, hero meta line, the song row's key slot, QuickAdd's key button |
+| **Set key** | Open the key picker for one song. | Right-click a song row, the hero meta line and QuickAdd's key button when the song has no key |
+| **Clear key** | Leave the song with no key. | Picker |
+| **Major / Minor** | The picker's mode toggle. It relabels the twelve keys; it never resizes them. | Picker |
+| **Capo…** | Work out the key from a capo position and chord shapes: "Capo 2 playing G shapes → Key A". Saves the sounding key; the capo is not stored. | Picker |
+
+Keys are spelled as stored: flats for the majors (Db, Eb, Ab, Bb), the fewer-accidentals
+spelling for the minors (C#m, G#m), F# and Ebm on the ties. The picker shows the other
+spelling small under an ambiguous key (Db over C#).
+
 ## The rail hint sentence
 
 Every rail that explains its gestures uses one sentence, built by `railHint()` in

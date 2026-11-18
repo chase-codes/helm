@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type {
   MusicKeyChange, MusicKeyListQuery, MusicKeyRow, MusicKeyTab, NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput,
 } from '../shared/types';
-import { isMusicKey, type MusicKey, type MusicKeySource } from '../shared/songs/musicKey';
+import { isMusicKey, normalizeKey, type MusicKey, type MusicKeySource } from '../shared/songs/musicKey';
 import { SONG_FTS_COLUMNS } from './schema';
 import { norm, matchDist, matchTol } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
@@ -59,6 +59,22 @@ const BM25: Record<SearchField, string> = {
   title: bm25For({ title: 1, author: 0, lyrics: 0 }),
   lyric: bm25For({ title: 0, author: 0, lyrics: 1 }),
 };
+/** A key arriving through songs:add / songs:update (QuickAdd's field). Canonicalised when it
+ * parses as one key; a placeholder ("N/A") is no key; anything else is kept exactly as typed.
+ * Kept rather than refused because QuickAdd hands a stored legacy value ("capo 2 G") straight
+ * back on every Save changes, and the section quick-edit does the same: refusing it would make
+ * those songs unsaveable. A modulation stays as typed too, as in the startup cleanup. */
+function cleanSongKey(raw: string | undefined): string {
+  const typed = raw?.trim() ?? '';
+  if (!typed) return '';
+  const r = normalizeKey(typed, 'field');
+  if (r.kind === 'empty') return '';
+  if (r.kind === 'key' && !r.endKey) return r.key;
+  return typed;
+}
+/** The source a key written by a person through add/update gets: canonical is 'typed', a
+ * value that did not parse is 'legacy' (it lands on No key for a person to decide). */
+const typedSourceOf = (key: string): MusicKeySource | '' => (key ? (isMusicKey(key) ? 'typed' : 'legacy') : '');
 const toSong = (r: Row): Song => ({
   id: r.id, title: r.title, author: r.author, sections: JSON.parse(r.sections_json),
   source: r.source, createdAt: r.created_at, ...(r.music_key ? { key: r.music_key } : {}),
@@ -68,9 +84,9 @@ const toSong = (r: Row): Song => ({
 });
 
 export function createSongsRepo(db: Database.Database): SongsRepo {
-  const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at, music_key) VALUES (?,?,?,?,?,?,?)');
+  const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at, music_key, music_key_source) VALUES (?,?,?,?,?,?,?,?)');
   const insertFts = db.prepare('INSERT INTO song_fts (rowid, title, author, lyrics) VALUES ((SELECT rowid FROM songs WHERE id = ?),?,?,?)');
-  const updateSong = db.prepare('UPDATE songs SET title = ?, author = ?, sections_json = ?, music_key = ? WHERE id = ?');
+  const updateSong = db.prepare('UPDATE songs SET title = ?, author = ?, sections_json = ? WHERE id = ?');
   const updateFts = db.prepare('UPDATE song_fts SET title = ?, author = ?, lyrics = ? WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
   // FTS row first, while `songs` still holds the rowid the subquery resolves through.
   const deleteFts = db.prepare('DELETE FROM song_fts WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
@@ -79,9 +95,13 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
   const insertOne = (input: NewSongInput): Song => {
     const sections = splitToSlides(input.text);
     if (!sections.length) throw new Error('Song has no content');
-    const key = input.key?.trim();
-    const song: Song = { id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections, source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}) };
-    insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key ?? '');
+    const key = cleanSongKey(input.key);
+    const keySource = typedSourceOf(key);
+    const song: Song = {
+      id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections,
+      source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}), ...(keySource ? { keySource } : {}),
+    };
+    insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key, keySource);
     insertFts.run(song.id, norm(song.title), norm(song.author), norm(lyricsOf(song)));
     invalidateVocab();
     // No songCache.delete here: the id is freshly minted (randomUUID above), so the
@@ -294,18 +314,25 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
       if (!sections.length) throw new Error('Song has no content');
       const title = input.title.trim() || 'Untitled Song';
       const author = input.author?.trim() ?? '';
-      const key = input.key?.trim() ?? '';
+      const key = cleanSongKey(input.key);
+      // Key source stays honest: a changed key was set by a person here, so it is 'typed'
+      // (or 'legacy' when it did not parse, or '' when cleared). An unchanged key keeps its
+      // source, so a lyric fix does not relabel a key that came from an import or the title.
+      const keyChanged = key !== (existing.key ?? '');
+      const keySource = keyChanged ? typedSourceOf(key) : (key ? existing.keySource ?? '' : '');
       const song: Song = {
         id, title, author, sections,
         source: existing.source, createdAt: existing.createdAt,
         ...(key ? { key } : {}),
-        // songs:update leaves the key-source column as it was, so this mirrors what get()
-        // reads back. The startup cleanup reconciles a key edited here (legacy ↔ typed).
-        ...(key && existing.keySource ? { keySource: existing.keySource } : {}),
+        ...(key && keySource ? { keySource } : {}),
         ...(existing.ccli ? { ccli: existing.ccli } : {}),
       };
       db.transaction(() => {
-        updateSong.run(title, author, JSON.stringify(sections), key, id);
+        updateSong.run(title, author, JSON.stringify(sections), id);
+        if (keyChanged) {
+          if (key) setKeyStmt.run(key, keySource, id);
+          else clearKeyStmt.run(id);
+        }
         updateFts.run(norm(title), norm(author), norm(lyricsOfSections(sections)), id);
       })();
       songCache.delete(id);
