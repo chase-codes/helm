@@ -52,6 +52,8 @@ export interface SongSearchRailProps {
   onActivate: (id: string) => void;
   onAddSong: () => void;
   onImportSongs: () => void;
+  /** Opens the Song keys window. The row is left out when not passed. */
+  onFillKeys?: () => void;
   onRowContextMenu?: (id: string, e: ReactMouseEvent) => void;
   inputRef?: RefObject<HTMLInputElement | null>;
 }
@@ -185,6 +187,7 @@ export function SongSearchRail({
   onActivate,
   onAddSong,
   onImportSongs,
+  onFillKeys,
   locked,
   onRowContextMenu,
   inputRef
@@ -349,6 +352,11 @@ export function SongSearchRail({
         <button style={{ ...importRowStyle, display: 'inline-flex', alignItems: 'center', gap: '7px' }} onClick={onImportSongs}>
           + Import a song library
         </button>
+        {onFillKeys && (
+          <button style={{ ...importRowStyle, marginTop: '1px' }} onClick={onFillKeys} data-fill-keys>
+            Fill in song keys
+          </button>
+        )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 10px' }}>
         {libraryEmpty && rows.length === 0 && !noResults && (

@@ -19,13 +19,28 @@ function payloadFor(t: { variant: OutputVariant; view: OutputViewMode; leaderSpl
   return { ...outputPayload(state, t.variant, t.view), leaderSplit: t.leaderSplit };
 }
 const sendPresState = broadcastAll(CH.presState);
+// Watchers of every state change (song usage capture). Run after the screens have been
+// sent the new state, and each one guarded: nothing a watcher does may reach the live path.
+const watchers: ((st: PresentationState) => void)[] = [];
 function broadcast(): void {
   sendPresState(state);
   // Output windows get a per-window payload (variant/view/split differ) — not broadcastAll.
   for (const [w, t] of outputWindows) if (!w.isDestroyed()) w.webContents.send(CH.outputSlide, payloadFor(t));
+  for (const watch of watchers) {
+    try {
+      watch(state);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 }
 export const presentation = {
   get: () => state,
+  /** Called with the new state after every broadcast. Returns the unsubscribe. */
+  watch: (fn: (st: PresentationState) => void): (() => void) => {
+    watchers.push(fn);
+    return () => { const i = watchers.indexOf(fn); if (i >= 0) watchers.splice(i, 1); };
+  },
   cue: (key: string, slide: Slide) => { state = applyCue(state, key, slide); broadcast(); },
   goLive: (key: string, slide: Slide) => { state = goLive(state, key, slide); broadcast(); },
   // Same identity-skip as `take`: showLive returns its input on every refusal (output

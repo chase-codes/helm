@@ -353,6 +353,86 @@ describe('song keys', () => {
     expect(() => keys.keyList({ tab: 'keyed' as 'all' })).toThrow('Unknown tab');
   });
 
+  // --- Phase 1c: the Song keys window's undo, counts and usage capture ---
+  test('restoreMusicKey writes a legacy value and its source back verbatim, past the cache', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx', key: 'A (capo 2)' });
+    expect(raw(s.id)).toMatchObject({ music_key: 'A (capo 2)', music_key_source: 'legacy' });
+    keys.setMusicKey(s.id, 'A', 'typed');
+    keys.get(s.id); // warm the cache
+    const out = keys.restoreMusicKey(s.id, 'A (capo 2)', 'legacy');
+    expect(out).toMatchObject({ key: 'A (capo 2)', keySource: 'legacy' });
+    expect(keys.get(s.id)).toMatchObject({ key: 'A (capo 2)', keySource: 'legacy' });
+    expect(raw(s.id)).toMatchObject({ music_key: 'A (capo 2)', music_key_source: 'legacy' });
+  });
+
+  test('restoreMusicKey puts back a canonical key with its source, or no key at all', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    keys.setMusicKey(s.id, 'Eb', 'title');
+    keys.setMusicKey(s.id, 'E', 'typed');
+    expect(keys.restoreMusicKey(s.id, 'Eb', 'title')).toMatchObject({ key: 'Eb', keySource: 'title' });
+    const cleared = keys.restoreMusicKey(s.id, '', '');
+    expect(cleared.key).toBeUndefined();
+    expect(raw(s.id)).toMatchObject({ music_key: '', music_key_source: '' });
+  });
+
+  test('restoreMusicKey restores the skip stamp only when given one', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx', key: 'G or A' });
+    keys.skipMusicKey(s.id);
+    const skipped = raw(s.id).key_skipped_at;
+    keys.setMusicKey(s.id, 'G', 'typed'); // a save clears the skip
+    keys.restoreMusicKey(s.id, 'G or A', 'legacy');
+    expect(raw(s.id).key_skipped_at).toBeNull();
+    keys.restoreMusicKey(s.id, 'G or A', 'legacy', skipped);
+    expect(raw(s.id).key_skipped_at).toBe(skipped);
+    keys.restoreMusicKey(s.id, 'G or A', 'legacy', null);
+    expect(raw(s.id).key_skipped_at).toBeNull();
+  });
+
+  test('restoreMusicKey refuses a bad id, a non-string, an unknown source, a source without a key, and free text as typed', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    keys.setMusicKey(s.id, 'D', 'typed');
+    expect(() => keys.restoreMusicKey('nope', 'G', 'typed')).toThrow('Song not found');
+    expect(() => keys.restoreMusicKey(s.id, 7 as unknown as string, 'typed')).toThrow('Expected the previous key');
+    expect(() => keys.restoreMusicKey(s.id, 'G', 'guess' as MusicKeySource)).toThrow('Unknown key source');
+    expect(() => keys.restoreMusicKey(s.id, '', 'typed')).toThrow('No key has no source');
+    expect(() => keys.restoreMusicKey(s.id, 'capo 2 G', 'typed')).toThrow('Not a key');
+    expect(() => keys.restoreMusicKey(s.id, 'G', 'typed', Number.NaN)).toThrow('Expected a skip time');
+    expect(raw(s.id)).toMatchObject({ music_key: 'D', music_key_source: 'typed' });
+  });
+
+  test('keyCounts: No key counts legacy values, Sung lately counts the last 8 weeks and how many have a key', () => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    expect(keys.keyCounts()).toEqual({ total: 0, noKey: 0, lately: 0, latelyWithKey: 0, anyLive: false });
+    const a = keys.add({ title: 'A', text: 'Verse 1\na' });
+    const b = keys.add({ title: 'B', text: 'Verse 1\nb', key: 'G' });
+    const c = keys.add({ title: 'C', text: 'Verse 1\nc', key: 'G or A' });
+    keys.add({ title: 'D', text: 'Verse 1\nd' });
+    const e = keys.add({ title: 'E', text: 'Verse 1\ne', key: 'A' });
+    expect(keys.keyCounts()).toEqual({ total: 5, noKey: 3, lately: 0, latelyWithKey: 0, anyLive: false });
+    keys.recordLive(a.id, now - day);
+    keys.recordLive(b.id, now - 7 * day);
+    keys.recordLive(c.id, now - 2 * day);
+    keys.recordLive(e.id, now - 90 * day); // went live, but not lately
+    expect(keys.keyCounts()).toEqual({ total: 5, noKey: 3, lately: 3, latelyWithKey: 1, anyLive: true });
+  });
+
+  test('recordLive sets last_live_at and counts a new day only when the last go-live was on another day', () => {
+    const usage = (id: string): { last_live_at: number | null; live_days: number } =>
+      db.prepare('SELECT last_live_at, live_days FROM songs WHERE id = ?').get(id) as { last_live_at: number | null; live_days: number };
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    const sun9 = new Date(2026, 10, 15, 9, 0).getTime();
+    const sun11 = new Date(2026, 10, 15, 11, 30).getTime();
+    const mon = new Date(2026, 10, 16, 0, 5).getTime();
+    keys.recordLive(s.id, sun9);
+    expect(usage(s.id)).toEqual({ last_live_at: sun9, live_days: 1 });
+    keys.recordLive(s.id, sun11);
+    expect(usage(s.id)).toEqual({ last_live_at: sun11, live_days: 1 });
+    keys.recordLive(s.id, mon);
+    expect(usage(s.id)).toEqual({ last_live_at: mon, live_days: 2 });
+    expect(() => keys.recordLive('gone', mon)).not.toThrow();
+  });
+
   test('update stamps typed when the key changes, clears the source with the key, and leaves an unchanged key alone', () => {
     const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
     keys.setMusicKey(s.id, 'G', 'import');

@@ -20,6 +20,8 @@ const api: HelmApi = {
     setMusicKeys: (batch) => ipcRenderer.invoke(CH.songsSetMusicKeys, batch),
     skipMusicKey: (id) => ipcRenderer.invoke(CH.songsSkipMusicKey, id),
     keyList: (query) => ipcRenderer.invoke(CH.songsKeyList, query),
+    restoreMusicKey: (id, raw, source, skippedAt) => ipcRenderer.invoke(CH.songsRestoreMusicKey, id, raw, source, skippedAt),
+    keyCounts: () => ipcRenderer.invoke(CH.songsKeyCounts),
   },
   presentation: {
     get: () => ipcRenderer.invoke(CH.presGet),

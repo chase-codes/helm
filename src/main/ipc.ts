@@ -102,6 +102,9 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['songs']['setMusicKeys']>(CH.songsSetMusicKeys, (batch) => repo.setMusicKeys(batch));
   handleApi<HelmApi['songs']['skipMusicKey']>(CH.songsSkipMusicKey, (id) => repo.skipMusicKey(id));
   handleApi<HelmApi['songs']['keyList']>(CH.songsKeyList, (query) => repo.keyList(query));
+  handleApi<HelmApi['songs']['restoreMusicKey']>(CH.songsRestoreMusicKey, (id, raw, source, skippedAt) =>
+    repo.restoreMusicKey(id, raw, source, skippedAt));
+  handleApi<HelmApi['songs']['keyCounts']>(CH.songsKeyCounts, () => repo.keyCounts());
   handleApi<HelmApi['presentation']['get']>(CH.presGet, () => presentation.get());
   onApi<HelmApi['presentation']['cue']>(CH.presCue, (key, slide) => presentation.cue(key, slide));
   onApi<HelmApi['presentation']['goLive']>(CH.presGoLive, (key, slide) => presentation.goLive(key, slide));

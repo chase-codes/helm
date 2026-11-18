@@ -52,6 +52,12 @@ export interface KeyPickerProps {
   onSkip?: () => void;
   /** The song's title, for the eyebrow, so a picker opened from a row says which song. */
   songTitle?: string;
+  /** Plain keys the host handles itself (the Song keys window's ↑/↓ rows and `/` search).
+   * The picker leaves them alone, so the host's own listener must stop them. */
+  hostKeys?: (e: KeyboardEvent) => boolean;
+  /** Move focus into the picker on mount (default). The Song keys window turns it off: its
+   * picker remounts per song, and must not pull focus out of the search field mid-word. */
+  autoFocus?: boolean;
 }
 
 const isTextField = (el: EventTarget | null): boolean => {
@@ -59,7 +65,7 @@ const isTextField = (el: EventTarget | null): boolean => {
   return tag === 'input' || tag === 'textarea';
 };
 
-export function KeyPicker({ value, onPick, onClose, onSkip, songTitle }: KeyPickerProps): JSX.Element {
+export function KeyPicker({ value, onPick, onClose, onSkip, songTitle, hostKeys, autoFocus = true }: KeyPickerProps): JSX.Element {
   const T = useContext(ThemeCtx);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const current = isMusicKey(value) ? pitchOfKey(value) : null;
@@ -100,6 +106,7 @@ export function KeyPicker({ value, onPick, onClose, onSkip, songTitle }: KeyPick
     if (e.metaKey || e.ctrlKey || e.altKey || e.key === 'Tab') return;
     // A text field outside the picker keeps its own keys (the Song keys window's search).
     if (isTextField(e.target) && !rootRef.current?.contains(e.target as Node)) return;
+    if (hostKeys?.(e)) return;
     const inSelect = (e.target as HTMLElement | null)?.tagName?.toLowerCase() === 'select';
     e.stopPropagation();
     const k = e.key;
@@ -140,7 +147,9 @@ export function KeyPicker({ value, onPick, onClose, onSkip, songTitle }: KeyPick
     return () => window.removeEventListener('keydown', listener, true);
   }, []);
   useEffect(() => {
-    rootRef.current?.focus();
+    if (autoFocus) rootRef.current?.focus();
+    // Mount only: a picker that has started taking keys keeps the focus it was given.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---------------- styles ----------------
