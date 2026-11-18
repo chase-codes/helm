@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { join } from 'path'
 import { openTestDb } from './testDb'
 import { createSongsRepo, type SongsRepo } from './songsRepo'
 import { createKeySheetFiles, workbookMessage, type KeySheetDeps, type KeySheetFiles } from './keySheetFiles'
@@ -18,7 +19,7 @@ describe('exportNoKey', () => {
     const kept = repo.add({ title: 'Kept', text: 'Verse 1\nhas a key' })
     repo.setMusicKey(kept.id, 'G', 'typed')
     repo.add({ title: 'Amazing Grace', text: 'Verse 1\nAmazing grace, how sweet the sound' })
-    const pickSave = vi.fn(async (p: string) => (p === '/docs/Song keys to fill in.csv' ? '/usb/Song keys to fill in.csv' : null))
+    const pickSave = vi.fn(async (p: string) => (p === join('/docs', 'Song keys to fill in.csv') ? '/usb/Song keys to fill in.csv' : null))
     const writeFile = vi.fn()
     const r = await files(repo, { pickSave, writeFile }).exportNoKey()
     expect(r).toEqual({ saved: 2, fileName: 'Song keys to fill in.csv' })
