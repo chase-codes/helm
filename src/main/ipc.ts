@@ -105,6 +105,8 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['songs']['restoreMusicKey']>(CH.songsRestoreMusicKey, (id, raw, source, skippedAt) =>
     repo.restoreMusicKey(id, raw, source, skippedAt));
   handleApi<HelmApi['songs']['keyCounts']>(CH.songsKeyCounts, () => repo.keyCounts());
+  handleApi<HelmApi['songs']['titleKeyCandidates']>(CH.songsTitleKeyCandidates, () => repo.titleKeyCandidates());
+  handleApi<HelmApi['songs']['restoreMusicKeys']>(CH.songsRestoreMusicKeys, (batch) => repo.restoreMusicKeys(batch));
   handleApi<HelmApi['presentation']['get']>(CH.presGet, () => presentation.get());
   onApi<HelmApi['presentation']['cue']>(CH.presCue, (key, slide) => presentation.cue(key, slide));
   onApi<HelmApi['presentation']['goLive']>(CH.presGoLive, (key, slide) => presentation.goLive(key, slide));
@@ -187,7 +189,7 @@ export function registerIpc(deps: IpcDeps): void {
 
   handleApi<HelmApi['songImport']['sources']>(CH.songImportSources, () => songImport.sources());
   handleApi<HelmApi['songImport']['scan']>(CH.songImportScan, (sourceId) => songImport.scan(sourceId));
-  handleApi<HelmApi['songImport']['commit']>(CH.songImportCommit, (token) => songImport.commit(token));
+  handleApi<HelmApi['songImport']['commit']>(CH.songImportCommit, (token, opts) => songImport.commit(token, opts));
 
   handleApi<HelmApi['songSources']['search']>(CH.songSourcesSearch, (q) => songSources.search(q));
   handleApi<HelmApi['songSources']['fromUrl']>(CH.songSourcesFromUrl, (url) => songSources.fromUrl(url));

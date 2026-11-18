@@ -9,8 +9,10 @@ import { themeFor } from '../../shared/theme';
 import { dispatchModeKey } from './keyDispatch';
 import { settleAndClear } from '../../test/mocks';
 import type { ModeKeyHandlerRef } from './App';
-import type { MusicKeyCounts, MusicKeyListQuery, MusicKeyRow, PresentationState, Song } from '../../shared/types';
-import type { MusicKey, MusicKeySource } from '../../shared/songs/musicKey';
+import type {
+  MusicKeyChange, MusicKeyCounts, MusicKeyListQuery, MusicKeyRestore, MusicKeyRow, PresentationState, Song, TitleKeyCandidate
+} from '../../shared/types';
+import { extractKeyFromTitle, type MusicKey, type MusicKeySource } from '../../shared/songs/musicKey';
 
 afterEach(cleanup);
 
@@ -33,7 +35,11 @@ const song = (id: string, title: string, extra: Partial<FakeSong> = {}): FakeSon
 });
 
 type Mock = ReturnType<typeof vi.fn>;
-type FakeHelm = Record<'keyList' | 'keyCounts' | 'setMusicKey' | 'skipMusicKey' | 'restoreMusicKey' | 'get' | 'cue' | 'goLive' | 'take' | 'setOutput', Mock>;
+type FakeHelm = Record<
+  'keyList' | 'keyCounts' | 'setMusicKey' | 'skipMusicKey' | 'restoreMusicKey' | 'get' | 'cue' | 'goLive' | 'take' | 'setOutput'
+  | 'titleKeyCandidates' | 'setMusicKeys' | 'restoreMusicKeys',
+  Mock
+> & { db: Map<string, FakeSong> };
 /** An in-memory stand-in for main's song keys calls, with the repo's tab rules. */
 function installFake(seed: FakeSong[], state: PresentationState = NOTHING_LIVE): FakeHelm {
   const db = new Map(seed.map((s) => [s.id, { ...s }]));
@@ -87,6 +93,38 @@ function installFake(seed: FakeSong[], state: PresentationState = NOTHING_LIVE):
     return Promise.resolve(out(s));
   });
   const get = vi.fn((id: string) => Promise.resolve(db.has(id) ? out(db.get(id)!) : null));
+  // The repo's sweep rules, in short: a key or a flag in the title, has-key for another key.
+  const titleKeyCandidates = vi.fn((): Promise<TitleKeyCandidate[]> => {
+    const rows: TitleKeyCandidate[] = [];
+    for (const s of db.values()) {
+      const t = extractKeyFromTitle(s.title);
+      const current = s.key ?? '';
+      if ((!t.key && !t.flag) || (t.key && current === t.key && t.title === s.title)) continue;
+      const flag = t.key && current && current !== t.key ? 'has-key' : t.flag;
+      rows.push({
+        id: s.id, title: s.title, cleanTitle: t.title, ...(t.key ? { key: t.key } : {}), ...(t.endKey ? { endKey: t.endKey } : {}),
+        ...(flag ? { flag } : {}), currentKey: current, currentSource: current ? (s.keySource ?? '') : '', skippedAt: s.skippedAt ?? null
+      });
+    }
+    return Promise.resolve(rows.sort((a, b) => Number(!a.flag) - Number(!b.flag) || a.title.localeCompare(b.title)));
+  });
+  const setMusicKeys = vi.fn((batch: MusicKeyChange[]) =>
+    Promise.resolve(batch.map((c) => {
+      const s = db.get(c.id)!;
+      if (c.key) Object.assign(s, { key: c.key, keySource: c.source, skippedAt: null });
+      else { delete s.key; delete s.keySource; }
+      if (c.title !== undefined) s.title = c.title;
+      return out(s);
+    })));
+  const restoreMusicKeys = vi.fn((batch: MusicKeyRestore[]) =>
+    Promise.resolve(batch.map((r) => {
+      const s = db.get(r.id)!;
+      if (r.key) Object.assign(s, { key: r.key, keySource: r.source || undefined });
+      else { delete s.key; delete s.keySource; }
+      s.skippedAt = r.skippedAt;
+      if (r.title !== undefined) s.title = r.title;
+      return out(s);
+    })));
   const cue = vi.fn();
   const goLive = vi.fn();
   const take = vi.fn();
@@ -96,12 +134,15 @@ function installFake(seed: FakeSong[], state: PresentationState = NOTHING_LIVE):
       list: () => Promise.resolve([...db.values()].map(out)),
       search: vi.fn(() => Promise.resolve([])),
       get, add: vi.fn(), update: vi.fn(), remove: vi.fn(),
-      keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey
+      keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey, titleKeyCandidates, setMusicKeys, restoreMusicKeys
     },
     presentation: { get: () => Promise.resolve(state), onState: () => () => {}, cue, goLive, take, setOutput },
     songImport: { sources: () => Promise.resolve([]), scan: vi.fn(), commit: vi.fn(), onProgress: () => () => {} }
   };
-  return { keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey, get, cue, goLive, take, setOutput };
+  return {
+    keyList, keyCounts, setMusicKey, skipMusicKey, restoreMusicKey, get, cue, goLive, take, setOutput,
+    titleKeyCandidates, setMusicKeys, restoreMusicKeys, db
+  };
 }
 
 const theme = themeFor('classic', 'dark');
@@ -179,7 +220,7 @@ describe('Song keys window', () => {
       expect(keyList).toHaveBeenLastCalledWith({ tab: 'lately', q: '' });
       await waitFor(() => expect(listTitles()).toEqual(['Cornerstone', 'Amazing Grace', 'Build My Life']));
       expect(shownTitle()).toBe('Cornerstone');
-      expect(document.querySelector('[data-key-source]')!.textContent).toBe('From the title in EasyWorship');
+      expect(document.querySelector('[data-key-source]')!.textContent).toBe("From the song's title");
 
       fireEvent.click(screen.getByRole('tab', { name: 'All' }));
       await waitFor(() => expect(listTitles()).toEqual(['Amazing Grace', 'Build My Life', 'Cornerstone', 'Lord I Need You']));
@@ -227,7 +268,7 @@ describe('Song keys window', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
       expect(restoreMusicKey).toHaveBeenCalledWith('c', 'Eb', 'title', null);
-      await waitFor(() => expect(document.querySelector('[data-key-source]')!.textContent).toBe('From the title in EasyWorship'));
+      await waitFor(() => expect(document.querySelector('[data-key-source]')!.textContent).toBe("From the song's title"));
       expect(screen.queryByText('Key changed to E')).toBeNull();
       await waitFor(() => expect(libSlot('Cornerstone')).toBe('Eb'));
     } finally {
@@ -413,5 +454,122 @@ describe('Song keys window — empty states and the progress line', () => {
     expect(progressLine({ ...c, lately: 1, latelyWithKey: 0 })).toBe('Sung lately: 0 of 1 has a key.');
     expect(progressLine({ ...c, lately: 0, latelyWithKey: 0 })).toBe('No song has gone live in the last eight weeks.');
     expect(progressLine(null)).toBe('');
+  });
+
+  // Song keys spec, Phase 1d: the library sweep.
+  describe('Move keys out of titles', () => {
+    const banner = (): Element | null => document.querySelector('[data-title-key-banner]');
+    const reviewRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[data-title-key-row]')];
+    const box = (title: string): HTMLInputElement =>
+      reviewRows().find((r) => r.textContent!.startsWith(title))!.querySelector('input')!;
+    const KING = song('k', 'A Child Of The King (Eb)');
+    const OCEANS = song('o', 'Oceans (D - E)');
+    const FEMALE = song('f', 'Song (F)');
+    const LIVE_T = song('h', 'Holy Ground (Live)');
+    const MAKER = song('m', 'Way Maker (Bb)', { key: 'C', keySource: 'typed', skippedAt: 123 });
+
+    it('shows no banner when no title ends in a key', async () => {
+      const { titleKeyCandidates } = installFake([A, LIVE_T]);
+      renderWindow();
+      await waitFor(() => expect(titleKeyCandidates).toHaveBeenCalled());
+      await waitFor(() => expect(listTitles().length).toBeGreaterThan(0));
+      await act(async () => {});
+      expect(banner()).toBeNull();
+      expect(screen.queryByText('Move keys out of titles')).toBeNull();
+    });
+
+    it('shows one banner line with a count and an example when some do', async () => {
+      installFake([KING, OCEANS, LIVE_T, A]);
+      renderWindow();
+      await waitFor(() => expect(banner()).toBeTruthy());
+      // Counts and shows only titles that move by default; the flagged modulation is left out.
+      expect(banner()!.textContent).toBe('1 title ends in a key, like A Child Of The King (Eb).Move keys out of titles');
+    });
+
+    it('shows no banner when only flagged titles are left, so a kept "Song (F)" never nags', async () => {
+      const { titleKeyCandidates } = installFake([OCEANS, FEMALE, MAKER, A]);
+      renderWindow();
+      await waitFor(() => expect(titleKeyCandidates).toHaveBeenCalled());
+      await waitFor(() => expect(listTitles().length).toBeGreaterThan(0));
+      await act(async () => {});
+      expect(banner()).toBeNull();
+    });
+
+    it('reviews title → key → clean title: flagged rows on top and unchecked, any row can be unchecked', async () => {
+      installFake([KING, OCEANS, FEMALE, MAKER, A]);
+      renderWindow();
+      fireEvent.click(await screen.findByRole('button', { name: 'Move keys out of titles' }));
+      await waitFor(() => expect(reviewRows()).toHaveLength(4));
+      expect(reviewRows().map((r) => r.querySelector('[data-title-key-note]')!.textContent)).toEqual([
+        'Changes key: the title stays', 'One letter: a key, or a version?', 'Already has key C', ''
+      ]);
+      expect(reviewRows().map((r) => r.querySelector('input')!.checked)).toEqual([false, false, false, true]);
+      expect(reviewRows()[3].textContent).toBe('A Child Of The King (Eb)EbA Child Of The King');
+      expect(reviewRows()[0].textContent).toContain('D → E');
+      expect(screen.getByRole('button', { name: 'Move 1 key' })).toBeTruthy();
+      fireEvent.click(box('A Child Of The King (Eb)'));
+      expect(box('A Child Of The King (Eb)').checked).toBe(false);
+      expect((screen.getByRole('button', { name: 'Move 0 keys' }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(box('Song (F)'));
+      expect(screen.getByRole('button', { name: 'Move 1 key' })).toBeTruthy();
+      // Escape steps back out of the review to the list; the window stays.
+      press('Escape');
+      expect(document.querySelector('[data-title-key-review]')).toBeNull();
+      expect(windowTitle()).toBeTruthy();
+      expect(banner()).toBeTruthy();
+    });
+
+    it('applies one batch with source title and the clean title, then Undo restores every title, key and source', async () => {
+      const onKeySaved = vi.fn();
+      const fake = installFake([KING, OCEANS, MAKER]);
+      render(
+        <ThemeCtx.Provider value={theme}>
+          <SongKeysWindow onClose={() => {}} onKeySaved={onKeySaved} />
+        </ThemeCtx.Provider>
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Move keys out of titles' }));
+      await waitFor(() => expect(reviewRows()).toHaveLength(3));
+      fireEvent.click(box('Oceans (D - E)'));
+      fireEvent.click(box('Way Maker (Bb)'));
+      fireEvent.click(screen.getByRole('button', { name: 'Move 3 keys' }));
+      await waitFor(() => expect(fake.setMusicKeys).toHaveBeenCalledTimes(1));
+      expect(fake.setMusicKeys).toHaveBeenCalledWith([
+        { id: 'o', key: 'D', source: 'title' }, // a modulation keeps its title
+        { id: 'm', key: 'Bb', source: 'title', title: 'Way Maker' },
+        { id: 'k', key: 'Eb', source: 'title', title: 'A Child Of The King' }
+      ]);
+      expect(await screen.findByText('Moved 3 keys')).toBeTruthy();
+      expect(onKeySaved).toHaveBeenCalledWith(expect.objectContaining({ id: 'k', title: 'A Child Of The King', key: 'Eb' }));
+      await waitFor(() => expect(banner()).toBeNull());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(fake.restoreMusicKeys).toHaveBeenCalledTimes(1));
+      expect(fake.restoreMusicKeys).toHaveBeenCalledWith([
+        { id: 'o', key: '', source: '', skippedAt: null },
+        { id: 'm', key: 'C', source: 'typed', skippedAt: 123, title: 'Way Maker (Bb)' },
+        { id: 'k', key: '', source: '', skippedAt: null, title: 'A Child Of The King (Eb)' }
+      ]);
+      await waitFor(() => expect(onKeySaved).toHaveBeenCalledWith(expect.objectContaining({ id: 'm', title: 'Way Maker (Bb)', key: 'C' })));
+      expect(fake.db.get('k')).toMatchObject({ title: 'A Child Of The King (Eb)' });
+      expect(fake.db.get('k')!.key).toBeUndefined();
+      await waitFor(() => expect(banner()).toBeTruthy());
+    });
+
+    it('windows the review: three thousand titles mount a few dozen rows', async () => {
+      installFake(Array.from({ length: 3000 }, (_, i) => song(`s${i}`, `Song ${i} (Eb)`)));
+      renderWindow();
+      fireEvent.click(await screen.findByRole('button', { name: 'Move keys out of titles' }));
+      await waitFor(() => expect(reviewRows().length).toBeGreaterThan(0));
+      expect(reviewRows().length).toBeLessThan(60);
+      expect(screen.getByRole('button', { name: 'Move 3,000 keys' })).toBeTruthy();
+    });
+
+    it('keeps the source of a key that is already the title key: only the title changes', async () => {
+      const fake = installFake([song('s', 'Cornerstone (Db)', { key: 'Db', keySource: 'typed' })]);
+      renderWindow();
+      fireEvent.click(await screen.findByRole('button', { name: 'Move keys out of titles' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Move 1 key' }));
+      await waitFor(() => expect(fake.setMusicKeys).toHaveBeenCalledWith([{ id: 's', key: 'Db', source: 'typed', title: 'Cornerstone' }]));
+    });
   });
 });

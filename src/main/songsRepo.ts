@@ -1,9 +1,12 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import type {
-  MusicKeyChange, MusicKeyCounts, MusicKeyListQuery, MusicKeyRow, MusicKeyTab, NewSongInput, SearchField, Song, SongSearchResult, UpdateSongInput,
+  MusicKeyChange, MusicKeyCounts, MusicKeyListQuery, MusicKeyRestore, MusicKeyRow, MusicKeyTab, NewSongInput, SearchField, Song,
+  SongSearchResult, TitleKeyCandidate, UpdateSongInput,
 } from '../shared/types';
-import { isMusicKey, normalizeKey, type MusicKey, type MusicKeySource } from '../shared/songs/musicKey';
+import {
+  extractKeyFromTitle, isMusicKey, normalizeCcli, normalizeKey, type MusicKey, type MusicKeySource,
+} from '../shared/songs/musicKey';
 import { SONG_FTS_COLUMNS } from './schema';
 import { norm, matchDist, matchTol } from '../shared/search/fuzzy';
 import { rankSongs } from '../shared/search/songScore';
@@ -45,6 +48,20 @@ export interface SongsRepo {
   /** One go-live of the song at `now` (songUsage.ts). An unknown id is ignored: the song
    * may have been deleted while it was on screen. */
   recordLive(id: string, now: number): void;
+  /** The library sweep (spec Phase 1d): every song whose title ends in a key (or a two-key
+   * flag) where moving it would change something. A song that already has a different key
+   * (a person's, or a legacy value) is listed flagged `has-key`, never silently replaced.
+   * Flagged rows first, then by title. */
+  titleKeyCandidates(): TitleKeyCandidate[];
+  /** Undo for a title sweep: one transaction writing back every title (and its song_fts
+   * row), key, source and skip time exactly as they were, a legacy value included. Every
+   * entry is validated before anything is written. */
+  restoreMusicKeys(batch: MusicKeyRestore[]): Song[];
+  /** Re-import fills blanks: in one transaction, writes each key only where the song has
+   * no key at all (a legacy value is not empty) and each CCLI number only where it has none.
+   * The guard is in the UPDATE itself, so a person's key is never overwritten. Returns how
+   * many keys and numbers landed. Main-side only (the import), not on IPC. */
+  fillBlanks(entries: { id: string; key?: MusicKey; ccli?: string }[], source: MusicKeySource): { keys: number; ccli: number };
 }
 interface Row {
   id: string; title: string; author: string; sections_json: string; source: string; created_at: number;
@@ -94,7 +111,7 @@ const toSong = (r: Row): Song => ({
 });
 
 export function createSongsRepo(db: Database.Database): SongsRepo {
-  const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at, music_key, music_key_source) VALUES (?,?,?,?,?,?,?,?)');
+  const insertSong = db.prepare('INSERT INTO songs (id, title, author, sections_json, source, created_at, music_key, music_key_source, ccli_no) VALUES (?,?,?,?,?,?,?,?,?)');
   const insertFts = db.prepare('INSERT INTO song_fts (rowid, title, author, lyrics) VALUES ((SELECT rowid FROM songs WHERE id = ?),?,?,?)');
   const updateSong = db.prepare('UPDATE songs SET title = ?, author = ?, sections_json = ? WHERE id = ?');
   const updateFts = db.prepare('UPDATE song_fts SET title = ?, author = ?, lyrics = ? WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)');
@@ -106,12 +123,19 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     const sections = splitToSlides(input.text);
     if (!sections.length) throw new Error('Song has no content');
     const key = cleanSongKey(input.key);
-    const keySource = typedSourceOf(key);
+    // An import says where a canonical key came from (the title); anything else is a person's.
+    const given = input.musicKeySource;
+    if (given !== undefined && (typeof given !== 'string' || !Object.hasOwn(MUSIC_KEY_SOURCES, given) || given === 'legacy')) {
+      throw new Error(`Unknown key source: ${String(given)}`);
+    }
+    const keySource = given && isMusicKey(key) ? given : typedSourceOf(key);
+    const ccli = typeof input.ccli === 'string' ? normalizeCcli(input.ccli) : '';
     const song: Song = {
       id: randomUUID(), title: input.title.trim() || 'Untitled Song', author: input.author?.trim() ?? '', sections,
       source: input.source ?? 'local', createdAt: Date.now(), ...(key ? { key } : {}), ...(keySource ? { keySource } : {}),
+      ...(ccli ? { ccli } : {}),
     };
-    insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key, keySource);
+    insertSong.run(song.id, song.title, song.author, JSON.stringify(song.sections), song.source, song.createdAt, key, keySource, ccli);
     insertFts.run(song.id, norm(song.title), norm(song.author), norm(lyricsOf(song)));
     invalidateVocab();
     // No songCache.delete here: the id is freshly minted (randomUUID above), so the
@@ -216,6 +240,21 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     COALESCE(SUM(last_live_at >= ? AND music_key <> '' AND music_key_source <> 'legacy'), 0) AS lately_with_key,
     COALESCE(MAX(last_live_at IS NOT NULL), 0) AS any_live
     FROM songs`);
+  const candidateStmt = db.prepare('SELECT id, title, music_key, music_key_source, key_skipped_at FROM songs');
+  const fillKeyStmt = db.prepare(`UPDATE songs SET music_key = ?, music_key_source = ?, key_skipped_at = NULL WHERE id = ? AND music_key = ''`);
+  const fillCcliStmt = db.prepare(`UPDATE songs SET ccli_no = ? WHERE id = ? AND ccli_no = ''`);
+  /** restoreMusicKey's checks, shared with the batch restore. */
+  const assertRestore = (raw: unknown, source: unknown, skippedAt: unknown): void => {
+    if (typeof raw !== 'string') throw new Error('Expected the previous key as text');
+    if (typeof source !== 'string' || (source !== '' && !Object.hasOwn(MUSIC_KEY_SOURCES, source))) {
+      throw new Error(`Unknown key source: ${String(source)}`);
+    }
+    if (raw === '' && source !== '') throw new Error('No key has no source');
+    if (raw !== '' && source !== 'legacy' && !isMusicKey(raw)) throw new Error(`Not a key: ${raw}`);
+    if (skippedAt !== undefined && skippedAt !== null && !(typeof skippedAt === 'number' && Number.isFinite(skippedAt))) {
+      throw new Error('Expected a skip time');
+    }
+  };
   const writeKey = (id: string, musicKey: MusicKey | null, source: MusicKeySource): void => {
     if (musicKey === null) clearKeyStmt.run(id);
     else setKeyStmt.run(musicKey, source, id);
@@ -263,21 +302,76 @@ export function createSongsRepo(db: Database.Database): SongsRepo {
     },
     restoreMusicKey(id, raw, source, skippedAt) {
       assertSong(id);
-      if (typeof raw !== 'string') throw new Error('Expected the previous key as text');
-      if (typeof source !== 'string' || (source !== '' && !Object.hasOwn(MUSIC_KEY_SOURCES, source))) {
-        throw new Error(`Unknown key source: ${String(source)}`);
-      }
-      if (raw === '' && source !== '') throw new Error('No key has no source');
-      if (raw !== '' && source !== 'legacy' && !isMusicKey(raw)) throw new Error(`Not a key: ${raw}`);
-      if (skippedAt !== undefined && skippedAt !== null && !(typeof skippedAt === 'number' && Number.isFinite(skippedAt))) {
-        throw new Error('Expected a skip time');
-      }
+      assertRestore(raw, source, skippedAt);
       db.transaction(() => {
         restoreKeyStmt.run(raw, source, id);
         if (skippedAt !== undefined) restoreSkipStmt.run(skippedAt, id);
       })();
       songCache.delete(id);
       return get(id)!;
+    },
+    restoreMusicKeys(batch) {
+      if (!Array.isArray(batch)) throw new Error('Expected a list of key restores');
+      const titles = batch.map((r) => {
+        if (typeof r !== 'object' || r === null) throw new Error('Expected a key restore');
+        assertSong(r.id);
+        assertRestore(r.key, r.source, r.skippedAt);
+        if (r.title === undefined) return undefined;
+        const title = typeof r.title === 'string' ? r.title.trim() : '';
+        if (!title) throw new Error('A song needs a title');
+        return title;
+      });
+      db.transaction(() => {
+        batch.forEach((r, i) => {
+          restoreKeyStmt.run(r.key, r.source, r.id);
+          if (r.skippedAt !== undefined) restoreSkipStmt.run(r.skippedAt, r.id);
+          const title = titles[i];
+          if (title !== undefined) {
+            setTitleStmt.run(title, r.id);
+            setFtsTitleStmt.run(norm(title), r.id);
+          }
+        });
+      })();
+      for (const r of batch) songCache.delete(r.id);
+      if (titles.some((t) => t !== undefined)) invalidateVocab();
+      return batch.map((r) => get(r.id)!);
+    },
+    titleKeyCandidates() {
+      type CandRow = { id: string; title: string; music_key: string; music_key_source: string; key_skipped_at: number | null };
+      const out: TitleKeyCandidate[] = [];
+      for (const r of candidateStmt.all() as CandRow[]) {
+        const t = extractKeyFromTitle(r.title);
+        if (!t.key && !t.flag) continue;
+        const current = r.music_key;
+        // Moving changes nothing when the key is already there and the title stays (a
+        // modulation keeps its title): such a song is done, not a candidate.
+        if (t.key && current === t.key && t.title === r.title) continue;
+        const flag = t.key && current !== '' && current !== t.key ? 'has-key' : t.flag;
+        out.push({
+          id: r.id, title: r.title, cleanTitle: t.title,
+          ...(t.key ? { key: t.key } : {}), ...(t.endKey ? { endKey: t.endKey } : {}), ...(flag ? { flag } : {}),
+          currentKey: current, currentSource: current ? (r.music_key_source as MusicKeySource | '') : '',
+          skippedAt: r.key_skipped_at,
+        });
+      }
+      return out.sort((a, b) =>
+        Number(!a.flag) - Number(!b.flag)
+        || a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+        || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    },
+    fillBlanks(entries, source) {
+      if (!Object.hasOwn(MUSIC_KEY_SOURCES, source) || source === 'legacy') throw new Error(`Unknown key source: ${source}`);
+      let keys = 0;
+      let ccli = 0;
+      db.transaction(() => {
+        for (const e of entries) {
+          if (e.key && isMusicKey(e.key)) keys += fillKeyStmt.run(e.key, source, e.id).changes;
+          const number = e.ccli ? normalizeCcli(e.ccli) : '';
+          if (number) ccli += fillCcliStmt.run(number, e.id).changes;
+        }
+      })();
+      for (const e of entries) songCache.delete(e.id);
+      return { keys, ccli };
     },
     keyCounts() {
       const since = Date.now() - LATELY_MS;

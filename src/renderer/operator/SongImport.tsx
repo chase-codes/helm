@@ -3,7 +3,9 @@ import { useWindowedList } from '../shared/useWindowedList';
 import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
 import { ImportIcon } from '../shared/icons';
-import type { ImportReviewRow, ImportSourceInfo, SongImportProgress, SongImportResult } from '../../shared/types';
+import type { ImportReviewRow, ImportSourceInfo, ImportTitleKey, SongImportProgress, SongImportResult } from '../../shared/types';
+import { TitleKeyReview, type TitleKeyReviewRow } from './TitleKeyReview';
+import { defaultChecked, titleKeyNote } from './songKeysText';
 import { Z_STACKED_MODAL } from './zLayers';
 import { MONO } from '../shared/fonts';
 
@@ -21,7 +23,12 @@ type Step =
   | { name: 'source' }
   | { name: 'scanning' }
   | { name: 'error'; message: string; expected?: string }
-  | { name: 'review'; token: string; rows: ImportReviewRow[]; withLayouts?: number }
+  | {
+      name: 'review'; token: string; rows: ImportReviewRow[]; withLayouts?: number; fillable: number;
+      /** Keys found in titles: the review rows (flagged first), which are checked, and whether
+       *  the list is showing (See them). */
+      titleKeys: TitleKeyReviewRow[]; checked: Set<string>; showKeys: boolean;
+    }
   | { name: 'importing'; done: number; total: number }
   | { name: 'done'; result: SongImportResult };
 
@@ -29,6 +36,20 @@ const plural = (n: number, one: string, many: string): string => `${n} ${n === 1
 // Review-row pitch (px): row box + gap. The windowed list assumes exactly this per row.
 const ROW_GAP = 5;
 const ROW_H = 36 + ROW_GAP;
+
+/** An import title key as a review row. A song already in Helm keeps its title: only its
+ * empty key is filled. */
+const titleKeyRow = (t: ImportTitleKey): TitleKeyReviewRow => ({
+  id: String(t.ref),
+  title: t.title,
+  cleanTitle: t.status === 'fill' ? t.title : t.cleanTitle,
+  ...(t.key ? { key: t.key } : {}),
+  ...(t.endKey ? { endKey: t.endKey } : {}),
+  flagged: !!t.flag,
+  note: titleKeyNote(t.flag) || (t.status === 'fill' ? 'Already in Helm: fills its key' : '')
+});
+const titleKeyRows = (keys: ImportTitleKey[] | undefined): TitleKeyReviewRow[] =>
+  (keys ?? []).map(titleKeyRow).sort((a, b) => Number(b.flagged) - Number(a.flagged));
 
 export function SongImport({ open, onClose, onImported, onImportingChange }: SongImportProps): JSX.Element | null {
   const T = useContext(ThemeCtx);
@@ -77,7 +98,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
   // Windowed over the review rows; a no-op (0 rows) on every other step. Above the early
   // return so the hook order is stable.
   const { setEl: setScrollEl, onScroll, start, end, topPad, bottomPad } = useWindowedList(
-    step.name === 'review' ? step.rows.length : 0,
+    step.name === 'review' && !step.showKeys ? step.rows.length : 0,
     ROW_H
   );
 
@@ -94,11 +115,16 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
       .scan(id)
       .then((result) => {
         if ('rows' in result) {
+          const titleKeys = titleKeyRows(result.titleKeys);
           setStep({
             name: 'review',
             token: result.token,
             rows: result.rows,
-            ...(result.withLayouts === undefined ? {} : { withLayouts: result.withLayouts })
+            ...(result.withLayouts === undefined ? {} : { withLayouts: result.withLayouts }),
+            fillable: result.fillable ?? 0,
+            titleKeys,
+            checked: defaultChecked(titleKeys),
+            showKeys: false
           });
           return;
         }
@@ -127,10 +153,10 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
       });
   };
 
-  const runImport = (token: string, total: number): void => {
+  const runImport = (token: string, total: number, checked: Set<string>): void => {
     setStep({ name: 'importing', done: 0, total });
     void window.helm.songImport
-      .commit(token)
+      .commit(token, { titleKeys: [...checked].map(Number) })
       .then((result) => {
         setStep({ name: 'done', result });
         onImported();
@@ -173,6 +199,28 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
   };
 
   const newCount = step.name === 'review' ? step.rows.filter((r) => r.status === 'new').length : 0;
+  const keysFound = step.name === 'review' ? step.titleKeys.filter((r) => r.key).length : 0;
+  const setShowKeys = (showKeys: boolean): void => setStep((s) => (s.name === 'review' ? { ...s, showKeys } : s));
+  const toggleTitleKey = (id: string): void =>
+    setStep((s) => {
+      if (s.name !== 'review') return s;
+      const checked = new Set(s.checked);
+      if (checked.has(id)) checked.delete(id);
+      else checked.add(id);
+      return { ...s, checked };
+    });
+  const linkStyle: CSSProperties = { fontSize: '13px', fontWeight: 700, color: T.accent, padding: '0 2px', flexShrink: 0 };
+  // One line, above the song list and above the key list alike, so See them never moves.
+  const keysLine = step.name === 'review' && keysFound > 0 && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '20px', marginBottom: '10px', fontSize: '13px', color: T.dim }} data-title-keys-line>
+      <span style={{ ...clipStyle, flex: 1, minWidth: 0 }}>
+        {`Keys found in ${plural(keysFound, 'song title', 'song titles')}. They'll move from the title to the song's key.`}
+      </span>
+      <button style={linkStyle} onClick={() => setShowKeys(!step.showKeys)}>
+        {step.showKeys ? 'Back to the songs' : 'See them'}
+      </button>
+    </div>
+  );
 
   return (
     <ModalShell
@@ -190,6 +238,12 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
         </div>
       </div>
 
+      {step.name === 'review' && step.showKeys ? (
+        <div style={{ ...bodyStyle, overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {keysLine}
+          <TitleKeyReview rows={step.titleKeys} checked={step.checked} onToggle={toggleTitleKey} />
+        </div>
+      ) : (
       <div style={bodyStyle} ref={setScrollEl} onScroll={onScroll}>
         {step.name === 'source' && (
           <>
@@ -219,6 +273,7 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
 
         {step.name === 'review' && (
           <>
+            {keysLine}
             <div style={{ fontSize: '12px', color: T.faint, marginBottom: '10px' }}>
               FOUND {plural(step.rows.length, 'SONG', 'SONGS').toUpperCase()}
               {step.withLayouts !== undefined &&
@@ -259,6 +314,14 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
             {step.result.skipped > 0 && (
               <div style={{ color: T.dim }}>{plural(step.result.skipped, 'song', 'songs')} already in Helm.</div>
             )}
+            {!!step.result.filledKeys && (
+              <div style={{ color: T.dim }}>Filled in {plural(step.result.filledKeys, 'key', 'keys')} on songs already in your library.</div>
+            )}
+            {!!step.result.filledCcli && (
+              <div style={{ color: T.dim }}>
+                Filled in {plural(step.result.filledCcli, 'CCLI number', 'CCLI numbers')} on songs already in your library.
+              </div>
+            )}
             {step.result.unreadable.length > 0 && (
               <>
                 <div style={{ color: T.dim }}>
@@ -277,17 +340,20 @@ export function SongImport({ open, onClose, onImported, onImportingChange }: Son
           </div>
         )}
       </div>
+      )}
 
       <div style={footerStyle}>
         <button style={cancelStyle} onClick={dismissible ? onClose : undefined} disabled={!dismissible}>
           {step.name === 'done' ? 'Close' : 'Cancel'}
         </button>
-        {step.name === 'review' && newCount > 0 && (
+        {/* Nothing new can still mean blanks to fill in songs already in Helm (re-import). */}
+        {step.name === 'review' && (newCount > 0 || step.fillable > 0) && (
           <button
             style={{ ...primaryStyle, display: 'inline-flex', alignItems: 'center', gap: '7px' }}
-            onClick={() => runImport(step.token, newCount)}
+            onClick={() => runImport(step.token, newCount, step.checked)}
           >
-            <ImportIcon size={14} /> Import {plural(newCount, 'song', 'songs')}
+            <ImportIcon size={14} />{' '}
+            {newCount > 0 ? `Import ${plural(newCount, 'song', 'songs')}` : `Fill in ${plural(step.fillable, 'song', 'songs')}`}
           </button>
         )}
       </div>

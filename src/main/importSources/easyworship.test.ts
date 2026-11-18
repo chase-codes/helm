@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import { basename, join } from 'path';
 import { createEasyWorshipSource, EW_DEFAULT_PATH } from './easyworship';
 import type { ImportSource, SourceDb } from './types';
+import type { ScannedSong } from '../../shared/types';
 
 const FIXTURE = join(__dirname, '__fixtures__', 'ew');
 const SONGS_DB_NAME = 'Songs.db';
@@ -63,32 +64,34 @@ interface FixtureSong {
   slideUids?: string;
   /** song.presentation_id — > 0 means the song carries a laid-out slide set. */
   layout?: number;
+  ccli?: string;
+  copyright?: string;
 }
 
 const makeLibrary = (
   dir: string,
   songs: FixtureSong[],
-  opts: { presentationId?: boolean; slideUids?: boolean } = {}
+  opts: { presentationId?: boolean; slideUids?: boolean; ccliColumn?: string; copyright?: boolean } = {}
 ): string => {
   mkdirSync(dir, { recursive: true });
   const withPid = opts.presentationId !== false;
   const withUids = opts.slideUids !== false;
+  // Optional columns, in the order they are declared: name, SQL type, a song's value.
+  type Column = [string, string, (song: FixtureSong) => string | number];
+  const extra: Column[] = [];
+  if (withPid) extra.push(['presentation_id', 'integer', (song) => song.layout ?? 0]);
+  if (opts.ccliColumn) extra.push([opts.ccliColumn, 'text', (song) => song.ccli ?? '']);
+  if (opts.copyright) extra.push(['copyright', 'text', (song) => song.copyright ?? '']);
 
   const s = new DatabaseSync(join(dir, SONGS_DB_NAME));
   s.exec(
     'CREATE TABLE song (rowid integer PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE, ' +
-      `title text NOT NULL, author text${withPid ? ', presentation_id integer' : ''})`
+      `title text NOT NULL, author text${extra.map(([c, type]) => `, ${c} ${type}`).join('')})`
   );
   const insertSong = s.prepare(
-    withPid
-      ? 'INSERT INTO song (title, author, presentation_id) VALUES (?, ?, ?)'
-      : 'INSERT INTO song (title, author) VALUES (?, ?)'
+    `INSERT INTO song (title, author${extra.map(([c]) => `, ${c}`).join('')}) VALUES (?, ?${extra.map(() => ', ?').join('')})`
   );
-  songs.forEach((song) =>
-    withPid
-      ? insertSong.run(song.title, song.author ?? '', song.layout ?? 0)
-      : insertSong.run(song.title, song.author ?? '')
-  );
+  songs.forEach((song) => insertSong.run(song.title, song.author ?? '', ...extra.map(([, , v]) => v(song))));
   s.close();
 
   const w = new DatabaseSync(join(dir, WORDS_DB_NAME));
@@ -152,7 +155,9 @@ describe('easyworship source', () => {
     expect(amazing).toEqual({
       title: 'Amazing Grace',
       author: 'John Newton',
-      text: 'Verse 1\nAmazing grace! how sweet the sound\nThat saved a wretch like me\n\nChorus\nPraise God'
+      text: 'Verse 1\nAmazing grace! how sweet the sound\nThat saved a wretch like me\n\nChorus\nPraise God',
+      // The committed fixture's `ccli_no` column.
+      ccli: '22025'
     });
   });
 
@@ -459,6 +464,58 @@ describe('easyworship source', () => {
     expect(outcome.songs.map((s) => s.title)).toEqual(['Empty', 'Null', 'Whitespace']);
     for (const song of outcome.songs) expect(song).not.toHaveProperty('sourceStanzas');
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Song keys spec, Phase 1d. The real CCLI column is unverified, so every shape is tolerated.
+  it('reads the CCLI number from the ccli_no column', async () => {
+    const dir = makeLibrary(tempLibrary('ccli'), [{ title: 'Cornerstone', ccli: 'CCLI# 6158927' }], { ccliColumn: 'ccli_no' });
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.songs[0].ccli).toBe('6158927');
+  });
+
+  it('imports normally, with no CCLI number, when there is no CCLI or copyright column', async () => {
+    const dir = makeLibrary(tempLibrary('noccli'), [{ title: 'Cornerstone' }]);
+    const outcome = await source(dir).scan({ path: dir });
+    expect(outcome.songs).toHaveLength(1);
+    expect(outcome.songs[0]).not.toHaveProperty('ccli');
+  });
+
+  it('falls back on a CCLI number in the copyright line', async () => {
+    const dir = makeLibrary(
+      tempLibrary('copyright'),
+      [
+        { title: 'Raise A Hallelujah', copyright: '© 2018 Bethel Music | CCLI Song # 7119315' },
+        { title: 'Both', ccli: '22025', copyright: 'CCLI # 99999' },
+        { title: 'Neither', copyright: 'Public Domain' }
+      ],
+      { ccliColumn: 'ccli_no', copyright: true }
+    );
+    const outcome = await source(dir).scan({ path: dir });
+    const by = (t: string): ScannedSong | undefined => outcome.songs.find((x) => x.title === t);
+    expect(by('Raise A Hallelujah')?.ccli).toBe('7119315');
+    // The column wins when it holds a number.
+    expect(by('Both')?.ccli).toBe('22025');
+    expect(by('Neither')).not.toHaveProperty('ccli');
+  });
+
+  it('finds the key at the end of a title, keeping the title as EasyWorship has it', async () => {
+    const dir = makeLibrary(tempLibrary('titlekeys'), [
+      { title: 'A Child Of The King      (Eb)' },
+      { title: 'Oceans (D - E)' },
+      { title: 'Song (F)' },
+      { title: 'Two (G, A)' },
+      { title: 'Holy Ground (Live)' }
+    ]);
+    const outcome = await source(dir).scan({ path: dir });
+    const by = (t: string): ScannedSong | undefined => outcome.songs.find((x) => x.title === t);
+    expect(by('A Child Of The King (Eb)')).toMatchObject({ musicKey: 'Eb' });
+    expect(by('A Child Of The King (Eb)')).not.toHaveProperty('titleKeyNote');
+    expect(by('Oceans (D - E)')).toMatchObject({ musicKey: 'D', titleKeyNote: 'modulation' });
+    expect(by('Song (F)')).toMatchObject({ musicKey: 'F', titleKeyNote: 'single-letter' });
+    expect(by('Two (G, A)')).toMatchObject({ titleKeyNote: 'two-keys' });
+    expect(by('Two (G, A)')).not.toHaveProperty('musicKey');
+    expect(by('Holy Ground (Live)')).not.toHaveProperty('musicKey');
+    expect(by('Holy Ground (Live)')).not.toHaveProperty('titleKeyNote');
   });
 
   it('finds a library nested below the folder the operator picked', async () => {

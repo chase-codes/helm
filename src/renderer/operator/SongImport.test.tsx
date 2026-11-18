@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SongImport } from './SongImport';
 import { ThemeCtx } from './ThemeCtx';
 import { themeFor } from '../../shared/theme';
-import type { ImportReviewRow, SongImportScanResult, SongImportResult } from '../../shared/types';
+import type { ImportReviewRow, ImportTitleKey, SongImportScanResult, SongImportResult } from '../../shared/types';
 
 afterEach(cleanup);
 
@@ -99,7 +99,7 @@ describe('SongImport', () => {
     renderModal(onImported);
     fireEvent.click(await screen.findByText('EasyWorship'));
     fireEvent.click(await screen.findByText(/Import 1 song/));
-    await waitFor(() => expect(helm.commit).toHaveBeenCalledWith('tok-1'));
+    await waitFor(() => expect(helm.commit).toHaveBeenCalledWith('tok-1', { titleKeys: [] }));
     expect(await screen.findByText(/Imported 1 song/)).toBeTruthy();
     // The rendered strings are "1 song already in Helm." and "1 song couldn't be read." —
     // match what is actually on screen, not a paraphrase of it.
@@ -251,5 +251,67 @@ describe('SongImport', () => {
     expect(screen.getByText('CHECK')).toBeTruthy();
     expect(screen.getByText('4 stanzas')).toBeTruthy();
     expect(screen.queryByText(/undefined/)).toBeNull();
+  });
+
+  // Song keys spec, Phase 1d.
+  describe('keys in titles', () => {
+    const KEY_ROWS: ImportReviewRow[] = [
+      { title: 'A Child Of The King (Eb)', author: '', stanzas: 1, status: 'new' },
+      { title: 'Oceans (D - E)', author: '', stanzas: 1, status: 'new' },
+      { title: 'Plain', author: '', stanzas: 1, status: 'new' }
+    ];
+    const TITLE_KEYS: ImportTitleKey[] = [
+      { ref: 0, title: 'A Child Of The King (Eb)', cleanTitle: 'A Child Of The King', key: 'Eb', status: 'new' },
+      { ref: 1, title: 'Oceans (D - E)', cleanTitle: 'Oceans (D - E)', key: 'D', endKey: 'E', flag: 'modulation', status: 'new' }
+    ];
+    const keyRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[data-title-key-row]')];
+
+    it('says nothing about keys when no title has one', async () => {
+      installHelm({ token: 't', rows: ROWS });
+      renderModal();
+      fireEvent.click(await screen.findByText('EasyWorship'));
+      expect(await screen.findByText('Amazing Grace')).toBeTruthy();
+      expect(document.querySelector('[data-title-keys-line]')).toBeNull();
+    });
+
+    it('adds one line with See them, opening the review list; the checked rows go to commit', async () => {
+      const helm = installHelm({ token: 'tok', rows: KEY_ROWS, titleKeys: TITLE_KEYS }, { imported: 3, skipped: 0, unreadable: [] });
+      renderModal();
+      fireEvent.click(await screen.findByText('EasyWorship'));
+      expect(await screen.findByText("Keys found in 2 song titles. They'll move from the title to the song's key.")).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'See them' }));
+      // Flagged on top and unchecked; the rest checked.
+      expect(keyRows().map((r) => [r.textContent!.split('Changes')[0], r.querySelector('input')!.checked])).toEqual([
+        ['Oceans (D - E)D → EOceans (D - E)', false],
+        ['A Child Of The King (Eb)EbA Child Of The King', true]
+      ]);
+      fireEvent.click(keyRows()[1].querySelector('input')!);
+      fireEvent.click(keyRows()[0].querySelector('input')!);
+      fireEvent.click(screen.getByRole('button', { name: 'Back to the songs' }));
+      expect(await screen.findByText('Plain')).toBeTruthy();
+      fireEvent.click(screen.getByText(/Import 3 songs/));
+      await waitFor(() => expect(helm.commit).toHaveBeenCalledWith('tok', { titleKeys: [1] }));
+    });
+
+    it('offers to fill blanks when nothing is new, and the Done step counts what was filled', async () => {
+      const helm = installHelm(
+        {
+          token: 'tok',
+          rows: [{ title: 'A Child Of The King (Eb)', author: '', stanzas: 1, status: 'duplicate' }],
+          titleKeys: [{ ...TITLE_KEYS[0], status: 'fill' }],
+          fillable: 1
+        },
+        { imported: 0, skipped: 1, unreadable: [], filledKeys: 37, filledCcli: 1 }
+      );
+      renderModal();
+      fireEvent.click(await screen.findByText('EasyWorship'));
+      fireEvent.click(await screen.findByRole('button', { name: 'See them' }));
+      // A song already in Helm keeps its title; only its empty key fills.
+      expect(keyRows()[0].textContent).toBe('A Child Of The King (Eb)EbA Child Of The King (Eb)Already in Helm: fills its key');
+      fireEvent.click(screen.getByText('Fill in 1 song'));
+      await waitFor(() => expect(helm.commit).toHaveBeenCalledWith('tok', { titleKeys: [0] }));
+      expect(await screen.findByText('Filled in 37 keys on songs already in your library.')).toBeTruthy();
+      expect(screen.getByText('Filled in 1 CCLI number on songs already in your library.')).toBeTruthy();
+    });
   });
 });

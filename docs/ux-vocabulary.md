@@ -57,7 +57,8 @@ the live cursor, and Pre-service still steps with bare `‹` / `›`.
 
 ## Song keys
 
-Added with song keys, Phase 1b (`docs/superpowers/specs/2026-11-17-song-keys-design.md`).
+Added with song keys, Phase 1b (`docs/superpowers/specs/2026-11-17-song-keys-design.md`);
+Move keys out of titles and See them with Phase 1d (`TitleKeyReview.tsx`).
 The picker is `KeyPicker.tsx`; it opens from QuickAdd's key button, right-click on a song
 row and the hero's meta line, and sits in the Song keys window (Phase 1c,
 `SongKeysWindow.tsx`).
@@ -73,9 +74,11 @@ row and the hero's meta line, and sits in the Song keys window (Phase 1c,
 | **Fill in song keys** | Open the Song keys window. | The Songs rail, the row under `+ Import a song library` |
 | **Skip** | Leave this song's key blank for now. It moves to the end of No key. | Picker, in the Song keys window only |
 | **No key / Sung lately / All** | The Song keys tabs. No key lists songs with no key (or an old value that was not one key, shown as "Was: capo 2 G"), most-sung first; Sung lately lists songs that went live in the last eight weeks, keyed or not; All is the library by title. | Song keys window |
+| **Move keys out of titles** | Take "(Eb)" off the end of song titles and make it the song's key, after a look at the list. Flagged titles (a key change, two keys, one letter, a song that already has a different key) start unchecked. Followed by `Moved 412 keys` with Undo. | The Song keys window's one-line banner ("412 titles end in a key, like *A Child Of The King (Eb)*.") and its review button (`Move 412 keys`) |
+| **See them** | Open the list of keys found in titles during an import: the same list as Move keys out of titles. | The import review's line "Keys found in 412 song titles. They'll move from the title to the song's key." |
 
 The Song keys window says where a key came from in plain words: "Typed in Helm", "From
-the title in EasyWorship", "From the EasyWorship import", "From a spreadsheet", "From
+the song's title" (moved out of a title, by the sweep or an import), "From the EasyWorship import", "From a spreadsheet", "From
 Planning Center", "From a chord chart", "Detected from chords" (`songKeysText.ts`). Its
 one progress line is scoped, never the whole library: "Sung lately: 9 of 14 have a key."
 

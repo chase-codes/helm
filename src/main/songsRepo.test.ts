@@ -485,3 +485,138 @@ describe('song keys', () => {
     expect(out).toMatchObject({ title: 'T2', key: 'G', keySource: 'import', ccli: '12345' });
   });
 });
+
+// Song keys spec, Phase 1d: keys that are already in the library's titles.
+describe('title sweep', () => {
+  let db: Database.Database;
+  let keys: SongsRepo;
+  beforeEach(() => {
+    db = openTestDb();
+    keys = createSongsRepo(db);
+  });
+  const raw = (id: string): { title: string; music_key: string; music_key_source: string; key_skipped_at: number | null } =>
+    db.prepare('SELECT title, music_key, music_key_source, key_skipped_at FROM songs WHERE id = ?').get(id) as
+      { title: string; music_key: string; music_key_source: string; key_skipped_at: number | null };
+  const ftsTitle = (id: string): string =>
+    (db.prepare('SELECT title FROM song_fts WHERE rowid = (SELECT rowid FROM songs WHERE id = ?)').get(id) as { title: string }).title;
+  const add = (title: string): Song => keys.add({ title, text: `Verse 1\n${title} words` });
+
+  test('lists titles that end in a key, unflagged ones last, with the clean title', () => {
+    const king = add('A Child Of The King      (Eb)');
+    add('Holy Ground (Live)');
+    add('Plain Song');
+    const oceans = add('Oceans (D - E)');
+    const female = add('Song (F)');
+    const two = add('Two (G, A)');
+    const out = keys.titleKeyCandidates();
+    expect(out.map((c) => c.id)).toEqual([oceans.id, female.id, two.id, king.id]);
+    expect(out.find((c) => c.id === king.id)).toEqual({
+      id: king.id, title: 'A Child Of The King      (Eb)', cleanTitle: 'A Child Of The King', key: 'Eb',
+      currentKey: '', currentSource: '', skippedAt: null,
+    });
+    // A modulation keeps its title and offers the start key.
+    expect(out.find((c) => c.id === oceans.id)).toMatchObject({ cleanTitle: 'Oceans (D - E)', key: 'D', endKey: 'E', flag: 'modulation' });
+    expect(out.find((c) => c.id === female.id)).toMatchObject({ cleanTitle: 'Song', key: 'F', flag: 'single-letter' });
+    expect(out.find((c) => c.id === two.id)).toMatchObject({ cleanTitle: 'Two (G, A)', flag: 'two-keys' });
+    expect(out.find((c) => c.id === two.id)).not.toHaveProperty('key');
+  });
+
+  test("never offers to replace a person's key: a different key is flagged has-key", () => {
+    const typed = add('Way Maker (Bb)');
+    keys.setMusicKey(typed.id, 'C', 'typed');
+    const same = add('Cornerstone (Db)');
+    keys.setMusicKey(same.id, 'Db', 'typed');
+    const [a, b] = [keys.titleKeyCandidates().find((c) => c.id === typed.id), keys.titleKeyCandidates().find((c) => c.id === same.id)];
+    expect(a).toMatchObject({ key: 'Bb', flag: 'has-key', currentKey: 'C', currentSource: 'typed' });
+    // The same key is not a conflict: only the title would change.
+    expect(b).toMatchObject({ key: 'Db', cleanTitle: 'Cornerstone', currentKey: 'Db' });
+    expect(b).not.toHaveProperty('flag');
+  });
+
+  test('a legacy value is somebody\'s key too: flagged has-key', () => {
+    const s = add('Song (G)');
+    db.prepare(`UPDATE songs SET music_key = 'capo 2 G', music_key_source = 'legacy' WHERE id = ?`).run(s.id);
+    expect(keys.titleKeyCandidates()[0]).toMatchObject({ flag: 'has-key', currentKey: 'capo 2 G', currentSource: 'legacy' });
+  });
+
+  test('drops a song once its key has moved, including a modulation whose title stays', () => {
+    const king = add('A Child Of The King (Eb)');
+    const oceans = add('Oceans (D - E)');
+    keys.setMusicKeys([
+      { id: king.id, key: 'Eb', source: 'title', title: 'A Child Of The King' },
+      { id: oceans.id, key: 'D', source: 'title' },
+    ]);
+    expect(keys.titleKeyCandidates()).toEqual([]);
+  });
+
+  test('apply then batch Undo puts every title, FTS row, key, source and skip time back exactly', () => {
+    const king = add('A Child Of The King      (Eb)');
+    const typed = add('Way Maker (Bb)');
+    keys.setMusicKey(typed.id, 'C', 'typed');
+    keys.skipMusicKey(king.id);
+    const legacy = add('Song (G)');
+    db.prepare(`UPDATE songs SET music_key = 'capo 2 G', music_key_source = 'legacy' WHERE id = ?`).run(legacy.id);
+    const before = [king, typed, legacy].map((s) => ({ ...raw(s.id), fts: ftsTitle(s.id) }));
+    const cands = keys.titleKeyCandidates();
+
+    keys.setMusicKeys(cands.map((c) => ({ id: c.id, key: c.key!, source: 'title' as const, title: c.cleanTitle })));
+    expect(raw(king.id)).toMatchObject({ title: 'A Child Of The King', music_key: 'Eb', music_key_source: 'title', key_skipped_at: null });
+    expect(keys.search('king eb', 'title')[0]?.song.title).toBe('A Child Of The King');
+    keys.search('king', 'title'); // warm the vocab, which the restore must invalidate
+
+    const out = keys.restoreMusicKeys(cands.map((c) => ({
+      id: c.id, key: c.currentKey, source: c.currentSource, skippedAt: c.skippedAt, title: c.title,
+    })));
+    expect(out.map((s) => s.id)).toEqual(cands.map((c) => c.id));
+    expect([king, typed, legacy].map((s) => ({ ...raw(s.id), fts: ftsTitle(s.id) }))).toEqual(before);
+    expect(keys.get(king.id)?.title).toBe('A Child Of The King      (Eb)');
+    // Search finds the old title again: "(Eb)" is back in the index.
+    const fts = db.prepare("SELECT count(*) AS n FROM song_fts WHERE song_fts MATCH 'title:eb'").get() as { n: number };
+    expect(fts.n).toBe(1);
+    expect(keys.search('child king eb', 'title')[0]?.song.id).toBe(king.id);
+    expect(keys.titleKeyCandidates().map((c) => c.id)).toEqual(cands.map((c) => c.id));
+  });
+
+  test('restoreMusicKeys validates the whole batch first: one bad entry writes nothing', () => {
+    const a = add('A (Eb)');
+    keys.setMusicKeys([{ id: a.id, key: 'Eb', source: 'title', title: 'A' }]);
+    expect(() => keys.restoreMusicKeys([
+      { id: a.id, key: '', source: '', skippedAt: null, title: 'A (Eb)' },
+      { id: 'nope', key: '', source: '', skippedAt: null },
+    ])).toThrow('Song not found');
+    expect(() => keys.restoreMusicKeys([{ id: a.id, key: 'bb', source: 'typed', skippedAt: null }])).toThrow('Not a key');
+    expect(() => keys.restoreMusicKeys([{ id: a.id, key: '', source: '', skippedAt: null, title: ' ' }])).toThrow('A song needs a title');
+    expect(raw(a.id)).toMatchObject({ title: 'A', music_key: 'Eb', music_key_source: 'title' });
+  });
+
+  test('addBatch keeps an import key source and the CCLI number', () => {
+    const [r] = keys.addBatch([{ title: 'A Child Of The King', text: 'Verse 1\nx', key: 'Eb', musicKeySource: 'title', ccli: 'CCLI# 0022025' }]);
+    expect('song' in r && r.song).toMatchObject({ key: 'Eb', keySource: 'title', ccli: '22025' });
+    const id = 'song' in r ? r.song.id : '';
+    expect(keys.get(id)).toMatchObject({ key: 'Eb', keySource: 'title', ccli: '22025' });
+    // No source given is a person's; a junk CCLI number is dropped.
+    const [t] = keys.addBatch([{ title: 'T', text: 'Verse 1\nx', key: 'G', ccli: 'N/A' }]);
+    expect('song' in t && t.song).toMatchObject({ key: 'G', keySource: 'typed' });
+    expect('song' in t && t.song.ccli).toBeUndefined();
+    const [bad] = keys.addBatch([{ title: 'B', text: 'Verse 1\nx', key: 'G', musicKeySource: 'legacy' }]);
+    expect(bad).toEqual({ error: expect.stringContaining('Unknown key source') });
+  });
+
+  test('fillBlanks writes only empty keys and CCLI numbers', () => {
+    const empty = add('Empty');
+    const typed = add('Typed');
+    keys.setMusicKey(typed.id, 'C', 'typed');
+    const legacy = add('Legacy');
+    db.prepare(`UPDATE songs SET music_key = 'capo 2 G', music_key_source = 'legacy', ccli_no = '111' WHERE id = ?`).run(legacy.id);
+    keys.skipMusicKey(empty.id);
+    expect(keys.fillBlanks([
+      { id: empty.id, key: 'Eb', ccli: '22025' },
+      { id: typed.id, key: 'Bb', ccli: '33' },
+      { id: legacy.id, key: 'G', ccli: '222' },
+    ], 'title')).toEqual({ keys: 1, ccli: 2 });
+    expect(keys.get(empty.id)).toMatchObject({ key: 'Eb', keySource: 'title', ccli: '22025' });
+    expect(raw(empty.id).key_skipped_at).toBeNull();
+    expect(keys.get(typed.id)).toMatchObject({ key: 'C', keySource: 'typed', ccli: '33' });
+    expect(keys.get(legacy.id)).toMatchObject({ key: 'capo 2 G', keySource: 'legacy', ccli: '111' });
+  });
+});
