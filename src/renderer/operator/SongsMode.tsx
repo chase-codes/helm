@@ -895,8 +895,9 @@ export function SongsMode({ keyHandlerRef, active, searchNonce = 0 }: SongsModeP
     margin: '0 -5px',
     borderRadius: '6px',
     fontSize: '13px',
+    // A key the band needs reads in full text colour; the Set key invitation stays faint.
     fontWeight: hasKey ? 600 : 500,
-    color: hasKey ? T.dim : T.faint,
+    color: hasKey ? T.text : T.faint,
     flexShrink: 0,
     maxWidth: '180px',
     overflow: 'hidden',

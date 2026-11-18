@@ -3,6 +3,7 @@ import { render, cleanup, waitFor, act, fireEvent } from '@testing-library/react
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LeaderView } from './LeaderView'
 import type { OutputPayload, PresentationState, Song } from '../../shared/types'
+import { DARK } from '../../shared/theme'
 
 afterEach(cleanup)
 
@@ -436,18 +437,70 @@ describe('LeaderView', () => {
     expect(rail.textContent).toContain('line two')
   })
 
-  it('shows the song key in the title row when set', async () => {
-    const st: PresentationState = {
-      output: 'live',
-      liveKey: 'song:s1:0',
-      liveSnap: { kind: 'lyrics', accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines },
-      cuedKey: 'song:s1:0',
-      cuedSnap: { kind: 'lyrics', accent: '#e0a341', label: 'Amazing Grace · Verse 1', lines: SONG.sections[0].lines }
+  describe('key badge', () => {
+    const verse1 = (id: string): PresentationState => {
+      const snap = { kind: 'lyrics' as const, accent: '#e0a341', label: 'Verse 1', lines: ['line'] }
+      return { output: 'live', liveKey: `song:${id}:0`, liveSnap: snap, cuedKey: `song:${id}:0`, cuedSnap: snap }
     }
-    installHelmStub(st)
-    const r = render(<LeaderView payload={payload(st)} />)
-    await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
-    expect(r.getByText(/Key D/)).toBeTruthy()
+    const songWith = (key: string | undefined): Song => ({ ...SONG, id: 'k', ...(key === undefined ? { key: undefined } : { key }) })
+    const renderSong = async (song: Song): Promise<ReturnType<typeof render>> => {
+      const st = verse1(song.id)
+      ;(window as unknown as { helm: unknown }).helm = {
+        presentation: { get: () => Promise.resolve(st), onState: () => () => {} },
+        songs: { get: () => Promise.resolve(song) },
+        displays: { setLeaderSplit: vi.fn() }
+      }
+      const r = render(<LeaderView payload={payload(st)} />)
+      await waitFor(() => expect(r.getByTestId('leader-rail')).toBeTruthy())
+      return r
+    }
+
+    it('shows the key big, in its own badge, and not in the title row', async () => {
+      const r = await renderSong(songWith('Bb'))
+      const badge = r.getByTestId('leader-key')
+      expect(badge.getAttribute('aria-label')).toBe('Key Bb')
+      expect(badge.querySelector('[data-leader-key-value]')!.textContent).toBe('Bb')
+      expect(r.getByTestId('leader-head').contains(badge)).toBe(true)
+      expect(r.getByTestId('leader-title-row').contains(badge)).toBe(false)
+      expect(r.getByTestId('leader-title-row').textContent).not.toMatch(/key/i)
+    })
+
+    it('renders no badge (and no placeholder) when the song has no key', async () => {
+      const r = await renderSong(songWith(undefined))
+      expect(r.queryByTestId('leader-key')).toBeNull()
+      expect(r.getByTestId('leader-head').textContent).not.toMatch(/key/i)
+    })
+
+    it('never paints the badge in the on-air red', async () => {
+      const r = await renderSong(songWith('G'))
+      const badge = r.getByTestId('leader-key')
+      const tone = (c: string): string => {
+        const p = document.createElement('span')
+        p.style.color = c
+        return p.style.color
+      }
+      const value = badge.querySelector('[data-leader-key-value]') as HTMLElement
+      expect(value.style.color).toBe(tone(DARK.text))
+      expect(value.style.color).not.toBe(tone(DARK.live))
+      expect(badge.style.background).not.toBe(tone(DARK.live))
+    })
+
+    it('holds one footprint: head height with or without a key, glyph box width whatever the key', async () => {
+      const heads: string[] = []
+      const widths: string[] = []
+      for (const key of ['C', 'F#m', undefined]) {
+        const r = await renderSong(songWith(key))
+        heads.push(r.getByTestId('leader-head').dataset.footprint ?? '')
+        const v = r.queryByTestId('leader-key')?.querySelector('[data-leader-key-value]') as HTMLElement | null
+        if (v) widths.push(v.dataset.footprint ?? '')
+        cleanup()
+      }
+      expect(heads[0]).toBeTruthy()
+      expect(new Set(heads).size).toBe(1)
+      expect(widths).toHaveLength(2)
+      expect(widths[0]).toBeTruthy()
+      expect(widths[0]).toBe(widths[1])
+    })
   })
 
   it('sizes the rail from payload.leaderSplit', async () => {

@@ -9,6 +9,20 @@ import { usePresentationState } from '../shared/useHelm'
 import { DARK as T } from '../../shared/theme'
 import { SlidesView } from './SlidesView'
 import { MONO } from '../shared/fonts'
+import { isMusicKey } from '../../shared/songs/musicKey'
+
+// The key badge's glyph size, in the hero's cqmin like the lyrics (whose fitted size tops
+// out at 7.4cqmin): a little under a full lyric line, so a guitarist can read it from the
+// stage, and about three times the title row. The px floor keeps it legible on a tiny
+// window; the head band below is sized off the same value.
+const KEY_GLYPH = 'max(22px, 6cqmin)'
+// The head band (title row + key badge) has ONE fixed height whether or not the song has a
+// key, and whatever the key's length — so the lyrics below never move as songs change
+// (ux-grammar rule 5). Tall enough for the badge, which fills it.
+const HEAD_H = 'max(32px, 8.4cqmin)'
+// The key glyph box is a fixed width sized for the widest canonical key (`Bbm`, `F#m`), so
+// `C` and `F#m` wear the same footprint; a legacy free-text key ellipsizes inside it.
+const KEY_BOX_W = `calc(${KEY_GLYPH} * 2.3)`
 
 
 export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element {
@@ -216,18 +230,68 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
     containerType: 'size',
     overflow: 'hidden'
   }
+  const headStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2cqmin',
+    height: HEAD_H,
+    flexShrink: 0
+  }
   const titleRowStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
     fontFamily: MONO,
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontSize: 'max(12px, 2.2cqmin)',
     color: T.faint
   }
+  // Title cells give way first (ellipsis); the section label and chips hold their width.
+  const titleCellStyle: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }
+  const fixedCellStyle: CSSProperties = { flexShrink: 0 }
+  // The key badge: full-contrast text on a quiet panel — deliberately not a chip (those are
+  // state: LIVE in T.live, CUED in T.accent) and never red (rule 1).
+  const keyBadgeStyle: CSSProperties = {
+    flexShrink: 0,
+    height: '100%',
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1.2cqmin',
+    padding: '0 1.4cqmin 0 1.8cqmin',
+    borderRadius: 'max(6px, 1.2cqmin)',
+    background: T.panel2,
+    boxShadow: `inset 0 0 0 1px ${T.border}`
+  }
+  const keyLabelStyle: CSSProperties = {
+    fontFamily: MONO,
+    textTransform: 'uppercase',
+    letterSpacing: '0.12em',
+    fontSize: 'max(11px, 2cqmin)',
+    fontWeight: 600,
+    color: T.dim
+  }
+  const keyValueStyle = (canonical: boolean): CSSProperties => ({
+    width: KEY_BOX_W,
+    textAlign: 'center',
+    // A legacy free-text value ("capo 2 G") is not one key: smaller, so more of it fits the
+    // same box, and it truncates rather than widening the badge.
+    fontSize: canonical ? KEY_GLYPH : `calc(${KEY_GLYPH} * 0.42)`,
+    fontWeight: 800,
+    lineHeight: 1,
+    letterSpacing: '-0.01em',
+    color: T.text,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  })
   const chipStyle = (color: string): CSSProperties => ({
+    flexShrink: 0,
     padding: '2px 10px',
     borderRadius: '6px',
     background: `${color}2b`,
@@ -296,13 +360,22 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
   // The one copy of the leader chrome — root, title row + chips, divider, rail — shared
   // by the song and scripture branches so a chip/divider/rail change can't silently miss
   // one of them.
-  const shell = (titleCells: JSX.Element, hero: JSX.Element, railCards: JSX.Element): JSX.Element => (
+  // The head band holds its height (HEAD_H) on every branch, with or without a key badge.
+  const shell = (
+    titleCells: JSX.Element,
+    hero: JSX.Element,
+    railCards: JSX.Element,
+    badge: JSX.Element | null = null
+  ): JSX.Element => (
     <div style={rootStyle} data-testid="leader-view">
       <div style={heroWrapStyle}>
-        <div style={titleRowStyle}>
-          {titleCells}
-          <span style={chipStyle(isLive ? T.live : T.accent)}>{isLive ? 'LIVE' : 'CUED'}</span>
-          {outChip && <span style={chipStyle(T.accent)}>{outChip}</span>}
+        <div style={headStyle} data-testid="leader-head" data-footprint={HEAD_H}>
+          <div style={titleRowStyle} data-testid="leader-title-row">
+            {titleCells}
+            <span style={chipStyle(isLive ? T.live : T.accent)}>{isLive ? 'LIVE' : 'CUED'}</span>
+            {outChip && <span style={chipStyle(T.accent)}>{outChip}</span>}
+          </div>
+          {badge}
         </div>
         {hero}
       </div>
@@ -323,7 +396,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
   // in view, so the person at the pulpit can read ahead.
   if (scrReady && scr && scrSnap && scrChapter)
     return shell(
-      <span>{scrSnap.ref}</span>,
+      <span style={titleCellStyle}>{scrSnap.ref}</span>,
       <div style={{ ...heroMiddleStyle, justifyContent: 'center' }}>
         <div style={{ width: 'min(100cqw, 177.78cqh)', aspectRatio: '16 / 9' }}>
           <SlideCanvas slide={scrSnap} variant="audience" fill />
@@ -370,11 +443,19 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
       </div>
     )
 
+  // Written `Key Eb` (docs/ux-vocabulary.md); the label is uppercased by style only.
+  const keyBadge = current.key ? (
+    <div style={keyBadgeStyle} data-testid="leader-key" aria-label={`Key ${current.key}`} title={`Key ${current.key}`}>
+      <span style={keyLabelStyle}>Key</span>
+      <span style={keyValueStyle(isMusicKey(current.key))} data-leader-key-value data-footprint={KEY_BOX_W}>
+        {current.key}
+      </span>
+    </div>
+  ) : null
   return shell(
     <>
-      <span>{current.title}</span>
-      <span>· {section.label}</span>
-      {current.key && <span>· Key {current.key}</span>}
+      <span style={titleCellStyle}>{current.title}</span>
+      <span style={fixedCellStyle}>· {section.label}</span>
     </>,
     <div ref={rootRef} style={heroMiddleStyle}>
       <div
@@ -410,6 +491,7 @@ export function LeaderView({ payload }: { payload: OutputPayload }): JSX.Element
           </div>
         )
       })}
-    </>
+    </>,
+    keyBadge
   )
 }
