@@ -1640,13 +1640,15 @@ describe('SongsMode — song keys', () => {
     expect(heroKey().textContent).toBe('Key Eb');
     const T = themeFor('classic', 'dark');
     const tone = (c: string): string => { const p = document.createElement('span'); p.style.color = c; return p.style.color; };
-    expect(heroKey().style.color).toBe(tone(T.dim));
+    expect(heroKey().style.color).toBe(tone(T.text));
+    expect(heroKey().style.fontWeight).toBe('600');
     const height = meta.style.height;
     expect(height).toBe('22px');
 
     fireEvent.click(rowFor('Goodness Of God'));
     await waitFor(() => expect(heroKey().textContent).toBe('Set key'));
     expect(heroKey().style.color).toBe(tone(T.faint));
+    expect(heroKey().style.fontWeight).toBe('500');
     expect(meta.style.height).toBe(height);
   });
 
