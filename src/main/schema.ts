@@ -6,6 +6,18 @@
 export const SONG_FTS_COLUMNS = ['title', 'author', 'lyrics'] as const;
 // verse_fts column order — biblesRepo's INSERT is positional against this list.
 export const VERSE_FTS_COLUMNS = ['version_id', 'book', 'chapter', 'verse', 'text'] as const;
+// Columns added to `songs` after it first shipped. Single source of truth for both the
+// fresh-DB CREATE TABLE below and the ALTER TABLE upgrade in songMigrations.ts, so a
+// fresh install and an upgraded one end up with the same columns.
+export const SONG_ADDED_COLUMNS: readonly { column: string; ddl: string }[] = [
+  { column: 'music_key', ddl: "TEXT NOT NULL DEFAULT ''" },
+  // Song keys (docs/superpowers/specs/2026-11-17-song-keys-design.md, Phase 1a).
+  { column: 'music_key_source', ddl: "TEXT NOT NULL DEFAULT ''" },
+  { column: 'key_skipped_at', ddl: 'INTEGER' },
+  { column: 'ccli_no', ddl: "TEXT NOT NULL DEFAULT ''" },
+  { column: 'last_live_at', ddl: 'INTEGER' },
+  { column: 'live_days', ddl: 'INTEGER NOT NULL DEFAULT 0' },
+];
 
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS songs (
@@ -15,7 +27,7 @@ CREATE TABLE IF NOT EXISTS songs (
   sections_json TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'local',
   created_at INTEGER NOT NULL,
-  music_key TEXT NOT NULL DEFAULT ''
+${SONG_ADDED_COLUMNS.map((c) => `  ${c.column} ${c.ddl}`).join(',\n')}
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS song_fts USING fts5(
   ${SONG_FTS_COLUMNS.join(', ')}, tokenize='unicode61 remove_diacritics 2'

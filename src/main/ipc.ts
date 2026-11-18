@@ -96,6 +96,12 @@ export function registerIpc(deps: IpcDeps): void {
   handleApi<HelmApi['songs']['update']>(CH.songsUpdate, (id, input) => repo.update(id, input));
   // Deleting a song forgets it as the live slide (#40) — keyed by item so any section goes.
   handleApi<HelmApi['songs']['remove']>(CH.songsRemove, (id) => { const r = repo.remove(id); presentation.invalidate(`song:${id}`); return r; });
+  // Song keys. The repo validates every argument (unknown id, non-canonical key, unknown
+  // source or tab) and throws, which rejects the renderer's invoke.
+  handleApi<HelmApi['songs']['setMusicKey']>(CH.songsSetMusicKey, (id, musicKey, source) => repo.setMusicKey(id, musicKey, source));
+  handleApi<HelmApi['songs']['setMusicKeys']>(CH.songsSetMusicKeys, (batch) => repo.setMusicKeys(batch));
+  handleApi<HelmApi['songs']['skipMusicKey']>(CH.songsSkipMusicKey, (id) => repo.skipMusicKey(id));
+  handleApi<HelmApi['songs']['keyList']>(CH.songsKeyList, (query) => repo.keyList(query));
   handleApi<HelmApi['presentation']['get']>(CH.presGet, () => presentation.get());
   onApi<HelmApi['presentation']['cue']>(CH.presCue, (key, slide) => presentation.cue(key, slide));
   onApi<HelmApi['presentation']['goLive']>(CH.presGoLive, (key, slide) => presentation.goLive(key, slide));

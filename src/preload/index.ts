@@ -16,6 +16,10 @@ const api: HelmApi = {
     add: (input) => ipcRenderer.invoke(CH.songsAdd, input),
     update: (id, input) => ipcRenderer.invoke(CH.songsUpdate, id, input),
     remove: (id) => ipcRenderer.invoke(CH.songsRemove, id),
+    setMusicKey: (id, key, source) => ipcRenderer.invoke(CH.songsSetMusicKey, id, key, source),
+    setMusicKeys: (batch) => ipcRenderer.invoke(CH.songsSetMusicKeys, batch),
+    skipMusicKey: (id) => ipcRenderer.invoke(CH.songsSkipMusicKey, id),
+    keyList: (query) => ipcRenderer.invoke(CH.songsKeyList, query),
   },
   presentation: {
     get: () => ipcRenderer.invoke(CH.presGet),

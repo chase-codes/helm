@@ -1,14 +1,36 @@
 import type { MessageImportResult } from './message/parseImport';
 import type { TapeRow, QuoteRow } from './search/messageScore';
 import type { FeedbackContext, FeedbackPayload, FeedbackSendResult } from './feedbackIssue';
+import type { MusicKey, MusicKeySource } from './songs/musicKey';
 
 export interface SongSection { label: string; lines: string[] }
 export interface Song {
   id: string; title: string; author: string;
   sections: SongSection[]; source: string; createdAt: number;
-  /** Musical key, e.g. "G", "Bb", "F#m". Absent when not set. */
+  /** Musical key, e.g. "G", "Bb", "F#m". Absent when not set. Usually a canonical
+   * `MusicKey`; a value the startup cleanup could not parse stays as typed, with
+   * `keySource: 'legacy'`. */
   key?: string;
+  /** Where `key` came from. Absent when unknown (keys set before song keys shipped). */
+  keySource?: MusicKeySource;
+  /** CCLI song number, digits only. Absent when not known. */
+  ccli?: string;
 }
+/** The Song keys window's three tabs (spec Phase 1c). */
+export type MusicKeyTab = 'none' | 'lately' | 'all';
+export interface MusicKeyListQuery { tab: MusicKeyTab; q?: string }
+/** One light row of the Song keys list: enough to show and rank a song without pulling
+ * its sections. `key` is '' when the song has none; a legacy value is the text as typed. */
+export interface MusicKeyRow {
+  id: string; title: string; author: string;
+  /** The first lyric line, so two songs called "Cornerstone" can be told apart. */
+  firstLine: string;
+  key: string; keySource: MusicKeySource | '';
+  liveDays: number; lastLiveAt: number | null; skippedAt: number | null;
+}
+/** One entry of a setMusicKeys batch. `title`, when given, renames the song too
+ * (the title sweep moves "(Eb)" out of the title and into the key). */
+export interface MusicKeyChange { id: string; key: MusicKey | null; source: MusicKeySource; title?: string }
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
 export interface NewSongInput { title: string; author?: string; text: string; source?: string; key?: string }
@@ -180,6 +202,8 @@ export const CH = {
   songsSearch: 'songs:search', songsList: 'songs:list',
   songsGet: 'songs:get', songsAdd: 'songs:add', songsUpdate: 'songs:update',
   songsRemove: 'songs:remove',
+  songsSetMusicKey: 'songs:setMusicKey', songsSetMusicKeys: 'songs:setMusicKeys',
+  songsSkipMusicKey: 'songs:skipMusicKey', songsKeyList: 'songs:keyList',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presTake: 'presentation:take',
@@ -315,6 +339,15 @@ export interface HelmApi {
     /** Permanent — the library is not a schedule, so this is the one in-service list
      * action that confirms instead of offering an undo (#90). */
     remove(id: string): Promise<Song[]>;
+    /** Sets or clears (null) one song's key. Touches only the key columns; rejects an
+     * unknown id or a key that is not one of the 24 canonical spellings. */
+    setMusicKey(id: string, key: MusicKey | null, source: MusicKeySource): Promise<Song>;
+    /** Many keys (and optionally titles) in one transaction: all land or none do. Returns
+     * the updated songs in batch order. */
+    setMusicKeys(batch: MusicKeyChange[]): Promise<Song[]>;
+    /** Marks a song as skipped in the Song keys window, so No key lists it last. */
+    skipMusicKey(id: string): Promise<void>;
+    keyList(query: MusicKeyListQuery): Promise<MusicKeyRow[]>;
   };
   presentation: {
     get(): Promise<PresentationState>;

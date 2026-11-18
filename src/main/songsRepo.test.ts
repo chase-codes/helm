@@ -1,7 +1,10 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
+import type Database from 'better-sqlite3';
 import { openTestDb } from './testDb';
 import { createSongsRepo, type SongsRepo } from './songsRepo';
 import { seedIfEmpty } from './seed';
+import type { MusicKey, MusicKeySource } from '../shared/songs/musicKey';
+import type { Song } from '../shared/types';
 
 let repo: SongsRepo;
 beforeEach(() => {
@@ -198,4 +201,164 @@ test('search "i\'d" finds "I\'d Rather Have Jesus" when it is the only token', (
   expect(repo.search("i'd", 'all').map((x) => x.song.title)).toContain("I'd Rather Have Jesus");
   expect(repo.search("I'd", 'title').map((x) => x.song.title)).toContain("I'd Rather Have Jesus");
   expect(repo.search('id', 'all').map((x) => x.song.title)).toContain("I'd Rather Have Jesus");
+});
+
+// --- Song keys (spec 2026-11-17-song-keys-design.md, Phase 1a) ---
+describe('song keys', () => {
+  let db: Database.Database;
+  let keys: SongsRepo;
+  beforeEach(() => {
+    db = openTestDb();
+    keys = createSongsRepo(db);
+  });
+  const raw = (id: string): { music_key: string; music_key_source: string; key_skipped_at: number | null } =>
+    db.prepare('SELECT music_key, music_key_source, key_skipped_at FROM songs WHERE id = ?').get(id) as
+      { music_key: string; music_key_source: string; key_skipped_at: number | null };
+
+  test('setMusicKey writes key and source, returns the Song, and get() sees it past the cache', () => {
+    const s = keys.add({ title: 'Cornerstone', text: 'Verse 1\nMy hope is built on nothing less' });
+    keys.get(s.id); // warm the cache
+    const out = keys.setMusicKey(s.id, 'Bb', 'typed');
+    expect(out).toMatchObject({ id: s.id, title: 'Cornerstone', key: 'Bb', keySource: 'typed' });
+    expect(keys.get(s.id)).toMatchObject({ key: 'Bb', keySource: 'typed' });
+    expect(keys.get(s.id)?.sections).toEqual(s.sections);
+  });
+
+  test('setMusicKey(null) clears key and source', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    keys.setMusicKey(s.id, 'G', 'typed');
+    const out = keys.setMusicKey(s.id, null, 'typed');
+    expect(out.key).toBeUndefined();
+    expect(out.keySource).toBeUndefined();
+    expect(raw(s.id)).toMatchObject({ music_key: '', music_key_source: '' });
+  });
+
+  test('setMusicKey rejects an unknown id, a non-canonical key, an unknown source, and legacy with a key', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    expect(() => keys.setMusicKey('nope', 'G', 'typed')).toThrow('Song not found');
+    expect(() => keys.setMusicKey(s.id, 'bb' as MusicKey, 'typed')).toThrow('Not a key');
+    expect(() => keys.setMusicKey(s.id, 'capo 2 G' as MusicKey, 'typed')).toThrow('Not a key');
+    expect(() => keys.setMusicKey(s.id, 'G', 'guess' as MusicKeySource)).toThrow('Unknown key source');
+    expect(() => keys.setMusicKey(s.id, 'G', 'legacy')).toThrow();
+    expect(raw(s.id).music_key).toBe('');
+  });
+
+  test('setMusicKey leaves title, lyrics and the search index alone', () => {
+    const s = keys.add({ title: 'Findable Anthem', text: 'Verse 1\nwonderful unique zebra' });
+    keys.setMusicKey(s.id, 'D', 'typed');
+    expect(keys.search('zebra', 'lyric').map((r) => r.song.id)).toEqual([s.id]);
+    expect(keys.search('findable', 'title')[0]?.song).toMatchObject({ id: s.id, key: 'D' });
+  });
+
+  test('skipMusicKey stamps key_skipped_at, and setting a key clears it', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    keys.skipMusicKey(s.id);
+    expect(raw(s.id).key_skipped_at).toEqual(expect.any(Number));
+    keys.setMusicKey(s.id, 'A', 'typed');
+    expect(raw(s.id).key_skipped_at).toBeNull();
+    expect(() => keys.skipMusicKey('nope')).toThrow('Song not found');
+  });
+
+  test('setMusicKeys writes every key in batch order and returns the Songs', () => {
+    const a = keys.add({ title: 'A', text: 'Verse 1\na' });
+    const b = keys.add({ title: 'B', text: 'Verse 1\nb' });
+    keys.setMusicKey(b.id, 'E', 'typed');
+    const out = keys.setMusicKeys([
+      { id: a.id, key: 'Eb', source: 'title' },
+      { id: b.id, key: null, source: 'typed' },
+    ]);
+    expect(out.map((s) => [s.id, s.key, s.keySource])).toEqual([[a.id, 'Eb', 'title'], [b.id, undefined, undefined]]);
+    expect(keys.get(a.id)?.key).toBe('Eb');
+    expect(keys.get(b.id)?.key).toBeUndefined();
+  });
+
+  test('setMusicKeys with a title renames the song and its FTS row in the same transaction', () => {
+    const s = keys.add({ title: 'A Child Of The King (Eb)', text: 'Verse 1\nMy Father is rich in houses and lands' });
+    keys.search('king', 'title'); // warm the vocab, which a rename must invalidate
+    const [out] = keys.setMusicKeys([{ id: s.id, key: 'Eb', source: 'title', title: 'A Child Of The Kingdom' }]);
+    expect(out).toMatchObject({ title: 'A Child Of The Kingdom', key: 'Eb', keySource: 'title' });
+    expect(keys.get(s.id)?.title).toBe('A Child Of The Kingdom');
+    expect(keys.search('kingdom', 'title').map((r) => r.song.id)).toContain(s.id);
+    const fts = db.prepare("SELECT count(*) AS n FROM song_fts WHERE song_fts MATCH 'title:eb'").get() as { n: number };
+    expect(fts.n).toBe(0); // the old title is gone from the index, not just from songs
+    expect(keys.search('father', 'lyric').map((r) => r.song.id)).toEqual([s.id]); // lyrics untouched
+  });
+
+  test('setMusicKeys validates the whole batch first: one bad entry writes nothing', () => {
+    const a = keys.add({ title: 'A', text: 'Verse 1\na' });
+    expect(() => keys.setMusicKeys([
+      { id: a.id, key: 'G', source: 'title', title: 'Renamed' },
+      { id: 'nope', key: 'G', source: 'title' },
+    ])).toThrow('Song not found');
+    expect(() => keys.setMusicKeys([{ id: a.id, key: 'G', source: 'title', title: '   ' }])).toThrow('A song needs a title');
+    expect(keys.get(a.id)).toMatchObject({ title: 'A' });
+    expect(keys.get(a.id)?.key).toBeUndefined();
+  });
+
+  test('keyList returns light rows with the first lyric line', () => {
+    const s = keys.add({ title: 'Cornerstone', author: 'Hillsong', text: 'Verse 1\nMy hope is built on nothing less\nThan Jesus blood\n\nChorus\nChrist alone' });
+    keys.setMusicKey(s.id, 'C', 'typed');
+    expect(keys.keyList({ tab: 'all' })).toEqual([{
+      id: s.id, title: 'Cornerstone', author: 'Hillsong', firstLine: 'My hope is built on nothing less',
+      key: 'C', keySource: 'typed', liveDays: 0, lastLiveAt: null, skippedAt: null,
+    }]);
+  });
+
+  test('keyList none: keyless and legacy songs, by live days, then last live, then title, skipped last', () => {
+    const mk = (title: string, liveDays = 0, lastLiveAt: number | null = null): Song => {
+      const s = keys.add({ title, text: `Verse 1\n${title} line` });
+      db.prepare('UPDATE songs SET live_days = ?, last_live_at = ? WHERE id = ?').run(liveDays, lastLiveAt, s.id);
+      return s;
+    };
+    const keyed = mk('Has Key', 9, 9);
+    keys.setMusicKey(keyed.id, 'G', 'typed');
+    const legacy = mk('Legacy', 1, 1);
+    db.prepare(`UPDATE songs SET music_key = 'capo 2 G', music_key_source = 'legacy' WHERE id = ?`).run(legacy.id);
+    const skipped = mk('Skipped But Popular', 50, 50);
+    keys.skipMusicKey(skipped.id);
+    mk('Bravo', 0); mk('alpha', 0);
+    mk('Recent', 3, 200); mk('Older', 3, 100);
+    expect(keys.keyList({ tab: 'none' }).map((r) => r.title))
+      .toEqual(['Recent', 'Older', 'Legacy', 'alpha', 'Bravo', 'Skipped But Popular']);
+    expect(keys.keyList({ tab: 'none' }).find((r) => r.id === legacy.id)).toMatchObject({ key: 'capo 2 G', keySource: 'legacy' });
+  });
+
+  test('keyList lately: songs live in the last 8 weeks, with or without a key, newest first', () => {
+    const now = Date.now();
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const mk = (title: string, lastLiveAt: number | null): Song => {
+      const s = keys.add({ title, text: 'Verse 1\nx' });
+      db.prepare('UPDATE songs SET last_live_at = ? WHERE id = ?').run(lastLiveAt, s.id);
+      return s;
+    };
+    keys.setMusicKey(mk('Last Week', now - week).id, 'A', 'typed');
+    mk('Seven Weeks', now - 7 * week);
+    mk('Nine Weeks', now - 9 * week);
+    mk('Never', null);
+    expect(keys.keyList({ tab: 'lately' }).map((r) => r.title)).toEqual(['Last Week', 'Seven Weeks']);
+  });
+
+  test('keyList all is by title, and q filters by title or author, accent- and case-blind', () => {
+    keys.add({ title: 'Renuévame', author: 'Marcos Witt', text: 'Coro\nRenuévame Señor' });
+    keys.add({ title: 'Cornerstone', author: 'Hillsong', text: 'Verse 1\nMy hope is built' });
+    keys.add({ title: 'amazing grace', author: 'John Newton', text: 'Verse 1\nhow sweet the sound' });
+    expect(keys.keyList({ tab: 'all' }).map((r) => r.title)).toEqual(['amazing grace', 'Cornerstone', 'Renuévame']);
+    expect(keys.keyList({ tab: 'all', q: 'RENUEV' }).map((r) => r.title)).toEqual(['Renuévame']);
+    expect(keys.keyList({ tab: 'all', q: 'hill corner' }).map((r) => r.title)).toEqual(['Cornerstone']);
+    expect(keys.keyList({ tab: 'all', q: 'sweet' })).toEqual([]); // lyrics are not searched
+    expect(keys.keyList({ tab: 'none', q: 'newton' }).map((r) => r.title)).toEqual(['amazing grace']);
+  });
+
+  test('keyList rejects an unknown tab', () => {
+    expect(() => keys.keyList({ tab: 'keyed' as 'all' })).toThrow('Unknown tab');
+  });
+
+  test('update keeps working and reads back the stored key source and CCLI', () => {
+    const s = keys.add({ title: 'T', text: 'Verse 1\nx' });
+    db.prepare(`UPDATE songs SET ccli_no = '12345' WHERE id = ?`).run(s.id); // before the write that drops the cache
+    keys.setMusicKey(s.id, 'G', 'import');
+    const out = keys.update(s.id, { title: 'T2', key: 'G', sections: s.sections });
+    expect(out).toEqual(keys.get(s.id));
+    expect(out).toMatchObject({ title: 'T2', key: 'G', keySource: 'import', ccli: '12345' });
+  });
 });
