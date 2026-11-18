@@ -1,7 +1,7 @@
 import type { MessageImportResult } from './message/parseImport';
 import type { TapeRow, QuoteRow } from './search/messageScore';
 import type { FeedbackContext, FeedbackPayload, FeedbackSendResult } from './feedbackIssue';
-import type { MusicKey, MusicKeySource } from './songs/musicKey';
+import type { MusicKey, MusicKeySource, TitleKeyFlag } from './songs/musicKey';
 
 export interface SongSection { label: string; lines: string[] }
 export interface Song {
@@ -31,6 +31,26 @@ export interface MusicKeyRow {
 /** One entry of a setMusicKeys batch. `title`, when given, renames the song too
  * (the title sweep moves "(Eb)" out of the title and into the key). */
 export interface MusicKeyChange { id: string; key: MusicKey | null; source: MusicKeySource; title?: string }
+/** One entry of a restoreMusicKeys batch (the Undo for a title sweep): the song's previous
+ * key, source, skip time and title, written back exactly. `key` may be a legacy value. */
+export interface MusicKeyRestore {
+  id: string; key: string; source: MusicKeySource | ''; skippedAt: number | null; title?: string;
+}
+/** Why a title key is held back for a person to look at: the title's own flags
+ * (extractKeyFromTitle), or `has-key` when the song already has a different key. */
+export type TitleKeyRowFlag = TitleKeyFlag | 'has-key';
+/** A stored song whose title ends in a key (the library sweep, spec Phase 1d). `key` is the
+ * key the title gives (the start key of a modulation; absent for two keys); `cleanTitle` is
+ * the title once it moves out, equal to `title` when the title is kept (a modulation, or a
+ * title that is only the key). */
+export interface TitleKeyCandidate {
+  id: string; title: string; cleanTitle: string;
+  key?: MusicKey; endKey?: MusicKey; flag?: TitleKeyRowFlag;
+  /** The song's key now ('' for none; a legacy value as typed), and its source. */
+  currentKey: string; currentSource: MusicKeySource | '';
+  /** Restored by Undo: moving a key clears it. */
+  skippedAt: number | null;
+}
 /** The Song keys window's tab count and its one scoped progress line. "Has a key" means a
  * canonical key: a legacy value still waits for a person, so it counts as none. */
 export interface MusicKeyCounts {
@@ -46,7 +66,14 @@ export interface MusicKeyCounts {
 }
 export interface SongSearchResult { song: Song; score: number; snippet: string }
 export type SearchField = 'all' | 'title' | 'lyric';
-export interface NewSongInput { title: string; author?: string; text: string; source?: string; key?: string }
+export interface NewSongInput {
+  title: string; author?: string; text: string; source?: string; key?: string;
+  /** Where `key` came from when it was not typed (an import moving it out of the title).
+   * Absent means a person typed it. Only kept when `key` is one canonical key. */
+  musicKeySource?: MusicKeySource;
+  /** CCLI song number; cleaned with normalizeCcli, dropped when it is not one. */
+  ccli?: string;
+}
 export interface UpdateSongInput { title: string; author?: string; key?: string; sections: SongSection[] }
 export interface SongWebCandidate {
   title: string; author: string;
@@ -112,6 +139,14 @@ export interface ScannedSong {
   /** Our own slide count for this song, on the same EasyWorship-faithful basis as
    *  `sourceStanzas` — present only when the two disagree. */
   parsedStanzas?: number;
+  /** The key the title ends in (extractKeyFromTitle; the start key of a modulation). Whether
+   *  it moves out of the title is decided at commit, from the review. */
+  musicKey?: MusicKey;
+  /** The CCLI song number, digits only. */
+  ccli?: string;
+  /** The title's key flag: modulation, two keys or a single letter. Flagged keys are offered
+   *  unchecked. */
+  titleKeyNote?: TitleKeyFlag;
 }
 export interface UnreadableSong { title: string; reason: string }
 export interface ScanOutcome {
@@ -158,9 +193,26 @@ export interface ImportReviewRow {
    *  trusting either is there. */
   parsedStanzas?: number;
 }
+/** A scanned song whose title ends in a key, for the import's "See them" list. `ref` is what
+ * commit takes back. `fill` is a song already in the library whose empty key this fills. */
+export interface ImportTitleKey {
+  ref: number; title: string; cleanTitle: string;
+  key?: MusicKey; endKey?: MusicKey; flag?: TitleKeyFlag;
+  status: 'new' | 'fill';
+}
+export interface SongImportCommitOptions {
+  /** The `ref`s of the title keys to move (the review's checked rows). Absent: every
+   *  unflagged one. */
+  titleKeys?: number[];
+}
 export interface SongImportScan {
   token: string;
   rows: ImportReviewRow[];
+  /** Scanned songs whose title ends in a key. Absent when there are none. */
+  titleKeys?: ImportTitleKey[];
+  /** Songs already in the library with an empty key or CCLI number this scan can fill in.
+   *  Absent when none. */
+  fillable?: number;
   /** How many songs carry a laid-out slide set in the source, when the source can say. */
   withLayouts?: number;
 }
@@ -169,6 +221,10 @@ export interface SongImportResult {
   imported: number;
   skipped: number;
   unreadable: { title: string; reason: string }[];
+  /** Songs already in the library whose empty key, or CCLI number, the scan filled in.
+   *  Absent when none. */
+  filledKeys?: number;
+  filledCcli?: number;
 }
 export interface SongImportProgress { done: number; total: number }
 
@@ -218,6 +274,7 @@ export const CH = {
   songsSetMusicKey: 'songs:setMusicKey', songsSetMusicKeys: 'songs:setMusicKeys',
   songsSkipMusicKey: 'songs:skipMusicKey', songsKeyList: 'songs:keyList',
   songsRestoreMusicKey: 'songs:restoreMusicKey', songsKeyCounts: 'songs:keyCounts',
+  songsTitleKeyCandidates: 'songs:titleKeyCandidates', songsRestoreMusicKeys: 'songs:restoreMusicKeys',
   presGet: 'presentation:get', presCue: 'presentation:cue',
   presGoLive: 'presentation:goLive', presShow: 'presentation:show',
   presTake: 'presentation:take',
@@ -366,6 +423,11 @@ export interface HelmApi {
      * value included (which setMusicKey refuses). `skippedAt`, when given, is restored too. */
     restoreMusicKey(id: string, raw: string, source: MusicKeySource | '', skippedAt?: number | null): Promise<Song>;
     keyCounts(): Promise<MusicKeyCounts>;
+    /** Every song whose title ends in a key the sweep could move (spec Phase 1d). */
+    titleKeyCandidates(): Promise<TitleKeyCandidate[]>;
+    /** Undo for a title sweep: one transaction putting back every title (song_fts too),
+     * key, source and skip time exactly. Returns the songs in batch order. */
+    restoreMusicKeys(batch: MusicKeyRestore[]): Promise<Song[]>;
   };
   presentation: {
     get(): Promise<PresentationState>;
@@ -466,7 +528,7 @@ export interface HelmApi {
   songImport: {
     sources(): Promise<ImportSourceInfo[]>;
     scan(sourceId: string): Promise<SongImportScanResult>;
-    commit(token: string): Promise<SongImportResult>;
+    commit(token: string, opts?: SongImportCommitOptions): Promise<SongImportResult>;
     onProgress(cb: (p: SongImportProgress) => void): () => void;
   };
   songSources: {

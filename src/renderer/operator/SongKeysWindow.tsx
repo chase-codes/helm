@@ -10,7 +10,7 @@ import {
   type JSX
 } from 'react';
 import type { Theme } from '../../shared/theme';
-import type { MusicKeyCounts, MusicKeyRow, MusicKeyTab, Song } from '../../shared/types';
+import type { MusicKeyChange, MusicKeyCounts, MusicKeyRestore, MusicKeyRow, MusicKeyTab, Song, TitleKeyCandidate } from '../../shared/types';
 import type { MusicKey, MusicKeySource } from '../../shared/songs/musicKey';
 import { ThemeCtx } from './ThemeCtx';
 import { ModalShell } from './ModalShell';
@@ -24,7 +24,8 @@ import { useDebouncedSearch } from './useDebouncedSearch';
 import { useWindowedList } from '../shared/useWindowedList';
 import { SearchIcon } from '../shared/icons';
 import { MONO } from '../shared/fonts';
-import { SOURCE_WORDS, progressLine } from './songKeysText';
+import { SOURCE_WORDS, defaultChecked, keysCount, progressLine, titleKeyNote } from './songKeysText';
+import { TitleKeyReview, type TitleKeyReviewRow } from './TitleKeyReview';
 
 // The Song keys window (song keys spec, Phase 1c): a library-shaped list on the left, the
 // selected song and the key picker on the right, built for 15-minute sessions over a
@@ -51,12 +52,31 @@ const TABS: { id: MusicKeyTab; label: string }[] = [
   { id: 'all', label: 'All' }
 ];
 
-interface PendingUndo {
-  id: string;
-  prevKey: string;
-  prevSource: MusicKeySource | '';
-  prevSkippedAt: number | null;
-  message: string;
+type PendingUndo =
+  | { kind: 'one'; id: string; prevKey: string; prevSource: MusicKeySource | ''; prevSkippedAt: number | null; message: string }
+  /** The title sweep: every song's old title, key, source and skip time. */
+  | { kind: 'sweep'; restore: MusicKeyRestore[]; message: string };
+
+/** A candidate as a review row. `has-key` and the title's own flags hold a row back. */
+const reviewRow = (c: TitleKeyCandidate): TitleKeyReviewRow => ({
+  id: c.id,
+  title: c.title,
+  cleanTitle: c.cleanTitle,
+  ...(c.key ? { key: c.key } : {}),
+  ...(c.endKey ? { endKey: c.endKey } : {}),
+  flagged: !!c.flag,
+  note: titleKeyNote(c.flag, c.currentKey)
+});
+
+/** What applying a checked candidate writes, and what Undo writes back. A key that is already
+ * the song's keeps its source (only the title changes); otherwise it came from the title. */
+function sweepEntry(c: TitleKeyCandidate & { key: MusicKey }): { change: MusicKeyChange; restore: MusicKeyRestore } {
+  const keepSource = c.currentKey === c.key && c.currentSource !== '' && c.currentSource !== 'legacy';
+  const rename = c.cleanTitle !== c.title;
+  return {
+    change: { id: c.id, key: c.key, source: keepSource ? (c.currentSource as MusicKeySource) : 'title', ...(rename ? { title: c.cleanTitle } : {}) },
+    restore: { id: c.id, key: c.currentKey, source: c.currentSource, skippedAt: c.skippedAt, ...(rename ? { title: c.title } : {}) }
+  };
 }
 
 export interface SongKeysWindowProps {
@@ -120,6 +140,9 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [counts, setCounts] = useState<MusicKeyCounts | null>(null);
   const [detail, setDetail] = useState<{ id: string; lines: string[] } | null>(null);
+  // The library sweep: titles that end in a key, and the review when it is open.
+  const [candidates, setCandidates] = useState<TitleKeyCandidate[]>([]);
+  const [sweep, setSweep] = useState<{ checked: Set<string> } | null>(null);
   const undo = useTimedUndo<PendingUndo>(5000);
   const panel = usePanelWidth('helmSongKeysListW', { def: LIST_W_DEFAULT, min: LIST_W_MIN, max: LIST_W_MAX, anchor: 'left' });
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -156,6 +179,18 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
       })
       .catch(console.error);
   }, []);
+
+  const loadCandidates = useCallback((): void => {
+    window.helm.songs
+      .titleKeyCandidates()
+      .then((c) => {
+        if (mountedRef.current) setCandidates(c);
+      })
+      .catch(console.error);
+  }, []);
+  useEffect(() => {
+    loadCandidates();
+  }, [loadCandidates]);
 
   // The list: debounced on typing, immediate on a tab switch (useDebouncedSearch's contract).
   useDebouncedSearch(q, tab, loadRows);
@@ -230,6 +265,7 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
       // Replacing a different key is the one write that can lose something: offer it back.
       if (prev.key && prev.key !== (k ?? '')) {
         undo.arm({
+          kind: 'one',
           id: row.id,
           prevKey: prev.key,
           prevSource: prev.source,
@@ -252,6 +288,15 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
     const p = undo.pending;
     if (!p) return;
     undo.cancel();
+    if (p.kind === 'sweep') {
+      window.helm.songs.restoreMusicKeys(p.restore).then((songs) => {
+        for (const song of songs) onKeySaved(song);
+        if (!mountedRef.current) return;
+        refresh();
+        loadCandidates();
+      }, console.error);
+      return;
+    }
     window.helm.songs.restoreMusicKey(p.id, p.prevKey, p.prevSource, p.prevSkippedAt).then((song) => {
       onKeySaved(song);
       if (!mountedRef.current) return;
@@ -259,6 +304,40 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
       refresh();
     }, console.error);
   };
+
+  // ---------------- the title sweep ----------------
+  // Only a candidate with a key can move; a two-key title is listed in the review, but on its
+  // own it would leave the banner up with nothing to do.
+  const movable = candidates.filter((c): c is TitleKeyCandidate & { key: MusicKey } => !!c.key);
+  // The banner counts only the titles that move by default. Flagged ones a person leaves
+  // unchecked ("Song (F)" meaning a female version) must not keep it up for good; they stay
+  // in the review list whenever the banner is back for new titles.
+  const ready = movable.filter((c) => !c.flag);
+  const example = ready[0]?.title ?? '';
+  const reviewRows = sweep ? candidates.map(reviewRow) : [];
+  const openSweep = (): void => setSweep({ checked: defaultChecked(candidates.map(reviewRow)) });
+  const toggleSweep = (id: string): void =>
+    setSweep((cur) => {
+      if (!cur) return cur;
+      const checked = new Set(cur.checked);
+      if (checked.has(id)) checked.delete(id);
+      else checked.add(id);
+      return { checked };
+    });
+  const applySweep = (): void => {
+    if (!sweep) return;
+    const entries = movable.filter((c) => sweep.checked.has(c.id)).map(sweepEntry);
+    if (!entries.length) return;
+    setSweep(null);
+    window.helm.songs.setMusicKeys(entries.map((e) => e.change)).then((songs) => {
+      for (const song of songs) onKeySaved(song);
+      undo.arm({ kind: 'sweep', restore: entries.map((e) => e.restore), message: `Moved ${keysCount(songs.length)}` });
+      if (!mountedRef.current) return;
+      refresh();
+      loadCandidates();
+    }, console.error);
+  };
+  const sweepCount = sweep ? movable.filter((c) => sweep.checked.has(c.id)).length : 0;
 
   // The keys this window owns. Capture phase on window, like the picker, so they are handled
   // before the page dispatcher could see them; the picker leaves exactly these to us.
@@ -282,6 +361,15 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // The review is one more layer: Escape steps back out of it to the list, never further.
+    // Its checkboxes take Space; the list's keys (arrows, `/`) have nothing to act on.
+    if (sweep) {
+      if (e.key === 'Escape') {
+        own();
+        setSweep(null);
+      }
+      return;
+    }
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && tag !== 'select') {
       own();
       move(e.key === 'ArrowDown' ? 1 : -1);
@@ -344,6 +432,38 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
     whiteSpace: 'nowrap'
   });
   const clip: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+  const bannerStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    height: '44px',
+    flexShrink: 0,
+    padding: '0 20px',
+    borderBottom: `1px solid ${T.hairline}`,
+    background: T.panel2,
+    fontSize: '13px',
+    color: T.dim
+  };
+  const secondaryStyle: CSSProperties = {
+    height: '30px',
+    padding: '0 14px',
+    flexShrink: 0,
+    borderRadius: '8px',
+    background: T.panel,
+    boxShadow: `inset 0 0 0 1px ${T.border}`,
+    fontSize: '12.5px',
+    fontWeight: 600,
+    color: T.text
+  };
+  const primaryStyle: CSSProperties = {
+    height: '30px',
+    padding: '0 16px',
+    borderRadius: '8px',
+    background: T.accent,
+    color: T.accentInk,
+    fontWeight: 700,
+    fontSize: '12.5px'
+  };
 
   const lines = selected && detail?.id === selected.id ? detail.lines : selected?.firstLine ? [selected.firstLine] : [];
   const source =
@@ -389,102 +509,131 @@ export function SongKeysWindow({ onClose, onKeySaved }: SongKeysWindowProps): JS
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div style={{ width: `${panel.width}px`, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ padding: '12px 12px 8px', flexShrink: 0 }}>
-            <div data-field style={searchBoxStyle}>
-              <span style={{ display: 'inline-flex', opacity: 0.5 }}>
-                <SearchIcon size={15} />
-              </span>
-              <input
-                ref={searchRef}
-                style={{ flex: 1, minWidth: 0, fontSize: '13.5px' }}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Title or author…"
-                aria-label="Search songs"
-              />
-              {!!q && (
-                <button style={{ fontSize: '12px', color: T.dim, padding: '4px' }} onClick={() => setQ('')} aria-label="Clear search">
-                  ✕
-                </button>
+      {/* The banner slot: one line, only while some title still ends in a key (spec 1d). */}
+      {!sweep && ready.length > 0 && (
+        <div style={bannerStyle} data-title-key-banner>
+          <span style={{ ...clip, flex: 1, minWidth: 0 }}>
+            {ready.length.toLocaleString()} {ready.length === 1 ? 'title ends' : 'titles end'} in a key, like <i>{example}</i>.
+          </span>
+          <button style={secondaryStyle} onClick={openSweep}>
+            Move keys out of titles
+          </button>
+        </div>
+      )}
+
+      {sweep ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 0' }} data-title-key-review>
+          <div style={{ ...clip, height: '20px', flexShrink: 0, marginBottom: '8px', fontSize: '13px', color: T.dim }}>
+            Uncheck any title to leave it as it is. Flagged ones, at the top, start unchecked.
+          </div>
+          <TitleKeyReview rows={reviewRows} checked={sweep.checked} onToggle={toggleSweep} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '12px 0 14px', flexShrink: 0 }}>
+            <button style={secondaryStyle} onClick={() => setSweep(null)}>
+              Cancel
+            </button>
+            <button style={{ ...primaryStyle, opacity: sweepCount ? 1 : 0.5 }} disabled={!sweepCount} onClick={applySweep}>
+              Move {keysCount(sweepCount)}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ width: `${panel.width}px`, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div style={{ padding: '12px 12px 8px', flexShrink: 0 }}>
+              <div data-field style={searchBoxStyle}>
+                <span style={{ display: 'inline-flex', opacity: 0.5 }}>
+                  <SearchIcon size={15} />
+                </span>
+                <input
+                  ref={searchRef}
+                  style={{ flex: 1, minWidth: 0, fontSize: '13.5px' }}
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Title or author…"
+                  aria-label="Search songs"
+                />
+                {!!q && (
+                  <button style={{ fontSize: '12px', color: T.dim, padding: '4px' }} onClick={() => setQ('')} aria-label="Clear search">
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div style={tabWrapStyle} role="tablist">
+                {TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    style={tabStyle(tab === t.id)}
+                    onClick={() => {
+                      setTab(t.id);
+                      setSelectedId(null);
+                    }}
+                  >
+                    <span style={clip}>{t.label}</span>
+                    {t.id === 'none' && counts && (
+                      <span data-tab-count style={{ fontFamily: MONO, fontSize: '10.5px', opacity: 0.8 }}>
+                        {counts.noKey}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div ref={setListEl} onScroll={win.onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 8px' }}>
+              {empty}
+              {rows && rows.length > 0 && (
+                <>
+                  <div style={{ height: `${win.topPad}px` }} />
+                  {rows.slice(win.start, win.end).map((r) => (
+                    <KeyRow key={r.id} r={r} T={T} selected={r.id === selected?.id} onSelect={setSelectedId} />
+                  ))}
+                  <div style={{ height: `${win.bottomPad}px` }} />
+                </>
               )}
             </div>
-            <div style={tabWrapStyle} role="tablist">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  style={tabStyle(tab === t.id)}
-                  onClick={() => {
-                    setTab(t.id);
-                    setSelectedId(null);
-                  }}
-                >
-                  <span style={clip}>{t.label}</span>
-                  {t.id === 'none' && counts && (
-                    <span data-tab-count style={{ fontFamily: MONO, fontSize: '10.5px', opacity: 0.8 }}>
-                      {counts.noKey}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
           </div>
-          <div ref={setListEl} onScroll={win.onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px 8px' }}>
-            {empty}
-            {rows && rows.length > 0 && (
+
+          <PanelDivider active={panel.dragging} onMouseDown={panel.startDrag} background={T.hairline} hit={6} />
+
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '18px 22px 0', background: T.appBg }}>
+            {selected && (
               <>
-                <div style={{ height: `${win.topPad}px` }} />
-                {rows.slice(win.start, win.end).map((r) => (
-                  <KeyRow key={r.id} r={r} T={T} selected={r.id === selected?.id} onSelect={setSelectedId} />
-                ))}
-                <div style={{ height: `${win.bottomPad}px` }} />
+                <div style={{ ...clip, fontWeight: 800, fontSize: '22px', letterSpacing: '-0.01em' }} data-key-song-title>
+                  {selected.title}
+                </div>
+                <div style={{ ...clip, height: '18px', marginTop: '2px', fontSize: '13px', color: T.dim }}>{selected.author}</div>
+                {/* Two fixed lines, so the picker below never moves with the lyrics (rule 5). */}
+                <div style={{ height: '42px', marginTop: '10px', fontSize: '13px', lineHeight: '21px', color: T.dim, fontStyle: 'italic' }} data-key-lyrics>
+                  {lines.map((l, i) => (
+                    <div key={i} style={clip}>
+                      {l}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ ...clip, height: '18px', margin: '8px 0 10px', fontSize: '12px', color: source?.color ?? T.faint }} data-key-source>
+                  {source?.text ?? ''}
+                </div>
+                {/* Keyed by song and key: a save on Sung lately or All stays on the song, and the
+                    picker starts fresh from the key it now has. */}
+                <KeyPicker
+                  key={`${selected.id}|${selected.key}`}
+                  value={selected.key}
+                  onPick={pick}
+                  onClose={onClose}
+                  onSkip={skip}
+                  hostKeys={hostKeys}
+                  autoFocus={false}
+                />
               </>
             )}
+            <div style={{ flex: 1 }} />
+            <div style={{ height: '52px', flexShrink: 0, margin: '0 -12px' }} data-undo-slot>
+              {undo.pending && <UndoToast label="" message={undo.pending.message} onUndo={onUndo} />}
+            </div>
           </div>
         </div>
-
-        <PanelDivider active={panel.dragging} onMouseDown={panel.startDrag} background={T.hairline} hit={6} />
-
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '18px 22px 0', background: T.appBg }}>
-          {selected && (
-            <>
-              <div style={{ ...clip, fontWeight: 800, fontSize: '22px', letterSpacing: '-0.01em' }} data-key-song-title>
-                {selected.title}
-              </div>
-              <div style={{ ...clip, height: '18px', marginTop: '2px', fontSize: '13px', color: T.dim }}>{selected.author}</div>
-              {/* Two fixed lines, so the picker below never moves with the lyrics (rule 5). */}
-              <div style={{ height: '42px', marginTop: '10px', fontSize: '13px', lineHeight: '21px', color: T.dim, fontStyle: 'italic' }} data-key-lyrics>
-                {lines.map((l, i) => (
-                  <div key={i} style={clip}>
-                    {l}
-                  </div>
-                ))}
-              </div>
-              <div style={{ ...clip, height: '18px', margin: '8px 0 10px', fontSize: '12px', color: source?.color ?? T.faint }} data-key-source>
-                {source?.text ?? ''}
-              </div>
-              {/* Keyed by song and key: a save on Sung lately or All stays on the song, and the
-                  picker starts fresh from the key it now has. */}
-              <KeyPicker
-                key={`${selected.id}|${selected.key}`}
-                value={selected.key}
-                onPick={pick}
-                onClose={onClose}
-                onSkip={skip}
-                hostKeys={hostKeys}
-                autoFocus={false}
-              />
-            </>
-          )}
-          <div style={{ flex: 1 }} />
-          <div style={{ height: '52px', flexShrink: 0, margin: '0 -12px' }} data-undo-slot>
-            {undo.pending && <UndoToast label="" message={undo.pending.message} onUndo={onUndo} />}
-          </div>
-        </div>
-      </div>
+      )}
     </ModalShell>
   );
 }

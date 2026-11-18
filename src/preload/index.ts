@@ -22,6 +22,8 @@ const api: HelmApi = {
     keyList: (query) => ipcRenderer.invoke(CH.songsKeyList, query),
     restoreMusicKey: (id, raw, source, skippedAt) => ipcRenderer.invoke(CH.songsRestoreMusicKey, id, raw, source, skippedAt),
     keyCounts: () => ipcRenderer.invoke(CH.songsKeyCounts),
+    titleKeyCandidates: () => ipcRenderer.invoke(CH.songsTitleKeyCandidates),
+    restoreMusicKeys: (batch) => ipcRenderer.invoke(CH.songsRestoreMusicKeys, batch),
   },
   presentation: {
     get: () => ipcRenderer.invoke(CH.presGet),
@@ -119,7 +121,7 @@ const api: HelmApi = {
   songImport: {
     sources: () => ipcRenderer.invoke(CH.songImportSources),
     scan: (sourceId) => ipcRenderer.invoke(CH.songImportScan, sourceId),
-    commit: (token) => ipcRenderer.invoke(CH.songImportCommit, token),
+    commit: (token, opts) => ipcRenderer.invoke(CH.songImportCommit, token, opts),
     onProgress: sub(CH.songImportProgress),
   },
   songSources: {

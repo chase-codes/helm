@@ -3,7 +3,7 @@ import { openTestDb } from './testDb';
 import { createSongsRepo, type SongsRepo } from './songsRepo';
 import { createSongImport, type SongImport } from './songImport';
 import type { ImportSource } from './importSources/types';
-import type { ScanOutcome, SongImportProgress } from '../shared/types';
+import type { ScanOutcome, Song, SongImportProgress, SongImportScan } from '../shared/types';
 
 const AMAZING = 'Verse 1\nAmazing grace! how sweet the sound\n\nChorus\nPraise God';
 const BLESSED = 'Verse 1\nBlessed assurance, Jesus is mine';
@@ -244,5 +244,93 @@ describe('songImport', () => {
     const withLayouts = { ...outcome([{ title: 'A', author: '', text: AMAZING }]), withLayouts: 7 };
     const result = await build(fakeSource(withLayouts)).scan('fake');
     expect('withLayouts' in result && result.withLayouts).toBe(7);
+  });
+
+  // Song keys spec, Phase 1d.
+  describe('keys in titles', () => {
+    const scanOf = async (imp: SongImport): Promise<SongImportScan> => {
+      const r = await imp.scan('fake');
+      if (!('rows' in r)) throw new Error('expected rows');
+      return r;
+    };
+
+    it('offers each title key for review, flagged ones unchecked by default, and moves the checked ones', async () => {
+      const imp = build(fakeSource(outcome([
+        { title: 'A Child Of The King (Eb)', author: '', text: AMAZING, musicKey: 'Eb', ccli: '22025' },
+        { title: 'Oceans (D - E)', author: '', text: BLESSED, musicKey: 'D', titleKeyNote: 'modulation' },
+        { title: 'Plain', author: '', text: 'Verse 1\nplain' }
+      ])));
+      const r = await scanOf(imp);
+      expect(r.titleKeys).toEqual([
+        { ref: 0, title: 'A Child Of The King (Eb)', cleanTitle: 'A Child Of The King', key: 'Eb', status: 'new' },
+        { ref: 1, title: 'Oceans (D - E)', cleanTitle: 'Oceans (D - E)', key: 'D', endKey: 'E', flag: 'modulation', status: 'new' }
+      ]);
+      await imp.commit(r.token); // no choice sent: the defaults
+      const by = (t: string): Song | undefined => repo.list().find((s) => s.title === t);
+      expect(by('A Child Of The King')).toMatchObject({ key: 'Eb', keySource: 'title', ccli: '22025' });
+      expect(by('Oceans (D - E)')?.key).toBeUndefined();
+      expect(by('Plain')?.key).toBeUndefined();
+    });
+
+    it('keeps the title and drops the key for an unchecked row, and moves a checked flagged one', async () => {
+      const imp = build(fakeSource(outcome([
+        { title: 'A Child Of The King (Eb)', author: '', text: AMAZING, musicKey: 'Eb' },
+        { title: 'Oceans (D - E)', author: '', text: BLESSED, musicKey: 'D', titleKeyNote: 'modulation' }
+      ])));
+      const r = await scanOf(imp);
+      await imp.commit(r.token, { titleKeys: [1] });
+      const titles = repo.list().map((s) => [s.title, s.key, s.keySource]);
+      expect(titles).toContainEqual(['A Child Of The King (Eb)', undefined, undefined]);
+      // A modulation keeps its title; the start key moves in.
+      expect(titles).toContainEqual(['Oceans (D - E)', 'D', 'title']);
+    });
+
+    it('rejects a commit whose titleKeys is not a list of refs, and leaves the token usable', async () => {
+      const imp = build(fakeSource(outcome([{ title: 'X (Eb)', author: '', text: AMAZING, musicKey: 'Eb' }])));
+      const r = await scanOf(imp);
+      await expect(imp.commit(r.token, { titleKeys: ['0'] as unknown as number[] })).rejects.toThrow(/refs/);
+      expect((await imp.commit(r.token)).imported).toBe(1);
+    });
+
+    it('still finds an "X (Eb)" stored before this change, and keeps "X (G)" and "X (Bb)" apart', async () => {
+      repo.add({ title: 'A Child Of The King (Eb)', text: AMAZING });
+      const imp = build(fakeSource(outcome([
+        { title: 'A Child Of The King (Eb)', author: '', text: AMAZING, musicKey: 'Eb' },
+        { title: 'Holy Spirit (G)', author: '', text: BLESSED, musicKey: 'G', titleKeyNote: 'single-letter' },
+        { title: 'Holy Spirit (Bb)', author: '', text: BLESSED, musicKey: 'Bb' }
+      ])));
+      const r = await scanOf(imp);
+      expect(r.rows.map((x) => x.status)).toEqual(['duplicate', 'new', 'new']);
+    });
+
+    it("re-import fills an empty key and CCLI number, never a person's key, and counts them", async () => {
+      const empty = repo.add({ title: 'A Child Of The King (Eb)', text: AMAZING });
+      const typed = repo.add({ title: 'Way Maker (Bb)', text: BLESSED });
+      repo.setMusicKey(typed.id, 'C', 'typed');
+      const imp = build(fakeSource(outcome([
+        { title: 'A Child Of The King (Eb)', author: '', text: AMAZING, musicKey: 'Eb', ccli: '22025' },
+        { title: 'Way Maker (Bb)', author: '', text: BLESSED, musicKey: 'Bb', ccli: '7115744' }
+      ])));
+      const r = await scanOf(imp);
+      expect(r.fillable).toBe(2);
+      // Only the empty key is offered; the person's C is not.
+      expect(r.titleKeys).toEqual([
+        { ref: 0, title: 'A Child Of The King (Eb)', cleanTitle: 'A Child Of The King', key: 'Eb', status: 'fill' }
+      ]);
+      expect(await imp.commit(r.token)).toEqual({ imported: 0, skipped: 2, unreadable: [], filledKeys: 1, filledCcli: 2 });
+      expect(repo.get(empty.id)).toMatchObject({ key: 'Eb', keySource: 'title', ccli: '22025' });
+      expect(repo.get(typed.id)).toMatchObject({ key: 'C', keySource: 'typed', ccli: '7115744' });
+      expect(repo.count()).toBe(2);
+    });
+
+    it('fills a CCLI number but not an unchecked key', async () => {
+      const empty = repo.add({ title: 'A Child Of The King (Eb)', text: AMAZING });
+      const imp = build(fakeSource(outcome([
+        { title: 'A Child Of The King (Eb)', author: '', text: AMAZING, musicKey: 'Eb', ccli: '22025' }
+      ])));
+      const r = await scanOf(imp);
+      expect(await imp.commit(r.token, { titleKeys: [] })).toEqual({ imported: 0, skipped: 1, unreadable: [], filledCcli: 1 });
+      expect(repo.get(empty.id)?.key).toBeUndefined();
+    });
   });
 });

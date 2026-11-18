@@ -6,6 +6,7 @@ import { rtfToParagraphs } from '../../shared/songs/rtfToText';
 import { ewSlideBreaks } from '../../shared/songs/ewSlideBreaks';
 import { importTidy } from '../../shared/songs/importTidy';
 import { decodeCp1252 } from '../../shared/songs/cp1252';
+import { ccliFromCopyright, extractKeyFromTitle, normalizeCcli } from '../../shared/songs/musicKey';
 import type { ImportSource, SourceDb } from './types';
 
 const SONGS_DB = 'Songs.db';
@@ -65,6 +66,19 @@ interface SongRow {
   title: string | null;
   author: string | null;
   presentation_id?: number | null;
+  ccli?: string | number | null;
+  copyright?: string | null;
+}
+
+// The CCLI column's name is unverified against a real EasyWorship library (song keys spec,
+// Risks): our fixture says `ccli_no`. The first of these that exists is read; none is fine.
+const CCLI_COLUMNS = ['ccli_no', 'ccli_number', 'ccli'];
+
+/** The song's CCLI number: the CCLI column, else one found in the copyright line, else ''. */
+function ccliOf(row: SongRow): string {
+  const direct = row.ccli === null || row.ccli === undefined ? '' : normalizeCcli(String(row.ccli));
+  if (direct) return direct;
+  return typeof row.copyright === 'string' ? ccliFromCopyright(row.copyright) : '';
 }
 interface WordRow { song_id: number; words: string | Uint8Array | null; slide_uids?: string | null }
 
@@ -389,11 +403,14 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
           const wordCols = columnsOf(wordsDb, 'word');
           const hasUids = wordCols.has('slide_uids');
           const hasLayouts = songCols.has('presentation_id');
+          const ccliCol = CCLI_COLUMNS.find((c) => songCols.has(c));
           const songSelect = [
             'rowid',
             'title',
             songCols.has('author') ? 'author' : "'' AS author",
-            ...(hasLayouts ? ['presentation_id'] : [])
+            ...(hasLayouts ? ['presentation_id'] : []),
+            ...(ccliCol ? [`${ccliCol} AS ccli`] : []),
+            ...(songCols.has('copyright') ? ['copyright'] : [])
           ];
           const wordSelect = ['song_id', 'words', ...(hasUids ? ['slide_uids'] : [])];
 
@@ -432,10 +449,17 @@ export function createEasyWorshipSource(overrides: Partial<EasyWorshipDeps> = {}
             // comparing against that would flag hundreds of songs that are perfectly fine.
             const expected = hasUids ? slideUidCount(wordRow?.slide_uids) : null;
             const disagrees = expected !== null && expected !== slideCount;
+            // A key at the end of the title ("A Child Of The King (Eb)"). The title stays as
+            // EasyWorship has it here: whether the key moves out is the review's call.
+            const titleKey = extractKeyFromTitle(title);
+            const ccli = ccliOf(row);
             songs.push({
               title,
               author: (row.author ?? '').trim(),
               text,
+              ...(titleKey.key ? { musicKey: titleKey.key } : {}),
+              ...(titleKey.flag ? { titleKeyNote: titleKey.flag } : {}),
+              ...(ccli ? { ccli } : {}),
               // Both fields carry the two numbers actually compared, so a reviewer sees what was
               // checked rather than a different, unrelated count. Set together, absent together.
               ...(disagrees ? { sourceStanzas: expected, parsedStanzas: slideCount } : {})
